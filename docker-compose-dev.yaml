@@ -1,0 +1,12 @@
+services:
+  hugo:
+    image: hugo:dev
+    build:
+      context: .
+      dockerfile: ./Dockerfile
+      target: building
+    volumes:
+      - $src_dir:/home/testuser/repositories/hugo
+    environment:
+      - TEST_MODELS_FOLDER=/models
+    command: tail -f /dev/null

@@ -1,0 +1,16 @@
+name: Run tests
+
+on: workflow_dispatch
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+      name: Run test suite
+      runs-on: ubuntu-22.04
+      steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+      - name: Build and run tests
+        run: make run-tests

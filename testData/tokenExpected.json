@@ -1,0 +1,187 @@
+{
+    "0": [
+        [
+            {
+                "Entity": "LABEL_0",
+                "Score": 0.9993012547492981,
+                "Word": "My name is",
+                "Start": 0,
+                "End": 10
+            },
+            {
+                "Entity": "LABEL_1",
+                "Score": 0.9923094511032104,
+                "Word": "Wolfgang",
+                "Start": 11,
+                "End": 19
+            },
+            {
+                "Entity": "LABEL_0",
+                "Score": 0.9984816312789917,
+                "Word": "and I live in",
+                "Start": 20,
+                "End": 33
+            },
+            {
+                "Entity": "LABEL_5",
+                "Score": 0.997545063495636,
+                "Word": "Berlin",
+                "Start": 34,
+                "End": 40
+            },
+            {
+                "Entity": "LABEL_0",
+                "Score": 0.9997385144233704,
+                "Word": ".",
+                "Start": 40,
+                "End": 41
+            }
+        ]
+    ],
+    "1": [
+        [
+            {
+                "index": 1,
+                "Entity": "LABEL_0",
+                "Score": 0.9988571405410767,
+                "Word": "My",
+                "Start": 0,
+                "End": 2
+            },
+            {
+                "index": 2,
+                "Entity": "LABEL_0",
+                "Score": 0.9994527697563171,
+                "Word": "name",
+                "Start": 3,
+                "End": 7
+            },
+            {
+                "index": 3,
+                "Entity": "LABEL_0",
+                "Score": 0.9995940327644348,
+                "Word": "is",
+                "Start": 8,
+                "End": 10
+            },
+            {
+                "index": 4,
+                "Entity": "LABEL_1",
+                "Score": 0.9923094511032104,
+                "Word": "Wolfgang",
+                "Start": 11,
+                "End": 19
+            },
+            {
+                "index": 5,
+                "Entity": "LABEL_0",
+                "Score": 0.9996515512466431,
+                "Word": "and",
+                "Start": 20,
+                "End": 23
+            },
+            {
+                "index": 6,
+                "Entity": "LABEL_0",
+                "Score": 0.9954800605773926,
+                "Word": "I",
+                "Start": 24,
+                "End": 25
+            },
+            {
+                "index": 7,
+                "Entity": "LABEL_0",
+                "Score": 0.9993816614151001,
+                "Word": "live",
+                "Start": 26,
+                "End": 30
+            },
+            {
+                "index": 8,
+                "Entity": "LABEL_0",
+                "Score": 0.9994133710861206,
+                "Word": "in",
+                "Start": 31,
+                "End": 33
+            },
+            {
+                "index": 9,
+                "Entity": "LABEL_5",
+                "Score": 0.997545063495636,
+                "Word": "Berlin",
+                "Start": 34,
+                "End": 40
+            },
+            {
+                "index": 10,
+                "Entity": "LABEL_0",
+                "Score": 0.9997385144233704,
+                "Word": ".",
+                "Start": 40,
+                "End": 41
+            }
+        ]
+    ],
+    "2": [
+        [
+            {
+                "Entity": "LABEL_3",
+                "Score": 0.9953675270080566,
+                "Word": "Microsoft",
+                "Start": 0,
+                "End": 9
+            },
+            {
+                "Entity": "LABEL_0",
+                "Score": 0.9985231757164001,
+                "Word": "incorporated.",
+                "Start": 10,
+                "End": 23
+            }
+        ],
+        [
+            {
+                "Entity": "LABEL_0",
+                "Score": 0.999459445476532,
+                "Word": "Yesterday I went to",
+                "Start": 0,
+                "End": 19
+            },
+            {
+                "Entity": "LABEL_5",
+                "Score": 0.9979496598243713,
+                "Word": "Berlin",
+                "Start": 20,
+                "End": 26
+            },
+            {
+                "Entity": "LABEL_0",
+                "Score": 0.9997991919517517,
+                "Word": "and met with",
+                "Start": 27,
+                "End": 39
+            },
+            {
+                "Entity": "LABEL_1",
+                "Score": 0.9973982572555542,
+                "Word": "Jack",
+                "Start": 40,
+                "End": 44
+            },
+            {
+                "Entity": "LABEL_2",
+                "Score": 0.9981720447540283,
+                "Word": "Brown",
+                "Start": 45,
+                "End": 50
+            },
+            {
+                "Entity": "LABEL_0",
+                "Score": 0.9996651411056519,
+                "Word": ".",
+                "Start": 50,
+                "End": 51
+            }
+        ]
+    ]
+}
