@@ -28,7 +28,10 @@ Implementations for additional pipelines will follow. We also very gladly accept
 
 ## Installation and usage
 
-HuGo relies on the [tokenizer](https://github.com/Knights-Analytics/tokenizers) library with bindings to huggingface's rust tokenizer, which is itself a fork of https://github.com/daulet/tokenizers. In particular, you will need to make available to HuGo the compiled libtokenizers.a file, which resides by default at /usr/lib/libtokenizers.a.
+HuGo has two main dependencies:
+
+- the [tokenizer](https://github.com/Knights-Analytics/tokenizers) library with bindings to huggingface's rust tokenizer, which is itself a fork of https://github.com/daulet/tokenizers. In particular, you will need to make available to HuGo the compiled libtokenizers.a file, which resides by default at /usr/lib/libtokenizers.a.
+- the [onnxruntime_go](https://github.com/yalue/onnxruntime_go) library, with go bindings to onnxruntime. You will need to make available to HuGo the onnxruntime.so file, which resides by default at /usr/lib/onnxruntime.so
 
 Assuming you have rust installed, you can compile the tokenizers library and get the required libtokenizers.a as simply as follows:
 
@@ -41,45 +44,18 @@ mv target/release/libtokenizers.a /usr/lib/libtokenizers.a
 
 Alternatively, you can just download libtokenizers.a from the release section of the repo.
 
-Once libtokenizers.a is in place, the library can be used as follows:
+For onnxruntime, it suffices to download it, untar it, and place it in the right location:
 
 ```
-import (
-	"github.com/phuslu/log"
-	ort "github.com/yalue/onnxruntime_go"
-)
-
-log.Info().Msg("Initialising Onnx Runtime Environment")
-checks.Check(ort.InitializeEnvironment())
-checks.Check(ort.DisableTelemetry())
-defer func() {
-    log.Info().Msg("Destroying Onnx Runtime")
-    checks.Check(ort.DestroyEnvironment())
-}()
-
-log.Info().Msg("Creating new token classification pipeline")
-// we use an onnx exported version of distilbert-NER which recognizes
-// Individuals, organisations, locations, and miscellaneous
-// see https://huggingface.co/dslim/distilbert-NER
-modelPath := "./distilbert-NER"
-pipelineSimple := NewTokenClassificationPipeline(modelPath, "testPipeline", WithSimpleAggregation())
-
-log.Info().Msg("Running the pipeline on a batch of strings")
-results := pipelineSimple.run(["Microsoft incorporated.", "Yesterday I went to Berlin and met with Jack Brown."])
-PrintTokenEntities(results)
+curl -LO https://github.com/microsoft/onnxruntime/releases/download/v${ONNXRUNTIME_VERSION}/onnxruntime-linux-x64-${ONNXRUNTIME_VERSION}.tgz && \
+   tar -xzf onnxruntime-linux-x64-${ONNXRUNTIME_VERSION}.tgz && \
+   mv ./onnxruntime-linux-x64-${ONNXRUNTIME_VERSION}/lib/libonnxruntime.so.${ONNXRUNTIME_VERSION} /usr/lib/onnxruntime.so
 ```
 
-Which yields the following:
+See also the dev/test [dockerfile](./Dockerfile).
+
+Once these pieces are in place, the library can be used as follows:
 
 ```
-Input 0
-{Entity:LABEL_3 Score:0.9953674 Scores:[] Index:0 Word:Microsoft TokenId:0 Start:0 End:9 IsSubword:false}
-{Entity:LABEL_0 Score:0.9985231 Scores:[] Index:0 Word:incorporated. TokenId:0 Start:10 End:23 IsSubword:false}
-Input 1
-{Entity:LABEL_0 Score:0.9994594 Scores:[] Index:0 Word:Yesterday I went to TokenId:0 Start:0 End:19 IsSubword:false}
-{Entity:LABEL_5 Score:0.99794966 Scores:[] Index:0 Word:Berlin TokenId:0 Start:20 End:26 IsSubword:false}
-{Entity:LABEL_0 Score:0.9997991 Scores:[] Index:0 Word:and met with TokenId:0 Start:27 End:39 IsSubword:false}
-{Entity:LABEL_1 Score:0.9973983 Scores:[] Index:0 Word:Jack TokenId:0 Start:40 End:44 IsSubword:false}
-{Entity:LABEL_2 Score:0.998172 Scores:[] Index:0 Word:Brown TokenId:0 Start:45 End:50 IsSubword:false}
-{Entity:LABEL_0 Score:0.9996651 Scores:[] Index:0 Word:. TokenId:0 Start:50 End:51 IsSubword:false}
+TODO
 ```
