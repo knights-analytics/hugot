@@ -14,10 +14,6 @@ type FeatureExtractionPipeline struct {
 	BasePipeline
 }
 
-func (p *FeatureExtractionPipeline) Destroy() {
-	p.Destroy()
-}
-
 // NewFeatureExtractionPipeline Initialize a feature extraction pipeline
 func NewFeatureExtractionPipeline(modelPath string, name string) *FeatureExtractionPipeline {
 	pipeline := &FeatureExtractionPipeline{}

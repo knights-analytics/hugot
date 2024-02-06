@@ -8,12 +8,12 @@ import (
 )
 
 type Session struct {
-	Pipelines map[string]pipelines.Pipeline
+	pipelines map[string]pipelines.Pipeline
 }
 
 func NewSession() *Session {
 	session := &Session{
-		Pipelines: map[string]pipelines.Pipeline{},
+		pipelines: map[string]pipelines.Pipeline{},
 	}
 	if ort.IsInitialized() {
 		log.Fatal().Msg("Another session is currently active and only one session can be active at one time.")
@@ -26,25 +26,25 @@ func NewSession() *Session {
 
 func (s *Session) NewTokenClassificationPipeline(modelPath string, name string, opts ...pipelines.TokenClassificationOption) *pipelines.TokenClassificationPipeline {
 	pipeline := pipelines.NewTokenClassificationPipeline(modelPath, name, opts...)
-	s.Pipelines[name] = pipeline
+	s.pipelines[name] = pipeline
 	return pipeline
 }
 
 func (s *Session) NewTextClassificationPipeline(modelPath string, name string, opts ...pipelines.TextClassificationOption) *pipelines.TextClassificationPipeline {
 	pipeline := pipelines.NewTextClassificationPipeline(modelPath, name, opts...)
-	s.Pipelines[name] = pipeline
+	s.pipelines[name] = pipeline
 	return pipeline
 }
 
 func (s *Session) NewFeatureExtractionPipeline(modelPath string, name string) *pipelines.FeatureExtractionPipeline {
 	pipeline := pipelines.NewFeatureExtractionPipeline(modelPath, name)
-	s.Pipelines[name] = pipeline
+	s.pipelines[name] = pipeline
 	return pipeline
 }
 
 func (s *Session) Destroy() {
 	log.Info().Msg("Destroying pipelines")
-	for _, p := range s.Pipelines {
+	for _, p := range s.pipelines {
 		p.Destroy()
 	}
 	log.Info().Msg("Destroying Onnx Runtime")
@@ -52,7 +52,7 @@ func (s *Session) Destroy() {
 }
 
 func (s *Session) GetStats() {
-	for _, p := range s.Pipelines {
+	for _, p := range s.pipelines {
 		p.LogStats()
 	}
 }

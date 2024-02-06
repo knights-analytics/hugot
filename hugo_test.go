@@ -66,7 +66,6 @@ func TestTextClassificationPipeline(t *testing.T) {
 			}
 		})
 	}
-	session.GetStats()
 }
 
 // Token classification

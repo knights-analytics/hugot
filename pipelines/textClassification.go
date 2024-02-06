@@ -21,10 +21,6 @@ type TextClassificationPipeline struct {
 	AggregationFunction func([]float32) []float32
 }
 
-func (p *TextClassificationPipeline) Destroy() {
-	p.Destroy()
-}
-
 type TextClassificationPipelineConfig struct {
 	IdLabelMap map[int]string `json:"id2label"`
 }

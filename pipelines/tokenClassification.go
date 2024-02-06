@@ -22,10 +22,6 @@ type TokenClassificationPipeline struct {
 	IgnoreLabels        []string
 }
 
-func (p *TokenClassificationPipeline) Destroy() {
-	p.Destroy()
-}
-
 type TokenClassificationPipelineConfig struct {
 	IdLabelMap map[int]string `json:"id2label"`
 }
