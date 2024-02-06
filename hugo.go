@@ -1,8 +1,6 @@
 package hugo
 
 import (
-	"time"
-
 	"github.com/Knights-Analytics/HuGo/pipelines"
 	"github.com/Knights-Analytics/HuGo/utils/checks"
 	"github.com/phuslu/log"
@@ -10,16 +8,12 @@ import (
 )
 
 type Session struct {
-	TokenClassificationPipelines map[string]*pipelines.TokenClassificationPipeline
-	TextClassificationPipelines  map[string]*pipelines.TextClassificationPipeline
-	FeatureExtractionPipelines   map[string]*pipelines.FeatureExtractionPipeline
+	Pipelines map[string]pipelines.Pipeline
 }
 
 func NewSession() *Session {
-	Session := &Session{
-		TokenClassificationPipelines: map[string]*pipelines.TokenClassificationPipeline{},
-		TextClassificationPipelines:  map[string]*pipelines.TextClassificationPipeline{},
-		FeatureExtractionPipelines:   map[string]*pipelines.FeatureExtractionPipeline{},
+	session := &Session{
+		Pipelines: map[string]pipelines.Pipeline{},
 	}
 	if ort.IsInitialized() {
 		log.Fatal().Msg("Another session is currently active and only one session can be active at one time.")
@@ -27,33 +21,30 @@ func NewSession() *Session {
 		checks.Check(ort.InitializeEnvironment())
 	}
 	checks.Check(ort.DisableTelemetry())
-	return Session
-}
-
-func (s *Session) NewTextClassificationPipeline(modelPath string, name string, opts ...pipelines.TextClassificationOption) *pipelines.TextClassificationPipeline {
-	pipeline := pipelines.NewTextClassificationPipeline(modelPath, name, opts...)
-	s.TextClassificationPipelines[name] = pipeline
-	return pipeline
+	return session
 }
 
 func (s *Session) NewTokenClassificationPipeline(modelPath string, name string, opts ...pipelines.TokenClassificationOption) *pipelines.TokenClassificationPipeline {
 	pipeline := pipelines.NewTokenClassificationPipeline(modelPath, name, opts...)
-	s.TokenClassificationPipelines[name] = pipeline
+	s.Pipelines[name] = pipeline
+	return pipeline
+}
+
+func (s *Session) NewTextClassificationPipeline(modelPath string, name string, opts ...pipelines.TextClassificationOption) *pipelines.TextClassificationPipeline {
+	pipeline := pipelines.NewTextClassificationPipeline(modelPath, name, opts...)
+	s.Pipelines[name] = pipeline
 	return pipeline
 }
 
 func (s *Session) NewFeatureExtractionPipeline(modelPath string, name string) *pipelines.FeatureExtractionPipeline {
 	pipeline := pipelines.NewFeatureExtractionPipeline(modelPath, name)
-	s.FeatureExtractionPipelines[name] = pipeline
+	s.Pipelines[name] = pipeline
 	return pipeline
 }
 
 func (s *Session) Destroy() {
 	log.Info().Msg("Destroying pipelines")
-	for _, p := range s.TextClassificationPipelines {
-		p.Destroy()
-	}
-	for _, p := range s.TokenClassificationPipelines {
+	for _, p := range s.Pipelines {
 		p.Destroy()
 	}
 	log.Info().Msg("Destroying Onnx Runtime")
@@ -61,19 +52,7 @@ func (s *Session) Destroy() {
 }
 
 func (s *Session) GetStats() {
-	for name, p := range s.FeatureExtractionPipelines {
-		logStats(name, p.TokenizerTimings, p.PipelineTimings)
+	for _, p := range s.Pipelines {
+		p.LogStats()
 	}
-	for name, p := range s.TokenClassificationPipelines {
-		logStats(name, p.TokenizerTimings, p.PipelineTimings)
-	}
-	for name, p := range s.TextClassificationPipelines {
-		logStats(name, p.TokenizerTimings, p.PipelineTimings)
-	}
-}
-
-func logStats(name string, tokenizerTimings *pipelines.Timings, pipelineTimings *pipelines.Timings) {
-	log.Info().Msgf("Statistics for pipeline: %s", name)
-	log.Info().Msgf("Tokenizer: Total time=%s, Execution count=%d, Average query time=%s", time.Duration(tokenizerTimings.TotalNS), tokenizerTimings.NumCalls, time.Duration(tokenizerTimings.TotalNS/max(1, tokenizerTimings.NumCalls)))
-	log.Info().Msgf("ONNX: Total time=%s, Execution count=%d, Average query time=%s", time.Duration(tokenizerTimings.TotalNS), pipelineTimings.NumCalls, time.Duration(pipelineTimings.TotalNS/max(1, pipelineTimings.NumCalls)))
 }

@@ -6,7 +6,7 @@ import (
 	"slices"
 )
 
-// mean of a float32 vector
+// Mean of a float32 vector
 func Mean(vector []float32) float32 {
 	n := 0
 	sum := float32(0.0)

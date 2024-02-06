@@ -16,9 +16,13 @@ import (
 // types
 
 type TextClassificationPipeline struct {
-	basePipeline
+	BasePipeline
 	IdLabelMap          map[int]string
 	AggregationFunction func([]float32) []float32
+}
+
+func (p *TextClassificationPipeline) Destroy() {
+	p.Destroy()
 }
 
 type TextClassificationPipelineConfig struct {
@@ -42,7 +46,7 @@ func WithAggregationFunction(aggregationFunction func([]float32) []float32) Text
 	}
 }
 
-// Initializes a new text classification pipeline
+// NewTextClassificationPipeline initializes a new text classification pipeline
 func NewTextClassificationPipeline(modelPath string, name string, opts ...TextClassificationOption) *TextClassificationPipeline {
 	pipeline := &TextClassificationPipeline{}
 	pipeline.ModelPath = modelPath
@@ -95,15 +99,19 @@ func NewTextClassificationPipeline(modelPath string, name string, opts ...TextCl
 }
 
 // TODO: perhaps this can be unified with the other pipelines
-func (p TextClassificationPipeline) Forward(batch PipelineBatch) PipelineBatch {
+
+func (p *TextClassificationPipeline) Forward(batch PipelineBatch) PipelineBatch {
 	start := time.Now()
 
 	actualBatchSize := int64(len(batch.Input))
 	maxSequence := int64(batch.MaxSequence)
 	inputTensors := p.getInputTensors(batch, actualBatchSize, maxSequence)
-	for _, tensor := range inputTensors {
-		defer func(tensor ort.ArbitraryTensor) { checks.Check(tensor.Destroy()) }(tensor)
-	}
+
+	defer func(inputTensors []ort.ArbitraryTensor) {
+		for _, tensor := range inputTensors {
+			checks.Check(tensor.Destroy())
+		}
+	}(inputTensors)
 
 	outputTensor, err4 := ort.NewEmptyTensor[float32](ort.NewShape(actualBatchSize, int64(p.OutputDim)))
 	checks.Check(err4)
@@ -118,7 +126,7 @@ func (p TextClassificationPipeline) Forward(batch PipelineBatch) PipelineBatch {
 	return batch
 }
 
-func (p TextClassificationPipeline) Postprocess(batch PipelineBatch) TextClassificationOutput {
+func (p *TextClassificationPipeline) Postprocess(batch PipelineBatch) TextClassificationOutput {
 
 	outputTensor := batch.OutputTensor
 	output := make([][]float32, len(batch.Input))
@@ -160,7 +168,7 @@ func (p TextClassificationPipeline) Postprocess(batch PipelineBatch) TextClassif
 }
 
 // Run the pipeline on a string batch
-func (p TextClassificationPipeline) Run(inputs []string) TextClassificationOutput {
+func (p *TextClassificationPipeline) Run(inputs []string) TextClassificationOutput {
 	batch := p.Preprocess(inputs)
 	batch = p.Forward(batch)
 	return p.Postprocess(batch)

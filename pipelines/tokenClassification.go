@@ -16,10 +16,14 @@ import (
 // types
 
 type TokenClassificationPipeline struct {
-	basePipeline
+	BasePipeline
 	IdLabelMap          map[int]string
 	AggregationStrategy string
 	IgnoreLabels        []string
+}
+
+func (p *TokenClassificationPipeline) Destroy() {
+	p.Destroy()
 }
 
 type TokenClassificationPipelineConfig struct {
@@ -127,7 +131,7 @@ func NewTokenClassificationPipeline(modelPath string, name string, opts ...Token
 }
 
 // Postprocess function for a token classification pipeline
-func (p TokenClassificationPipeline) Postprocess(batch PipelineBatch) TokenClassificationOutput {
+func (p *TokenClassificationPipeline) Postprocess(batch PipelineBatch) TokenClassificationOutput {
 
 	outputs := make([][][]float32, len(batch.Input))        // holds the final output
 	inputVectors := make([][]float32, 0, batch.MaxSequence) // holds the embeddings of each original token (no padding) for an input
@@ -186,7 +190,7 @@ func (p TokenClassificationPipeline) Postprocess(batch PipelineBatch) TokenClass
 }
 
 // GatherPreEntities from batch of logits to list of pre-aggregated outputs
-func (p TokenClassificationPipeline) GatherPreEntities(input TokenizedInput, output [][]float32) []entity {
+func (p *TokenClassificationPipeline) GatherPreEntities(input TokenizedInput, output [][]float32) []entity {
 
 	sentence := input.Raw
 	var preEntities []entity
@@ -220,7 +224,7 @@ func (p TokenClassificationPipeline) GatherPreEntities(input TokenizedInput, out
 	return preEntities
 }
 
-func (p TokenClassificationPipeline) Aggregate(input TokenizedInput, preEntities []entity) []entity {
+func (p *TokenClassificationPipeline) Aggregate(input TokenizedInput, preEntities []entity) []entity {
 	entities := make([]entity, len(preEntities))
 	if p.AggregationStrategy == "SIMPLE" || p.AggregationStrategy == "NONE" {
 		for i, preEntity := range preEntities {
@@ -249,7 +253,7 @@ func (p TokenClassificationPipeline) Aggregate(input TokenizedInput, preEntities
 	return p.GroupEntities(entities)
 }
 
-func (p TokenClassificationPipeline) getTag(entityName string) (string, string) {
+func (p *TokenClassificationPipeline) getTag(entityName string) (string, string) {
 	var bi string
 	var tag string
 	if strings.HasPrefix(entityName, "B-") {
@@ -266,7 +270,7 @@ func (p TokenClassificationPipeline) getTag(entityName string) (string, string) 
 	return bi, tag
 }
 
-func (p TokenClassificationPipeline) groupSubEntities(entities []entity) entity {
+func (p *TokenClassificationPipeline) groupSubEntities(entities []entity) entity {
 	splits := strings.Split(entities[0].Entity, "-")
 	var entityType string
 	if len(splits) == 1 {
@@ -295,7 +299,7 @@ func (p TokenClassificationPipeline) groupSubEntities(entities []entity) entity 
 }
 
 // GroupEntities group together adjacent tokens with the same entity predicted
-func (p TokenClassificationPipeline) GroupEntities(entities []entity) []entity {
+func (p *TokenClassificationPipeline) GroupEntities(entities []entity) []entity {
 	var entityGroups []entity
 	var currentGroupDisagg []entity
 
@@ -324,7 +328,7 @@ func (p TokenClassificationPipeline) GroupEntities(entities []entity) []entity {
 }
 
 // Run the pipeline on a string batch
-func (p TokenClassificationPipeline) Run(inputs []string) TokenClassificationOutput {
+func (p *TokenClassificationPipeline) Run(inputs []string) TokenClassificationOutput {
 	batch := p.Preprocess(inputs)
 	batch = p.Forward(batch)
 	return p.Postprocess(batch)

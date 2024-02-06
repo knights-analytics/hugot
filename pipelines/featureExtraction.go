@@ -11,7 +11,11 @@ import (
 // types
 
 type FeatureExtractionPipeline struct {
-	basePipeline
+	BasePipeline
+}
+
+func (p *FeatureExtractionPipeline) Destroy() {
+	p.Destroy()
 }
 
 // NewFeatureExtractionPipeline Initialize a feature extraction pipeline

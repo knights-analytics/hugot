@@ -13,8 +13,8 @@ import (
 	ort "github.com/yalue/onnxruntime_go"
 )
 
-// basic pipeline type used for struct composition in the other pipelines
-type basePipeline struct {
+// BasePipeline is a basic pipeline type used for struct composition in the other pipelines
+type BasePipeline struct {
 	ModelPath        string
 	PipelineName     string
 	OrtSession       *ort.DynamicAdvancedSession
@@ -28,6 +28,11 @@ type basePipeline struct {
 	OutputDim        int
 	TokenizerTimings *Timings
 	PipelineTimings  *Timings
+}
+
+type Pipeline interface {
+	Destroy()
+	LogStats()
 }
 
 type Timings struct {
@@ -55,11 +60,11 @@ type PipelineBatch struct {
 	OutputTensor         []float32
 }
 
-func (p *basePipeline) GetOutputDim() int {
+func (p *BasePipeline) GetOutputDim() int {
 	return p.OutputDim
 }
 
-func (p *basePipeline) SetSessionOptions() {
+func (p *BasePipeline) SetSessionOptions() {
 	options, optionsError := ort.NewSessionOptions()
 	checks.Check(optionsError)
 	checks.Check(options.SetIntraOpNumThreads(1))
@@ -69,7 +74,7 @@ func (p *basePipeline) SetSessionOptions() {
 }
 
 // Load the ort model supporting the pipeline
-func (p *basePipeline) loadModel() {
+func (p *BasePipeline) loadModel() {
 
 	// Initialise tokenizer
 	log.Info().Msgf("Loading Tokenizer config: %s", util.PathJoinSafe(p.ModelPath, "tokenizer.json"))
@@ -113,14 +118,14 @@ func (p *basePipeline) loadModel() {
 	p.Tokenizer = tk
 }
 
-func (p *basePipeline) Destroy() {
+func (p *BasePipeline) Destroy() {
 	checks.Check(p.Tokenizer.Close())
 	checks.Check(p.OrtSession.Destroy())
 	checks.Check(p.OrtOptions.Destroy())
 }
 
 // Preprocess the input strings in the batch
-func (p *basePipeline) Preprocess(inputs []string) PipelineBatch {
+func (p *BasePipeline) Preprocess(inputs []string) PipelineBatch {
 	start := time.Now()
 
 	outputs := make([]TokenizedInput, len(inputs))
@@ -160,7 +165,7 @@ func (p *basePipeline) Preprocess(inputs []string) PipelineBatch {
 	return batch
 }
 
-func (p *basePipeline) getInputTensors(batch PipelineBatch, actualBatchSize int64, maxSequence int64) []ort.ArbitraryTensor {
+func (p *BasePipeline) getInputTensors(batch PipelineBatch, actualBatchSize int64, maxSequence int64) []ort.ArbitraryTensor {
 	inputTensors := make([]ort.ArbitraryTensor, len(p.InputsMeta))
 
 	for i, input := range p.InputsMeta {
@@ -184,7 +189,7 @@ func (p *basePipeline) getInputTensors(batch PipelineBatch, actualBatchSize int6
 }
 
 // Forward pass of the neural network on the tokenized input
-func (p *basePipeline) Forward(batch PipelineBatch) PipelineBatch {
+func (p *BasePipeline) Forward(batch PipelineBatch) PipelineBatch {
 	start := time.Now()
 
 	actualBatchSize := int64(len(batch.Input))
@@ -193,9 +198,12 @@ func (p *basePipeline) Forward(batch PipelineBatch) PipelineBatch {
 
 	outputTensor, err4 := ort.NewEmptyTensor[float32](ort.NewShape(actualBatchSize, maxSequence, int64(p.OutputDim)))
 	checks.Check(err4)
-	for _, tensor := range inputTensors {
-		defer func(tensor ort.ArbitraryTensor) { checks.Check(tensor.Destroy()) }(tensor)
-	}
+
+	defer func(inputTensors []ort.ArbitraryTensor) {
+		for _, tensor := range inputTensors {
+			checks.Check(tensor.Destroy())
+		}
+	}(inputTensors)
 
 	// Run Onnx model
 	checks.Check(p.OrtSession.Run(inputTensors, []ort.ArbitraryTensor{outputTensor}))
@@ -208,7 +216,7 @@ func (p *basePipeline) Forward(batch PipelineBatch) PipelineBatch {
 }
 
 // convert tokenized input to the format required by the onnxruntime library
-func (p *basePipeline) convertInputToTensors(inputs []TokenizedInput, maxSequence int) PipelineBatch {
+func (p *BasePipeline) convertInputToTensors(inputs []TokenizedInput, maxSequence int) PipelineBatch {
 
 	tensorSize := len(inputs) * maxSequence
 	counter := 0
@@ -244,4 +252,10 @@ func (p *basePipeline) convertInputToTensors(inputs []TokenizedInput, maxSequenc
 		AttentionMasksTensor: attentionMasksTensor,
 		MaxSequence:          maxSequence,
 	}
+}
+
+func (p *BasePipeline) LogStats() {
+	log.Info().Msgf("Statistics for pipeline: %s", p.PipelineName)
+	log.Info().Msgf("Tokenizer: Total time=%s, Execution count=%d, Average query time=%s", time.Duration(p.TokenizerTimings.TotalNS), p.TokenizerTimings.NumCalls, time.Duration(p.TokenizerTimings.TotalNS/max(1, p.TokenizerTimings.NumCalls)))
+	log.Info().Msgf("ONNX: Total time=%s, Execution count=%d, Average query time=%s", time.Duration(p.PipelineTimings.TotalNS), p.PipelineTimings.NumCalls, time.Duration(p.PipelineTimings.TotalNS/max(1, p.PipelineTimings.NumCalls)))
 }
