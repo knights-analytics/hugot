@@ -5,11 +5,11 @@ import (
 	"slices"
 	"strings"
 
-	util "github.com/Knights-Analytics/HuGo/utils"
+	util "github.com/knights-analytics/hugo/utils"
 
-	"github.com/Knights-Analytics/HuGo/utils/checks"
-	"github.com/Knights-Analytics/tokenizers"
 	jsoniter "github.com/json-iterator/go"
+	"github.com/knights-analytics/hugo/utils/checks"
+	"github.com/knights-analytics/tokenizers"
 	"github.com/phuslu/log"
 )
 

@@ -6,7 +6,7 @@ ARG ONNXRUNTIME_VERSION=1.16.3
 
 FROM rust:$RUST_VERSION AS tokenizer
 
-RUN git clone https://github.com/Knights-Analytics/tokenizers -b main && \
+RUN git clone https://github.com/knights-analytics/tokenizers -b main && \
     cd tokenizers && \
     cargo build --release
 

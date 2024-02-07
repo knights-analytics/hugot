@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Knights-Analytics/HuGo/utils/checks"
+	"github.com/knights-analytics/hugo/utils/checks"
 	"github.com/viant/afs"
 	_ "github.com/viant/afsc/s3"
 )

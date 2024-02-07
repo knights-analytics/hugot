@@ -4,11 +4,11 @@ import (
 	"sync/atomic"
 	"time"
 
-	util "github.com/Knights-Analytics/HuGo/utils"
+	util "github.com/knights-analytics/hugo/utils"
 
-	"github.com/Knights-Analytics/HuGo/utils/checks"
+	"github.com/knights-analytics/hugo/utils/checks"
 
-	"github.com/Knights-Analytics/tokenizers"
+	"github.com/knights-analytics/tokenizers"
 	"github.com/phuslu/log"
 	ort "github.com/yalue/onnxruntime_go"
 )
@@ -33,6 +33,7 @@ type BasePipeline struct {
 type Pipeline interface {
 	Destroy()
 	LogStats()
+	GetOutputDim() int
 }
 
 type Timings struct {

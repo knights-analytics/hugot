@@ -10,9 +10,9 @@ import (
 	"strings"
 	"testing"
 
-	hugo "github.com/Knights-Analytics/HuGo"
-	"github.com/Knights-Analytics/HuGo/pipelines"
-	"github.com/Knights-Analytics/HuGo/utils/checks"
+	"github.com/knights-analytics/hugo"
+	"github.com/knights-analytics/hugo/pipelines"
+	"github.com/knights-analytics/hugo/utils/checks"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -28,6 +28,7 @@ func TestTextClassificationPipeline(t *testing.T) {
 	session := hugo.NewSession()
 	defer session.Destroy()
 	modelFolder := os.Getenv("TEST_MODELS_FOLDER")
+	modelFolder = "./models"
 	modelPath := path.Join(modelFolder, "distilbert-base-uncased-finetuned-sst-2-english")
 	sentimentPipeline := session.NewTextClassificationPipeline(modelPath, "testPipeline")
 
@@ -66,6 +67,9 @@ func TestTextClassificationPipeline(t *testing.T) {
 			}
 		})
 	}
+
+	// check get stats
+	session.GetStats()
 }
 
 // Token classification

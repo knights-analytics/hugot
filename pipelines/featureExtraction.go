@@ -1,7 +1,7 @@
 package pipelines
 
 import (
-	"github.com/Knights-Analytics/tokenizers"
+	"github.com/knights-analytics/tokenizers"
 	"github.com/phuslu/log"
 )
 

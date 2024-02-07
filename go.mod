@@ -1,10 +1,10 @@
-module github.com/Knights-Analytics/HuGo
+module github.com/knights-analytics/hugo
 
 go 1.21.5
 
 require (
-	github.com/Knights-Analytics/tokenizers v0.0.0-20240201112506-5aefcbb3390d
 	github.com/json-iterator/go v1.1.12
+	github.com/knights-analytics/tokenizers v0.0.0-20240208100333-3aa65fb1865a
 	github.com/phuslu/log v1.0.88
 	github.com/stretchr/testify v1.8.4
 	github.com/viant/afs v1.25.0

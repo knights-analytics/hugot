@@ -8,8 +8,6 @@ cloud.google.com/go/iam v1.1.5 h1:1jTsCu4bcsNsE4iiqNT5SHwrDRCfRmIaaaVFhRveTJI=
 cloud.google.com/go/iam v1.1.5/go.mod h1:rB6P/Ic3mykPbFio+vo7403drjlgvoWfYpJhMXEbzv8=
 cloud.google.com/go/storage v1.37.0 h1:WI8CsaFO8Q9KjPVtsZ5Cmi0dXV25zMoX0FklT7c3Jm4=
 cloud.google.com/go/storage v1.37.0/go.mod h1:i34TiT2IhiNDmcj65PqwCjcoUX7Z5pLzS8DEmoiFq1k=
-github.com/Knights-Analytics/tokenizers v0.0.0-20240201112506-5aefcbb3390d h1:mYaYASPBoVA+filNAgjh488uawQ6bXgVKWpJl+RYBrY=
-github.com/Knights-Analytics/tokenizers v0.0.0-20240201112506-5aefcbb3390d/go.mod h1:0teoX3jhgpeuyscSsAoJycP9vQfWEnTHBUyCFeVMmPw=
 github.com/aws/aws-sdk-go v1.50.11 h1:BxUqMbkzKzzQ6FXLlZFNFkFjHnv6utbc4PItVs5SvaE=
 github.com/aws/aws-sdk-go v1.50.11/go.mod h1:LF8svs817+Nz+DmiMQKTO3ubZ/6IaTpq3TjupRn3Eqk=
 github.com/creack/pty v1.1.9/go.mod h1:oKZEueFk5CKHvIhNR5MUki03XCEU+Q6VDXinZuGJ33E=
@@ -43,6 +41,8 @@ github.com/jmespath/go-jmespath/internal/testify v1.5.1 h1:shLQSRRSCCPj3f2gpwzGw
 github.com/jmespath/go-jmespath/internal/testify v1.5.1/go.mod h1:L3OGu8Wl2/fWfCI6z80xFu9LTZmf1ZRjMHUOPmWr69U=
 github.com/json-iterator/go v1.1.12 h1:PV8peI4a0ysnczrg+LtxykD8LfKY9ML6u2jnxaEnrnM=
 github.com/json-iterator/go v1.1.12/go.mod h1:e30LSqwooZae/UwlEbR2852Gd8hjQvJoHmT4TnhNGBo=
+github.com/knights-analytics/tokenizers v0.0.0-20240208100333-3aa65fb1865a h1:bfRmbUDknncmNr6Wlhq1oEEcUirod38CM1kvzwPz1yE=
+github.com/knights-analytics/tokenizers v0.0.0-20240208100333-3aa65fb1865a/go.mod h1:OEp61MZeHeQNfvkqulvM2U9w9qDwklxVMY8PqqQpWbQ=
 github.com/kr/pretty v0.1.0 h1:L/CwN0zerZDmRFUapSPitk6f+Q3+0za1rQkzVuMiMFI=
 github.com/kr/pretty v0.1.0/go.mod h1:dAy3ld7l9f0ibDNOQOHHMYYIIbhfbHSm3C4ZsoJORNo=
 github.com/kr/text v0.2.0 h1:5Nx0Ya0ZqY2ygV366QzturHI13Jq95ApcVaJBhpS+AY=
