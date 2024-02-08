@@ -14,6 +14,8 @@ type FeatureExtractionPipeline struct {
 	BasePipeline
 }
 
+type FeatureExtractionOutput [][]float32
+
 // NewFeatureExtractionPipeline Initialize a feature extraction pipeline
 func NewFeatureExtractionPipeline(modelPath string, name string) *FeatureExtractionPipeline {
 	pipeline := &FeatureExtractionPipeline{}
@@ -41,7 +43,7 @@ func NewFeatureExtractionPipeline(modelPath string, name string) *FeatureExtract
 }
 
 // Postprocess Parse the results of the forward pass into the output. Token embeddings are mean pooled.
-func (p *FeatureExtractionPipeline) Postprocess(batch PipelineBatch) [][]float32 {
+func (p *FeatureExtractionPipeline) Postprocess(batch PipelineBatch) FeatureExtractionOutput {
 
 	maxSequence := batch.MaxSequence
 	vectorCounter := 0
@@ -93,7 +95,7 @@ func meanPooling(tokens [][]float32, input TokenizedInput, maxSequence int, dime
 }
 
 // Run the pipeline on a string batch
-func (p *FeatureExtractionPipeline) Run(inputs []string) [][]float32 {
+func (p *FeatureExtractionPipeline) Run(inputs []string) FeatureExtractionOutput {
 	batch := p.Preprocess(inputs)
 	batch = p.Forward(batch)
 	return p.Postprocess(batch)

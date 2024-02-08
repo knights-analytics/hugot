@@ -28,7 +28,6 @@ func TestTextClassificationPipeline(t *testing.T) {
 	session := hugo.NewSession()
 	defer session.Destroy()
 	modelFolder := os.Getenv("TEST_MODELS_FOLDER")
-	modelFolder = "./models"
 	modelPath := path.Join(modelFolder, "distilbert-base-uncased-finetuned-sst-2-english")
 	sentimentPipeline := session.NewTextClassificationPipeline(modelPath, "testPipeline")
 
