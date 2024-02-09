@@ -1,4 +1,4 @@
-module github.com/knights-analytics/hugo
+module github.com/knights-analytics/hugot
 
 go 1.21.5
 

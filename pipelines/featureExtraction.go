@@ -1,8 +1,9 @@
 package pipelines
 
 import (
+	"errors"
+
 	"github.com/knights-analytics/tokenizers"
-	"github.com/phuslu/log"
 )
 
 // FeatureExtractionPipeline A feature extraction pipeline is a go version of
@@ -17,7 +18,7 @@ type FeatureExtractionPipeline struct {
 type FeatureExtractionOutput [][]float32
 
 // NewFeatureExtractionPipeline Initialize a feature extraction pipeline
-func NewFeatureExtractionPipeline(modelPath string, name string) *FeatureExtractionPipeline {
+func NewFeatureExtractionPipeline(modelPath string, name string) (*FeatureExtractionPipeline, error) {
 	pipeline := &FeatureExtractionPipeline{}
 	pipeline.ModelPath = modelPath
 	pipeline.PipelineName = name
@@ -29,21 +30,24 @@ func NewFeatureExtractionPipeline(modelPath string, name string) *FeatureExtract
 	pipeline.TokenizerTimings = &Timings{}
 
 	// load onnx model
-	pipeline.loadModel()
+	err := pipeline.loadModel()
+	if err != nil {
+		return nil, err
+	}
 
 	// the dimension of the output is taken from the output meta. For the moment we assume that there is only one output
 	pipeline.OutputDim = int(pipeline.OutputsMeta[0].Dimensions[2])
 
 	// output dimension
 	if pipeline.OutputDim <= 0 {
-		log.Fatal().Msg("Pipeline configuration invalid: outputDim parameter must be greater than zero.")
+		return nil, errors.New("pipeline configuration invalid: outputDim parameter must be greater than zero")
 	}
 
-	return pipeline
+	return pipeline, nil
 }
 
 // Postprocess Parse the results of the forward pass into the output. Token embeddings are mean pooled.
-func (p *FeatureExtractionPipeline) Postprocess(batch PipelineBatch) FeatureExtractionOutput {
+func (p *FeatureExtractionPipeline) Postprocess(batch PipelineBatch) (FeatureExtractionOutput, error) {
 
 	maxSequence := batch.MaxSequence
 	vectorCounter := 0
@@ -71,7 +75,7 @@ func (p *FeatureExtractionPipeline) Postprocess(batch PipelineBatch) FeatureExtr
 			vectorCounter++
 		}
 	}
-	return outputs
+	return outputs, nil
 }
 
 func meanPooling(tokens [][]float32, input TokenizedInput, maxSequence int, dimensions int) []float32 {
@@ -95,8 +99,11 @@ func meanPooling(tokens [][]float32, input TokenizedInput, maxSequence int, dime
 }
 
 // Run the pipeline on a string batch
-func (p *FeatureExtractionPipeline) Run(inputs []string) FeatureExtractionOutput {
+func (p *FeatureExtractionPipeline) Run(inputs []string) (FeatureExtractionOutput, error) {
 	batch := p.Preprocess(inputs)
-	batch = p.Forward(batch)
+	batch, forwardError := p.Forward(batch)
+	if forwardError != nil {
+		return nil, forwardError
+	}
 	return p.Postprocess(batch)
 }

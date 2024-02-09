@@ -4,9 +4,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	util "github.com/knights-analytics/hugo/utils"
-
-	"github.com/knights-analytics/hugo/utils/checks"
+	util "github.com/knights-analytics/hugot/utils"
 
 	"github.com/knights-analytics/tokenizers"
 	"github.com/phuslu/log"
@@ -31,7 +29,7 @@ type BasePipeline struct {
 }
 
 type Pipeline interface {
-	Destroy()
+	Destroy() error
 	LogStats()
 	GetOutputDim() int
 }
@@ -65,30 +63,58 @@ func (p *BasePipeline) GetOutputDim() int {
 	return p.OutputDim
 }
 
-func (p *BasePipeline) SetSessionOptions() {
+func (p *BasePipeline) SetSessionOptions() error {
 	options, optionsError := ort.NewSessionOptions()
-	checks.Check(optionsError)
-	checks.Check(options.SetIntraOpNumThreads(1))
-	checks.Check(options.SetInterOpNumThreads(1))
-	checks.Check(options.SetCpuMemArena(true))
+	if optionsError != nil {
+		return optionsError
+	}
+	err1 := options.SetIntraOpNumThreads(1)
+	if err1 != nil {
+		return err1
+	}
+	err2 := options.SetInterOpNumThreads(1)
+	if err2 != nil {
+		return err2
+	}
+	err3 := options.SetCpuMemArena(true)
+	if err3 != nil {
+		return err3
+	}
 	p.OrtOptions = options
+	return nil
 }
 
 // Load the ort model supporting the pipeline
-func (p *BasePipeline) loadModel() {
+func (p *BasePipeline) loadModel() error {
 
 	// Initialise tokenizer
 	log.Info().Msgf("Loading Tokenizer config: %s", util.PathJoinSafe(p.ModelPath, "tokenizer.json"))
-	tk, err := tokenizers.FromBytes(util.ReadFileBytes(util.PathJoinSafe(p.ModelPath, "tokenizer.json")))
-	checks.Check(err)
+	tokenizerBytes, err := util.ReadFileBytes(util.PathJoinSafe(p.ModelPath, "tokenizer.json"))
+	if err != nil {
+		return err
+	}
 
-	p.SetSessionOptions()
+	tk, err := tokenizers.FromBytes(tokenizerBytes)
+	if err != nil {
+		return err
+	}
+
+	err = p.SetSessionOptions()
+	if err != nil {
+		return err
+	}
 
 	log.Info().Msgf("Loading model at %s/model.onnx", p.ModelPath)
 
-	onnxBytes := util.ReadFileBytes(util.PathJoinSafe(p.ModelPath, "model.onnx"))
-	inputs, outputs, err2 := ort.GetInputOutputInfoWithONNXData(onnxBytes)
-	checks.Check(err2)
+	onnxBytes, err := util.ReadFileBytes(util.PathJoinSafe(p.ModelPath, "model.onnx"))
+	if err != nil {
+		return err
+	}
+
+	inputs, outputs, err := ort.GetInputOutputInfoWithONNXData(onnxBytes)
+	if err != nil {
+		return err
+	}
 
 	p.InputsMeta = inputs
 	p.OutputsMeta = outputs
@@ -107,22 +133,36 @@ func (p *BasePipeline) loadModel() {
 	for i, meta := range outputs {
 		outputNames[i] = meta.Name
 	}
-	session, err3 := ort.NewDynamicAdvancedSessionWithONNXData(
-		util.ReadFileBytes(util.PathJoinSafe(p.ModelPath, "model.onnx")),
+	session, err := ort.NewDynamicAdvancedSessionWithONNXData(
+		onnxBytes,
 		inputNames,
 		outputNames,
 		p.OrtOptions,
 	)
-	checks.Check(err3)
+	if err != nil {
+		return err
+	}
 
 	p.OrtSession = session
 	p.Tokenizer = tk
+	return nil
 }
 
-func (p *BasePipeline) Destroy() {
-	checks.Check(p.Tokenizer.Close())
-	checks.Check(p.OrtSession.Destroy())
-	checks.Check(p.OrtOptions.Destroy())
+func (p *BasePipeline) Destroy() error {
+	var finalErr error
+	errTokenizer := p.Tokenizer.Close()
+	if errTokenizer != nil {
+		finalErr = errTokenizer
+	}
+	ortError := p.OrtSession.Destroy()
+	if ortError != nil {
+		finalErr = ortError
+	}
+	ortOptionsErr := p.OrtOptions.Destroy()
+	if ortOptionsErr != nil {
+		finalErr = ortOptionsErr
+	}
+	return finalErr
 }
 
 // Preprocess the input strings in the batch
@@ -166,12 +206,12 @@ func (p *BasePipeline) Preprocess(inputs []string) PipelineBatch {
 	return batch
 }
 
-func (p *BasePipeline) getInputTensors(batch PipelineBatch, actualBatchSize int64, maxSequence int64) []ort.ArbitraryTensor {
+func (p *BasePipeline) getInputTensors(batch PipelineBatch, actualBatchSize int64, maxSequence int64) ([]ort.ArbitraryTensor, error) {
 	inputTensors := make([]ort.ArbitraryTensor, len(p.InputsMeta))
+	var err error
 
 	for i, input := range p.InputsMeta {
 		var inputTensor *ort.Tensor[int64]
-		var err error
 
 		// create the tensor for the input name
 		switch input.Name {
@@ -183,37 +223,44 @@ func (p *BasePipeline) getInputTensors(batch PipelineBatch, actualBatchSize int6
 			inputTensor, err = ort.NewTensor(ort.NewShape(actualBatchSize, maxSequence), batch.AttentionMasksTensor)
 		}
 
-		checks.Check(err)
 		inputTensors[i] = inputTensor
 	}
-	return inputTensors
+	return inputTensors, err
 }
 
 // Forward pass of the neural network on the tokenized input
-func (p *BasePipeline) Forward(batch PipelineBatch) PipelineBatch {
+func (p *BasePipeline) Forward(batch PipelineBatch) (PipelineBatch, error) {
 	start := time.Now()
 
 	actualBatchSize := int64(len(batch.Input))
 	maxSequence := int64(batch.MaxSequence)
-	inputTensors := p.getInputTensors(batch, actualBatchSize, maxSequence)
+	inputTensors, err := p.getInputTensors(batch, actualBatchSize, maxSequence)
+	if err != nil {
+		return batch, err
+	}
 
 	outputTensor, err4 := ort.NewEmptyTensor[float32](ort.NewShape(actualBatchSize, maxSequence, int64(p.OutputDim)))
-	checks.Check(err4)
+	if err4 != nil {
+		return batch, err4
+	}
 
 	defer func(inputTensors []ort.ArbitraryTensor) {
 		for _, tensor := range inputTensors {
-			checks.Check(tensor.Destroy())
+			tensor.Destroy()
 		}
 	}(inputTensors)
 
 	// Run Onnx model
-	checks.Check(p.OrtSession.Run(inputTensors, []ort.ArbitraryTensor{outputTensor}))
+	errOnnx := p.OrtSession.Run(inputTensors, []ort.ArbitraryTensor{outputTensor})
+	if errOnnx != nil {
+		return batch, errOnnx
+	}
 	batch.OutputTensor = outputTensor.GetData()
-	defer func() { checks.Check(outputTensor.Destroy()) }()
+	defer func() { outputTensor.Destroy() }()
 
 	atomic.AddUint64(&p.PipelineTimings.NumCalls, 1)
 	atomic.AddUint64(&p.PipelineTimings.TotalNS, uint64(time.Since(start)))
-	return batch
+	return batch, nil
 }
 
 // convert tokenized input to the format required by the onnxruntime library

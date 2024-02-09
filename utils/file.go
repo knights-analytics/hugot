@@ -1,16 +1,13 @@
 package util
 
 import (
-	"bytes"
 	"context"
 	"io"
 	"io/fs"
-	"os/user"
 	"path/filepath"
 	"strings"
 	"time"
 
-	"github.com/knights-analytics/hugo/utils/checks"
 	"github.com/viant/afs"
 	_ "github.com/viant/afsc/s3"
 )
@@ -91,80 +88,27 @@ func (afs AfsFS) Open(name string) (fs.File, error) {
 
 // end AFS FS abstraction
 
-func FileExists(filename string) bool {
+func FileExists(filename string) (bool, error) {
 	exists, err := FileSystem.Exists(context.Background(), filename)
-	checks.Check(err)
-	return exists
+	return exists, err
 }
 
-func OpenFile(filename string) io.ReadCloser {
+func ReadFileBytes(filename string) ([]byte, error) {
 	file, err := FileSystem.OpenURL(context.Background(), filename)
-	checks.Check(err)
-	return file
-}
-
-func DeleteFile(filename string) {
-	checks.Check(FileSystem.Delete(context.Background(), filename))
-}
-
-func CopyFile(from string, to string) {
-	checks.Check(FileSystem.Copy(context.Background(), from, to))
-}
-
-func MoveFile(from string, to string) {
-	checks.Check(FileSystem.Move(context.Background(), from, to))
-}
-
-func ReadFileString(filename string) string {
-	return string(ReadFileBytes(filename))
-}
-
-func WriteFileString(filename string, data string) {
-	checks.Check(FileSystem.Upload(context.Background(), filename, 0664, strings.NewReader(data)))
-}
-
-func ReadFileBytes(filename string) []byte {
-	file, err := FileSystem.OpenURL(context.Background(), filename)
-	checks.Check(err)
+	if err != nil {
+		return nil, err
+	}
 	defer CloseFile(file)
 
 	outBytes, readErr := io.ReadAll(file)
-	checks.Check(readErr)
-
-	return outBytes
-}
-
-func WriteFileBytes(filename string, data []byte) {
-	checks.Check(FileSystem.Upload(context.Background(), filename, 0664, bytes.NewReader(data)))
-}
-
-func CloseFile(file io.Closer) {
-	err := file.Close()
-	checks.Check(err)
-}
-
-func NewFileWriter(filename string) io.WriteCloser {
-	if FileExists(filename) {
-		checks.Check(FileSystem.Delete(context.Background(), filename))
+	if readErr != nil {
+		return nil, readErr
 	}
-	writer, err := FileSystem.NewWriter(context.Background(), filename, 0644)
-	checks.Check(err)
-	return writer
+	return outBytes, nil
 }
 
-func ReplaceHomeDir(path string) string {
-	usr, _ := user.Current()
-	dir := usr.HomeDir
-
-	if path == "~" || path == "$HOME" {
-		// In case of "~", which won't be caught by the "else if"
-		path = dir
-	} else if strings.HasPrefix(path, "~/") || strings.HasPrefix(path, "$HOME/") {
-		// Use strings.HasPrefix so we don't match paths like
-		// "/something/~/something/"
-		path = PathJoinSafe(dir, path[2:])
-	}
-	return path
+func CloseFile(file io.Closer) error {
+	return file.Close()
 }
 
 func GetPathType(path string) string {

@@ -1,14 +1,14 @@
 package pipelines
 
 import (
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
 
-	util "github.com/knights-analytics/hugo/utils"
+	util "github.com/knights-analytics/hugot/utils"
 
 	jsoniter "github.com/json-iterator/go"
-	"github.com/knights-analytics/hugo/utils/checks"
 	"github.com/knights-analytics/tokenizers"
 	"github.com/phuslu/log"
 )
@@ -63,7 +63,7 @@ func WithIgnoreLabels(ignoreLabels []string) TokenClassificationOption {
 }
 
 // NewTokenClassificationPipeline Initializes a feature extraction pipeline
-func NewTokenClassificationPipeline(modelPath string, name string, opts ...TokenClassificationOption) *TokenClassificationPipeline {
+func NewTokenClassificationPipeline(modelPath string, name string, opts ...TokenClassificationOption) (*TokenClassificationPipeline, error) {
 	pipeline := &TokenClassificationPipeline{}
 	pipeline.ModelPath = modelPath
 	pipeline.PipelineName = name
@@ -84,11 +84,21 @@ func NewTokenClassificationPipeline(modelPath string, name string, opts ...Token
 	// load json model config and set pipeline settings
 	configPath := util.PathJoinSafe(modelPath, "config.json")
 	pipelineInputConfig := TokenClassificationPipelineConfig{}
-	if util.FileExists(configPath) {
-		mapBytes := util.ReadFileBytes(configPath)
-		checks.Check(jsoniter.Unmarshal(mapBytes, &pipelineInputConfig))
+	fileExists, err := util.FileExists(configPath)
+	if err != nil {
+		return nil, err
+	}
+	if fileExists {
+		mapBytes, err := util.ReadFileBytes(configPath)
+		if err != nil {
+			return nil, err
+		}
+		err = jsoniter.Unmarshal(mapBytes, &pipelineInputConfig)
+		if err != nil {
+			return nil, err
+		}
 	} else {
-		log.Info().Msgf("No config.json file found for %s in the model folder at %s", pipeline.PipelineName, pipeline.ModelPath)
+		return nil, fmt.Errorf("no config.json file found for %s in the model folder at %s", pipeline.PipelineName, pipeline.ModelPath)
 	}
 	pipeline.IdLabelMap = pipelineInputConfig.IdLabelMap
 
@@ -106,28 +116,31 @@ func NewTokenClassificationPipeline(modelPath string, name string, opts ...Token
 	}
 
 	// load onnx model
-	pipeline.loadModel()
+	errModel := pipeline.loadModel()
+	if errModel != nil {
+		return nil, errModel
+	}
 
 	// the dimension of the output is taken from the output meta.
 	pipeline.OutputDim = int(pipeline.OutputsMeta[0].Dimensions[2])
 
 	// output dimension
 	if pipeline.OutputDim <= 0 {
-		log.Fatal().Msg("Pipeline configuration invalid: outputDim parameter must be greater than zero.")
+		return nil, fmt.Errorf("pipeline configuration invalid: outputDim parameter must be greater than zero")
 	}
 
 	// checks
 	if len(pipeline.IdLabelMap) <= 0 {
-		log.Fatal().Msg("Pipeline configuration invalid: length of id2label map for token classification pipeline must be greater than zero.")
+		return nil, fmt.Errorf("pipeline configuration invalid: length of id2label map for token classification pipeline must be greater than zero")
 	}
 	if len(pipeline.IdLabelMap) != pipeline.OutputDim {
-		log.Fatal().Msg("Pipeline configuration invalid: length of id2label map does not match model output dimension.")
+		return nil, fmt.Errorf("pipeline configuration invalid: length of id2label map does not match model output dimension")
 	}
-	return pipeline
+	return pipeline, nil
 }
 
 // Postprocess function for a token classification pipeline
-func (p *TokenClassificationPipeline) Postprocess(batch PipelineBatch) TokenClassificationOutput {
+func (p *TokenClassificationPipeline) Postprocess(batch PipelineBatch) (TokenClassificationOutput, error) {
 
 	outputs := make([][][]float32, len(batch.Input))        // holds the final output
 	inputVectors := make([][]float32, 0, batch.MaxSequence) // holds the embeddings of each original token (no padding) for an input
@@ -172,7 +185,10 @@ func (p *TokenClassificationPipeline) Postprocess(batch PipelineBatch) TokenClas
 	classificationOutput := make([][]entity, len(batch.Input))
 	for i, input := range batch.Input {
 		preEntities := p.GatherPreEntities(input, outputs[i])
-		entities := p.Aggregate(input, preEntities)
+		entities, errAggregate := p.Aggregate(input, preEntities)
+		if errAggregate != nil {
+			return nil, errAggregate
+		}
 		// Filter anything that is in ignore_labels
 		var filteredEntities []entity
 		for _, e := range entities {
@@ -182,7 +198,7 @@ func (p *TokenClassificationPipeline) Postprocess(batch PipelineBatch) TokenClas
 		}
 		classificationOutput[i] = filteredEntities
 	}
-	return classificationOutput
+	return classificationOutput, nil
 }
 
 // GatherPreEntities from batch of logits to list of pre-aggregated outputs
@@ -220,15 +236,17 @@ func (p *TokenClassificationPipeline) GatherPreEntities(input TokenizedInput, ou
 	return preEntities
 }
 
-func (p *TokenClassificationPipeline) Aggregate(input TokenizedInput, preEntities []entity) []entity {
+func (p *TokenClassificationPipeline) Aggregate(input TokenizedInput, preEntities []entity) ([]entity, error) {
 	entities := make([]entity, len(preEntities))
 	if p.AggregationStrategy == "SIMPLE" || p.AggregationStrategy == "NONE" {
 		for i, preEntity := range preEntities {
-			entityIdx, score, err := util.ArgMax(preEntity.Scores)
-			checks.Check(err)
+			entityIdx, score, argMaxErr := util.ArgMax(preEntity.Scores)
+			if argMaxErr != nil {
+				return nil, argMaxErr
+			}
 			label, ok := p.IdLabelMap[entityIdx]
 			if !ok {
-				log.Fatal().Msgf("Could not determine entity type for input %s, predicted entity index %d", input.Raw, entityIdx)
+				return nil, fmt.Errorf("could not determine entity type for input %s, predicted entity index %d", input.Raw, entityIdx)
 			}
 			entities[i] = entity{
 				Entity:  label,
@@ -241,10 +259,10 @@ func (p *TokenClassificationPipeline) Aggregate(input TokenizedInput, preEntitie
 			}
 		}
 	} else {
-		log.Fatal().Msg("Aggregation strategies other than SIMPLE and NONE are not implemented")
+		return nil, errors.New("aggregation strategies other than SIMPLE and NONE are not implemented")
 	}
 	if p.AggregationStrategy == "NONE" {
-		return entities
+		return entities, nil
 	}
 	return p.GroupEntities(entities)
 }
@@ -295,7 +313,7 @@ func (p *TokenClassificationPipeline) groupSubEntities(entities []entity) entity
 }
 
 // GroupEntities group together adjacent tokens with the same entity predicted
-func (p *TokenClassificationPipeline) GroupEntities(entities []entity) []entity {
+func (p *TokenClassificationPipeline) GroupEntities(entities []entity) ([]entity, error) {
 	var entityGroups []entity
 	var currentGroupDisagg []entity
 
@@ -320,13 +338,16 @@ func (p *TokenClassificationPipeline) GroupEntities(entities []entity) []entity 
 		// last entity remaining
 		entityGroups = append(entityGroups, p.groupSubEntities(currentGroupDisagg))
 	}
-	return entityGroups
+	return entityGroups, nil
 }
 
 // Run the pipeline on a string batch
-func (p *TokenClassificationPipeline) Run(inputs []string) TokenClassificationOutput {
+func (p *TokenClassificationPipeline) Run(inputs []string) (TokenClassificationOutput, error) {
 	batch := p.Preprocess(inputs)
-	batch = p.Forward(batch)
+	batch, errForward := p.Forward(batch)
+	if errForward != nil {
+		return nil, errForward
+	}
 	return p.Postprocess(batch)
 }
 
