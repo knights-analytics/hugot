@@ -196,8 +196,8 @@ func (p *BasePipeline) Preprocess(inputs []string) PipelineBatch {
 		}
 	}
 
-	atomic.AddUint64(&p.PipelineTimings.NumCalls, 1)
-	atomic.AddUint64(&p.PipelineTimings.TotalNS, uint64(time.Since(start)))
+	atomic.AddUint64(&p.TokenizerTimings.NumCalls, 1)
+	atomic.AddUint64(&p.TokenizerTimings.TotalNS, uint64(time.Since(start)))
 	batch := p.convertInputToTensors(outputs, maxSequence+1)
 	return batch
 }

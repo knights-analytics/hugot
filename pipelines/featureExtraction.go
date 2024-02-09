@@ -15,7 +15,9 @@ type FeatureExtractionPipeline struct {
 	BasePipeline
 }
 
-type FeatureExtractionOutput [][]float32
+type FeatureExtractionOutput struct {
+	Embeddings [][]float32
+}
 
 // NewFeatureExtractionPipeline Initialize a feature extraction pipeline
 func NewFeatureExtractionPipeline(modelPath string, name string) (*FeatureExtractionPipeline, error) {
@@ -75,7 +77,7 @@ func (p *FeatureExtractionPipeline) Postprocess(batch PipelineBatch) (FeatureExt
 			vectorCounter++
 		}
 	}
-	return outputs, nil
+	return FeatureExtractionOutput{Embeddings: outputs}, nil
 }
 
 func meanPooling(tokens [][]float32, input TokenizedInput, maxSequence int, dimensions int) []float32 {
@@ -103,7 +105,7 @@ func (p *FeatureExtractionPipeline) Run(inputs []string) (FeatureExtractionOutpu
 	batch := p.Preprocess(inputs)
 	batch, forwardError := p.Forward(batch)
 	if forwardError != nil {
-		return nil, forwardError
+		return FeatureExtractionOutput{}, forwardError
 	}
 	return p.Postprocess(batch)
 }
