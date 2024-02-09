@@ -1,6 +1,6 @@
 services:
-  hugo:
-    image: hugo:$commit_hash
+  hugot:
+    image: hugot:$commit_hash
     build:
       context: ./..
       dockerfile: ./Dockerfile

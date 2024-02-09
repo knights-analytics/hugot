@@ -1,4 +1,4 @@
-# <span>HuGo: Huggingface 🤗 pipelines for golang
+# <span>Hugot: Huggingface 🤗 pipelines for golang
 
 ## What
 
@@ -28,10 +28,10 @@ Implementations for additional pipelines will follow. We also very gladly accept
 
 ## Installation and usage
 
-HuGo has two main dependencies:
+Hugot has two main dependencies:
 
-- the [tokenizer](https://github.com/Knights-Analytics/tokenizers) library with bindings to huggingface's rust tokenizer, which is itself a fork of https://github.com/daulet/tokenizers. In particular, you will need to make available to HuGo the compiled libtokenizers.a file, which resides by default at /usr/lib/libtokenizers.a.
-- the [onnxruntime_go](https://github.com/yalue/onnxruntime_go) library, with go bindings to onnxruntime. You will need to make available to HuGo the onnxruntime.so file, which resides by default at /usr/lib/onnxruntime.so
+- the [tokenizer](https://github.com/Knights-Analytics/tokenizers) library with bindings to huggingface's rust tokenizer, which is itself a fork of https://github.com/daulet/tokenizers. In particular, you will need to make available to Hugot the compiled libtokenizers.a file, which resides by default at /usr/lib/libtokenizers.a.
+- the [onnxruntime_go](https://github.com/yalue/onnxruntime_go) library, with go bindings to onnxruntime. You will need to make available to Hugot the onnxruntime.so file, which resides by default at /usr/lib/onnxruntime.so
 
 Assuming you have rust installed, you can compile the tokenizers library and get the required libtokenizers.a as simply as follows:
 
