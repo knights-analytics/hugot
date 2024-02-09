@@ -1,6 +1,7 @@
 package pipelines
 
 import (
+	"errors"
 	"fmt"
 	"sync/atomic"
 	"time"
@@ -74,7 +75,10 @@ func NewTextClassificationPipeline(modelPath string, name string, opts ...TextCl
 	pipeline.AggregationFunction = util.SoftMax
 
 	// load onnx model
-	pipeline.loadModel()
+	loadErr := pipeline.loadModel()
+	if loadErr != nil {
+		return nil, loadErr
+	}
 
 	// we only support single label classification for now
 	pipeline.OutputDim = int(pipeline.OutputsMeta[0].Dimensions[1])
@@ -103,23 +107,25 @@ func (p *TextClassificationPipeline) Forward(batch PipelineBatch) (PipelineBatch
 
 	actualBatchSize := int64(len(batch.Input))
 	maxSequence := int64(batch.MaxSequence)
-	inputTensors, errInput := p.getInputTensors(batch, actualBatchSize, maxSequence)
-	if errInput != nil {
-		return batch, errInput
+	inputTensors, err := p.getInputTensors(batch, actualBatchSize, maxSequence)
+	if err != nil {
+		return batch, err
 	}
 
 	defer func(inputTensors []ort.ArbitraryTensor) {
 		for _, tensor := range inputTensors {
-			tensor.Destroy()
+			err = errors.Join(err, tensor.Destroy())
 		}
 	}(inputTensors)
 
-	outputTensor, err4 := ort.NewEmptyTensor[float32](ort.NewShape(actualBatchSize, int64(p.OutputDim)))
-	if err4 != nil {
-		return batch, err4
+	outputTensor, errTensor := ort.NewEmptyTensor[float32](ort.NewShape(actualBatchSize, int64(p.OutputDim)))
+	if errTensor != nil {
+		return batch, errTensor
 	}
 
-	defer func() { outputTensor.Destroy() }()
+	defer func(outputTensor *ort.Tensor[float32]) {
+		err = errors.Join(err, outputTensor.Destroy())
+	}(outputTensor)
 
 	// Run Onnx model
 	errOnnx := p.OrtSession.Run(inputTensors, []ort.ArbitraryTensor{outputTensor})
@@ -130,7 +136,7 @@ func (p *TextClassificationPipeline) Forward(batch PipelineBatch) (PipelineBatch
 
 	atomic.AddUint64(&p.PipelineTimings.NumCalls, 1)
 	atomic.AddUint64(&p.PipelineTimings.TotalNS, uint64(time.Since(start)))
-	return batch, nil
+	return batch, err
 }
 
 func (p *TextClassificationPipeline) Postprocess(batch PipelineBatch) (TextClassificationOutput, error) {

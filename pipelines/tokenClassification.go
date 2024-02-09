@@ -10,7 +10,6 @@ import (
 
 	jsoniter "github.com/json-iterator/go"
 	"github.com/knights-analytics/tokenizers"
-	"github.com/phuslu/log"
 )
 
 // types
@@ -103,7 +102,6 @@ func NewTokenClassificationPipeline(modelPath string, name string, opts ...Token
 	if pipeline.AggregationStrategy == "" {
 		pipeline.AggregationStrategy = "SIMPLE"
 	}
-	log.Info().Msgf("Pipeline %s using aggregation strategy %s", pipeline.PipelineName, pipeline.AggregationStrategy)
 	if len(pipeline.IgnoreLabels) == 0 {
 		pipeline.IgnoreLabels = []string{"O"}
 	}

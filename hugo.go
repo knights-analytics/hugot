@@ -3,10 +3,9 @@ package hugot
 import (
 	"errors"
 	"fmt"
-
 	"github.com/knights-analytics/hugot/pipelines"
-	"github.com/phuslu/log"
 	ort "github.com/yalue/onnxruntime_go"
+	"slices"
 )
 
 type Session struct {
@@ -33,10 +32,12 @@ func (m pipelineMap[T]) Destroy() error {
 	return err
 }
 
-func (m pipelineMap[T]) GetStats() {
+func (m pipelineMap[T]) GetStats() []string {
+	var stats []string
 	for _, p := range m {
-		p.LogStats()
+		stats = slices.Concat(stats, p.GetStats())
 	}
+	return stats
 }
 
 func NewSession() (*Session, error) {
@@ -101,23 +102,18 @@ func (s *Session) GetTokenClassificationPipeline(name string) (*pipelines.TokenC
 }
 
 func (s *Session) Destroy() error {
-	log.Info().Msg("Destroying pipelines")
-	var errList []error
-	err1 := s.featureExtractionPipelines.Destroy()
-	errList = append(errList, err1)
-	err2 := s.tokenClassificationPipelines.Destroy()
-	errList = append(errList, err2)
-	err3 := s.textClassificationPipelines.Destroy()
-	errList = append(errList, err3)
 
-	log.Info().Msg("Destroying Onnx Runtime")
-	err4 := ort.DestroyEnvironment()
-	errList = append(errList, err4)
-	return errors.Join(errList...)
+	return errors.Join(
+		s.featureExtractionPipelines.Destroy(),
+		s.tokenClassificationPipelines.Destroy(),
+		s.textClassificationPipelines.Destroy(),
+		ort.DestroyEnvironment(),
+	)
 }
 
-func (s *Session) GetStats() {
-	s.tokenClassificationPipelines.GetStats()
-	s.textClassificationPipelines.GetStats()
-	s.featureExtractionPipelines.GetStats()
+func (s *Session) GetStats() []string {
+	return slices.Concat(s.tokenClassificationPipelines.GetStats(),
+		s.textClassificationPipelines.GetStats(),
+		s.featureExtractionPipelines.GetStats(),
+	)
 }

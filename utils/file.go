@@ -2,6 +2,7 @@ package util
 
 import (
 	"context"
+	"errors"
 	"io"
 	"io/fs"
 	"path/filepath"
@@ -59,6 +60,9 @@ func (fileInfo AfsFileInfo) Sys() any {
 
 func (file *AfsFile) Stat() (fs.FileInfo, error) {
 	object, err := FileSystem.Object(context.Background(), file.path)
+	if err != nil {
+		return nil, err
+	}
 	fileInfo := AfsFileInfo{
 		fileName:    object.Name(),
 		fileSize:    object.Size(),
@@ -67,7 +71,7 @@ func (file *AfsFile) Stat() (fs.FileInfo, error) {
 		fileIsDir:   object.IsDir(),
 		fileSys:     object.Sys(),
 	}
-	return fileInfo, err
+	return fileInfo, nil
 }
 
 func (file *AfsFile) Read(p []byte) (int, error) {
@@ -93,13 +97,15 @@ func ReadFileBytes(filename string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer CloseFile(file)
+	defer func(file io.Closer) {
+		err = errors.Join(err, CloseFile(file))
+	}(file)
 
 	outBytes, readErr := io.ReadAll(file)
 	if readErr != nil {
 		return nil, readErr
 	}
-	return outBytes, nil
+	return outBytes, err
 }
 
 func CloseFile(file io.Closer) error {

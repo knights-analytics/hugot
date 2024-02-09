@@ -4,14 +4,12 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
+	"log"
 	"math"
 	"os"
 	"path"
-	"runtime/debug"
 	"strings"
 	"testing"
-
-	"github.com/phuslu/log"
 
 	"github.com/knights-analytics/hugot"
 	"github.com/knights-analytics/hugot/pipelines"
@@ -29,7 +27,9 @@ var resultsByte []byte
 func TestTextClassificationPipeline(t *testing.T) {
 	session, err := hugot.NewSession()
 	Check(err)
-	defer session.Destroy()
+	defer func(session *hugot.Session) {
+		Check(session.Destroy())
+	}(session)
 	modelFolder := os.Getenv("TEST_MODELS_FOLDER")
 	modelPath := path.Join(modelFolder, "distilbert-base-uncased-finetuned-sst-2-english")
 	sentimentPipeline, err := session.NewTextClassificationPipeline(modelPath, "testPipeline")
@@ -81,14 +81,16 @@ func TestTextClassificationPipeline(t *testing.T) {
 func TestTokenClassificationPipeline(t *testing.T) {
 	session, err := hugot.NewSession()
 	Check(err)
-	defer session.Destroy()
+	defer func(session *hugot.Session) {
+		Check(session.Destroy())
+	}(session)
 
 	modelFolder := os.Getenv("TEST_MODELS_FOLDER")
 	modelPath := path.Join(modelFolder, "distilbert-NER")
-	pipelineSimple, err := session.NewTokenClassificationPipeline(modelPath, "testPipeline", pipelines.WithSimpleAggregation())
-	Check(err)
-	pipelineNone, err := session.NewTokenClassificationPipeline(modelPath, "testPipeline", pipelines.WithoutAggregation())
-	Check(err)
+	pipelineSimple, err2 := session.NewTokenClassificationPipeline(modelPath, "testPipeline", pipelines.WithSimpleAggregation())
+	Check(err2)
+	pipelineNone, err3 := session.NewTokenClassificationPipeline(modelPath, "testPipeline", pipelines.WithoutAggregation())
+	Check(err3)
 
 	var expectedResults map[int]pipelines.TokenClassificationOutput
 	Check(json.Unmarshal(tokenExpectedByte, &expectedResults))
@@ -141,7 +143,9 @@ func TestTokenClassificationPipeline(t *testing.T) {
 func TestFeatureExtractionPipeline(t *testing.T) {
 	session, err := hugot.NewSession()
 	Check(err)
-	defer session.Destroy()
+	defer func(session *hugot.Session) {
+		Check(session.Destroy())
+	}(session)
 
 	modelFolder := os.Getenv("TEST_MODELS_FOLDER")
 	modelPath := path.Join(modelFolder, "all-MiniLM-L6-v2")
@@ -239,7 +243,6 @@ func almostEqual(a, b float64) bool {
 
 func Check(err error) {
 	if err != nil {
-		stack := strings.Join(strings.Split(string(debug.Stack()), "\n")[5:], "\n")
-		log.Fatal().Stack().Err(err).Msg(stack)
+		log.Panic(err)
 	}
 }

@@ -1,14 +1,13 @@
 package pipelines
 
 import (
+	"errors"
+	"fmt"
+	util "github.com/knights-analytics/hugot/utils"
+	"github.com/knights-analytics/tokenizers"
+	ort "github.com/yalue/onnxruntime_go"
 	"sync/atomic"
 	"time"
-
-	util "github.com/knights-analytics/hugot/utils"
-
-	"github.com/knights-analytics/tokenizers"
-	"github.com/phuslu/log"
-	ort "github.com/yalue/onnxruntime_go"
 )
 
 // BasePipeline is a basic pipeline type used for struct composition in the other pipelines
@@ -30,7 +29,7 @@ type BasePipeline struct {
 
 type Pipeline interface {
 	Destroy() error
-	LogStats()
+	GetStats() []string
 	GetOutputDim() int
 }
 
@@ -88,7 +87,6 @@ func (p *BasePipeline) SetSessionOptions() error {
 func (p *BasePipeline) loadModel() error {
 
 	// Initialise tokenizer
-	log.Info().Msgf("Loading Tokenizer config: %s", util.PathJoinSafe(p.ModelPath, "tokenizer.json"))
 	tokenizerBytes, err := util.ReadFileBytes(util.PathJoinSafe(p.ModelPath, "tokenizer.json"))
 	if err != nil {
 		return err
@@ -103,8 +101,6 @@ func (p *BasePipeline) loadModel() error {
 	if err != nil {
 		return err
 	}
-
-	log.Info().Msgf("Loading model at %s/model.onnx", p.ModelPath)
 
 	onnxBytes, err := util.ReadFileBytes(util.PathJoinSafe(p.ModelPath, "model.onnx"))
 	if err != nil {
@@ -246,7 +242,7 @@ func (p *BasePipeline) Forward(batch PipelineBatch) (PipelineBatch, error) {
 
 	defer func(inputTensors []ort.ArbitraryTensor) {
 		for _, tensor := range inputTensors {
-			tensor.Destroy()
+			err = errors.Join(err, tensor.Destroy())
 		}
 	}(inputTensors)
 
@@ -256,11 +252,13 @@ func (p *BasePipeline) Forward(batch PipelineBatch) (PipelineBatch, error) {
 		return batch, errOnnx
 	}
 	batch.OutputTensor = outputTensor.GetData()
-	defer func() { outputTensor.Destroy() }()
+	defer func(outputTensor *ort.Tensor[float32]) {
+		err = errors.Join(err, outputTensor.Destroy())
+	}(outputTensor)
 
 	atomic.AddUint64(&p.PipelineTimings.NumCalls, 1)
 	atomic.AddUint64(&p.PipelineTimings.TotalNS, uint64(time.Since(start)))
-	return batch, nil
+	return batch, err
 }
 
 // convert tokenized input to the format required by the onnxruntime library
@@ -302,8 +300,10 @@ func (p *BasePipeline) convertInputToTensors(inputs []TokenizedInput, maxSequenc
 	}
 }
 
-func (p *BasePipeline) LogStats() {
-	log.Info().Msgf("Statistics for pipeline: %s", p.PipelineName)
-	log.Info().Msgf("Tokenizer: Total time=%s, Execution count=%d, Average query time=%s", time.Duration(p.TokenizerTimings.TotalNS), p.TokenizerTimings.NumCalls, time.Duration(p.TokenizerTimings.TotalNS/max(1, p.TokenizerTimings.NumCalls)))
-	log.Info().Msgf("ONNX: Total time=%s, Execution count=%d, Average query time=%s", time.Duration(p.PipelineTimings.TotalNS), p.PipelineTimings.NumCalls, time.Duration(p.PipelineTimings.TotalNS/max(1, p.PipelineTimings.NumCalls)))
+func (p *BasePipeline) GetStats() []string {
+	return []string{
+		fmt.Sprintf("Statistics for pipeline: %s", p.PipelineName),
+		fmt.Sprintf("Tokenizer: Total time=%s, Execution count=%d, Average query time=%s", time.Duration(p.TokenizerTimings.TotalNS), p.TokenizerTimings.NumCalls, time.Duration(p.TokenizerTimings.TotalNS/max(1, p.TokenizerTimings.NumCalls))),
+		fmt.Sprintf("ONNX: Total time=%s, Execution count=%d, Average query time=%s", time.Duration(p.PipelineTimings.TotalNS), p.PipelineTimings.NumCalls, time.Duration(p.PipelineTimings.TotalNS/max(1, p.PipelineTimings.NumCalls))),
+	}
 }
