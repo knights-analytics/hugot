@@ -84,21 +84,14 @@ func NewTokenClassificationPipeline(modelPath string, name string, opts ...Token
 	// load json model config and set pipeline settings
 	configPath := util.PathJoinSafe(modelPath, "config.json")
 	pipelineInputConfig := TokenClassificationPipelineConfig{}
-	fileExists, err := util.FileExists(configPath)
+	mapBytes, err := util.ReadFileBytes(configPath)
 	if err != nil {
 		return nil, err
 	}
-	if fileExists {
-		mapBytes, err := util.ReadFileBytes(configPath)
-		if err != nil {
-			return nil, err
-		}
-		err = jsoniter.Unmarshal(mapBytes, &pipelineInputConfig)
-		if err != nil {
-			return nil, err
-		}
-	} else {
-		return nil, fmt.Errorf("no config.json file found for %s in the model folder at %s", pipeline.PipelineName, pipeline.ModelPath)
+
+	err = jsoniter.Unmarshal(mapBytes, &pipelineInputConfig)
+	if err != nil {
+		return nil, err
 	}
 	pipeline.IdLabelMap = pipelineInputConfig.IdLabelMap
 

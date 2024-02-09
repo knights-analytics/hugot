@@ -88,11 +88,6 @@ func (afs AfsFS) Open(name string) (fs.File, error) {
 
 // end AFS FS abstraction
 
-func FileExists(filename string) (bool, error) {
-	exists, err := FileSystem.Exists(context.Background(), filename)
-	return exists, err
-}
-
 func ReadFileBytes(filename string) ([]byte, error) {
 	file, err := FileSystem.OpenURL(context.Background(), filename)
 	if err != nil {
