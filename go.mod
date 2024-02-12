@@ -4,7 +4,7 @@ go 1.22
 
 require (
 	github.com/json-iterator/go v1.1.12
-	github.com/knights-analytics/tokenizers v0.8.0
+	github.com/knights-analytics/tokenizers v0.9.0
 	github.com/stretchr/testify v1.8.4
 	github.com/viant/afs v1.25.0
 	github.com/viant/afsc v1.9.1
