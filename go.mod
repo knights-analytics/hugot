@@ -13,7 +13,7 @@ require (
 
 require (
 	cloud.google.com/go/storage v1.37.0 // indirect
-	github.com/aws/aws-sdk-go v1.50.14 // indirect
+	github.com/aws/aws-sdk-go v1.50.15 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/go-errors/errors v1.5.1 // indirect
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
