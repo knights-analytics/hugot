@@ -31,6 +31,9 @@ func TestTextClassificationPipeline(t *testing.T) {
 		Check(session.Destroy())
 	}(session)
 	modelFolder := os.Getenv("TEST_MODELS_FOLDER")
+	if modelFolder == "" {
+		modelFolder = "./models"
+	}
 	modelPath := path.Join(modelFolder, "distilbert-base-uncased-finetuned-sst-2-english")
 	sentimentPipeline, err := session.NewTextClassificationPipeline(modelPath, "testPipeline")
 	Check(err)
@@ -86,6 +89,9 @@ func TestTokenClassificationPipeline(t *testing.T) {
 	}(session)
 
 	modelFolder := os.Getenv("TEST_MODELS_FOLDER")
+	if modelFolder == "" {
+		modelFolder = "./models"
+	}
 	modelPath := path.Join(modelFolder, "distilbert-NER")
 	pipelineSimple, err2 := session.NewTokenClassificationPipeline(modelPath, "testPipeline", pipelines.WithSimpleAggregation())
 	Check(err2)
@@ -148,6 +154,9 @@ func TestFeatureExtractionPipeline(t *testing.T) {
 	}(session)
 
 	modelFolder := os.Getenv("TEST_MODELS_FOLDER")
+	if modelFolder == "" {
+		modelFolder = "./models"
+	}
 	modelPath := path.Join(modelFolder, "all-MiniLM-L6-v2")
 	pipeline, err := session.NewFeatureExtractionPipeline(modelPath, "testPipeline")
 	Check(err)
@@ -206,10 +215,11 @@ func TestFeatureExtractionPipeline(t *testing.T) {
 		}
 	}
 
-	assert.Greater(t, pipeline.PipelineTimings.NumCalls, 0, "PipelineTimings.NumCalls should be greater than 0")
-	assert.Greater(t, pipeline.PipelineTimings.TotalNS, 0, "PipelineTimings.TotalNS should be greater than 0")
-	assert.Greater(t, pipeline.TokenizerTimings.NumCalls, 0, "TokenizerTimings.NumCalls should be greater than 0")
-	assert.Greater(t, pipeline.TokenizerTimings.TotalNS, 0, "TokenizerTimings.TotalNS should be greater than 0")
+	zero := uint64(0)
+	assert.Greater(t, pipeline.PipelineTimings.NumCalls, zero, "PipelineTimings.NumCalls should be greater than 0")
+	assert.Greater(t, pipeline.PipelineTimings.TotalNS, zero, "PipelineTimings.TotalNS should be greater than 0")
+	assert.Greater(t, pipeline.TokenizerTimings.NumCalls, zero, "TokenizerTimings.NumCalls should be greater than 0")
+	assert.Greater(t, pipeline.TokenizerTimings.TotalNS, zero, "TokenizerTimings.TotalNS should be greater than 0")
 }
 
 // utilities

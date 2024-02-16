@@ -1,5 +1,5 @@
 ARG GO_VERSION=1.22.0
-ARG RUST_VERSION=1.75
+ARG RUST_VERSION=1.76
 ARG ONNXRUNTIME_VERSION=1.17.0
 
 #--- rust build of tokenizer
@@ -46,7 +46,7 @@ RUN curl -LO https://github.com/gotestyourself/gotestsum/releases/download/v1.11
 COPY . /build
 WORKDIR /build
 RUN go mod download && CGO_ENABLED=1 GOOS=linux GOARCH=amd64 && \
-    mkdir /unittest && go test -c ./pipelines -o /unittest && \
+    mkdir /unittest && go test -c . -o /unittest/pipelines.test && \
     go clean -r -cache -testcache -modcache
 
 # models

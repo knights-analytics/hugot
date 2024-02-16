@@ -1,6 +1,7 @@
 services:
   hugot:
     image: hugot:$commit_hash
+    container_name: hugot
     build:
       context: ./..
       dockerfile: ./Dockerfile

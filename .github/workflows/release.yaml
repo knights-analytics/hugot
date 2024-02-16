@@ -10,23 +10,42 @@ permissions:
 
 jobs:
   test:
-      name: Run test suite
-      runs-on: ubuntu-latest
-      steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      - name: Build and run tests
-        run: make run-tests
-  release:
-    name: Release pushed tag
+    name: Run test suite
     runs-on: ubuntu-latest
     steps:
-      - name: Create release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          tag: ${{ github.ref_name }}
-        run: |
-          gh release create "$tag" \
-              --repo="$GITHUB_REPOSITORY" \
-              --title="${GITHUB_REPOSITORY#*/} ${tag#v}" \
-              --generate-notes
+    - name: Checkout code
+      uses: actions/checkout@v4
+    - name: Build and run tests
+      run: make run-tests
+    - name: print
+      run: ls -la
+    - uses: actions/upload-artifact@v4
+      with:
+        name: libtokenizers.a
+        path: ./testTarget/libtokenizers.a
+    - uses: actions/upload-artifact@v4
+      with:
+        name: onnxruntime.so
+        path: ./testTarget/onnxruntime.so
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: libtokenizers.a
+          path: .
+      - uses: actions/download-artifact@v4
+        with:
+          name: onnxruntime.so
+          path: .
+      - name: Display structure of downloaded files
+        run: ls -R
+      - uses: ncipollo/release-action@v1
+        with:
+          artifacts: "libtokenizers.a, onnxruntime.so"
+          generateReleaseNotes: true
+          skipIfReleaseExists: true

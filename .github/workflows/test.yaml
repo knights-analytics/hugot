@@ -14,3 +14,13 @@ jobs:
         uses: actions/checkout@v4
       - name: Build and run tests
         run: make run-tests
+      - name: print
+        run: ls -la
+      - uses: actions/upload-artifact@v4
+        with:
+          name: libtokenizers.a
+          path: ./testTarget/libtokenizers.a
+      - uses: actions/upload-artifact@v4
+        with:
+          name: onnxruntime.so
+          path: ./testTarget/onnxruntime.so
