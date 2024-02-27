@@ -19,8 +19,12 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: libtokenizers.a
-          path: ./testTarget/libtokenizers.a
+          path: ./artifacts/libtokenizers.a
       - uses: actions/upload-artifact@v4
         with:
           name: onnxruntime.so
-          path: ./testTarget/onnxruntime.so
+          path: ./artifacts/onnxruntime.so
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hugot-cli-linux-amd64 
+          path: ./artifacts/hugot-cli-linux-amd64

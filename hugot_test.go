@@ -22,10 +22,13 @@ var tokenExpectedByte []byte
 //go:embed testData/vectors.json
 var resultsByte []byte
 
+// use the system library for the tests
+var onnxruntimeSharedLibrary string = ""
+
 // Text classification
 
 func TestTextClassificationPipeline(t *testing.T) {
-	session, err := hugot.NewSession()
+	session, err := hugot.NewSession(onnxruntimeSharedLibrary)
 	Check(err)
 	defer func(session *hugot.Session) {
 		Check(session.Destroy())
@@ -48,17 +51,19 @@ func TestTextClassificationPipeline(t *testing.T) {
 			pipeline: sentimentPipeline,
 			name:     "Basic tests",
 			strings:  []string{"This movie is disgustingly good !", "The director tried too much"},
-			expected: [][]pipelines.ClassificationOutput{
-				{
+			expected: pipelines.TextClassificationOutput{
+				ClassificationOutputs: [][]pipelines.ClassificationOutput{
 					{
-						Label: "POSITIVE",
-						Score: 0.9998536109924316,
+						{
+							Label: "POSITIVE",
+							Score: 0.9998536109924316,
+						},
 					},
-				},
-				{
 					{
-						Label: "NEGATIVE",
-						Score: 0.9975218176841736,
+						{
+							Label: "NEGATIVE",
+							Score: 0.9975218176841736,
+						},
 					},
 				},
 			},
@@ -67,10 +72,14 @@ func TestTextClassificationPipeline(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := tt.pipeline.Run(tt.strings)
+			batchResult, err := tt.pipeline.Run(tt.strings)
+			result, ok := batchResult.(*pipelines.TextClassificationOutput)
+			if !ok {
+				t.FailNow()
+			}
 			Check(err)
-			for i, expected := range tt.expected {
-				checkClassificationOutput(t, expected, result[i])
+			for i, expected := range tt.expected.ClassificationOutputs {
+				checkClassificationOutput(t, expected, result.ClassificationOutputs[i])
 			}
 		})
 	}
@@ -82,7 +91,7 @@ func TestTextClassificationPipeline(t *testing.T) {
 // Token classification
 
 func TestTokenClassificationPipeline(t *testing.T) {
-	session, err := hugot.NewSession()
+	session, err := hugot.NewSession(onnxruntimeSharedLibrary)
 	Check(err)
 	defer func(session *hugot.Session) {
 		Check(session.Destroy())
@@ -93,9 +102,9 @@ func TestTokenClassificationPipeline(t *testing.T) {
 		modelFolder = "./models"
 	}
 	modelPath := path.Join(modelFolder, "distilbert-NER")
-	pipelineSimple, err2 := session.NewTokenClassificationPipeline(modelPath, "testPipeline", pipelines.WithSimpleAggregation())
+	pipelineSimple, err2 := session.NewTokenClassificationPipeline(modelPath, "testPipelineSimple", pipelines.WithSimpleAggregation())
 	Check(err2)
-	pipelineNone, err3 := session.NewTokenClassificationPipeline(modelPath, "testPipeline", pipelines.WithoutAggregation())
+	pipelineNone, err3 := session.NewTokenClassificationPipeline(modelPath, "testPipelineNone", pipelines.WithoutAggregation())
 	Check(err3)
 
 	var expectedResults map[int]pipelines.TokenClassificationOutput
@@ -129,13 +138,18 @@ func TestTokenClassificationPipeline(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			res, err := tt.pipeline.Run(tt.strings)
+			batchResult, err := tt.pipeline.Run(tt.strings)
 			Check(err)
-			pipelines.PrintTokenEntities(res)
-			for i, predictedEntities := range res {
-				assert.Equal(t, len(tt.expected[i]), len(predictedEntities))
+			result, ok := batchResult.(*pipelines.TokenClassificationOutput)
+			if !ok {
+				t.FailNow()
+			}
+
+			pipelines.PrintTokenEntities(result)
+			for i, predictedEntities := range result.Entities {
+				assert.Equal(t, len(tt.expected.Entities[i]), len(predictedEntities))
 				for j, entity := range predictedEntities {
-					expectedEntity := tt.expected[i][j]
+					expectedEntity := tt.expected.Entities[i][j]
 					assert.Equal(t, expectedEntity.Entity, entity.Entity)
 					assert.Equal(t, expectedEntity.Word, entity.Word)
 				}
@@ -147,7 +161,7 @@ func TestTokenClassificationPipeline(t *testing.T) {
 // feature extraction
 
 func TestFeatureExtractionPipeline(t *testing.T) {
-	session, err := hugot.NewSession()
+	session, err := hugot.NewSession(onnxruntimeSharedLibrary)
 	Check(err)
 	defer func(session *hugot.Session) {
 		Check(session.Destroy())
@@ -164,13 +178,16 @@ func TestFeatureExtractionPipeline(t *testing.T) {
 	var expectedResults map[string][][]float32
 	Check(json.Unmarshal(resultsByte, &expectedResults))
 	var testResults [][]float32
-	var result pipelines.FeatureExtractionOutput
-	// test 'robert smith'
 
+	// test 'robert smith'
 	testResults = expectedResults["test1output"]
 	for i := 1; i <= 10; i++ {
-		result, err = pipeline.Run([]string{"robert smith"})
+		batchResult, err := pipeline.Run([]string{"robert smith"})
 		Check(err)
+		result, ok := batchResult.(*pipelines.FeatureExtractionOutput)
+		if !ok {
+			t.FailNow()
+		}
 		e := floatsEqual(result.Embeddings[0], testResults[0])
 		if e != nil {
 			t.Logf("Test 1: The neural network didn't produce the correct result on loop %d: %s\n", i, e)
@@ -181,8 +198,12 @@ func TestFeatureExtractionPipeline(t *testing.T) {
 	// test ['robert smith junior', 'francis ford coppola']
 	testResults = expectedResults["test2output"]
 	for i := 1; i <= 10; i++ {
-		result, err = pipeline.Run([]string{"robert smith junior", "francis ford coppola"})
+		batchResult, err := pipeline.Run([]string{"robert smith junior", "francis ford coppola"})
 		Check(err)
+		result, ok := batchResult.(*pipelines.FeatureExtractionOutput)
+		if !ok {
+			t.FailNow()
+		}
 		for j, res := range result.Embeddings {
 			e := floatsEqual(res, testResults[j])
 			if e != nil {
@@ -200,12 +221,21 @@ func TestFeatureExtractionPipeline(t *testing.T) {
 
 	for k, sentencePair := range testPairs {
 		// these vectors should be the same
-		firstRes, err2 := pipeline.Run(sentencePair[0])
+		firstBatchResult, err2 := pipeline.Run(sentencePair[0])
 		Check(err2)
-		firstEmbedding := firstRes.Embeddings[0]
-		secondRes, err3 := pipeline.Run(sentencePair[1])
+		firstResult, ok := firstBatchResult.(*pipelines.FeatureExtractionOutput)
+		if !ok {
+			t.FailNow()
+		}
+		firstEmbedding := firstResult.Embeddings[0]
+
+		secondBatchResult, err3 := pipeline.Run(sentencePair[1])
 		Check(err3)
-		secondEmbedding := secondRes.Embeddings[0]
+		secondResult, ok := secondBatchResult.(*pipelines.FeatureExtractionOutput)
+		if !ok {
+			t.FailNow()
+		}
+		secondEmbedding := secondResult.Embeddings[0]
 		e := floatsEqual(firstEmbedding, secondEmbedding)
 		if e != nil {
 			t.Logf("Equality failed for determinism test %s test with pairs %s and %s", k, strings.Join(sentencePair[0], ","), strings.Join(sentencePair[1], ","))

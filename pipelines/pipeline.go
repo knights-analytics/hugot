@@ -3,11 +3,12 @@ package pipelines
 import (
 	"errors"
 	"fmt"
+	"sync/atomic"
+	"time"
+
 	util "github.com/knights-analytics/hugot/utils"
 	"github.com/knights-analytics/tokenizers"
 	ort "github.com/yalue/onnxruntime_go"
-	"sync/atomic"
-	"time"
 )
 
 // BasePipeline is a basic pipeline type used for struct composition in the other pipelines
@@ -27,10 +28,15 @@ type BasePipeline struct {
 	PipelineTimings  *Timings
 }
 
+type PipelineBatchOutput interface {
+	GetOutput() []any
+}
+
 type Pipeline interface {
 	Destroy() error
 	GetStats() []string
 	GetOutputDim() int
+	Run([]string) (PipelineBatchOutput, error)
 }
 
 type Timings struct {
