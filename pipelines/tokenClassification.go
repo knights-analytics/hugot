@@ -25,7 +25,7 @@ type TokenClassificationPipelineConfig struct {
 	IdLabelMap map[int]string `json:"id2label"`
 }
 
-type entity struct {
+type Entity struct {
 	Entity    string
 	Score     float32
 	Scores    []float32
@@ -37,7 +37,17 @@ type entity struct {
 	IsSubword bool
 }
 
-type TokenClassificationOutput [][]entity
+type TokenClassificationOutput struct {
+	Entities [][]Entity
+}
+
+func (t *TokenClassificationOutput) GetOutput() []any {
+	out := make([]any, len(t.Entities))
+	for i, entity := range t.Entities {
+		out[i] = any(entity)
+	}
+	return out
+}
 
 // options
 
@@ -131,7 +141,7 @@ func NewTokenClassificationPipeline(modelPath string, name string, opts ...Token
 }
 
 // Postprocess function for a token classification pipeline
-func (p *TokenClassificationPipeline) Postprocess(batch PipelineBatch) (TokenClassificationOutput, error) {
+func (p *TokenClassificationPipeline) Postprocess(batch PipelineBatch) (PipelineBatchOutput, error) {
 
 	outputs := make([][][]float32, len(batch.Input))        // holds the final output
 	inputVectors := make([][]float32, 0, batch.MaxSequence) // holds the embeddings of each original token (no padding) for an input
@@ -173,7 +183,10 @@ func (p *TokenClassificationPipeline) Postprocess(batch PipelineBatch) (TokenCla
 	}
 
 	// now convert the logits to the predictions of actual entities
-	classificationOutput := make([][]entity, len(batch.Input))
+	classificationOutput := TokenClassificationOutput{
+		Entities: make([][]Entity, len(batch.Input)),
+	}
+
 	for i, input := range batch.Input {
 		preEntities := p.GatherPreEntities(input, outputs[i])
 		entities, errAggregate := p.Aggregate(input, preEntities)
@@ -181,22 +194,22 @@ func (p *TokenClassificationPipeline) Postprocess(batch PipelineBatch) (TokenCla
 			return nil, errAggregate
 		}
 		// Filter anything that is in ignore_labels
-		var filteredEntities []entity
+		var filteredEntities []Entity
 		for _, e := range entities {
 			if !slices.Contains(p.IgnoreLabels, e.Entity) && e.Entity != "" {
 				filteredEntities = append(filteredEntities, e)
 			}
 		}
-		classificationOutput[i] = filteredEntities
+		classificationOutput.Entities[i] = filteredEntities
 	}
-	return classificationOutput, nil
+	return &classificationOutput, nil
 }
 
 // GatherPreEntities from batch of logits to list of pre-aggregated outputs
-func (p *TokenClassificationPipeline) GatherPreEntities(input TokenizedInput, output [][]float32) []entity {
+func (p *TokenClassificationPipeline) GatherPreEntities(input TokenizedInput, output [][]float32) []Entity {
 
 	sentence := input.Raw
-	var preEntities []entity
+	var preEntities []Entity
 
 	for j, tokenScores := range output {
 
@@ -214,7 +227,7 @@ func (p *TokenClassificationPipeline) GatherPreEntities(input TokenizedInput, ou
 		isSubword := len(word) != len(wordRef)
 		// TODO: check for unknown token here, it's in the config and can be loaded and compared with the token
 		// in that case set the subword as in the python code
-		preEntities = append(preEntities, entity{
+		preEntities = append(preEntities, Entity{
 			Word:      word,
 			TokenId:   tokenId,
 			Scores:    tokenScores,
@@ -227,8 +240,8 @@ func (p *TokenClassificationPipeline) GatherPreEntities(input TokenizedInput, ou
 	return preEntities
 }
 
-func (p *TokenClassificationPipeline) Aggregate(input TokenizedInput, preEntities []entity) ([]entity, error) {
-	entities := make([]entity, len(preEntities))
+func (p *TokenClassificationPipeline) Aggregate(input TokenizedInput, preEntities []Entity) ([]Entity, error) {
+	entities := make([]Entity, len(preEntities))
 	if p.AggregationStrategy == "SIMPLE" || p.AggregationStrategy == "NONE" {
 		for i, preEntity := range preEntities {
 			entityIdx, score, argMaxErr := util.ArgMax(preEntity.Scores)
@@ -239,7 +252,7 @@ func (p *TokenClassificationPipeline) Aggregate(input TokenizedInput, preEntitie
 			if !ok {
 				return nil, fmt.Errorf("could not determine entity type for input %s, predicted entity index %d", input.Raw, entityIdx)
 			}
-			entities[i] = entity{
+			entities[i] = Entity{
 				Entity:  label,
 				Score:   score,
 				Index:   preEntity.Index,
@@ -275,7 +288,7 @@ func (p *TokenClassificationPipeline) getTag(entityName string) (string, string)
 	return bi, tag
 }
 
-func (p *TokenClassificationPipeline) groupSubEntities(entities []entity) entity {
+func (p *TokenClassificationPipeline) groupSubEntities(entities []Entity) Entity {
 	splits := strings.Split(entities[0].Entity, "-")
 	var entityType string
 	if len(splits) == 1 {
@@ -294,7 +307,7 @@ func (p *TokenClassificationPipeline) groupSubEntities(entities []entity) entity
 	// in the python code they pass the words to a token_to_string_method
 	word := p.Tokenizer.Decode(tokens, false)
 
-	return entity{
+	return Entity{
 		Entity: entityType,
 		Score:  score,
 		Word:   word,
@@ -304,9 +317,9 @@ func (p *TokenClassificationPipeline) groupSubEntities(entities []entity) entity
 }
 
 // GroupEntities group together adjacent tokens with the same entity predicted
-func (p *TokenClassificationPipeline) GroupEntities(entities []entity) ([]entity, error) {
-	var entityGroups []entity
-	var currentGroupDisagg []entity
+func (p *TokenClassificationPipeline) GroupEntities(entities []Entity) ([]Entity, error) {
+	var entityGroups []Entity
+	var currentGroupDisagg []Entity
 
 	for _, e := range entities {
 		if len(currentGroupDisagg) == 0 {
@@ -321,7 +334,7 @@ func (p *TokenClassificationPipeline) GroupEntities(entities []entity) ([]entity
 		} else {
 			// create the grouped entity
 			entityGroups = append(entityGroups, p.groupSubEntities(currentGroupDisagg))
-			currentGroupDisagg = []entity{e}
+			currentGroupDisagg = []Entity{e}
 		}
 	}
 
@@ -333,7 +346,7 @@ func (p *TokenClassificationPipeline) GroupEntities(entities []entity) ([]entity
 }
 
 // Run the pipeline on a string batch
-func (p *TokenClassificationPipeline) Run(inputs []string) (TokenClassificationOutput, error) {
+func (p *TokenClassificationPipeline) Run(inputs []string) (PipelineBatchOutput, error) {
 	batch := p.Preprocess(inputs)
 	batch, errForward := p.Forward(batch)
 	if errForward != nil {
@@ -342,8 +355,8 @@ func (p *TokenClassificationPipeline) Run(inputs []string) (TokenClassificationO
 	return p.Postprocess(batch)
 }
 
-func PrintTokenEntities(o TokenClassificationOutput) {
-	for i, entities := range o {
+func PrintTokenEntities(o *TokenClassificationOutput) {
+	for i, entities := range o.Entities {
 		fmt.Printf("Input %d\n", i)
 		for _, entity := range entities {
 			fmt.Printf("%+v\n", entity)

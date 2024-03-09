@@ -9,6 +9,7 @@ run-tests:
 
 clean:
 	rm -r ./testTarget || true
+	rm -r ./artifacts || true
 
 start-dev-container:
 	scripts/start-dev-container.sh

@@ -9,14 +9,20 @@ import (
 // FeatureExtractionPipeline A feature extraction pipeline is a go version of
 // https://github.com/huggingface/transformers/blob/main/src/transformers/pipelines/feature_extraction.py
 
-// types
-
 type FeatureExtractionPipeline struct {
 	BasePipeline
 }
 
 type FeatureExtractionOutput struct {
 	Embeddings [][]float32
+}
+
+func (t *FeatureExtractionOutput) GetOutput() []any {
+	out := make([]any, len(t.Embeddings))
+	for i, embedding := range t.Embeddings {
+		out[i] = any(embedding)
+	}
+	return out
 }
 
 // NewFeatureExtractionPipeline Initialize a feature extraction pipeline
@@ -49,7 +55,7 @@ func NewFeatureExtractionPipeline(modelPath string, name string) (*FeatureExtrac
 }
 
 // Postprocess Parse the results of the forward pass into the output. Token embeddings are mean pooled.
-func (p *FeatureExtractionPipeline) Postprocess(batch PipelineBatch) (FeatureExtractionOutput, error) {
+func (p *FeatureExtractionPipeline) Postprocess(batch PipelineBatch) (PipelineBatchOutput, error) {
 
 	maxSequence := batch.MaxSequence
 	vectorCounter := 0
@@ -77,7 +83,7 @@ func (p *FeatureExtractionPipeline) Postprocess(batch PipelineBatch) (FeatureExt
 			vectorCounter++
 		}
 	}
-	return FeatureExtractionOutput{Embeddings: outputs}, nil
+	return &FeatureExtractionOutput{Embeddings: outputs}, nil
 }
 
 func meanPooling(tokens [][]float32, input TokenizedInput, maxSequence int, dimensions int) []float32 {
@@ -101,11 +107,11 @@ func meanPooling(tokens [][]float32, input TokenizedInput, maxSequence int, dime
 }
 
 // Run the pipeline on a string batch
-func (p *FeatureExtractionPipeline) Run(inputs []string) (FeatureExtractionOutput, error) {
+func (p *FeatureExtractionPipeline) Run(inputs []string) (PipelineBatchOutput, error) {
 	batch := p.Preprocess(inputs)
 	batch, forwardError := p.Forward(batch)
 	if forwardError != nil {
-		return FeatureExtractionOutput{}, forwardError
+		return nil, forwardError
 	}
 	return p.Postprocess(batch)
 }

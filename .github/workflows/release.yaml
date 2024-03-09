@@ -22,11 +22,15 @@ jobs:
     - uses: actions/upload-artifact@v4
       with:
         name: libtokenizers.a
-        path: ./testTarget/libtokenizers.a
+        path: ./artifacts/libtokenizers.a
     - uses: actions/upload-artifact@v4
       with:
         name: onnxruntime.so
-        path: ./testTarget/onnxruntime.so
+        path: ./artifacts/onnxruntime.so
+    - uses: actions/upload-artifact@v4
+      with:
+        name: hugot-cli-linux-amd64 
+        path: ./artifacts/hugot-cli-linux-amd64
   release:
     name: Release
     runs-on: ubuntu-latest
@@ -42,10 +46,14 @@ jobs:
         with:
           name: onnxruntime.so
           path: .
+      - uses: actions/download-artifact@v4
+        with:
+          name: hugot-cli-linux-amd64
+          path: .
       - name: Display structure of downloaded files
         run: ls -R
       - uses: ncipollo/release-action@v1
         with:
-          artifacts: "libtokenizers.a, onnxruntime.so"
+          artifacts: "libtokenizers.a, onnxruntime.so, hugot-cli-linux-amd64"
           generateReleaseNotes: true
           skipIfReleaseExists: true

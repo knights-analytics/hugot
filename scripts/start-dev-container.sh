@@ -15,5 +15,5 @@ if [[ ! -d "$src_dir/models" ]]; then
     git clone https://huggingface.co/KnightsAnalytics/distilbert-NER)
 fi
 
-docker compose -f ./docker-compose-dev.yaml build
-docker compose -f ./docker-compose-dev.yaml up -d
+docker compose -f ./compose-dev.yaml build
+docker compose -f ./compose-dev.yaml up -d

@@ -30,7 +30,17 @@ type ClassificationOutput struct {
 	Score float32
 }
 
-type TextClassificationOutput [][]ClassificationOutput
+type TextClassificationOutput struct {
+	ClassificationOutputs [][]ClassificationOutput
+}
+
+func (t *TextClassificationOutput) GetOutput() []any {
+	out := make([]any, len(t.ClassificationOutputs))
+	for i, classificationOutput := range t.ClassificationOutputs {
+		out[i] = any(classificationOutput)
+	}
+	return out
+}
 
 // options
 
@@ -139,7 +149,7 @@ func (p *TextClassificationPipeline) Forward(batch PipelineBatch) (PipelineBatch
 	return batch, err
 }
 
-func (p *TextClassificationPipeline) Postprocess(batch PipelineBatch) (TextClassificationOutput, error) {
+func (p *TextClassificationPipeline) Postprocess(batch PipelineBatch) (PipelineBatchOutput, error) {
 
 	outputTensor := batch.OutputTensor
 	output := make([][]float32, len(batch.Input))
@@ -160,7 +170,10 @@ func (p *TextClassificationPipeline) Postprocess(batch PipelineBatch) (TextClass
 		}
 	}
 
-	batchClassificationOutputs := make([][]ClassificationOutput, len(batch.Input))
+	// batchClassificationOutputs := make([][]ClassificationOutput, len(batch.Input))
+	batchClassificationOutputs := TextClassificationOutput{
+		ClassificationOutputs: make([][]ClassificationOutput, len(batch.Input)),
+	}
 
 	var err error
 
@@ -180,13 +193,13 @@ func (p *TextClassificationPipeline) Postprocess(batch PipelineBatch) (TextClass
 			Label: class,
 			Score: value,
 		}
-		batchClassificationOutputs[i] = inputClassificationOutputs
+		batchClassificationOutputs.ClassificationOutputs[i] = inputClassificationOutputs
 	}
-	return batchClassificationOutputs, err
+	return &batchClassificationOutputs, err
 }
 
 // Run the pipeline on a string batch
-func (p *TextClassificationPipeline) Run(inputs []string) (TextClassificationOutput, error) {
+func (p *TextClassificationPipeline) Run(inputs []string) (PipelineBatchOutput, error) {
 	batch := p.Preprocess(inputs)
 	batch, err := p.Forward(batch)
 	if err != nil {

@@ -1,11 +1,14 @@
 package hugot
 
 import (
+	"context"
 	"errors"
 	"fmt"
-	"github.com/knights-analytics/hugot/pipelines"
-	ort "github.com/yalue/onnxruntime_go"
 	"slices"
+
+	"github.com/knights-analytics/hugot/pipelines"
+	util "github.com/knights-analytics/hugot/utils"
+	ort "github.com/yalue/onnxruntime_go"
 )
 
 type Session struct {
@@ -40,11 +43,22 @@ func (m pipelineMap[T]) GetStats() []string {
 	return stats
 }
 
-func NewSession() (*Session, error) {
+func NewSession(ortLibraryPath string) (*Session, error) {
 	session := &Session{
 		featureExtractionPipelines:   map[string]*pipelines.FeatureExtractionPipeline{},
 		tokenClassificationPipelines: map[string]*pipelines.TokenClassificationPipeline{},
 		textClassificationPipelines:  map[string]*pipelines.TextClassificationPipeline{},
+	}
+
+	if ortLibraryPath != "" {
+		ortPathExists, err := util.FileSystem.Exists(context.Background(), ortLibraryPath)
+		if err != nil {
+			return nil, err
+		}
+		if !ortPathExists {
+			return nil, fmt.Errorf("Cannot find the ort library at: %s", ortLibraryPath)
+		}
+		ort.SetSharedLibraryPath(ortLibraryPath)
 	}
 
 	if ort.IsInitialized() {

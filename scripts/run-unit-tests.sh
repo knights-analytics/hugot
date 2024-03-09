@@ -21,13 +21,11 @@ if [[ ! -d "$src_dir/models" ]]; then
 fi
 
 # build with compose
-docker compose -f $src_dir/.ci/docker-compose.yaml build
+docker compose -f $src_dir/compose-test.yaml build
 echo "Running tests for commit hash: $commit_hash"
-docker compose -f $src_dir/.ci/docker-compose.yaml up && \
-docker compose -f $src_dir/.ci/docker-compose.yaml logs --no-color >& $test_folder/logs.txt && \
+docker compose -f $src_dir/compose-test.yaml up && \
+docker compose -f $src_dir/compose-test.yaml logs --no-color >& $test_folder/logs.txt
+docker compose -f $src_dir/compose-test.yaml rm -fsv
+
 echo "Extracting lib artifacts"
-id=$(docker ps -aqf "name=hugot")
-docker cp $id:/usr/lib/libtokenizers.a ./testTarget/libtokenizers.a
-docker cp $id:/usr/lib64/onnxruntime.so ./testTarget/onnxruntime.so
-echo $id
-docker compose -f $src_dir/.ci/docker-compose.yaml rm -fsv
+docker build . --output "$src_dir/artifacts" --target artifacts

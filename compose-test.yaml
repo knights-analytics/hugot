@@ -3,8 +3,9 @@ services:
     image: hugot:$commit_hash
     container_name: hugot
     build:
-      context: ./..
+      context: .
       dockerfile: ./Dockerfile
+      target: testing
     volumes:
       - $test_folder:/test
       - $test_folder/../scripts/run-unit-tests-container.sh:/run-unit-tests-container.sh
