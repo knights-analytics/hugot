@@ -5,6 +5,7 @@ go 1.22
 require (
 	github.com/json-iterator/go v1.1.12
 	github.com/knights-analytics/tokenizers v0.10.0
+	github.com/mattn/go-isatty v0.0.20
 	github.com/stretchr/testify v1.9.0
 	github.com/urfave/cli/v2 v2.27.1
 	github.com/viant/afs v1.25.0
@@ -14,7 +15,7 @@ require (
 
 require (
 	cloud.google.com/go/storage v1.39.0 // indirect
-	github.com/aws/aws-sdk-go v1.50.35 // indirect
+	github.com/aws/aws-sdk-go v1.50.36 // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.3 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/go-errors/errors v1.5.1 // indirect

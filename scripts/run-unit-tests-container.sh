@@ -2,4 +2,8 @@
 
 set -e
 
-gotestsum --raw-command --junitfile "/test/unit/pipelines.xml" --jsonfile "/test/unit/pipelines.json" -- test2json -t -p pipelines /unittest/pipelines.test -test.v=test2json
+cd /build && \
+mkdir -p /test/unit && \
+gotestsum --junitfile=/test/unit/unit.xml --jsonfile=/test/unit/unit.json -- -coverprofile=/test/unit/cover.out -race -covermode=atomic ./...
+
+echo Done.

@@ -46,12 +46,21 @@ func NewFeatureExtractionPipeline(modelPath string, name string) (*FeatureExtrac
 	// the dimension of the output is taken from the output meta. For the moment we assume that there is only one output
 	pipeline.OutputDim = int(pipeline.OutputsMeta[0].Dimensions[2])
 
-	// output dimension
-	if pipeline.OutputDim <= 0 {
-		return nil, errors.New("pipeline configuration invalid: outputDim parameter must be greater than zero")
+	err = pipeline.Validate()
+	if err != nil {
+		return nil, err
 	}
 
 	return pipeline, nil
+}
+
+func (p *FeatureExtractionPipeline) Validate() error {
+	var validationErrors []error
+
+	if p.OutputDim <= 0 {
+		validationErrors = append(validationErrors, errors.New("pipeline configuration invalid: outputDim parameter must be greater than zero"))
+	}
+	return errors.Join(validationErrors...)
 }
 
 // Postprocess Parse the results of the forward pass into the output. Token embeddings are mean pooled.

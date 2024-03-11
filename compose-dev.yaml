@@ -9,4 +9,4 @@ services:
       - $src_dir:/home/testuser/repositories/hugot
     environment:
       - TEST_MODELS_FOLDER=/models
-    command: tail -f /dev/null
+    entrypoint: ["tail", "-f", "/dev/null"]

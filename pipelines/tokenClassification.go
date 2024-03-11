@@ -125,19 +125,26 @@ func NewTokenClassificationPipeline(modelPath string, name string, opts ...Token
 	// the dimension of the output is taken from the output meta.
 	pipeline.OutputDim = int(pipeline.OutputsMeta[0].Dimensions[2])
 
-	// output dimension
-	if pipeline.OutputDim <= 0 {
-		return nil, fmt.Errorf("pipeline configuration invalid: outputDim parameter must be greater than zero")
-	}
-
-	// checks
-	if len(pipeline.IdLabelMap) <= 0 {
-		return nil, fmt.Errorf("pipeline configuration invalid: length of id2label map for token classification pipeline must be greater than zero")
-	}
-	if len(pipeline.IdLabelMap) != pipeline.OutputDim {
-		return nil, fmt.Errorf("pipeline configuration invalid: length of id2label map does not match model output dimension")
+	err = pipeline.Validate()
+	if err != nil {
+		return nil, err
 	}
 	return pipeline, nil
+}
+
+func (p *TokenClassificationPipeline) Validate() error {
+	var validationErrors []error
+
+	if p.OutputDim <= 0 {
+		validationErrors = append(validationErrors, fmt.Errorf("p configuration invalid: outputDim parameter must be greater than zero"))
+	}
+	if len(p.IdLabelMap) <= 0 {
+		validationErrors = append(validationErrors, fmt.Errorf("p configuration invalid: length of id2label map for token classification p must be greater than zero"))
+	}
+	if len(p.IdLabelMap) != p.OutputDim {
+		validationErrors = append(validationErrors, fmt.Errorf("p configuration invalid: length of id2label map does not match model output dimension"))
+	}
+	return errors.Join(validationErrors...)
 }
 
 // Postprocess function for a token classification pipeline
@@ -353,13 +360,4 @@ func (p *TokenClassificationPipeline) Run(inputs []string) (PipelineBatchOutput,
 		return nil, errForward
 	}
 	return p.Postprocess(batch)
-}
-
-func PrintTokenEntities(o *TokenClassificationOutput) {
-	for i, entities := range o.Entities {
-		fmt.Printf("Input %d\n", i)
-		for _, entity := range entities {
-			fmt.Printf("%+v\n", entity)
-		}
-	}
 }

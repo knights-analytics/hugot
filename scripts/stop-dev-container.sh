@@ -6,4 +6,4 @@ set -e
 this_dir="$( cd "$( dirname "$0" )" && pwd )"
 export src_dir="$(realpath "${this_dir}/..")"
 
-docker compose -f ./docker-compose-dev.yaml down -v
+docker compose -f ./compose-dev.yaml down -v

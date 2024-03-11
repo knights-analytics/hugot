@@ -36,6 +36,7 @@ type Pipeline interface {
 	Destroy() error
 	GetStats() []string
 	GetOutputDim() int
+	Validate() error
 	Run([]string) (PipelineBatchOutput, error)
 }
 

@@ -4,7 +4,6 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
-	"log"
 	"math"
 	"os"
 	"path"
@@ -13,6 +12,7 @@ import (
 
 	"github.com/knights-analytics/hugot"
 	"github.com/knights-analytics/hugot/pipelines"
+	util "github.com/knights-analytics/hugot/utils"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -23,15 +23,16 @@ var tokenExpectedByte []byte
 var resultsByte []byte
 
 // use the system library for the tests
-var onnxruntimeSharedLibrary string = ""
+var onnxruntimeSharedLibrary = ""
 
 // Text classification
 
 func TestTextClassificationPipeline(t *testing.T) {
 	session, err := hugot.NewSession(onnxruntimeSharedLibrary)
-	Check(err)
+	check(t, err)
 	defer func(session *hugot.Session) {
-		Check(session.Destroy())
+		err := session.Destroy()
+		check(t, err)
 	}(session)
 	modelFolder := os.Getenv("TEST_MODELS_FOLDER")
 	if modelFolder == "" {
@@ -39,7 +40,7 @@ func TestTextClassificationPipeline(t *testing.T) {
 	}
 	modelPath := path.Join(modelFolder, "distilbert-base-uncased-finetuned-sst-2-english")
 	sentimentPipeline, err := session.NewTextClassificationPipeline(modelPath, "testPipeline")
-	Check(err)
+	check(t, err)
 
 	tests := []struct {
 		pipeline *pipelines.TextClassificationPipeline
@@ -77,7 +78,7 @@ func TestTextClassificationPipeline(t *testing.T) {
 			if !ok {
 				t.FailNow()
 			}
-			Check(err)
+			check(t, err)
 			for i, expected := range tt.expected.ClassificationOutputs {
 				checkClassificationOutput(t, expected, result.ClassificationOutputs[i])
 			}
@@ -88,13 +89,44 @@ func TestTextClassificationPipeline(t *testing.T) {
 	session.GetStats()
 }
 
+func TestTextClassificationPipelineValidation(t *testing.T) {
+	session, err := hugot.NewSession(onnxruntimeSharedLibrary)
+	check(t, err)
+	defer func(session *hugot.Session) {
+		err := session.Destroy()
+		check(t, err)
+	}(session)
+	modelFolder := os.Getenv("TEST_MODELS_FOLDER")
+	if modelFolder == "" {
+		modelFolder = "./models"
+	}
+	modelPath := path.Join(modelFolder, "distilbert-base-uncased-finetuned-sst-2-english")
+	sentimentPipeline, err := session.NewTextClassificationPipeline(modelPath, "testPipeline", pipelines.WithAggregationFunction(util.SoftMax))
+	check(t, err)
+	sentimentPipeline.IdLabelMap = map[int]string{}
+	err = sentimentPipeline.Validate()
+	assert.Error(t, err)
+	if err != nil {
+		errInt := err.(interface{ Unwrap() []error })
+		assert.Equal(t, 3, len(errInt.Unwrap()))
+	}
+	sentimentPipeline.OutputDim = 0
+	err = sentimentPipeline.Validate()
+	assert.Error(t, err)
+	if err != nil {
+		errInt := err.(interface{ Unwrap() []error })
+		assert.Equal(t, 3, len(errInt.Unwrap()))
+	}
+}
+
 // Token classification
 
 func TestTokenClassificationPipeline(t *testing.T) {
 	session, err := hugot.NewSession(onnxruntimeSharedLibrary)
-	Check(err)
+	check(t, err)
 	defer func(session *hugot.Session) {
-		Check(session.Destroy())
+		err := session.Destroy()
+		check(t, err)
 	}(session)
 
 	modelFolder := os.Getenv("TEST_MODELS_FOLDER")
@@ -103,12 +135,13 @@ func TestTokenClassificationPipeline(t *testing.T) {
 	}
 	modelPath := path.Join(modelFolder, "distilbert-NER")
 	pipelineSimple, err2 := session.NewTokenClassificationPipeline(modelPath, "testPipelineSimple", pipelines.WithSimpleAggregation())
-	Check(err2)
+	check(t, err2)
 	pipelineNone, err3 := session.NewTokenClassificationPipeline(modelPath, "testPipelineNone", pipelines.WithoutAggregation())
-	Check(err3)
+	check(t, err3)
 
 	var expectedResults map[int]pipelines.TokenClassificationOutput
-	Check(json.Unmarshal(tokenExpectedByte, &expectedResults))
+	err4 := json.Unmarshal(tokenExpectedByte, &expectedResults)
+	check(t, err4)
 
 	tests := []struct {
 		pipeline *pipelines.TokenClassificationPipeline
@@ -139,13 +172,13 @@ func TestTokenClassificationPipeline(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			batchResult, err := tt.pipeline.Run(tt.strings)
-			Check(err)
+			check(t, err)
 			result, ok := batchResult.(*pipelines.TokenClassificationOutput)
 			if !ok {
 				t.FailNow()
 			}
 
-			pipelines.PrintTokenEntities(result)
+			printTokenEntities(result)
 			for i, predictedEntities := range result.Entities {
 				assert.Equal(t, len(tt.expected.Entities[i]), len(predictedEntities))
 				for j, entity := range predictedEntities {
@@ -158,13 +191,46 @@ func TestTokenClassificationPipeline(t *testing.T) {
 	}
 }
 
+func TestTokenClassificationPipelineValidation(t *testing.T) {
+	session, err := hugot.NewSession(onnxruntimeSharedLibrary)
+	check(t, err)
+	defer func(session *hugot.Session) {
+		err := session.Destroy()
+		check(t, err)
+	}(session)
+
+	modelFolder := os.Getenv("TEST_MODELS_FOLDER")
+	if modelFolder == "" {
+		modelFolder = "./models"
+	}
+	modelPath := path.Join(modelFolder, "distilbert-NER")
+	pipelineSimple, err2 := session.NewTokenClassificationPipeline(modelPath, "testPipelineSimple", pipelines.WithSimpleAggregation())
+	check(t, err2)
+
+	pipelineSimple.IdLabelMap = map[int]string{}
+	err = pipelineSimple.Validate()
+	assert.Error(t, err)
+	if err != nil {
+		errInt := err.(interface{ Unwrap() []error })
+		assert.Equal(t, 2, len(errInt.Unwrap()))
+	}
+	pipelineSimple.OutputDim = 0
+	err = pipelineSimple.Validate()
+	assert.Error(t, err)
+	if err != nil {
+		errInt := err.(interface{ Unwrap() []error })
+		assert.Equal(t, 2, len(errInt.Unwrap()))
+	}
+}
+
 // feature extraction
 
 func TestFeatureExtractionPipeline(t *testing.T) {
 	session, err := hugot.NewSession(onnxruntimeSharedLibrary)
-	Check(err)
+	check(t, err)
 	defer func(session *hugot.Session) {
-		Check(session.Destroy())
+		err := session.Destroy()
+		check(t, err)
 	}(session)
 
 	modelFolder := os.Getenv("TEST_MODELS_FOLDER")
@@ -173,17 +239,18 @@ func TestFeatureExtractionPipeline(t *testing.T) {
 	}
 	modelPath := path.Join(modelFolder, "all-MiniLM-L6-v2")
 	pipeline, err := session.NewFeatureExtractionPipeline(modelPath, "testPipeline")
-	Check(err)
+	check(t, err)
 
 	var expectedResults map[string][][]float32
-	Check(json.Unmarshal(resultsByte, &expectedResults))
+	err = json.Unmarshal(resultsByte, &expectedResults)
+	check(t, err)
 	var testResults [][]float32
 
 	// test 'robert smith'
 	testResults = expectedResults["test1output"]
 	for i := 1; i <= 10; i++ {
 		batchResult, err := pipeline.Run([]string{"robert smith"})
-		Check(err)
+		check(t, err)
 		result, ok := batchResult.(*pipelines.FeatureExtractionOutput)
 		if !ok {
 			t.FailNow()
@@ -199,7 +266,7 @@ func TestFeatureExtractionPipeline(t *testing.T) {
 	testResults = expectedResults["test2output"]
 	for i := 1; i <= 10; i++ {
 		batchResult, err := pipeline.Run([]string{"robert smith junior", "francis ford coppola"})
-		Check(err)
+		check(t, err)
 		result, ok := batchResult.(*pipelines.FeatureExtractionOutput)
 		if !ok {
 			t.FailNow()
@@ -222,7 +289,7 @@ func TestFeatureExtractionPipeline(t *testing.T) {
 	for k, sentencePair := range testPairs {
 		// these vectors should be the same
 		firstBatchResult, err2 := pipeline.Run(sentencePair[0])
-		Check(err2)
+		check(t, err2)
 		firstResult, ok := firstBatchResult.(*pipelines.FeatureExtractionOutput)
 		if !ok {
 			t.FailNow()
@@ -230,7 +297,7 @@ func TestFeatureExtractionPipeline(t *testing.T) {
 		firstEmbedding := firstResult.Embeddings[0]
 
 		secondBatchResult, err3 := pipeline.Run(sentencePair[1])
-		Check(err3)
+		check(t, err3)
 		secondResult, ok := secondBatchResult.(*pipelines.FeatureExtractionOutput)
 		if !ok {
 			t.FailNow()
@@ -250,6 +317,27 @@ func TestFeatureExtractionPipeline(t *testing.T) {
 	assert.Greater(t, pipeline.PipelineTimings.TotalNS, zero, "PipelineTimings.TotalNS should be greater than 0")
 	assert.Greater(t, pipeline.TokenizerTimings.NumCalls, zero, "TokenizerTimings.NumCalls should be greater than 0")
 	assert.Greater(t, pipeline.TokenizerTimings.TotalNS, zero, "TokenizerTimings.TotalNS should be greater than 0")
+}
+
+func TestFeatureExtractionPipelineValidation(t *testing.T) {
+	session, err := hugot.NewSession(onnxruntimeSharedLibrary)
+	check(t, err)
+	defer func(session *hugot.Session) {
+		err := session.Destroy()
+		check(t, err)
+	}(session)
+
+	modelFolder := os.Getenv("TEST_MODELS_FOLDER")
+	if modelFolder == "" {
+		modelFolder = "./models"
+	}
+	modelPath := path.Join(modelFolder, "all-MiniLM-L6-v2")
+	pipeline, err := session.NewFeatureExtractionPipeline(modelPath, "testPipeline")
+	check(t, err)
+
+	pipeline.OutputDim = 0
+	err = pipeline.Validate()
+	assert.Error(t, err)
 }
 
 // utilities
@@ -286,8 +374,17 @@ func almostEqual(a, b float64) bool {
 	return math.Abs(a-b) <= 0.0001
 }
 
-func Check(err error) {
+func check(t *testing.T, err error) {
 	if err != nil {
-		log.Panic(err)
+		t.Fatalf("Test failed with error %s", err.Error())
+	}
+}
+
+func printTokenEntities(o *pipelines.TokenClassificationOutput) {
+	for i, entities := range o.Entities {
+		fmt.Printf("Input %d\n", i)
+		for _, entity := range entities {
+			fmt.Printf("%+v\n", entity)
+		}
 	}
 }
