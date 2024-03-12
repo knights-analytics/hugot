@@ -149,7 +149,7 @@ func (p *TokenClassificationPipeline) Validate() error {
 }
 
 // Postprocess function for a token classification pipeline
-func (p *TokenClassificationPipeline) Postprocess(batch PipelineBatch) (PipelineBatchOutput, error) {
+func (p *TokenClassificationPipeline) Postprocess(batch PipelineBatch) (*TokenClassificationOutput, error) {
 
 	outputs := make([][][]float32, len(batch.Input))        // holds the final output
 	inputVectors := make([][]float32, 0, batch.MaxSequence) // holds the embeddings of each original token (no padding) for an input
@@ -355,6 +355,10 @@ func (p *TokenClassificationPipeline) GroupEntities(entities []Entity) ([]Entity
 
 // Run the pipeline on a string batch
 func (p *TokenClassificationPipeline) Run(inputs []string) (PipelineBatchOutput, error) {
+	return p.RunPipeline(inputs)
+}
+
+func (p *TokenClassificationPipeline) RunPipeline(inputs []string) (*TokenClassificationOutput, error) {
 	batch := p.Preprocess(inputs)
 	batch, errForward := p.Forward(batch)
 	if errForward != nil {

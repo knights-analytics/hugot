@@ -66,7 +66,7 @@ func (p *FeatureExtractionPipeline) Validate() error {
 }
 
 // Postprocess Parse the results of the forward pass into the output. Token embeddings are mean pooled.
-func (p *FeatureExtractionPipeline) Postprocess(batch PipelineBatch) (PipelineBatchOutput, error) {
+func (p *FeatureExtractionPipeline) Postprocess(batch PipelineBatch) (*FeatureExtractionOutput, error) {
 
 	maxSequence := batch.MaxSequence
 	vectorCounter := 0
@@ -119,6 +119,10 @@ func meanPooling(tokens [][]float32, input TokenizedInput, maxSequence int, dime
 
 // Run the pipeline on a string batch
 func (p *FeatureExtractionPipeline) Run(inputs []string) (PipelineBatchOutput, error) {
+	return p.RunPipeline(inputs)
+}
+
+func (p *FeatureExtractionPipeline) RunPipeline(inputs []string) (*FeatureExtractionOutput, error) {
 	batch := p.Preprocess(inputs)
 	batch, forwardError := p.Forward(batch)
 	if forwardError != nil {
