@@ -159,7 +159,7 @@ func (p *TextClassificationPipeline) Forward(batch PipelineBatch) (PipelineBatch
 	return batch, err
 }
 
-func (p *TextClassificationPipeline) Postprocess(batch PipelineBatch) (PipelineBatchOutput, error) {
+func (p *TextClassificationPipeline) Postprocess(batch PipelineBatch) (*TextClassificationOutput, error) {
 
 	outputTensor := batch.OutputTensor
 	output := make([][]float32, len(batch.Input))
@@ -210,6 +210,10 @@ func (p *TextClassificationPipeline) Postprocess(batch PipelineBatch) (PipelineB
 
 // Run the pipeline on a string batch
 func (p *TextClassificationPipeline) Run(inputs []string) (PipelineBatchOutput, error) {
+	return p.RunPipeline(inputs)
+}
+
+func (p *TextClassificationPipeline) RunPipeline(inputs []string) (*TextClassificationOutput, error) {
 	batch := p.Preprocess(inputs)
 	batch, err := p.Forward(batch)
 	if err != nil {

@@ -85,6 +85,11 @@ import (
 	"github.com/knights-analytics/hugot/pipelines"
 )
 
+func check(err error) {
+    if err != nil {
+        panic(err.Error())
+    }
+}
 // start a new session. This looks for the onnxruntime.so library in its default path, e.g. /usr/lib/onnxruntime.so
 session, err := hugot.NewSession()
 // if your onnxruntime.so is somewhere else, you can explicitly set it by using WithOnnxLibraryPath
@@ -97,17 +102,14 @@ defer func(session *hugot.Session) {
 }(session)
 // we now create a text classification pipeline. It requires the path to the onnx model folder,
 // and a pipeline name
-sentimentPipeline, err := session.NewTextClassificationPipeline(modelPath, "testPipeline")
+sentimentPipeline, err := session.NewTextClassificationPipeline("/path/to/model/", "testPipeline")
 check(err)
 // we can now use the pipeline for prediction on a batch of strings
 batch := []string{"This movie is disgustingly good !", "The director tried too much"}
-batchResult, err := sentimentPipeline.Run(batch)
+batchResult, err := sentimentPipeline.RunPipeline(batch)
 check(err)
-// batchResult is an interface so that we can treat pipelines uniformly.
-// we can cast it to the concrete result type of this pipeline
-result, ok := batchResult.(*pipelines.TextClassificationOutput)
 // and do whatever we want with it :)
-s, err := json.Marshal(result)
+s, err := json.Marshal(batchResult)
 check(err)
 fmt.Println(string(s))
 // {"ClassificationOutputs":[[{"Label":"POSITIVE","Score":0.9998536}],[{"Label":"NEGATIVE","Score":0.99752176}]]}

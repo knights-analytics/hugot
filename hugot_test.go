@@ -73,14 +73,10 @@ func TestTextClassificationPipeline(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			batchResult, err := tt.pipeline.Run(tt.strings)
-			result, ok := batchResult.(*pipelines.TextClassificationOutput)
-			if !ok {
-				t.FailNow()
-			}
+			batchResult, err := tt.pipeline.RunPipeline(tt.strings)
 			check(t, err)
 			for i, expected := range tt.expected.ClassificationOutputs {
-				checkClassificationOutput(t, expected, result.ClassificationOutputs[i])
+				checkClassificationOutput(t, expected, batchResult.ClassificationOutputs[i])
 			}
 		})
 	}
@@ -176,15 +172,10 @@ func TestTokenClassificationPipeline(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			batchResult, err := tt.pipeline.Run(tt.strings)
+			batchResult, err := tt.pipeline.RunPipeline(tt.strings)
 			check(t, err)
-			result, ok := batchResult.(*pipelines.TokenClassificationOutput)
-			if !ok {
-				t.FailNow()
-			}
-
-			printTokenEntities(result)
-			for i, predictedEntities := range result.Entities {
+			printTokenEntities(batchResult)
+			for i, predictedEntities := range batchResult.Entities {
 				assert.Equal(t, len(tt.expected.Entities[i]), len(predictedEntities))
 				for j, entity := range predictedEntities {
 					expectedEntity := tt.expected.Entities[i][j]
@@ -254,13 +245,9 @@ func TestFeatureExtractionPipeline(t *testing.T) {
 	// test 'robert smith'
 	testResults = expectedResults["test1output"]
 	for i := 1; i <= 10; i++ {
-		batchResult, err := pipeline.Run([]string{"robert smith"})
+		batchResult, err := pipeline.RunPipeline([]string{"robert smith"})
 		check(t, err)
-		result, ok := batchResult.(*pipelines.FeatureExtractionOutput)
-		if !ok {
-			t.FailNow()
-		}
-		e := floatsEqual(result.Embeddings[0], testResults[0])
+		e := floatsEqual(batchResult.Embeddings[0], testResults[0])
 		if e != nil {
 			t.Logf("Test 1: The neural network didn't produce the correct result on loop %d: %s\n", i, e)
 			t.FailNow()
@@ -270,13 +257,9 @@ func TestFeatureExtractionPipeline(t *testing.T) {
 	// test ['robert smith junior', 'francis ford coppola']
 	testResults = expectedResults["test2output"]
 	for i := 1; i <= 10; i++ {
-		batchResult, err := pipeline.Run([]string{"robert smith junior", "francis ford coppola"})
+		batchResult, err := pipeline.RunPipeline([]string{"robert smith junior", "francis ford coppola"})
 		check(t, err)
-		result, ok := batchResult.(*pipelines.FeatureExtractionOutput)
-		if !ok {
-			t.FailNow()
-		}
-		for j, res := range result.Embeddings {
+		for j, res := range batchResult.Embeddings {
 			e := floatsEqual(res, testResults[j])
 			if e != nil {
 				t.Logf("Test 2: The neural network didn't produce the correct result on loop %d: %s\n", i, e)
@@ -293,21 +276,13 @@ func TestFeatureExtractionPipeline(t *testing.T) {
 
 	for k, sentencePair := range testPairs {
 		// these vectors should be the same
-		firstBatchResult, err2 := pipeline.Run(sentencePair[0])
+		firstBatchResult, err2 := pipeline.RunPipeline(sentencePair[0])
 		check(t, err2)
-		firstResult, ok := firstBatchResult.(*pipelines.FeatureExtractionOutput)
-		if !ok {
-			t.FailNow()
-		}
-		firstEmbedding := firstResult.Embeddings[0]
+		firstEmbedding := firstBatchResult.Embeddings[0]
 
-		secondBatchResult, err3 := pipeline.Run(sentencePair[1])
+		secondBatchResult, err3 := pipeline.RunPipeline(sentencePair[1])
 		check(t, err3)
-		secondResult, ok := secondBatchResult.(*pipelines.FeatureExtractionOutput)
-		if !ok {
-			t.FailNow()
-		}
-		secondEmbedding := secondResult.Embeddings[0]
+		secondEmbedding := secondBatchResult.Embeddings[0]
 		e := floatsEqual(firstEmbedding, secondEmbedding)
 		if e != nil {
 			t.Logf("Equality failed for determinism test %s test with pairs %s and %s", k, strings.Join(sentencePair[0], ","), strings.Join(sentencePair[1], ","))
