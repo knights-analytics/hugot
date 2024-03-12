@@ -3,6 +3,7 @@ package pipelines
 import (
 	"errors"
 	"fmt"
+	ort "github.com/yalue/onnxruntime_go"
 	"slices"
 	"strings"
 
@@ -72,11 +73,11 @@ func WithIgnoreLabels(ignoreLabels []string) TokenClassificationOption {
 }
 
 // NewTokenClassificationPipeline Initializes a feature extraction pipeline
-func NewTokenClassificationPipeline(modelPath string, name string, opts ...TokenClassificationOption) (*TokenClassificationPipeline, error) {
+func NewTokenClassificationPipeline(modelPath string, name string, ortOptions *ort.SessionOptions, opts ...TokenClassificationOption) (*TokenClassificationPipeline, error) {
 	pipeline := &TokenClassificationPipeline{}
 	pipeline.ModelPath = modelPath
 	pipeline.PipelineName = name
-
+	pipeline.OrtOptions = ortOptions
 	for _, o := range opts {
 		o(pipeline)
 	}

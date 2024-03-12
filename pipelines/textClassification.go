@@ -53,10 +53,11 @@ func WithAggregationFunction(aggregationFunction func([]float32) []float32) Text
 }
 
 // NewTextClassificationPipeline initializes a new text classification pipeline
-func NewTextClassificationPipeline(modelPath string, name string, opts ...TextClassificationOption) (*TextClassificationPipeline, error) {
+func NewTextClassificationPipeline(modelPath string, name string, ortOptions *ort.SessionOptions, opts ...TextClassificationOption) (*TextClassificationPipeline, error) {
 	pipeline := &TextClassificationPipeline{}
 	pipeline.ModelPath = modelPath
 	pipeline.PipelineName = name
+	pipeline.OrtOptions = ortOptions
 	for _, opt := range opts {
 		opt(pipeline)
 	}

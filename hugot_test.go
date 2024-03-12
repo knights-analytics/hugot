@@ -23,12 +23,12 @@ var tokenExpectedByte []byte
 var resultsByte []byte
 
 // use the system library for the tests
-var onnxruntimeSharedLibrary = ""
+var onnxruntimeSharedLibrary = "/usr/lib64/onnxruntime.so"
 
 // Text classification
 
 func TestTextClassificationPipeline(t *testing.T) {
-	session, err := hugot.NewSession(onnxruntimeSharedLibrary)
+	session, err := hugot.NewSession(hugot.WithOnnxLibraryPath(onnxruntimeSharedLibrary))
 	check(t, err)
 	defer func(session *hugot.Session) {
 		err := session.Destroy()
@@ -51,7 +51,7 @@ func TestTextClassificationPipeline(t *testing.T) {
 		{
 			pipeline: sentimentPipeline,
 			name:     "Basic tests",
-			strings:  []string{"This movie is disgustingly good !", "The director tried too much"},
+			strings:  []string{"This movie is disgustingly good!", "The director tried too much"},
 			expected: pipelines.TextClassificationOutput{
 				ClassificationOutputs: [][]pipelines.ClassificationOutput{
 					{
@@ -89,8 +89,13 @@ func TestTextClassificationPipeline(t *testing.T) {
 	session.GetStats()
 }
 
+func TestNewSessionErrors(t *testing.T) {
+	_, err := hugot.NewSession(hugot.WithOnnxLibraryPath(""))
+	assert.Error(t, err)
+}
+
 func TestTextClassificationPipelineValidation(t *testing.T) {
-	session, err := hugot.NewSession(onnxruntimeSharedLibrary)
+	session, err := hugot.NewSession(hugot.WithOnnxLibraryPath(onnxruntimeSharedLibrary))
 	check(t, err)
 	defer func(session *hugot.Session) {
 		err := session.Destroy()
@@ -122,7 +127,7 @@ func TestTextClassificationPipelineValidation(t *testing.T) {
 // Token classification
 
 func TestTokenClassificationPipeline(t *testing.T) {
-	session, err := hugot.NewSession(onnxruntimeSharedLibrary)
+	session, err := hugot.NewSession(hugot.WithOnnxLibraryPath(onnxruntimeSharedLibrary))
 	check(t, err)
 	defer func(session *hugot.Session) {
 		err := session.Destroy()
@@ -134,7 +139,7 @@ func TestTokenClassificationPipeline(t *testing.T) {
 		modelFolder = "./models"
 	}
 	modelPath := path.Join(modelFolder, "distilbert-NER")
-	pipelineSimple, err2 := session.NewTokenClassificationPipeline(modelPath, "testPipelineSimple", pipelines.WithSimpleAggregation())
+	pipelineSimple, err2 := session.NewTokenClassificationPipeline(modelPath, "testPipelineSimple", pipelines.WithSimpleAggregation(), pipelines.WithIgnoreLabels([]string{"O"}))
 	check(t, err2)
 	pipelineNone, err3 := session.NewTokenClassificationPipeline(modelPath, "testPipelineNone", pipelines.WithoutAggregation())
 	check(t, err3)
@@ -192,7 +197,7 @@ func TestTokenClassificationPipeline(t *testing.T) {
 }
 
 func TestTokenClassificationPipelineValidation(t *testing.T) {
-	session, err := hugot.NewSession(onnxruntimeSharedLibrary)
+	session, err := hugot.NewSession(hugot.WithOnnxLibraryPath(onnxruntimeSharedLibrary))
 	check(t, err)
 	defer func(session *hugot.Session) {
 		err := session.Destroy()
@@ -226,7 +231,7 @@ func TestTokenClassificationPipelineValidation(t *testing.T) {
 // feature extraction
 
 func TestFeatureExtractionPipeline(t *testing.T) {
-	session, err := hugot.NewSession(onnxruntimeSharedLibrary)
+	session, err := hugot.NewSession(hugot.WithOnnxLibraryPath(onnxruntimeSharedLibrary))
 	check(t, err)
 	defer func(session *hugot.Session) {
 		err := session.Destroy()
@@ -320,7 +325,7 @@ func TestFeatureExtractionPipeline(t *testing.T) {
 }
 
 func TestFeatureExtractionPipelineValidation(t *testing.T) {
-	session, err := hugot.NewSession(onnxruntimeSharedLibrary)
+	session, err := hugot.NewSession(hugot.WithOnnxLibraryPath(onnxruntimeSharedLibrary))
 	check(t, err)
 	defer func(session *hugot.Session) {
 		err := session.Destroy()

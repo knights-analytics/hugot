@@ -2,6 +2,7 @@ package pipelines
 
 import (
 	"errors"
+	ort "github.com/yalue/onnxruntime_go"
 
 	"github.com/knights-analytics/tokenizers"
 )
@@ -26,10 +27,11 @@ func (t *FeatureExtractionOutput) GetOutput() []any {
 }
 
 // NewFeatureExtractionPipeline Initialize a feature extraction pipeline
-func NewFeatureExtractionPipeline(modelPath string, name string) (*FeatureExtractionPipeline, error) {
+func NewFeatureExtractionPipeline(modelPath string, name string, ortOptions *ort.SessionOptions) (*FeatureExtractionPipeline, error) {
 	pipeline := &FeatureExtractionPipeline{}
 	pipeline.ModelPath = modelPath
 	pipeline.PipelineName = name
+	pipeline.OrtOptions = ortOptions
 
 	// tokenizer
 	pipeline.TokenizerOptions = []tokenizers.EncodeOption{tokenizers.WithReturnTypeIDs(), tokenizers.WithReturnAttentionMask()}

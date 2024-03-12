@@ -85,11 +85,12 @@ import (
 	"github.com/knights-analytics/hugot/pipelines"
 )
 
-// start a new session. You can pass in a path to the onnxruntime.so file, or leave it empty,
-// in which case hugot will try to load it from the default path.
-session, err := hugot.NewSession("")
+// start a new session. This looks for the onnxruntime.so library in its default path, e.g. /usr/lib/onnxruntime.so
+session, err := hugot.NewSession()
+// if your onnxruntime.so is somewhere else, you can explicitly set it by using WithOnnxLibraryPath
+// session, err := hugot.NewSession(WithOnnxLibraryPath("/path/to/onnxruntime.so"))
 check(err)
-// the hugot session needs to be destroyed when you're done
+// A successfully created hugot session needs to be destroyed when you're done
 defer func(session *hugot.Session) {
     err := session.Destroy()
     check(err)
@@ -103,9 +104,9 @@ batch := []string{"This movie is disgustingly good !", "The director tried too m
 batchResult, err := sentimentPipeline.Run(batch)
 check(err)
 // batchResult is an interface so that we can treat pipelines uniformly.
-// we can cast it to the concrete type
+// we can cast it to the concrete result type of this pipeline
 result, ok := batchResult.(*pipelines.TextClassificationOutput)
-// and do whatever we want with it
+// and do whatever we want with it :)
 s, err := json.Marshal(result)
 check(err)
 fmt.Println(string(s))
