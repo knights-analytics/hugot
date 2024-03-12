@@ -120,7 +120,7 @@ See also hugot_test.go for further examples.
 With hugot you don't need python, pytorch, or even go to run huggingface transformers. Simply install the hugot cli (alpha):
 
 ```
-bash <(curl -s https://github.com/knights-analytics/hugot/blob/main/scripts/install-hugot-cli.sh)
+curl https://raw.githubusercontent.com/knights-analytics/hugot/main/scripts/install-hugot-cli.sh | bash
 ```
 
 This will install the hugot binary at $HOME/.local/bin/hugot, and the corresponding onnxruntime.so library at $HOME/lib/hugot/onnxruntime.so.
