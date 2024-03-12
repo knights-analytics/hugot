@@ -5,7 +5,7 @@ services:
     build:
       context: .
       dockerfile: ./Dockerfile
-      target: testing
+      target: building
     volumes:
       - $test_folder:/test
       - $test_folder/../scripts/run-unit-tests-container.sh:/run-unit-tests-container.sh

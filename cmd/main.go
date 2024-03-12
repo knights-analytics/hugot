@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -14,6 +15,7 @@ import (
 	"github.com/knights-analytics/hugot"
 	"github.com/knights-analytics/hugot/pipelines"
 	util "github.com/knights-analytics/hugot/utils"
+	"github.com/mattn/go-isatty"
 	"github.com/urfave/cli/v2"
 )
 
@@ -22,6 +24,7 @@ var inputPath string
 var outputPath string
 var pipelineType string
 var sharedLibraryPath string
+var batchSize int
 
 var runCommand = &cli.Command{
 	Name:  "run",
@@ -69,19 +72,31 @@ var runCommand = &cli.Command{
 			Destination: &sharedLibraryPath,
 			Required:    false,
 		},
+		&cli.IntFlag{
+			Name:        "batchSize",
+			Usage:       "Number of inputs to process in a batch",
+			Aliases:     []string{"b"},
+			Destination: &batchSize,
+			Required:    false,
+			Value:       20,
+		},
 	},
 	Action: func(ctx *cli.Context) error {
 
-		if sharedLibraryPath == "" {
+		var onnxLibraryPathOpt hugot.SessionOption
+
+		if sharedLibraryPath != "" {
+			onnxLibraryPathOpt = hugot.WithOnnxLibraryPath(sharedLibraryPath)
+		} else {
 			homeDir, err := os.UserHomeDir()
 			if err != nil {
 				if exists, err := util.FileSystem.Exists(ctx.Context, path.Join(homeDir, "lib", "hugot", "onnxruntime.so")); err != nil && exists {
-					sharedLibraryPath = path.Join(homeDir, "lib", "hugot", "onnxruntime.so")
+					onnxLibraryPathOpt = hugot.WithOnnxLibraryPath(path.Join(homeDir, "lib", "hugot", "onnxruntime.so"))
 				}
 			}
 		}
 
-		session, err := hugot.NewSession(sharedLibraryPath)
+		session, err := hugot.NewSession(onnxLibraryPathOpt)
 		if err != nil {
 			return err
 		}
@@ -124,12 +139,16 @@ var runCommand = &cli.Command{
 			processedWg.Add(1)
 		}
 
-		var writers []io.WriteCloser
+		var writers []struct {
+			Writer io.WriteCloser
+			Type   string
+		}
+
 		for i := range nWriteWorkers {
 			var writer io.WriteCloser
 
 			if outputPath != "" {
-				dest := util.PathJoinSafe(outputPath, fmt.Sprintf("worker-%d.jsonl", i))
+				dest := util.PathJoinSafe(outputPath, fmt.Sprintf("result-%d.jsonl", i))
 				writer, err = util.FileSystem.NewWriter(ctx.Context, dest, os.ModePerm)
 				if err != nil {
 					return err
@@ -138,34 +157,38 @@ var runCommand = &cli.Command{
 				writer = os.Stdout
 			}
 
-			writers = append(writers, writer)
+			writers = append(writers, struct {
+				Writer io.WriteCloser
+				Type   string
+			}{
+				Writer: writer,
+				Type:   "stdout",
+			})
 			writeWg.Add(1)
 			go writeOutputs(&writeWg, processedChannel, errorsChannel, writer)
 		}
 
 		defer func() {
 			for _, writer := range writers {
-				err = errors.Join(err, writer.Close())
+				if writer.Type != "stdout" {
+					err = errors.Join(err, writer.Writer.Close())
+				}
 			}
 		}()
+
+		// read inputs
 
 		exists, err := util.FileSystem.Exists(ctx.Context, inputPath)
 		if err != nil {
 			return err
 		}
+		exists = inputPath != "" && exists
 
 		if exists {
-			var fileWalker func(ctx context.Context, baseURL, parent string, info os.FileInfo, reader io.Reader) (toContinue bool, err error)
-
-			fileWalker = func(ctx context.Context, baseURL, parent string, info os.FileInfo, reader io.Reader) (toContinue bool, err error) {
+			fileWalker := func(ctx context.Context, baseURL, parent string, info os.FileInfo, reader io.Reader) (toContinue bool, err error) {
 				extension := filepath.Ext(info.Name())
 				if extension == ".jsonl" {
 					err := readInputs(reader, inputChannel)
-					if err != nil {
-						return false, err
-					}
-				} else if info.IsDir() {
-					err := util.FileSystem.Walk(ctx, baseURL, fileWalker)
 					if err != nil {
 						return false, err
 					}
@@ -178,9 +201,16 @@ var runCommand = &cli.Command{
 				return err
 			}
 		} else {
-			err := readInputs(os.Stdin, inputChannel)
-			if err != nil {
-				return err
+			if inputPath != "" {
+				return fmt.Errorf("file %s does not exist", inputPath)
+			}
+
+			if !isatty.IsTerminal(os.Stdin.Fd()) && !isatty.IsCygwinTerminal(os.Stdin.Fd()) {
+				// there is something to process on stdin
+				err := readInputs(os.Stdin, inputChannel)
+				if err != nil {
+					return err
+				}
 			}
 		}
 
@@ -263,21 +293,23 @@ func processWithPipeline(wg *sync.WaitGroup, inputChannel chan []input, processe
 
 func readInputs(inputSource io.Reader, inputChannel chan []input) error {
 	inputBatch := make([]input, 0, 20)
-	d := json.NewDecoder(inputSource)
-	for {
+
+	scanner := bufio.NewScanner(inputSource)
+	for scanner.Scan() {
 		var line input
-		if err := d.Decode(&line); err == io.EOF {
-			inputChannel <- inputBatch
-			break // done decoding file
-		} else if err != nil {
+		err := json.Unmarshal(scanner.Bytes(), &line)
+		if err != nil {
 			return err
-		} else {
-			inputBatch = append(inputBatch, line)
-			if len(inputBatch) == 20 {
-				inputChannel <- inputBatch
-				inputBatch = []input{}
-			}
 		}
+		inputBatch = append(inputBatch, line)
+		if len(inputBatch) == batchSize {
+			inputChannel <- inputBatch
+			inputBatch = []input{}
+		}
+	}
+	// flush
+	if len(inputBatch) > 0 {
+		inputChannel <- inputBatch
 	}
 	return nil
 }

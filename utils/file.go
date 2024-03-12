@@ -3,94 +3,14 @@ package util
 import (
 	"context"
 	"errors"
-	"io"
-	"io/fs"
-	"path/filepath"
-	"strings"
-	"time"
-
 	"github.com/viant/afs"
 	_ "github.com/viant/afsc/s3"
+	"io"
+	"path/filepath"
+	"strings"
 )
 
 var FileSystem = afs.New()
-
-// AFS FS abstraction
-
-type AfsFS struct {
-}
-
-type AfsFile struct {
-	readCloser io.ReadCloser
-	path       string
-}
-
-type AfsFileInfo struct {
-	fileName    string
-	fileSize    int64
-	fileMode    fs.FileMode
-	fileModTime time.Time
-	fileIsDir   bool
-	fileSys     any
-}
-
-func (fileInfo AfsFileInfo) Name() string {
-	return fileInfo.fileName
-}
-
-func (fileInfo AfsFileInfo) Size() int64 {
-	return fileInfo.fileSize
-}
-
-func (fileInfo AfsFileInfo) Mode() fs.FileMode {
-	return fileInfo.fileMode
-}
-
-func (fileInfo AfsFileInfo) ModTime() time.Time {
-	return fileInfo.fileModTime
-}
-
-func (fileInfo AfsFileInfo) IsDir() bool {
-	return fileInfo.fileIsDir
-}
-
-func (fileInfo AfsFileInfo) Sys() any {
-	return nil
-}
-
-func (file *AfsFile) Stat() (fs.FileInfo, error) {
-	object, err := FileSystem.Object(context.Background(), file.path)
-	if err != nil {
-		return nil, err
-	}
-	fileInfo := AfsFileInfo{
-		fileName:    object.Name(),
-		fileSize:    object.Size(),
-		fileMode:    object.Mode(),
-		fileModTime: object.ModTime(),
-		fileIsDir:   object.IsDir(),
-		fileSys:     object.Sys(),
-	}
-	return fileInfo, nil
-}
-
-func (file *AfsFile) Read(p []byte) (int, error) {
-	return file.readCloser.Read(p)
-}
-
-func (file *AfsFile) Close() error {
-	return file.readCloser.Close()
-}
-
-func (afs AfsFS) Open(name string) (fs.File, error) {
-	f, err := FileSystem.OpenURL(context.Background(), name)
-	return &AfsFile{
-		readCloser: f,
-		path:       name,
-	}, err
-}
-
-// end AFS FS abstraction
 
 func ReadFileBytes(filename string) ([]byte, error) {
 	file, err := FileSystem.OpenURL(context.Background(), filename)

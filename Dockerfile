@@ -10,7 +10,7 @@ RUN git clone https://github.com/knights-analytics/tokenizers -b main && \
     cd tokenizers && \
     cargo build --release
 
-#--- build layer ---
+#--- build and test layer ---
 
 FROM public.ecr.aws/amazonlinux/amazonlinux:2023 AS building
 ARG GO_VERSION
@@ -37,41 +37,17 @@ RUN GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o test2json -ldflags="-s -w"
     curl -LO https://github.com/gotestyourself/gotestsum/releases/download/v1.11.0/gotestsum_1.11.0_linux_amd64.tar.gz && \
     tar -xzf gotestsum_1.11.0_linux_amd64.tar.gz --directory /usr/local/bin
 
-COPY . /build
-WORKDIR /build
-RUN go mod download && CGO_ENABLED=1 GOOS=linux GOARCH=amd64 && \
-    mkdir /unittest && go test -c . -o /unittest/pipelines.test && \
-    go clean -r -cache -testcache -modcache
-
-# cli build
-RUN cd ./cmd && CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -a -o ./target main.go
-
 COPY ./models /models
 
-# NON-PRIVILEDGED USER
-# create non-priviledged testuser with id: 1000
-RUN dnf install --disablerepo=* --enablerepo=amazonlinux --allowerasing -y dirmngr && dnf clean all
-RUN useradd -u 1000 -m testuser && chown -R testuser:testuser /unittest
-
-#--- test layer
-
-FROM public.ecr.aws/amazonlinux/amazonlinux:2023 AS testing
-
-RUN dnf install --disablerepo=* --enablerepo=amazonlinux --allowerasing -y dirmngr && dnf clean all
-
-COPY --from=building /usr/lib64/onnxruntime.so /usr/lib64/onnxruntime.so
-COPY --from=building /usr/lib/libtokenizers.a /usr/lib/libtokenizers.a
-COPY --from=building /unittest /unittest
-COPY --from=building /usr/local/bin/test2json /usr/local/bin/test2json
-COPY --from=building /usr/local/bin/gotestsum /usr/local/bin/gotestsum
-COPY --from=building /models /models
-COPY --from=building /build/cmd/target /usr/local/bin/hugot
-
-ENV GOVERSION=$GO_VERSION
+# build cli
+COPY . /build
+WORKDIR /build
+RUN cd ./cmd && CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -a -o ./target main.go
 
 # NON-PRIVILEDGED USER
 # create non-priviledged testuser with id: 1000
-RUN useradd -u 1000 -m testuser && chown -R testuser:testuser /unittest
+RUN dnf install --disablerepo=* --enablerepo=amazonlinux --allowerasing -y dirmngr && dnf clean all
+RUN useradd -u 1000 -m testuser
 
 # ENTRYPOINT
 COPY ./scripts/entrypoint.sh /entrypoint.sh

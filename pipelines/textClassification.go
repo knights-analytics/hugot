@@ -53,10 +53,11 @@ func WithAggregationFunction(aggregationFunction func([]float32) []float32) Text
 }
 
 // NewTextClassificationPipeline initializes a new text classification pipeline
-func NewTextClassificationPipeline(modelPath string, name string, opts ...TextClassificationOption) (*TextClassificationPipeline, error) {
+func NewTextClassificationPipeline(modelPath string, name string, ortOptions *ort.SessionOptions, opts ...TextClassificationOption) (*TextClassificationPipeline, error) {
 	pipeline := &TextClassificationPipeline{}
 	pipeline.ModelPath = modelPath
 	pipeline.PipelineName = name
+	pipeline.OrtOptions = ortOptions
 	for _, opt := range opts {
 		opt(pipeline)
 	}
@@ -80,9 +81,10 @@ func NewTextClassificationPipeline(modelPath string, name string, opts ...TextCl
 	pipeline.PipelineTimings = &Timings{}
 	pipeline.TokenizerTimings = &Timings{}
 
-	// softmax by default
-
-	pipeline.AggregationFunction = util.SoftMax
+	if pipeline.AggregationFunction == nil {
+		// softmax by default
+		pipeline.AggregationFunction = util.SoftMax
+	}
 
 	// load onnx model
 	loadErr := pipeline.loadModel()
@@ -92,25 +94,33 @@ func NewTextClassificationPipeline(modelPath string, name string, opts ...TextCl
 
 	// we only support single label classification for now
 	pipeline.OutputDim = int(pipeline.OutputsMeta[0].Dimensions[1])
-	if len(pipeline.IdLabelMap) < 1 {
-		return nil, fmt.Errorf("only single label classification models are currently supported and more than one label is required")
+
+	// validate
+	validationErrors := pipeline.Validate()
+	if validationErrors != nil {
+		return nil, validationErrors
 	}
 
-	// output dimension
-	if pipeline.OutputDim <= 0 {
-		return nil, fmt.Errorf("pipeline configuration invalid: outputDim parameter must be greater than zero")
-	}
-
-	if len(pipeline.IdLabelMap) <= 0 {
-		return nil, fmt.Errorf("pipeline configuration invalid: length of id2label map for token classification pipeline must be greater than zero")
-	}
-	if len(pipeline.IdLabelMap) != pipeline.OutputDim {
-		return nil, fmt.Errorf("pipeline configuration invalid: length of id2label map does not match model output dimension")
-	}
 	return pipeline, nil
 }
 
-// TODO: perhaps this can be unified with the other pipelines
+func (p *TextClassificationPipeline) Validate() error {
+	var validationErrors []error
+
+	if len(p.IdLabelMap) < 1 {
+		validationErrors = append(validationErrors, fmt.Errorf("only single label classification models are currently supported and more than one label is required"))
+	}
+	if p.OutputDim <= 0 {
+		validationErrors = append(validationErrors, fmt.Errorf("pipeline configuration invalid: outputDim parameter must be greater than zero"))
+	}
+	if len(p.IdLabelMap) <= 0 {
+		validationErrors = append(validationErrors, fmt.Errorf("pipeline configuration invalid: length of id2label map for token classification pipeline must be greater than zero"))
+	}
+	if len(p.IdLabelMap) != p.OutputDim {
+		validationErrors = append(validationErrors, fmt.Errorf("pipeline configuration invalid: length of id2label map does not match model output dimension"))
+	}
+	return errors.Join(validationErrors...)
+}
 
 func (p *TextClassificationPipeline) Forward(batch PipelineBatch) (PipelineBatch, error) {
 	start := time.Now()

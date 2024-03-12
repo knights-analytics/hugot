@@ -36,6 +36,7 @@ type Pipeline interface {
 	Destroy() error
 	GetStats() []string
 	GetOutputDim() int
+	Validate() error
 	Run([]string) (PipelineBatchOutput, error)
 }
 
@@ -68,27 +69,6 @@ func (p *BasePipeline) GetOutputDim() int {
 	return p.OutputDim
 }
 
-func (p *BasePipeline) SetSessionOptions() error {
-	options, optionsError := ort.NewSessionOptions()
-	if optionsError != nil {
-		return optionsError
-	}
-	err1 := options.SetIntraOpNumThreads(1)
-	if err1 != nil {
-		return err1
-	}
-	err2 := options.SetInterOpNumThreads(1)
-	if err2 != nil {
-		return err2
-	}
-	err3 := options.SetCpuMemArena(true)
-	if err3 != nil {
-		return err3
-	}
-	p.OrtOptions = options
-	return nil
-}
-
 // Load the ort model supporting the pipeline
 func (p *BasePipeline) loadModel() error {
 
@@ -99,11 +79,6 @@ func (p *BasePipeline) loadModel() error {
 	}
 
 	tk, err := tokenizers.FromBytes(tokenizerBytes)
-	if err != nil {
-		return err
-	}
-
-	err = p.SetSessionOptions()
 	if err != nil {
 		return err
 	}
@@ -159,10 +134,6 @@ func (p *BasePipeline) Destroy() error {
 	ortError := p.OrtSession.Destroy()
 	if ortError != nil {
 		finalErr = ortError
-	}
-	ortOptionsErr := p.OrtOptions.Destroy()
-	if ortOptionsErr != nil {
-		finalErr = ortOptionsErr
 	}
 	return finalErr
 }
