@@ -152,7 +152,7 @@ Note that if --input is not provided, hugot will read from stdin, and if --outpu
 This allows to chain things like:
 
 ```
-echo '{"input":"The director tried too much","output":[{"Label":"NEGATIVE","Score":0.99752176}]}' | hugot run --model=/path/to/model --type=textClassification | jq
+echo '{"input":"The director tried too much"}' | hugot run --model=/path/to/model --type=textClassification | jq
 ```
 
 To be able to run transformers fully from the command line.
