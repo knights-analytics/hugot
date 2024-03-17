@@ -1,8 +1,10 @@
 package pipelines
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -72,7 +74,6 @@ func (p *BasePipeline) GetOutputDim() int {
 // Load the ort model supporting the pipeline
 func (p *BasePipeline) loadModel() error {
 
-	// Initialise tokenizer
 	tokenizerBytes, err := util.ReadFileBytes(util.PathJoinSafe(p.ModelPath, "tokenizer.json"))
 	if err != nil {
 		return err
@@ -83,7 +84,25 @@ func (p *BasePipeline) loadModel() error {
 		return err
 	}
 
-	onnxBytes, err := util.ReadFileBytes(util.PathJoinSafe(p.ModelPath, "model.onnx"))
+	// we look for .onnx files. If more than one exists, we error
+	files, err := util.FileSystem.List(context.Background(), p.ModelPath)
+	if err != nil {
+		return err
+	}
+	onnxFiles := make([]string, 0)
+	for _, f := range files {
+		if strings.HasSuffix(f.Name(), ".onnx") {
+			onnxFiles = append(onnxFiles, f.Name())
+		}
+	}
+	if len(onnxFiles) > 1 {
+		return fmt.Errorf("more than one .onnx file detected at %s. There should only be one .onnx file", p.ModelPath)
+	}
+	if len(onnxFiles) == 0 {
+		return fmt.Errorf("no .onnx file detected at %s. There should be exactly .onnx file", p.ModelPath)
+	}
+
+	onnxBytes, err := util.ReadFileBytes(util.PathJoinSafe(p.ModelPath, onnxFiles[0]))
 	if err != nil {
 		return err
 	}

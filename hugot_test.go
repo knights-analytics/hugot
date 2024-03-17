@@ -1,6 +1,7 @@
-package hugot_test
+package hugot
 
 import (
+	"context"
 	_ "embed"
 	"encoding/json"
 	"fmt"
@@ -10,7 +11,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/knights-analytics/hugot"
 	"github.com/knights-analytics/hugot/pipelines"
 	util "github.com/knights-analytics/hugot/utils"
 	"github.com/stretchr/testify/assert"
@@ -25,20 +25,61 @@ var resultsByte []byte
 // use the system library for the tests
 var onnxruntimeSharedLibrary = "/usr/lib64/onnxruntime.so"
 
+func TestMain(m *testing.M) {
+	// model setup
+	if ok, err := util.FileSystem.Exists(context.Background(), "./models"); err == nil {
+		if !ok {
+			session, err := NewSession(WithOnnxLibraryPath(onnxruntimeSharedLibrary))
+			if err != nil {
+				panic(err)
+			}
+			err = os.MkdirAll("./models", os.ModePerm)
+			if err != nil {
+				panic(err)
+			}
+			downloadOptions := NewDownloadOptions()
+			for _, modelName := range []string{
+				"KnightsAnalytics/all-MiniLM-L6-v2",
+				"KnightsAnalytics/distilbert-base-uncased-finetuned-sst-2-english",
+				"KnightsAnalytics/distilbert-NER"} {
+				_, err := session.DownloadModel(modelName, "./models", downloadOptions)
+				if err != nil {
+					panic(err)
+				}
+			}
+			err = session.Destroy()
+			if err != nil {
+				panic(err)
+			}
+		}
+	} else {
+		panic(err)
+	}
+	// run all tests
+	code := m.Run()
+	os.Exit(code)
+}
+
+// test download validation
+
+func TestDownloadValidation(t *testing.T) {
+	err := validateDownloadHfModel("KnightsAnalytics/distilbert-base-uncased-finetuned-sst-2-english", "main", "")
+	assert.NoError(t, err)
+	// a model without tokenizer.json or .onnx model should error
+	err = validateDownloadHfModel("ByteDance/SDXL-Lightning", "main", "")
+	assert.Error(t, err)
+}
+
 // Text classification
 
 func TestTextClassificationPipeline(t *testing.T) {
-	session, err := hugot.NewSession(hugot.WithOnnxLibraryPath(onnxruntimeSharedLibrary))
+	session, err := NewSession(WithOnnxLibraryPath(onnxruntimeSharedLibrary))
 	check(t, err)
-	defer func(session *hugot.Session) {
+	defer func(session *Session) {
 		err := session.Destroy()
 		check(t, err)
 	}(session)
-	modelFolder := os.Getenv("TEST_MODELS_FOLDER")
-	if modelFolder == "" {
-		modelFolder = "./models"
-	}
-	modelPath := path.Join(modelFolder, "distilbert-base-uncased-finetuned-sst-2-english")
+	modelPath := path.Join("./models", "KnightsAnalytics_distilbert-base-uncased-finetuned-sst-2-english")
 	sentimentPipeline, err := session.NewTextClassificationPipeline(modelPath, "testPipeline")
 	check(t, err)
 
@@ -86,22 +127,18 @@ func TestTextClassificationPipeline(t *testing.T) {
 }
 
 func TestNewSessionErrors(t *testing.T) {
-	_, err := hugot.NewSession(hugot.WithOnnxLibraryPath(""))
+	_, err := NewSession(WithOnnxLibraryPath(""))
 	assert.Error(t, err)
 }
 
 func TestTextClassificationPipelineValidation(t *testing.T) {
-	session, err := hugot.NewSession(hugot.WithOnnxLibraryPath(onnxruntimeSharedLibrary))
+	session, err := NewSession(WithOnnxLibraryPath(onnxruntimeSharedLibrary))
 	check(t, err)
-	defer func(session *hugot.Session) {
+	defer func(session *Session) {
 		err := session.Destroy()
 		check(t, err)
 	}(session)
-	modelFolder := os.Getenv("TEST_MODELS_FOLDER")
-	if modelFolder == "" {
-		modelFolder = "./models"
-	}
-	modelPath := path.Join(modelFolder, "distilbert-base-uncased-finetuned-sst-2-english")
+	modelPath := path.Join("./models", "KnightsAnalytics_distilbert-base-uncased-finetuned-sst-2-english")
 	sentimentPipeline, err := session.NewTextClassificationPipeline(modelPath, "testPipeline", pipelines.WithAggregationFunction(util.SoftMax))
 	check(t, err)
 	sentimentPipeline.IdLabelMap = map[int]string{}
@@ -123,18 +160,14 @@ func TestTextClassificationPipelineValidation(t *testing.T) {
 // Token classification
 
 func TestTokenClassificationPipeline(t *testing.T) {
-	session, err := hugot.NewSession(hugot.WithOnnxLibraryPath(onnxruntimeSharedLibrary))
+	session, err := NewSession(WithOnnxLibraryPath(onnxruntimeSharedLibrary))
 	check(t, err)
-	defer func(session *hugot.Session) {
+	defer func(session *Session) {
 		err := session.Destroy()
 		check(t, err)
 	}(session)
 
-	modelFolder := os.Getenv("TEST_MODELS_FOLDER")
-	if modelFolder == "" {
-		modelFolder = "./models"
-	}
-	modelPath := path.Join(modelFolder, "distilbert-NER")
+	modelPath := path.Join("./models", "KnightsAnalytics_distilbert-NER")
 	pipelineSimple, err2 := session.NewTokenClassificationPipeline(modelPath, "testPipelineSimple", pipelines.WithSimpleAggregation(), pipelines.WithIgnoreLabels([]string{"O"}))
 	check(t, err2)
 	pipelineNone, err3 := session.NewTokenClassificationPipeline(modelPath, "testPipelineNone", pipelines.WithoutAggregation())
@@ -188,18 +221,14 @@ func TestTokenClassificationPipeline(t *testing.T) {
 }
 
 func TestTokenClassificationPipelineValidation(t *testing.T) {
-	session, err := hugot.NewSession(hugot.WithOnnxLibraryPath(onnxruntimeSharedLibrary))
+	session, err := NewSession(WithOnnxLibraryPath(onnxruntimeSharedLibrary))
 	check(t, err)
-	defer func(session *hugot.Session) {
+	defer func(session *Session) {
 		err := session.Destroy()
 		check(t, err)
 	}(session)
 
-	modelFolder := os.Getenv("TEST_MODELS_FOLDER")
-	if modelFolder == "" {
-		modelFolder = "./models"
-	}
-	modelPath := path.Join(modelFolder, "distilbert-NER")
+	modelPath := path.Join("./models", "KnightsAnalytics_distilbert-NER")
 	pipelineSimple, err2 := session.NewTokenClassificationPipeline(modelPath, "testPipelineSimple", pipelines.WithSimpleAggregation())
 	check(t, err2)
 
@@ -222,18 +251,14 @@ func TestTokenClassificationPipelineValidation(t *testing.T) {
 // feature extraction
 
 func TestFeatureExtractionPipeline(t *testing.T) {
-	session, err := hugot.NewSession(hugot.WithOnnxLibraryPath(onnxruntimeSharedLibrary))
+	session, err := NewSession(WithOnnxLibraryPath(onnxruntimeSharedLibrary))
 	check(t, err)
-	defer func(session *hugot.Session) {
+	defer func(session *Session) {
 		err := session.Destroy()
 		check(t, err)
 	}(session)
 
-	modelFolder := os.Getenv("TEST_MODELS_FOLDER")
-	if modelFolder == "" {
-		modelFolder = "./models"
-	}
-	modelPath := path.Join(modelFolder, "all-MiniLM-L6-v2")
+	modelPath := path.Join("./models", "KnightsAnalytics_all-MiniLM-L6-v2")
 	pipeline, err := session.NewFeatureExtractionPipeline(modelPath, "testPipeline")
 	check(t, err)
 
@@ -300,24 +325,64 @@ func TestFeatureExtractionPipeline(t *testing.T) {
 }
 
 func TestFeatureExtractionPipelineValidation(t *testing.T) {
-	session, err := hugot.NewSession(hugot.WithOnnxLibraryPath(onnxruntimeSharedLibrary))
+	session, err := NewSession(WithOnnxLibraryPath(onnxruntimeSharedLibrary))
 	check(t, err)
-	defer func(session *hugot.Session) {
+	defer func(session *Session) {
 		err := session.Destroy()
 		check(t, err)
 	}(session)
 
-	modelFolder := os.Getenv("TEST_MODELS_FOLDER")
-	if modelFolder == "" {
-		modelFolder = "./models"
-	}
-	modelPath := path.Join(modelFolder, "all-MiniLM-L6-v2")
+	modelPath := path.Join("./models", "KnightsAnalytics_all-MiniLM-L6-v2")
 	pipeline, err := session.NewFeatureExtractionPipeline(modelPath, "testPipeline")
 	check(t, err)
 
 	pipeline.OutputDim = 0
 	err = pipeline.Validate()
 	assert.Error(t, err)
+}
+
+// README: test the readme examples
+
+func TestReadmeExample(t *testing.T) {
+	check := func(err error) {
+		if err != nil {
+			panic(err.Error())
+		}
+	}
+	// start a new session. This looks for the onnxruntime.so library in its default path, e.g. /usr/lib/onnxruntime.so
+	session, err := NewSession()
+	// if your onnxruntime.so is somewhere else, you can explicitly set it by using WithOnnxLibraryPath
+	// session, err := NewSession(WithOnnxLibraryPath("/path/to/onnxruntime.so"))
+	check(err)
+	// A successfully created session needs to be destroyed when you're done
+	defer func(session *Session) {
+		err := session.Destroy()
+		check(err)
+	}(session)
+	// Let's download an onnx sentiment test classification model in the current directory
+	modelPath, err := session.DownloadModel("KnightsAnalytics/distilbert-base-uncased-finetuned-sst-2-english", "./", NewDownloadOptions())
+
+	defer func(modelPath string) {
+		err := util.FileSystem.Delete(context.Background(), modelPath)
+		if err != nil {
+			t.FailNow()
+		}
+	}(modelPath)
+
+	check(err)
+	// we now create a text classification pipeline. It requires the path to the just downloader onnx model folder,
+	// and a pipeline name
+	sentimentPipeline, err := session.NewTextClassificationPipeline(modelPath, "testPipeline")
+	check(err)
+	// we can now use the pipeline for prediction on a batch of strings
+	batch := []string{"This movie is disgustingly good !", "The director tried too much"}
+	batchResult, err := sentimentPipeline.RunPipeline(batch)
+	check(err)
+	// and do whatever we want with it :)
+	s, err := json.Marshal(batchResult)
+	check(err)
+	fmt.Println(string(s))
+	// {"ClassificationOutputs":[[{"Label":"POSITIVE","Score":0.9998536}],[{"Label":"NEGATIVE","Score":0.99752176}]]}
 }
 
 // utilities

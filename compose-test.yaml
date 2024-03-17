@@ -11,5 +11,4 @@ services:
       - $test_folder/../scripts/run-unit-tests-container.sh:/run-unit-tests-container.sh
     environment:
       - HOST_UID=$host_uid
-      - TEST_MODELS_FOLDER=/models
     command: /run-unit-tests-container.sh
