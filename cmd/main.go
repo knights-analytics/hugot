@@ -10,6 +10,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	"github.com/knights-analytics/hugot"
@@ -25,6 +26,7 @@ var outputPath string
 var pipelineType string
 var sharedLibraryPath string
 var batchSize int
+var modelsDir string
 
 var runCommand = &cli.Command{
 	Name:  "run",
@@ -34,7 +36,8 @@ var runCommand = &cli.Command{
 	ArgsUsage: `
 				--input: path to a .jsonl file or a folder with .jsonl files to process. If omitted, the input will be read from stdin.
 				--output: path to a folder where to write the output. If omitted, the output will be sent to stdout.
-				--model: path to the .onnx model to load.
+				--model: model name or path to the .onnx model to load. The hugot cli looks for models with this chain: first use the provided path. If the path does not exist, look for a model
+				with this name at $HOME/hugot/models. Finally, try to download the model from Huggingface and use it.
 				--type: pipeline type. Currently implemented types are: featureExtraction, tokenClassification, and textClassification (only single label)
 				--onnxruntimeSharedLibrary: path to the onnxruntime.so library. If not provided, the cli will try to load it from $HOME/lib/hugot/onnxruntime.so, and from /usr/lib/onnxruntime.so in the last instance.
 				`,
@@ -80,10 +83,26 @@ var runCommand = &cli.Command{
 			Required:    false,
 			Value:       20,
 		},
+		&cli.StringFlag{
+			Name:        "modelFolder",
+			Usage:       "Folder where to store downloaded models. Falls back to $HOME/hugot/models if not specified",
+			Aliases:     []string{"f"},
+			Destination: &modelsDir,
+			Required:    false,
+			Value:       "",
+		},
 	},
 	Action: func(ctx *cli.Context) error {
 
 		var onnxLibraryPathOpt hugot.SessionOption
+
+		if modelsDir == "" {
+			userDir, err := os.UserHomeDir()
+			if err != nil {
+				return err
+			}
+			modelsDir = util.PathJoinSafe(userDir, "hugot", "models")
+		}
 
 		if sharedLibraryPath != "" {
 			onnxLibraryPathOpt = hugot.WithOnnxLibraryPath(sharedLibraryPath)
@@ -109,6 +128,36 @@ var runCommand = &cli.Command{
 		}()
 
 		var pipe pipelines.Pipeline
+
+		// is the model a full path to a model
+		ok, err := util.FileSystem.Exists(ctx.Context, modelPath)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			// is the model the name of a model previously downloaded
+			downloadedModelName := strings.Replace(modelPath, "/", "_", -1)
+			ok, err = util.FileSystem.Exists(ctx.Context, util.PathJoinSafe(modelsDir, downloadedModelName))
+			if err != nil {
+				return err
+			}
+			if ok {
+				modelPath = util.PathJoinSafe(modelsDir, downloadedModelName)
+			} else {
+				// is the model the name of a model to download
+				if strings.Contains(modelPath, ":") {
+					return fmt.Errorf("filters with : are currently not supported")
+				}
+				err = util.FileSystem.Create(context.Background(), modelsDir, os.ModePerm, true)
+				if err != nil {
+					return err
+				}
+				modelPath, err = session.DownloadModel(modelPath, modelsDir, hugot.NewDownloadOptions())
+				if err != nil {
+					return err
+				}
+			}
+		}
 
 		switch pipelineType {
 		case "tokenClassification":

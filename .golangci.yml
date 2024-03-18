@@ -1,0 +1,132 @@
+linters:
+  disable-all: true
+  enable:
+   # Check for pass []any as any in variadic func(...any).
+    # Rare case but saved me from debugging a few times.
+    - asasalint
+
+    # I prefer plane ASCII identifiers.
+    # Symbol `∆` instead of `delta` looks cool but no thanks.
+    - asciicheck
+
+    # Checks for dangerous unicode character sequences.
+    # Super rare but why not to be a bit paranoid?
+    - bidichk
+
+    # Checks whether HTTP response body is closed successfully.
+    - bodyclose
+
+    # Check whether the function uses a non-inherited context.
+    - contextcheck
+
+    # Check for two durations multiplied together.
+    - durationcheck
+
+    # Forces to not skip error check.
+    - errcheck 
+
+    # Checks `Err-` prefix for var and `-Error` suffix for error type.
+    - errname
+
+    # Suggests to use `%w` for error-wrapping.
+    - errorlint
+
+    # Checks for pointers to enclosing loop variables.
+    - exportloopref
+
+    # Forces to put `.` at the end of the comment. Code is poetry.
+    - godot
+
+    # Might not be that important but I prefer to keep all of them.
+    # `gofumpt` is amazing, kudos to Daniel Marti https://github.com/mvdan/gofumpt
+    - gofmt
+    - gofumpt
+    - goimports
+
+    # Allow or ban replace directives in go.mod
+    # or force explanation for retract directives.
+    - gomoddirectives
+
+    # Powerful security-oriented linter. But requires some time to
+    # configure it properly, see https://github.com/securego/gosec#available-rules
+    - gosec
+
+    # Linter that specializes in simplifying code.
+    - gosimple
+
+    # Official Go tool. Must have. 
+    - govet
+
+    # Detects when assignments to existing variables are not used
+    # Last week I caught a bug with it.
+    - ineffassign
+
+    # Fix all the misspells, amazing thing.
+    - misspell
+
+    # Finds naked/bare returns and requires change them.
+    - nakedret
+
+    # Both require a bit more explicit returns.
+    - nilerr
+    - nilnil
+
+    # Finds sending HTTP request without context.Context.
+    - noctx
+
+    # Forces comment why another check is disabled.
+    # Better not to have //nolint: at all ;)
+    - nolintlint
+
+    # Finds slices that could potentially be pre-allocated.
+    # Small performance win + cleaner code.
+    - prealloc
+
+    # Finds shadowing of Go's predeclared identifiers.
+    # I hear a lot of complaints from junior developers.
+    # But after some time they find it very useful.
+    - predeclared
+
+    # Lint your Prometheus metrics name.
+    - promlinter
+
+    # Checks that package variables are not reassigned.
+    # Super rare case but can catch bad things (like `io.EOF = nil`)
+    - reassign
+
+    # Drop-in replacement of `golint`.
+    - revive
+
+    # Somewhat similar to `bodyclose` but for `database/sql` package.
+    - rowserrcheck
+    - sqlclosecheck
+
+    # I have found that it's not the same as staticcheck binary :\
+    - staticcheck
+
+    # Is a replacement for `golint`, similar to `revive`.
+    - stylecheck
+
+    # Check struct tags.
+    - tagliatelle
+
+    # Test-related checks. All of them are good.
+    - tenv
+    - testableexamples
+    - thelper
+    - tparallel
+
+    # Remove unnecessary type conversions, make code cleaner
+    - unconvert
+
+    # Might be noisy but better to know what is unused
+    - unparam
+
+    # Must have. Finds unused declarations.
+    - unused
+
+    # Detect the possibility to use variables/constants from stdlib.
+    - usestdlibvars
+
+    # Finds wasted assignment statements.
+    - wastedassign

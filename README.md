@@ -100,9 +100,12 @@ defer func(session *hugot.Session) {
     err := session.Destroy()
     check(err)
 }(session)
-// we now create a text classification pipeline. It requires the path to the onnx model folder,
+// Let's download an onnx sentiment test classification model in the current directory
+modelPath, err := session.DownloadModel("KnightsAnalytics/distilbert-base-uncased-finetuned-sst-2-english", "./")
+check(err)
+// we now create a text classification pipeline. It requires the path to the just downloader onnx model folder,
 // and a pipeline name
-sentimentPipeline, err := session.NewTextClassificationPipeline("/path/to/model/", "testPipeline")
+sentimentPipeline, err := session.NewTextClassificationPipeline(modelPath, "testPipeline")
 check(err)
 // we can now use the pipeline for prediction on a batch of strings
 batch := []string{"This movie is disgustingly good !", "The director tried too much"}
@@ -129,7 +132,7 @@ This will install the hugot binary at $HOME/.local/bin/hugot, and the correspond
 The if $HOME/.local/bin is on your $PATH, you can do:
 
 ```
-hugot run --model=/path/to/onnx/model --input=/path/to/input.jsonl --output=/path/to/folder/output --type=textClassification
+hugot run --model=KnightsAnalytics/distilbert-base-uncased-finetuned-sst-2-english --input=/path/to/input.jsonl --output=/path/to/folder/output --type=textClassification
 ```
 
 Hugot will load the model, process the input, and write the results in the output folder.
@@ -156,6 +159,10 @@ echo '{"input":"The director tried too much"}' | hugot run --model=/path/to/mode
 ```
 
 To be able to run transformers fully from the command line.
+
+Note that the --model parameter can be:
+    1. the full path to a model to load
+    2. the name of a huggingface model. Hugot will first try to look for the model at $HOME/hugot, or will try to download the model from huggingface.
 
 ## Contributing
 

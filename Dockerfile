@@ -1,4 +1,4 @@
-ARG GO_VERSION=1.22.0
+ARG GO_VERSION=1.22.1
 ARG RUST_VERSION=1.76
 ARG ONNXRUNTIME_VERSION=1.17.1
 
@@ -37,8 +37,6 @@ RUN GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o test2json -ldflags="-s -w"
     curl -LO https://github.com/gotestyourself/gotestsum/releases/download/v1.11.0/gotestsum_1.11.0_linux_amd64.tar.gz && \
     tar -xzf gotestsum_1.11.0_linux_amd64.tar.gz --directory /usr/local/bin
 
-COPY ./models /models
-
 # build cli
 COPY . /build
 WORKDIR /build
@@ -47,7 +45,7 @@ RUN cd ./cmd && CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -a -o ./target ma
 # NON-PRIVILEDGED USER
 # create non-priviledged testuser with id: 1000
 RUN dnf install --disablerepo=* --enablerepo=amazonlinux --allowerasing -y dirmngr && dnf clean all
-RUN useradd -u 1000 -m testuser
+RUN useradd -u 1000 -m testuser && chown -R testuser:testuser /build
 
 # ENTRYPOINT
 COPY ./scripts/entrypoint.sh /entrypoint.sh

@@ -7,6 +7,4 @@ services:
       target: building
     volumes:
       - $src_dir:/home/testuser/repositories/hugot
-    environment:
-      - TEST_MODELS_FOLDER=/models
     entrypoint: ["tail", "-f", "/dev/null"]

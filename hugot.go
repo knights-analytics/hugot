@@ -50,7 +50,7 @@ type SessionOption func() error
 func WithOnnxLibraryPath(ortLibraryPath string) SessionOption {
 	return func() error {
 		if ortLibraryPath == "" {
-			return fmt.Errorf("Path to the ort library cannot be empty")
+			return fmt.Errorf("path to the ort library cannot be empty")
 		}
 		ortPathExists, err := util.FileSystem.Exists(context.Background(), ortLibraryPath)
 		if err != nil {
