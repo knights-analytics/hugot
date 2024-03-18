@@ -101,9 +101,11 @@ defer func(session *hugot.Session) {
     check(err)
 }(session)
 // Let's download an onnx sentiment test classification model in the current directory
+// note: if you compile your library with build flag NODOWNLOAD, this will exclude the downloader.
+// Useful in case you just want the core engine (because you already have the models) and want to drop the dependency on huggingfaceModelDownloader.
 modelPath, err := session.DownloadModel("KnightsAnalytics/distilbert-base-uncased-finetuned-sst-2-english", "./")
 check(err)
-// we now create a text classification pipeline. It requires the path to the just downloader onnx model folder,
+// we now create a text classification pipeline. It requires the path to the onnx model folder we just downloaded,
 // and a pipeline name
 sentimentPipeline, err := session.NewTextClassificationPipeline(modelPath, "testPipeline")
 check(err)
