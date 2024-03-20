@@ -1,6 +1,6 @@
 #!/bin/bash
 
-hugot_version=v0.0.6
+hugot_version=v0.0.7
 
 echo "Installing hugot cli version $hugot_version..."
 
