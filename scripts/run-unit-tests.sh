@@ -20,3 +20,4 @@ docker compose -f $src_dir/compose-test.yaml rm -fsv
 
 echo "Extracting lib artifacts"
 docker build . --output "$src_dir/artifacts" --target artifacts
+echo "lib artifacts extracted"

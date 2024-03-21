@@ -4,6 +4,7 @@ on: workflow_dispatch
 
 permissions:
   contents: write
+  checks: write
 
 jobs:
   test:
@@ -39,3 +40,8 @@ jobs:
         with:
           name: hugot-cli-linux-amd64 
           path: ./artifacts/hugot-cli-linux-amd64
+      - name: Publish Test Report
+        uses: mikepenz/action-junit-report@v4
+        if: success() || failure()
+        with:
+          report_paths: './testTarget/unit/*.xml'

@@ -9,7 +9,6 @@ import (
 
 	_ "embed"
 
-	"github.com/knights-analytics/hugot"
 	util "github.com/knights-analytics/hugot/utils"
 	"github.com/urfave/cli/v2"
 )
@@ -19,41 +18,6 @@ var textClassificationData []byte
 
 //go:embed testData/tokenClassification.jsonl
 var tokenClassificationData []byte
-
-func TestMain(m *testing.M) {
-	// model setup
-	if ok, err := util.FileSystem.Exists(context.Background(), "../models"); err == nil {
-		if !ok {
-			session, err := hugot.NewSession()
-			if err != nil {
-				panic(err)
-			}
-			err = os.MkdirAll("../models", os.ModePerm)
-			if err != nil {
-				panic(err)
-			}
-			downloadOptions := hugot.NewDownloadOptions()
-			for _, modelName := range []string{
-				"KnightsAnalytics/all-MiniLM-L6-v2",
-				"KnightsAnalytics/distilbert-base-uncased-finetuned-sst-2-english",
-				"KnightsAnalytics/distilbert-NER"} {
-				_, err := session.DownloadModel(modelName, "../models", downloadOptions)
-				if err != nil {
-					panic(err)
-				}
-			}
-			err = session.Destroy()
-			if err != nil {
-				panic(err)
-			}
-		}
-	} else {
-		panic(err)
-	}
-	// run all tests
-	code := m.Run()
-	os.Exit(code)
-}
 
 func TestTextClassificationCli(t *testing.T) {
 	app := &cli.App{
@@ -184,6 +148,7 @@ func TestModelChain(t *testing.T) {
 }
 
 func check(t *testing.T, err error) {
+	t.Helper()
 	if err != nil {
 		t.Fatalf("%s", err.Error())
 	}
