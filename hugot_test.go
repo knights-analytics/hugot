@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
-	"os"
 	"path"
 	"strings"
 	"testing"
@@ -24,41 +23,6 @@ var resultsByte []byte
 
 // use the system library for the tests
 var onnxruntimeSharedLibrary = "/usr/lib64/onnxruntime.so"
-
-func TestMain(m *testing.M) {
-	// model setup
-	if ok, err := util.FileSystem.Exists(context.Background(), "./models"); err == nil {
-		if !ok {
-			session, err := NewSession(WithOnnxLibraryPath(onnxruntimeSharedLibrary))
-			if err != nil {
-				panic(err)
-			}
-			err = os.MkdirAll("./models", os.ModePerm)
-			if err != nil {
-				panic(err)
-			}
-			downloadOptions := NewDownloadOptions()
-			for _, modelName := range []string{
-				"KnightsAnalytics/all-MiniLM-L6-v2",
-				"KnightsAnalytics/distilbert-base-uncased-finetuned-sst-2-english",
-				"KnightsAnalytics/distilbert-NER"} {
-				_, err := session.DownloadModel(modelName, "./models", downloadOptions)
-				if err != nil {
-					panic(err)
-				}
-			}
-			err = session.Destroy()
-			if err != nil {
-				panic(err)
-			}
-		}
-	} else {
-		panic(err)
-	}
-	// run all tests
-	code := m.Run()
-	os.Exit(code)
-}
 
 // test download validation
 
@@ -407,6 +371,7 @@ func floatsEqual(a, b []float32) error {
 }
 
 func checkClassificationOutput(t *testing.T, inputResult []pipelines.ClassificationOutput, inputExpected []pipelines.ClassificationOutput) {
+	t.Helper()
 	assert.Equal(t, len(inputResult), len(inputExpected))
 	for i, output := range inputResult {
 		resultExpected := inputExpected[i]
@@ -420,6 +385,7 @@ func almostEqual(a, b float64) bool {
 }
 
 func check(t *testing.T, err error) {
+	t.Helper()
 	if err != nil {
 		t.Fatalf("Test failed with error %s", err.Error())
 	}

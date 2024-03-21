@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: write
+  checks: write
 
 jobs:
   test:
@@ -42,6 +43,11 @@ jobs:
         with:
           name: hugot-cli-linux-amd64 
           path: ./artifacts/hugot-cli-linux-amd64
+      - name: Publish Test Report
+        uses: mikepenz/action-junit-report@v4
+        if: success() || failure()
+        with:
+          report_paths: '/build/testTarget/unit/unit.xml'
   release:
     name: Release
     runs-on: ubuntu-latest
