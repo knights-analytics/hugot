@@ -4,10 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	util "github.com/knights-analytics/hugot/utils"
 	"slices"
 
 	"github.com/knights-analytics/hugot/pipelines"
-	util "github.com/knights-analytics/hugot/utils"
 	ort "github.com/yalue/onnxruntime_go"
 )
 
@@ -45,61 +45,16 @@ func (m pipelineMap[T]) GetStats() []string {
 	return stats
 }
 
-type SessionOption func() error
-
-func WithOnnxLibraryPath(ortLibraryPath string) SessionOption {
-	return func() error {
-		if ortLibraryPath == "" {
-			return fmt.Errorf("path to the ort library cannot be empty")
-		}
-		ortPathExists, err := util.FileSystem.Exists(context.Background(), ortLibraryPath)
-		if err != nil {
-			return err
-		}
-		if !ortPathExists {
-			return fmt.Errorf("cannot find the ort library at: %s", ortLibraryPath)
-		}
-		ort.SetSharedLibraryPath(ortLibraryPath)
-		return nil
-	}
-}
-
-func (s *Session) setSessionOptions() error {
-	options, optionsError := ort.NewSessionOptions()
-	if optionsError != nil {
-		return optionsError
-	}
-	err1 := options.SetIntraOpNumThreads(1)
-	if err1 != nil {
-		return err1
-	}
-	err2 := options.SetInterOpNumThreads(1)
-	if err2 != nil {
-		return err2
-	}
-	err3 := options.SetCpuMemArena(true)
-	if err3 != nil {
-		return err3
-	}
-	s.ortOptions = options
-	return nil
-}
-
 // NewSession is the main entrypoint to hugot and is used to create a new hugot session object.
 // ortLibraryPath should be the path to onnxruntime.so. If it's the empty string, hugot will try
 // to load the library from the default location (/usr/lib/onnxruntime.so).
 // A new session must be destroyed when it's not needed anymore to avoid memory leaks. See the Destroy method.
 // Note moreover that there can be at most one hugot session active (i.e., the Session object is a singleton),
 // otherwise NewSession will return an error.
-func NewSession(options ...SessionOption) (*Session, error) {
+func NewSession(options ...WithOption) (*Session, error) {
 
 	if ort.IsInitialized() {
-		return nil, errors.New("another session is currently active and only one session can be active at one time")
-	} else {
-		err := ort.InitializeEnvironment()
-		if err != nil {
-			return nil, err
-		}
+		return nil, errors.New("another session is currently active, and only one session can be active at one time")
 	}
 
 	session := &Session{
@@ -108,29 +63,81 @@ func NewSession(options ...SessionOption) (*Session, error) {
 		textClassificationPipelines:  map[string]*pipelines.TextClassificationPipeline{},
 	}
 
-	telemetryErr := ort.DisableTelemetry()
-	if telemetryErr != nil {
-		destroyErr := session.Destroy()
-		return nil, errors.Join(telemetryErr, destroyErr)
+	// set session options and initialise
+	if initialised, err := session.initialiseORT(options...); err != nil {
+		if initialised {
+			destroyErr := session.Destroy()
+			return nil, errors.Join(err, destroyErr)
+		}
+		return nil, err
 	}
 
-	// set session options
-	optionsErr := session.setSessionOptions()
-	if optionsErr != nil {
-		destroyErr := session.Destroy()
-		return nil, errors.Join(optionsErr, destroyErr)
+	return session, nil
+}
+
+func (s *Session) initialiseORT(options ...WithOption) (bool, error) {
+
+	// Collect options into a struct, so they can be applied in the correct order later
+	o := &ortOptions{}
+	for _, option := range options {
+		option(o)
 	}
 
-	for _, opt := range options {
-		if opt != nil {
-			optSetErr := opt()
-			if optSetErr != nil {
-				destroyErr := session.Destroy()
-				return nil, errors.Join(optSetErr, destroyErr)
-			}
+	// Set pre-initialisation options
+	if o.libraryPath != "" {
+		ortPathExists, err := util.FileSystem.Exists(context.Background(), o.libraryPath)
+		if err != nil {
+			return false, err
+		}
+		if !ortPathExists {
+			return false, fmt.Errorf("cannot find the ort library at: %s", o.libraryPath)
+		}
+		ort.SetSharedLibraryPath(o.libraryPath)
+	}
+
+	// Start OnnxRuntime
+	if err := ort.InitializeEnvironment(); err != nil {
+		return false, err
+	}
+
+	if o.telemetry {
+		if err := ort.EnableTelemetry(); err != nil {
+			return true, err
+		}
+	} else {
+		if err := ort.DisableTelemetry(); err != nil {
+			return true, err
 		}
 	}
-	return session, nil
+
+	// Create session options for use in all pipelines
+	sessionOptions, optionsError := ort.NewSessionOptions()
+	if optionsError != nil {
+		return true, optionsError
+	}
+	if o.intraOpNumThreads != 0 {
+		if err := sessionOptions.SetIntraOpNumThreads(o.intraOpNumThreads); err != nil {
+			return true, err
+		}
+	}
+	if o.interOpNumThreads != 0 {
+		if err := sessionOptions.SetInterOpNumThreads(o.interOpNumThreads); err != nil {
+			return true, err
+		}
+	}
+	if !o.cpuMemArenaSet {
+		if err := sessionOptions.SetCpuMemArena(o.cpuMemArena); err != nil {
+			return true, err
+		}
+	}
+	if !o.memPatternSet {
+		if err := sessionOptions.SetMemPattern(o.memPattern); err != nil {
+			return true, err
+		}
+	}
+
+	s.ortOptions = sessionOptions
+	return true, nil
 }
 
 // NewTokenClassificationPipeline creates and returns a new token classification pipeline object.

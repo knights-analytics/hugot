@@ -289,7 +289,7 @@ func (p *TokenClassificationPipeline) getTag(entityName string) (string, string)
 		bi = "I"
 		tag = entityName[2:]
 	} else {
-		// defaulting to I if string is not in B- I- format
+		// defaulting to "I" if string is not in B- I- format
 		bi = "I"
 		tag = entityName
 	}
