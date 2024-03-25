@@ -47,7 +47,9 @@ jobs:
         uses: mikepenz/action-junit-report@v4
         if: success() || failure()
         with:
-          report_paths: '/build/testTarget/unit/unit.xml'
+          report_paths: './testTarget/unit/*.xml'
+          fail_on_failure: true
+          require_test: true
   release:
     name: Release
     runs-on: ubuntu-latest

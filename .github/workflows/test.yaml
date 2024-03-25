@@ -45,3 +45,5 @@ jobs:
         if: success() || failure()
         with:
           report_paths: './testTarget/unit/*.xml'
+          fail_on_failure: true
+          require_test: true
