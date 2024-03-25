@@ -15,13 +15,13 @@ require (
 )
 
 require (
-	cloud.google.com/go/storage v1.39.0 // indirect
-	github.com/aws/aws-sdk-go v1.51.2 // indirect
-	github.com/cpuguy83/go-md2man/v2 v2.0.3 // indirect
+	cloud.google.com/go/iam v1.1.7 // indirect
+	cloud.google.com/go/storage v1.39.1 // indirect
+	github.com/aws/aws-sdk-go v1.51.6 // indirect
+	github.com/cpuguy83/go-md2man/v2 v2.0.4 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/fatih/color v1.16.0 // indirect
 	github.com/go-errors/errors v1.5.1 // indirect
-	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	github.com/kr/text v0.2.0 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
@@ -35,7 +35,9 @@ require (
 	golang.org/x/net v0.22.0 // indirect
 	golang.org/x/oauth2 v0.18.0 // indirect
 	golang.org/x/sys v0.18.0 // indirect
-	google.golang.org/api v0.169.0 // indirect
-	google.golang.org/protobuf v1.33.0 // indirect
+	google.golang.org/api v0.171.0 // indirect
+	google.golang.org/genproto v0.0.0-20240318140521-94a12d6c2237 // indirect
+	google.golang.org/genproto/googleapis/api v0.0.0-20240318140521-94a12d6c2237 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20240318140521-94a12d6c2237 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

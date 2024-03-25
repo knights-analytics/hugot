@@ -22,7 +22,7 @@ For the golang developer or ML engineer who wants to run transformer piplines on
 
 ## What is already there
 
-Currently we have implementations for the following transfomer pipelines:
+Currently, we have implementations for the following transfomer pipelines:
 
 - [featureExtraction](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.FeatureExtractionPipeline)
 - [textClassification](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.TextClassificationPipeline) (single label classification only)
@@ -167,6 +167,25 @@ Note that the --model parameter can be:
     1. the full path to a model to load
     2. the name of a huggingface model. Hugot will first try to look for the model at $HOME/hugot, or will try to download the model from huggingface.
 
+## Performance Tuning
+
+Firstly, the throughput of onnxruntime depends largely on the size of the input requests. The best batch size is affected by the number of tokens per input, but we find batches of roughly 32 inputs per call to be optimal.
+
+The library defaults to onnxruntime's default tuning settings. These are optimised for latency over throughput, and will attempt to parallelize single threaded calls to onnxruntime over multiple cores.
+
+For maximum throughput, it is best to call a single shared hugot pipeline from multiple goroutines (1 per core), using a channel to pass the input data. In this scenario, the following settings will greatly increase inference throughput.
+
+```go
+session, err := hugot.NewSession(
+	hugot.WithInterOpNumThreads(1),
+	hugot.WithIntraOpNumThreads(1),
+	hugot.WithCpuMemArena(false),
+	hugot.WithMemPattern(false),
+)
+```
+
+InterOpNumThreads and IntraOpNumThreads constricts each goroutine's call to a single core, greatly reducing locking and cache penalties. Disabling CpuMemArena and MemPattern skips pre-allocation of some memory structures, increasing latency, but also throughput efficiency.
+
 ## Contributing
 
 ### Development environment
@@ -205,7 +224,7 @@ If you prefer to develop on bare metal, you will need to download the tokenizers
 
 ### Run the tests
 
-The full test suite can be ran as follows. From the source folder:
+The full test suite can be run as follows. From the source folder:
 
 ```bash
 make clean run-tests

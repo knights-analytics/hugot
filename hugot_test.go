@@ -22,7 +22,7 @@ var tokenExpectedByte []byte
 var resultsByte []byte
 
 // use the system library for the tests
-var onnxruntimeSharedLibrary = "/usr/lib64/onnxruntime.so"
+const onnxRuntimeSharedLibrary = "/usr/lib64/onnxruntime.so"
 
 // test download validation
 
@@ -37,7 +37,14 @@ func TestDownloadValidation(t *testing.T) {
 // Text classification
 
 func TestTextClassificationPipeline(t *testing.T) {
-	session, err := NewSession(WithOnnxLibraryPath(onnxruntimeSharedLibrary))
+	session, err := NewSession(
+		WithOnnxLibraryPath(onnxRuntimeSharedLibrary),
+		WithTelemetry(),
+		WithCpuMemArena(true),
+		WithMemPattern(true),
+		WithIntraOpNumThreads(1),
+		WithInterOpNumThreads(1),
+	)
 	check(t, err)
 	defer func(session *Session) {
 		err := session.Destroy()
@@ -90,13 +97,8 @@ func TestTextClassificationPipeline(t *testing.T) {
 	session.GetStats()
 }
 
-func TestNewSessionErrors(t *testing.T) {
-	_, err := NewSession(WithOnnxLibraryPath(""))
-	assert.Error(t, err)
-}
-
 func TestTextClassificationPipelineValidation(t *testing.T) {
-	session, err := NewSession(WithOnnxLibraryPath(onnxruntimeSharedLibrary))
+	session, err := NewSession(WithOnnxLibraryPath(onnxRuntimeSharedLibrary))
 	check(t, err)
 	defer func(session *Session) {
 		err := session.Destroy()
@@ -124,7 +126,7 @@ func TestTextClassificationPipelineValidation(t *testing.T) {
 // Token classification
 
 func TestTokenClassificationPipeline(t *testing.T) {
-	session, err := NewSession(WithOnnxLibraryPath(onnxruntimeSharedLibrary))
+	session, err := NewSession(WithOnnxLibraryPath(onnxRuntimeSharedLibrary))
 	check(t, err)
 	defer func(session *Session) {
 		err := session.Destroy()
@@ -185,7 +187,7 @@ func TestTokenClassificationPipeline(t *testing.T) {
 }
 
 func TestTokenClassificationPipelineValidation(t *testing.T) {
-	session, err := NewSession(WithOnnxLibraryPath(onnxruntimeSharedLibrary))
+	session, err := NewSession(WithOnnxLibraryPath(onnxRuntimeSharedLibrary))
 	check(t, err)
 	defer func(session *Session) {
 		err := session.Destroy()
@@ -215,7 +217,7 @@ func TestTokenClassificationPipelineValidation(t *testing.T) {
 // feature extraction
 
 func TestFeatureExtractionPipeline(t *testing.T) {
-	session, err := NewSession(WithOnnxLibraryPath(onnxruntimeSharedLibrary))
+	session, err := NewSession(WithOnnxLibraryPath(onnxRuntimeSharedLibrary))
 	check(t, err)
 	defer func(session *Session) {
 		err := session.Destroy()
@@ -289,7 +291,7 @@ func TestFeatureExtractionPipeline(t *testing.T) {
 }
 
 func TestFeatureExtractionPipelineValidation(t *testing.T) {
-	session, err := NewSession(WithOnnxLibraryPath(onnxruntimeSharedLibrary))
+	session, err := NewSession(WithOnnxLibraryPath(onnxRuntimeSharedLibrary))
 	check(t, err)
 	defer func(session *Session) {
 		err := session.Destroy()

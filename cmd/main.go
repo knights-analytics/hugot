@@ -94,7 +94,7 @@ var runCommand = &cli.Command{
 	},
 	Action: func(ctx *cli.Context) error {
 
-		var onnxLibraryPathOpt hugot.SessionOption
+		var opts []hugot.WithOption
 
 		if modelsDir == "" {
 			userDir, err := os.UserHomeDir()
@@ -105,17 +105,17 @@ var runCommand = &cli.Command{
 		}
 
 		if sharedLibraryPath != "" {
-			onnxLibraryPathOpt = hugot.WithOnnxLibraryPath(sharedLibraryPath)
+			opts = append(opts, hugot.WithOnnxLibraryPath(sharedLibraryPath))
 		} else {
 			homeDir, err := os.UserHomeDir()
 			if err != nil {
 				if exists, err := util.FileSystem.Exists(ctx.Context, path.Join(homeDir, "lib", "hugot", "onnxruntime.so")); err != nil && exists {
-					onnxLibraryPathOpt = hugot.WithOnnxLibraryPath(path.Join(homeDir, "lib", "hugot", "onnxruntime.so"))
+					opts = append(opts, hugot.WithOnnxLibraryPath(path.Join(homeDir, "lib", "hugot", "onnxruntime.so")))
 				}
 			}
 		}
 
-		session, err := hugot.NewSession(onnxLibraryPathOpt)
+		session, err := hugot.NewSession(opts...)
 		if err != nil {
 			return err
 		}
