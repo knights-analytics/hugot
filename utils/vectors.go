@@ -6,7 +6,7 @@ import (
 	"slices"
 )
 
-// Mean of a float32 vector
+// Mean of a float32 vector.
 func Mean(vector []float32) float32 {
 	n := 0
 	sum := float32(0.0)
@@ -17,7 +17,7 @@ func Mean(vector []float32) float32 {
 	return sum / float32(n)
 }
 
-// SoftMax take a vector and calculate softmax scores of its values
+// SoftMax take a vector and calculate softmax scores of its values.
 func SoftMax(vector []float32) []float32 {
 	maxLogit := slices.Max(vector)
 	shiftedExp := make([]float64, len(vector))
@@ -40,7 +40,7 @@ func SumSlice(s []float64) float64 {
 	return sum
 }
 
-// ArgMax find both index of max value in s and max value
+// ArgMax find both index of max value in s and max value.
 func ArgMax(s []float32) (int, float32, error) {
 	if len(s) == 0 {
 		return 0, 0, fmt.Errorf("attempted to calculate argmax of empty slice")
@@ -54,4 +54,14 @@ func ArgMax(s []float32) (int, float32, error) {
 		}
 	}
 	return maxIndex, maxValue, nil
+}
+
+func Sigmoid(s []float32) []float32 {
+	sigmoid := make([]float32, 0, len(s))
+
+	for _, v := range s {
+		v64 := float64(v)
+		sigmoid = append(sigmoid, float32(1.0/(1.0+math.Exp(-v64))))
+	}
+	return sigmoid
 }

@@ -3,11 +3,12 @@ package util
 import (
 	"context"
 	"errors"
-	"github.com/viant/afs"
-	_ "github.com/viant/afsc/s3"
 	"io"
 	"path/filepath"
 	"strings"
+
+	"github.com/viant/afs"
+	_ "github.com/viant/afsc/s3"
 )
 
 var FileSystem = afs.New()

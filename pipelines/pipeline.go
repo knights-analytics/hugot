@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"os"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -13,9 +15,10 @@ import (
 	ort "github.com/yalue/onnxruntime_go"
 )
 
-// BasePipeline is a basic pipeline type used for struct composition in the other pipelines
+// BasePipeline is a basic pipeline type used for struct composition in the other pipelines.
 type BasePipeline struct {
 	ModelPath        string
+	OnnxFilename     string
 	PipelineName     string
 	OrtSession       *ort.DynamicAdvancedSession
 	OrtOptions       *ort.SessionOptions
@@ -40,6 +43,15 @@ type Pipeline interface {
 	GetOutputDim() int
 	Validate() error
 	Run([]string) (PipelineBatchOutput, error)
+}
+
+type PipelineOption[T Pipeline] func(eo T)
+
+type PipelineConfig[T Pipeline] struct {
+	ModelPath    string
+	Name         string
+	OnnxFilename string
+	Options      []PipelineOption[T]
 }
 
 type Timings struct {
@@ -71,9 +83,20 @@ func (p *BasePipeline) GetOutputDim() int {
 	return p.OutputDim
 }
 
-// Load the ort model supporting the pipeline
-func (p *BasePipeline) loadModel() error {
+func getOnnxFiles(path string) ([][]string, error) {
+	var onnxFiles [][]string
+	walker := func(_ context.Context, _ string, parent string, info os.FileInfo, _ io.Reader) (toContinue bool, err error) {
+		if strings.HasSuffix(info.Name(), ".onnx") {
+			onnxFiles = append(onnxFiles, []string{util.PathJoinSafe(path, parent), info.Name()})
+		}
+		return true, nil
+	}
+	err := util.FileSystem.Walk(context.Background(), path, walker)
+	return onnxFiles, err
+}
 
+// Load the ort model supporting the pipeline.
+func (p *BasePipeline) loadModel() error {
 	tokenizerBytes, err := util.ReadFileBytes(util.PathJoinSafe(p.ModelPath, "tokenizer.json"))
 	if err != nil {
 		return err
@@ -84,25 +107,34 @@ func (p *BasePipeline) loadModel() error {
 		return err
 	}
 
-	// we look for .onnx files. If more than one exists, we error
-	files, err := util.FileSystem.List(context.Background(), p.ModelPath)
+	// we look for .onnx files.
+	var modelOnnxFile string
+	onnxFiles, err := getOnnxFiles(p.ModelPath)
 	if err != nil {
 		return err
-	}
-	onnxFiles := make([]string, 0)
-	for _, f := range files {
-		if strings.HasSuffix(f.Name(), ".onnx") {
-			onnxFiles = append(onnxFiles, f.Name())
-		}
-	}
-	if len(onnxFiles) > 1 {
-		return fmt.Errorf("more than one .onnx file detected at %s. There should only be one .onnx file", p.ModelPath)
 	}
 	if len(onnxFiles) == 0 {
 		return fmt.Errorf("no .onnx file detected at %s. There should be exactly .onnx file", p.ModelPath)
 	}
+	if len(onnxFiles) > 1 {
+		if p.OnnxFilename == "" {
+			return fmt.Errorf("multiple .onnx file detected at %s and no OnnxFilename specified", p.ModelPath)
+		}
+		modelNameFound := false
+		for i := range onnxFiles {
+			if onnxFiles[i][1] == p.OnnxFilename {
+				modelNameFound = true
+				modelOnnxFile = util.PathJoinSafe(onnxFiles[i]...)
+			}
+		}
+		if !modelNameFound {
+			return fmt.Errorf("file %s not found at %s", p.OnnxFilename, p.ModelPath)
+		}
+	} else {
+		modelOnnxFile = util.PathJoinSafe(onnxFiles[0]...)
+	}
 
-	onnxBytes, err := util.ReadFileBytes(util.PathJoinSafe(p.ModelPath, onnxFiles[0]))
+	onnxBytes, err := util.ReadFileBytes(modelOnnxFile)
 	if err != nil {
 		return err
 	}
@@ -259,7 +291,6 @@ func (p *BasePipeline) Forward(batch PipelineBatch) (PipelineBatch, error) {
 
 // convert tokenized input to the format required by the onnxruntime library
 func (p *BasePipeline) convertInputToTensors(inputs []TokenizedInput, maxSequence int) PipelineBatch {
-
 	tensorSize := len(inputs) * maxSequence
 	counter := 0
 

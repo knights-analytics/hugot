@@ -17,8 +17,9 @@ import (
 
 type TextClassificationPipeline struct {
 	BasePipeline
-	IdLabelMap          map[int]string
-	AggregationFunction func([]float32) []float32
+	IdLabelMap              map[int]string
+	AggregationFunctionName string
+	ProblemType             string
 }
 
 type TextClassificationPipelineConfig struct {
@@ -46,27 +47,58 @@ func (t *TextClassificationOutput) GetOutput() []any {
 
 type TextClassificationOption func(eo *TextClassificationPipeline)
 
-func WithAggregationFunction(aggregationFunction func([]float32) []float32) TextClassificationOption {
+func WithSoftmax() PipelineOption[*TextClassificationPipeline] {
 	return func(pipeline *TextClassificationPipeline) {
-		pipeline.AggregationFunction = aggregationFunction
+		pipeline.AggregationFunctionName = "SOFTMAX"
+	}
+}
+
+func WithSigmoid() PipelineOption[*TextClassificationPipeline] {
+	return func(pipeline *TextClassificationPipeline) {
+		pipeline.AggregationFunctionName = "SIGMOID"
+	}
+}
+
+func WithSingleLabel() PipelineOption[*TextClassificationPipeline] {
+	return func(pipeline *TextClassificationPipeline) {
+		pipeline.ProblemType = "singleLabel"
+	}
+}
+
+func WithMultiLabel() PipelineOption[*TextClassificationPipeline] {
+	return func(pipeline *TextClassificationPipeline) {
+		pipeline.ProblemType = "multiLabel"
 	}
 }
 
 // NewTextClassificationPipeline initializes a new text classification pipeline
-func NewTextClassificationPipeline(modelPath string, name string, ortOptions *ort.SessionOptions, opts ...TextClassificationOption) (*TextClassificationPipeline, error) {
+func NewTextClassificationPipeline(config PipelineConfig[*TextClassificationPipeline], ortOptions *ort.SessionOptions) (*TextClassificationPipeline, error) {
 	pipeline := &TextClassificationPipeline{}
-	pipeline.ModelPath = modelPath
-	pipeline.PipelineName = name
+	pipeline.ModelPath = config.ModelPath
+	pipeline.PipelineName = config.Name
 	pipeline.OrtOptions = ortOptions
-	for _, opt := range opts {
-		opt(pipeline)
+	pipeline.OnnxFilename = config.OnnxFilename
+
+	for _, o := range config.Options {
+		o(pipeline)
+	}
+
+	if pipeline.ProblemType == "" {
+		pipeline.ProblemType = "singleLabel"
+	}
+	if pipeline.AggregationFunctionName == "" {
+		if pipeline.PipelineName == "singleLabel" {
+			pipeline.AggregationFunctionName = "SOFTMAX"
+		} else {
+			pipeline.AggregationFunctionName = "SIGMOID"
+		}
 	}
 
 	pipeline.TokenizerOptions = []tokenizers.EncodeOption{
 		tokenizers.WithReturnAttentionMask(),
 	}
 
-	configPath := util.PathJoinSafe(modelPath, "config.json")
+	configPath := util.PathJoinSafe(pipeline.ModelPath, "config.json")
 	pipelineInputConfig := TextClassificationPipelineConfig{}
 	mapBytes, err := util.ReadFileBytes(configPath)
 	if err != nil {
@@ -81,18 +113,12 @@ func NewTextClassificationPipeline(modelPath string, name string, ortOptions *or
 	pipeline.PipelineTimings = &Timings{}
 	pipeline.TokenizerTimings = &Timings{}
 
-	if pipeline.AggregationFunction == nil {
-		// softmax by default
-		pipeline.AggregationFunction = util.SoftMax
-	}
-
 	// load onnx model
 	loadErr := pipeline.loadModel()
 	if loadErr != nil {
 		return nil, loadErr
 	}
 
-	// we only support single label classification for now
 	pipeline.OutputDim = int(pipeline.OutputsMeta[0].Dimensions[1])
 
 	// validate
@@ -160,18 +186,26 @@ func (p *TextClassificationPipeline) Forward(batch PipelineBatch) (PipelineBatch
 }
 
 func (p *TextClassificationPipeline) Postprocess(batch PipelineBatch) (*TextClassificationOutput, error) {
-
 	outputTensor := batch.OutputTensor
 	output := make([][]float32, len(batch.Input))
 	inputCounter := 0
 	vectorCounter := 0
 	inputVector := make([]float32, p.OutputDim)
+	var aggregationFunction func([]float32) []float32
+	switch p.AggregationFunctionName {
+	case "SIGMOID":
+		aggregationFunction = util.Sigmoid
+	case "SOFTMAX":
+		aggregationFunction = util.SoftMax
+	default:
+		return nil, fmt.Errorf("aggregation function %s is not supported", p.AggregationFunctionName)
+	}
 
 	for _, result := range outputTensor {
 		inputVector[vectorCounter] = result
 		if vectorCounter == p.OutputDim-1 {
 
-			output[inputCounter] = p.AggregationFunction(inputVector)
+			output[inputCounter] = aggregationFunction(inputVector)
 			vectorCounter = 0
 			inputVector = make([]float32, p.OutputDim)
 			inputCounter++
@@ -180,7 +214,6 @@ func (p *TextClassificationPipeline) Postprocess(batch PipelineBatch) (*TextClas
 		}
 	}
 
-	// batchClassificationOutputs := make([][]ClassificationOutput, len(batch.Input))
 	batchClassificationOutputs := TextClassificationOutput{
 		ClassificationOutputs: make([][]ClassificationOutput, len(batch.Input)),
 	}
@@ -188,22 +221,39 @@ func (p *TextClassificationPipeline) Postprocess(batch PipelineBatch) (*TextClas
 	var err error
 
 	for i := 0; i < len(batch.Input); i++ {
-		// since we only support single label classification for now there's only one classification output in the slice
-		inputClassificationOutputs := make([]ClassificationOutput, 1)
-		index, value, errArgMax := util.ArgMax(output[i])
-		if errArgMax != nil {
-			err = errArgMax
-			continue
+		switch p.ProblemType {
+		case "singleLabel":
+			inputClassificationOutputs := make([]ClassificationOutput, 1)
+			index, value, errArgMax := util.ArgMax(output[i])
+			if errArgMax != nil {
+				err = errArgMax
+				continue
+			}
+			class, ok := p.IdLabelMap[index]
+			if !ok {
+				err = fmt.Errorf("class with index number %d not found in id label map", index)
+			}
+			inputClassificationOutputs[0] = ClassificationOutput{
+				Label: class,
+				Score: value,
+			}
+			batchClassificationOutputs.ClassificationOutputs[i] = inputClassificationOutputs
+		case "multiLabel":
+			inputClassificationOutputs := make([]ClassificationOutput, len(p.IdLabelMap))
+			for j := range output[i] {
+				class, ok := p.IdLabelMap[j]
+				if !ok {
+					err = fmt.Errorf("class with index number %d not found in id label map", j)
+				}
+				inputClassificationOutputs[j] = ClassificationOutput{
+					Label: class,
+					Score: output[i][j],
+				}
+			}
+			batchClassificationOutputs.ClassificationOutputs[i] = inputClassificationOutputs
+		default:
+			err = fmt.Errorf("problem type %s not recognized", p.ProblemType)
 		}
-		class, ok := p.IdLabelMap[index]
-		if !ok {
-			err = fmt.Errorf("class with index number %d not found in id label map", index)
-		}
-		inputClassificationOutputs[0] = ClassificationOutput{
-			Label: class,
-			Score: value,
-		}
-		batchClassificationOutputs.ClassificationOutputs[i] = inputClassificationOutputs
 	}
 	return &batchClassificationOutputs, err
 }

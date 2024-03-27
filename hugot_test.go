@@ -51,7 +51,27 @@ func TestTextClassificationPipeline(t *testing.T) {
 		check(t, err)
 	}(session)
 	modelPath := path.Join("./models", "KnightsAnalytics_distilbert-base-uncased-finetuned-sst-2-english")
-	sentimentPipeline, err := session.NewTextClassificationPipeline(modelPath, "testPipeline")
+	config := TextClassificationConfig{
+		ModelPath: modelPath,
+		Name:      "testPipelineSimple",
+		Options: []TextClassificationOption{
+			pipelines.WithSoftmax(),
+		},
+	}
+	sentimentPipeline, err := NewPipeline(session, config)
+	check(t, err)
+
+	modelPathMulti := path.Join("./models", "SamLowe_roberta-base-go_emotions-onnx")
+	configMulti := TextClassificationConfig{
+		ModelPath:    modelPathMulti,
+		Name:         "testPipelineSimpleMulti",
+		OnnxFilename: "model.onnx",
+		Options: []TextClassificationOption{
+			pipelines.WithMultiLabel(),
+			pipelines.WithSigmoid(),
+		},
+	}
+	sentimentPipelineMulti, err := NewPipeline(session, configMulti)
 	check(t, err)
 
 	tests := []struct {
@@ -81,6 +101,129 @@ func TestTextClassificationPipeline(t *testing.T) {
 				},
 			},
 		},
+		{
+			pipeline: sentimentPipelineMulti,
+			name:     "Multiclass pipeline test",
+			strings:  []string{"ONNX is seriously fast for small batches. Impressive"},
+			expected: pipelines.TextClassificationOutput{
+				ClassificationOutputs: [][]pipelines.ClassificationOutput{
+					{
+						{
+							Label: "admiration",
+							Score: 0.9217681,
+						},
+						{
+							Label: "amusement",
+							Score: 0.001201711,
+						},
+						{
+							Label: "anger",
+							Score: 0.001109502,
+						},
+						{
+							Label: "annoyance",
+							Score: 0.0034009134,
+						},
+						{
+							Label: "approval",
+							Score: 0.05643816,
+						},
+						{
+							Label: "caring",
+							Score: 0.0011591336,
+						},
+						{
+							Label: "confusion",
+							Score: 0.0018672282,
+						},
+						{
+							Label: "curiosity",
+							Score: 0.0026787464,
+						},
+						{
+							Label: "desire",
+							Score: 0.00085846696,
+						},
+						{
+							Label: "disappointment",
+							Score: 0.0027759627,
+						},
+						{
+							Label: "disapproval",
+							Score: 0.004615115,
+						},
+						{
+							Label: "disgust",
+							Score: 0.00075303164,
+						},
+						{
+							Label: "embarrassment",
+							Score: 0.0003314704,
+						},
+						{
+							Label: "excitement",
+							Score: 0.005340109,
+						},
+						{
+							Label: "fear",
+							Score: 0.00042834174,
+						},
+						{
+							Label: "gratitude",
+							Score: 0.013405683,
+						},
+						{
+							Label: "grief",
+							Score: 0.00029952865,
+						},
+						{
+							Label: "joy",
+							Score: 0.0026875956,
+						},
+						{
+							Label: "love",
+							Score: 0.00092915917,
+						},
+						{
+							Label: "nervousness",
+							Score: 0.00012843,
+						},
+						{
+							Label: "optimism",
+							Score: 0.006792505,
+						},
+						{
+							Label: "pride",
+							Score: 0.0033409835,
+						},
+						{
+							Label: "realization",
+							Score: 0.007224476,
+						},
+						{
+							Label: "relief",
+							Score: 0.00071489986,
+						},
+						{
+							Label: "remorse",
+							Score: 0.00026071363,
+						},
+						{
+							Label: "sadness",
+							Score: 0.0009562365,
+						},
+						{
+							Label: "surprise",
+							Score: 0.0037120024,
+						},
+						{
+							Label: "neutral",
+							Score: 0.04079749,
+						},
+					},
+				},
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -105,7 +248,15 @@ func TestTextClassificationPipelineValidation(t *testing.T) {
 		check(t, err)
 	}(session)
 	modelPath := path.Join("./models", "KnightsAnalytics_distilbert-base-uncased-finetuned-sst-2-english")
-	sentimentPipeline, err := session.NewTextClassificationPipeline(modelPath, "testPipeline", pipelines.WithAggregationFunction(util.SoftMax))
+
+	config := TextClassificationConfig{
+		ModelPath: modelPath,
+		Name:      "testPipelineSimple",
+		Options: []TextClassificationOption{
+			pipelines.WithSingleLabel(),
+		},
+	}
+	sentimentPipeline, err := NewPipeline(session, config)
 	check(t, err)
 	sentimentPipeline.IdLabelMap = map[int]string{}
 	err = sentimentPipeline.Validate()
@@ -134,9 +285,25 @@ func TestTokenClassificationPipeline(t *testing.T) {
 	}(session)
 
 	modelPath := path.Join("./models", "KnightsAnalytics_distilbert-NER")
-	pipelineSimple, err2 := session.NewTokenClassificationPipeline(modelPath, "testPipelineSimple", pipelines.WithSimpleAggregation(), pipelines.WithIgnoreLabels([]string{"O"}))
+	configSimple := TokenClassificationConfig{
+		ModelPath: modelPath,
+		Name:      "testPipelineSimple",
+		Options: []TokenClassificationOption{
+			pipelines.WithSimpleAggregation(),
+			pipelines.WithIgnoreLabels([]string{"O"}),
+		},
+	}
+	pipelineSimple, err2 := NewPipeline(session, configSimple)
 	check(t, err2)
-	pipelineNone, err3 := session.NewTokenClassificationPipeline(modelPath, "testPipelineNone", pipelines.WithoutAggregation())
+
+	configNone := TokenClassificationConfig{
+		ModelPath: modelPath,
+		Name:      "testPipelineNone",
+		Options: []TokenClassificationOption{
+			pipelines.WithoutAggregation(),
+		},
+	}
+	pipelineNone, err3 := NewPipeline(session, configNone)
 	check(t, err3)
 
 	var expectedResults map[int]pipelines.TokenClassificationOutput
@@ -195,7 +362,15 @@ func TestTokenClassificationPipelineValidation(t *testing.T) {
 	}(session)
 
 	modelPath := path.Join("./models", "KnightsAnalytics_distilbert-NER")
-	pipelineSimple, err2 := session.NewTokenClassificationPipeline(modelPath, "testPipelineSimple", pipelines.WithSimpleAggregation())
+	configSimple := TokenClassificationConfig{
+		ModelPath: modelPath,
+		Name:      "testPipelineSimple",
+		Options: []TokenClassificationOption{
+			pipelines.WithSimpleAggregation(),
+			pipelines.WithIgnoreLabels([]string{"O"}),
+		},
+	}
+	pipelineSimple, err2 := NewPipeline(session, configSimple)
 	check(t, err2)
 
 	pipelineSimple.IdLabelMap = map[int]string{}
@@ -214,6 +389,31 @@ func TestTokenClassificationPipelineValidation(t *testing.T) {
 	}
 }
 
+func TestNoSameNamePipeline(t *testing.T) {
+	session, err := NewSession(WithOnnxLibraryPath(onnxRuntimeSharedLibrary))
+	check(t, err)
+	defer func(session *Session) {
+		err := session.Destroy()
+		check(t, err)
+	}(session)
+
+	modelPath := path.Join("./models", "KnightsAnalytics_distilbert-NER")
+	configSimple := TokenClassificationConfig{
+		ModelPath: modelPath,
+		Name:      "testPipelineSimple",
+		Options: []TokenClassificationOption{
+			pipelines.WithSimpleAggregation(),
+			pipelines.WithIgnoreLabels([]string{"O"}),
+		},
+	}
+	_, err2 := NewPipeline(session, configSimple)
+	if err2 != nil {
+		t.FailNow()
+	}
+	_, err3 := NewPipeline(session, configSimple)
+	assert.Error(t, err3)
+}
+
 // feature extraction
 
 func TestFeatureExtractionPipeline(t *testing.T) {
@@ -225,7 +425,11 @@ func TestFeatureExtractionPipeline(t *testing.T) {
 	}(session)
 
 	modelPath := path.Join("./models", "KnightsAnalytics_all-MiniLM-L6-v2")
-	pipeline, err := session.NewFeatureExtractionPipeline(modelPath, "testPipeline")
+	config := FeatureExtractionConfig{
+		ModelPath: modelPath,
+		Name:      "testPipeline",
+	}
+	pipeline, err := NewPipeline(session, config)
 	check(t, err)
 
 	var expectedResults map[string][][]float32
@@ -299,7 +503,11 @@ func TestFeatureExtractionPipelineValidation(t *testing.T) {
 	}(session)
 
 	modelPath := path.Join("./models", "KnightsAnalytics_all-MiniLM-L6-v2")
-	pipeline, err := session.NewFeatureExtractionPipeline(modelPath, "testPipeline")
+	config := FeatureExtractionConfig{
+		ModelPath: modelPath,
+		Name:      "testPipeline",
+	}
+	pipeline, err := NewPipeline(session, config)
 	check(t, err)
 
 	pipeline.OutputDim = 0
@@ -315,18 +523,24 @@ func TestReadmeExample(t *testing.T) {
 			panic(err.Error())
 		}
 	}
+
 	// start a new session. This looks for the onnxruntime.so library in its default path, e.g. /usr/lib/onnxruntime.so
 	session, err := NewSession()
 	// if your onnxruntime.so is somewhere else, you can explicitly set it by using WithOnnxLibraryPath
-	// session, err := NewSession(WithOnnxLibraryPath("/path/to/onnxruntime.so"))
+	// session, err := hugot.NewSession(WithOnnxLibraryPath("/path/to/onnxruntime.so"))
 	check(err)
-	// A successfully created session needs to be destroyed when you're done
+	// A successfully created hugot session needs to be destroyed when you're done
 	defer func(session *Session) {
 		err := session.Destroy()
 		check(err)
 	}(session)
+
 	// Let's download an onnx sentiment test classification model in the current directory
+	// note: if you compile your library with build flag NODOWNLOAD, this will exclude the downloader.
+	// Useful in case you just want the core engine (because you already have the models) and want to
+	// drop the dependency on huggingfaceModelDownloader.
 	modelPath, err := session.DownloadModel("KnightsAnalytics/distilbert-base-uncased-finetuned-sst-2-english", "./", NewDownloadOptions())
+	check(err)
 
 	defer func(modelPath string) {
 		err := util.FileSystem.Delete(context.Background(), modelPath)
@@ -335,15 +549,22 @@ func TestReadmeExample(t *testing.T) {
 		}
 	}(modelPath)
 
+	// we now create the configuration for the text classification pipeline we want to create.
+	// Options to the pipeline can be set here using the Options field
+	config := TextClassificationConfig{
+		ModelPath: modelPath,
+		Name:      "testPipeline",
+	}
+	// then we create out pipeline.
+	// Note: the pipeline will also be added to the session object so all pipelines can be destroyed at once
+	sentimentPipeline, err := NewPipeline(session, config)
 	check(err)
-	// we now create a text classification pipeline. It requires the path to the just downloader onnx model folder,
-	// and a pipeline name
-	sentimentPipeline, err := session.NewTextClassificationPipeline(modelPath, "testPipeline")
-	check(err)
+
 	// we can now use the pipeline for prediction on a batch of strings
 	batch := []string{"This movie is disgustingly good !", "The director tried too much"}
 	batchResult, err := sentimentPipeline.RunPipeline(batch)
 	check(err)
+
 	// and do whatever we want with it :)
 	s, err := json.Marshal(batchResult)
 	check(err)
