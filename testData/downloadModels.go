@@ -33,7 +33,8 @@ func main() {
 			for _, modelName := range []string{
 				"KnightsAnalytics/all-MiniLM-L6-v2",
 				"KnightsAnalytics/distilbert-base-uncased-finetuned-sst-2-english",
-				"KnightsAnalytics/distilbert-NER"} {
+				"KnightsAnalytics/distilbert-NER",
+				"SamLowe/roberta-base-go_emotions-onnx"} {
 				_, err := session.DownloadModel(modelName, "./models", downloadOptions)
 				if err != nil {
 					panic(err)

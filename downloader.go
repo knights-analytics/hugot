@@ -3,6 +3,7 @@
 package hugot
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -72,41 +73,15 @@ type hfFile struct {
 }
 
 func validateDownloadHfModel(modelPath string, branch string, authToken string) error {
-	client := &http.Client{}
 	if strings.Contains(modelPath, ":") {
 		return errors.New("model filters are not supported")
 	}
-	req, err := http.NewRequest("GET", fmt.Sprintf("https://huggingface.co/api/models/%s/tree/%s", modelPath, branch), nil)
+
+	client := &http.Client{}
+
+	hasTokenizer, hasOnxx, err := checkURL(client, fmt.Sprintf("https://huggingface.co/api/models/%s/tree/%s", modelPath, branch), authToken)
 	if err != nil {
 		return err
-	}
-	if authToken != "" {
-		req.Header.Add("Authorization", "Bearer "+authToken)
-	}
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer func(resp *http.Response) {
-		err = errors.Join(err, resp.Body.Close())
-	}(resp)
-
-	var filesList []hfFile
-	e := json.NewDecoder(resp.Body).Decode(&filesList)
-	if e != nil {
-		return e
-	}
-	hasTokenizer := false
-	hasOnxx := false
-
-	for _, f := range filesList {
-		if f.Path == "tokenizer.json" {
-			hasTokenizer = true
-		}
-		if filepath.Ext(f.Path) == ".onnx" {
-			hasOnxx = true
-		}
 	}
 
 	var errs []error
@@ -117,4 +92,49 @@ func validateDownloadHfModel(modelPath string, branch string, authToken string) 
 		errs = append(errs, fmt.Errorf("model does not have a tokenizer.json file"))
 	}
 	return errors.Join(errs...)
+}
+
+func checkURL(client *http.Client, url string, authToken string) (bool, bool, error) {
+	var tokenizerFound bool
+	var onnxFound bool
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, url, nil)
+	if err != nil {
+		return false, false, err
+	}
+	if authToken != "" {
+		req.Header.Add("Authorization", "Bearer "+authToken)
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return false, false, err
+	}
+	defer func(resp *http.Response) {
+		err = errors.Join(err, resp.Body.Close())
+	}(resp)
+
+	var filesList []hfFile
+	e := json.NewDecoder(resp.Body).Decode(&filesList)
+	if e != nil {
+		return false, false, e
+	}
+	for _, f := range filesList {
+		if f.Path == "tokenizer.json" {
+			tokenizerFound = true
+		}
+		if filepath.Ext(f.Path) == ".onnx" {
+			onnxFound = true
+		}
+		if f.Type == "directory" && !(tokenizerFound && onnxFound) {
+			tokenizerFoundRec, onnxFoundRec, err := checkURL(client, url+"/"+f.Path, authToken)
+			if err != nil {
+				return false, false, err
+			}
+			tokenizerFound = tokenizerFound || tokenizerFoundRec
+			onnxFound = onnxFound || onnxFoundRec
+		}
+		if onnxFound && tokenizerFound {
+			break
+		}
+	}
+	return tokenizerFound, onnxFound, nil
 }
