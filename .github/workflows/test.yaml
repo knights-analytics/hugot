@@ -46,4 +46,4 @@ jobs:
         with:
           report_paths: './testTarget/unit/*.xml'
           fail_on_failure: true
-          require_test: true
+          require_tests: true
