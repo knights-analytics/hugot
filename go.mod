@@ -5,7 +5,7 @@ go 1.22
 require (
 	github.com/bodaay/HuggingFaceModelDownloader v0.0.0-20240307153905-2f38356a6d6c
 	github.com/json-iterator/go v1.1.12
-	github.com/knights-analytics/tokenizers v0.11.0
+	github.com/knights-analytics/tokenizers v0.10.0
 	github.com/mattn/go-isatty v0.0.20
 	github.com/stretchr/testify v1.9.0
 	github.com/urfave/cli/v2 v2.27.1
