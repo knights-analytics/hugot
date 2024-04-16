@@ -3,9 +3,10 @@ package pipelines
 import (
 	"errors"
 	"fmt"
-	ort "github.com/yalue/onnxruntime_go"
 	"slices"
 	"strings"
+
+	ort "github.com/yalue/onnxruntime_go"
 
 	util "github.com/knights-analytics/hugot/utils"
 
@@ -52,33 +53,32 @@ func (t *TokenClassificationOutput) GetOutput() []any {
 
 // options
 
-type TokenClassificationOption func(eo *TokenClassificationPipeline)
-
-func WithSimpleAggregation() TokenClassificationOption {
+func WithSimpleAggregation() PipelineOption[*TokenClassificationPipeline] {
 	return func(pipeline *TokenClassificationPipeline) {
 		pipeline.AggregationStrategy = "SIMPLE"
 	}
 }
 
-func WithoutAggregation() TokenClassificationOption {
+func WithoutAggregation() PipelineOption[*TokenClassificationPipeline] {
 	return func(pipeline *TokenClassificationPipeline) {
 		pipeline.AggregationStrategy = "NONE"
 	}
 }
 
-func WithIgnoreLabels(ignoreLabels []string) TokenClassificationOption {
+func WithIgnoreLabels(ignoreLabels []string) PipelineOption[*TokenClassificationPipeline] {
 	return func(pipeline *TokenClassificationPipeline) {
 		pipeline.IgnoreLabels = ignoreLabels
 	}
 }
 
 // NewTokenClassificationPipeline Initializes a feature extraction pipeline
-func NewTokenClassificationPipeline(modelPath string, name string, ortOptions *ort.SessionOptions, opts ...TokenClassificationOption) (*TokenClassificationPipeline, error) {
+func NewTokenClassificationPipeline(config PipelineConfig[*TokenClassificationPipeline], ortOptions *ort.SessionOptions) (*TokenClassificationPipeline, error) {
 	pipeline := &TokenClassificationPipeline{}
-	pipeline.ModelPath = modelPath
-	pipeline.PipelineName = name
+	pipeline.ModelPath = config.ModelPath
+	pipeline.PipelineName = config.Name
 	pipeline.OrtOptions = ortOptions
-	for _, o := range opts {
+	pipeline.OnnxFilename = config.OnnxFilename
+	for _, o := range config.Options {
 		o(pipeline)
 	}
 
@@ -92,7 +92,7 @@ func NewTokenClassificationPipeline(modelPath string, name string, ortOptions *o
 	}
 
 	// load json model config and set pipeline settings
-	configPath := util.PathJoinSafe(modelPath, "config.json")
+	configPath := util.PathJoinSafe(config.ModelPath, "config.json")
 	pipelineInputConfig := TokenClassificationPipelineConfig{}
 	mapBytes, err := util.ReadFileBytes(configPath)
 	if err != nil {

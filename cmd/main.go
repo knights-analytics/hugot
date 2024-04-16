@@ -93,7 +93,6 @@ var runCommand = &cli.Command{
 		},
 	},
 	Action: func(ctx *cli.Context) error {
-
 		var opts []hugot.WithOption
 
 		if modelsDir == "" {
@@ -161,13 +160,25 @@ var runCommand = &cli.Command{
 
 		switch pipelineType {
 		case "tokenClassification":
-			pipe, err = session.NewTokenClassificationPipeline(modelPath, "cliPipeline")
+			config := hugot.TokenClassificationConfig{
+				ModelPath: modelPath,
+				Name:      "cliPipeline",
+			}
+			pipe, err = hugot.NewPipeline(session, config)
 			setupErrs = append(setupErrs, err)
 		case "textClassification":
-			pipe, err = session.NewTextClassificationPipeline(modelPath, "cliPipeline")
+			config := hugot.TextClassificationConfig{
+				ModelPath: modelPath,
+				Name:      "cliPipeline",
+			}
+			pipe, err = hugot.NewPipeline(session, config)
 			setupErrs = append(setupErrs, err)
 		case "featureExtraction":
-			pipe, err = session.NewFeatureExtractionPipeline(modelPath, "cliPipeline")
+			config := hugot.FeatureExtractionConfig{
+				ModelPath: modelPath,
+				Name:      "cliPipeline",
+			}
+			pipe, err = hugot.NewPipeline(session, config)
 			setupErrs = append(setupErrs, err)
 		default:
 			setupErrs = append(setupErrs, fmt.Errorf("pipeline type %s not implemented", pipelineType))
@@ -234,7 +245,7 @@ var runCommand = &cli.Command{
 		exists = inputPath != "" && exists
 
 		if exists {
-			fileWalker := func(ctx context.Context, baseURL, parent string, info os.FileInfo, reader io.Reader) (toContinue bool, err error) {
+			fileWalker := func(_ context.Context, _ string, _ string, info os.FileInfo, reader io.Reader) (toContinue bool, err error) {
 				extension := filepath.Ext(info.Name())
 				if extension == ".jsonl" {
 					err := readInputs(reader, inputChannel)

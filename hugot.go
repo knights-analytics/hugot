@@ -4,8 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	util "github.com/knights-analytics/hugot/utils"
 	"slices"
+
+	util "github.com/knights-analytics/hugot/utils"
 
 	"github.com/knights-analytics/hugot/pipelines"
 	ort "github.com/yalue/onnxruntime_go"
@@ -20,14 +21,6 @@ type Session struct {
 }
 
 type pipelineMap[T pipelines.Pipeline] map[string]T
-
-func (m pipelineMap[T]) GetPipeline(name string) (T, error) {
-	p, ok := m[name]
-	if !ok {
-		return p, fmt.Errorf("pipeline named %s does not exist", name)
-	}
-	return p, nil
-}
 
 func (m pipelineMap[T]) Destroy() error {
 	var err error
@@ -44,6 +37,21 @@ func (m pipelineMap[T]) GetStats() []string {
 	}
 	return stats
 }
+
+// TokenClassificationConfig is the configuration for a token classification pipeline
+type TokenClassificationConfig = pipelines.PipelineConfig[*pipelines.TokenClassificationPipeline]
+
+// TextClassificationConfig is the configuration for a text classification pipeline
+type TextClassificationConfig = pipelines.PipelineConfig[*pipelines.TextClassificationPipeline]
+
+// FeatureExtractionConfig is the configuration for a feature extraction pipeline
+type FeatureExtractionConfig = pipelines.PipelineConfig[*pipelines.FeatureExtractionPipeline]
+
+// TokenClassificationOption is an option for a token classification pipeline
+type TokenClassificationOption = pipelines.PipelineOption[*pipelines.TokenClassificationPipeline]
+
+// TextClassificationOption is an option for a text classification pipeline
+type TextClassificationOption = pipelines.PipelineOption[*pipelines.TextClassificationPipeline]
 
 // NewSession is the main entrypoint to hugot and is used to create a new hugot session object.
 // ortLibraryPath should be the path to onnxruntime.so. If it's the empty string, hugot will try
@@ -140,55 +148,88 @@ func (s *Session) initialiseORT(options ...WithOption) (bool, error) {
 	return true, nil
 }
 
-// NewTokenClassificationPipeline creates and returns a new token classification pipeline object.
-// modelPath should be the path to a folder with the onnx exported transformer model. Name is an identifier
-// for the pipeline (see GetTokenClassificationPipeline).
-func (s *Session) NewTokenClassificationPipeline(modelPath string, name string, opts ...pipelines.TokenClassificationOption) (*pipelines.TokenClassificationPipeline, error) {
-	pipeline, err := pipelines.NewTokenClassificationPipeline(modelPath, name, s.ortOptions, opts...)
-	if err != nil {
-		return nil, err
+type pipelineNotFoundError struct {
+	pipelineName string
+}
+
+func (e *pipelineNotFoundError) Error() string {
+	return fmt.Sprintf("Pipeline with name %s not found", e.pipelineName)
+}
+
+// NewPipeline can be used to create a new pipeline of type T. The initialised pipeline will be returned and it
+// will also be stored in the session object so that all created pipelines can be destroyed with session.Destroy()
+// at once.
+func NewPipeline[T pipelines.Pipeline](s *Session, pipelineConfig pipelines.PipelineConfig[T]) (T, error) {
+	var pipeline T
+	var err error
+	if pipelineConfig.Name == "" {
+		return pipeline, errors.New("a name for the pipeline is required")
 	}
-	s.tokenClassificationPipelines[name] = pipeline
-	return pipeline, nil
-}
 
-// NewTextClassificationPipeline creates and returns a new text classification pipeline object.
-// modelPath should be the path to a folder with the onnx exported transformer model. Name is an identifier
-// for the pipeline (see GetTextClassificationPipeline).
-func (s *Session) NewTextClassificationPipeline(modelPath string, name string, opts ...pipelines.TextClassificationOption) (*pipelines.TextClassificationPipeline, error) {
-	pipeline, err := pipelines.NewTextClassificationPipeline(modelPath, name, s.ortOptions, opts...)
-	if err != nil {
-		return nil, err
+	_, getError := GetPipeline[T](s, pipelineConfig.Name)
+	var notFoundError *pipelineNotFoundError
+	if getError == nil {
+		return pipeline, fmt.Errorf("pipeline %s has already been initialised", pipelineConfig.Name)
+	} else if !errors.As(getError, &notFoundError) {
+		return pipeline, getError
 	}
-	s.textClassificationPipelines[name] = pipeline
-	return pipeline, nil
-}
 
-// NewFeatureExtractionPipeline creates and returns a new feature extraction pipeline object.
-// modelPath should be the path to a folder with the onnx exported transformer model. Name is an identifier
-// for the pipeline (see GetFeatureExtractionPipeline).
-func (s *Session) NewFeatureExtractionPipeline(modelPath string, name string) (*pipelines.FeatureExtractionPipeline, error) {
-	pipeline, err := pipelines.NewFeatureExtractionPipeline(modelPath, name, s.ortOptions)
-	if err != nil {
-		return nil, err
+	switch any(pipeline).(type) {
+	case *pipelines.TokenClassificationPipeline:
+		config := any(pipelineConfig).(pipelines.PipelineConfig[*pipelines.TokenClassificationPipeline])
+		pipelineInitialised, err := pipelines.NewTokenClassificationPipeline(config, s.ortOptions)
+		if err != nil {
+			return pipeline, err
+		}
+		s.tokenClassificationPipelines[config.Name] = pipelineInitialised
+		pipeline = any(pipelineInitialised).(T)
+	case *pipelines.TextClassificationPipeline:
+		config := any(pipelineConfig).(pipelines.PipelineConfig[*pipelines.TextClassificationPipeline])
+		pipelineInitialised, err := pipelines.NewTextClassificationPipeline(config, s.ortOptions)
+		if err != nil {
+			return pipeline, err
+		}
+		s.textClassificationPipelines[config.Name] = pipelineInitialised
+		pipeline = any(pipelineInitialised).(T)
+	case *pipelines.FeatureExtractionPipeline:
+		config := any(pipelineConfig).(pipelines.PipelineConfig[*pipelines.FeatureExtractionPipeline])
+		pipelineInitialised, err := pipelines.NewFeatureExtractionPipeline(config, s.ortOptions)
+		if err != nil {
+			return pipeline, err
+		}
+		s.featureExtractionPipelines[config.Name] = pipelineInitialised
+		pipeline = any(pipelineInitialised).(T)
+	default:
+		return pipeline, fmt.Errorf("not implemented")
 	}
-	s.featureExtractionPipelines[name] = pipeline
-	return pipeline, nil
+	return pipeline, err
 }
 
-// GetFeatureExtractionPipeline returns a feature extraction pipeline by name. If the name does not exist, it will return an error.
-func (s *Session) GetFeatureExtractionPipeline(name string) (*pipelines.FeatureExtractionPipeline, error) {
-	return s.featureExtractionPipelines.GetPipeline(name)
-}
-
-// GetTextClassificationPipeline returns a text classification pipeline by name. If the name does not exist, it will return an error.
-func (s *Session) GetTextClassificationPipeline(name string) (*pipelines.TextClassificationPipeline, error) {
-	return s.textClassificationPipelines.GetPipeline(name)
-}
-
-// GetTokenClassificationPipeline returns a token classification pipeline by name. If the name does not exist, it will return an error.
-func (s *Session) GetTokenClassificationPipeline(name string) (*pipelines.TokenClassificationPipeline, error) {
-	return s.tokenClassificationPipelines.GetPipeline(name)
+// GetPipeline can be used to retrieve a pipeline of type T with the given name from the session
+func GetPipeline[T pipelines.Pipeline](s *Session, name string) (T, error) {
+	var pipeline T
+	switch any(pipeline).(type) {
+	case *pipelines.TokenClassificationPipeline:
+		p, ok := s.tokenClassificationPipelines[name]
+		if !ok {
+			return pipeline, &pipelineNotFoundError{pipelineName: name}
+		}
+		return any(p).(T), nil
+	case *pipelines.TextClassificationPipeline:
+		p, ok := s.textClassificationPipelines[name]
+		if !ok {
+			return pipeline, &pipelineNotFoundError{pipelineName: name}
+		}
+		return any(p).(T), nil
+	case *pipelines.FeatureExtractionPipeline:
+		p, ok := s.featureExtractionPipelines[name]
+		if !ok {
+			return pipeline, &pipelineNotFoundError{pipelineName: name}
+		}
+		return any(p).(T), nil
+	default:
+		return pipeline, errors.New("pipeline type not supported")
+	}
 }
 
 // Destroy deletes the hugot session and onnxruntime environment and all initialized pipelines, freeing memory.
@@ -215,4 +256,62 @@ func (s *Session) GetStats() []string {
 		s.textClassificationPipelines.GetStats(),
 		s.featureExtractionPipelines.GetStats(),
 	)
+}
+
+// deprecated methods
+
+// NewTokenClassificationPipeline creates and returns a new token classification pipeline object.
+// modelPath should be the path to a folder with the onnx exported transformer model. Name is an identifier
+// for the pipeline (see GetTokenClassificationPipeline).
+// Deprecated: use NewPipeline
+func (s *Session) NewTokenClassificationPipeline(modelPath string, name string, opts ...TokenClassificationOption) (*pipelines.TokenClassificationPipeline, error) {
+	config := pipelines.PipelineConfig[*pipelines.TokenClassificationPipeline]{
+		ModelPath: modelPath,
+		Name:      name,
+		Options:   opts,
+	}
+	return NewPipeline(s, config)
+}
+
+// NewTextClassificationPipeline creates and returns a new text classification pipeline object.
+// modelPath should be the path to a folder with the onnx exported transformer model. Name is an identifier
+// for the pipeline (see GetTextClassificationPipeline).
+// Deprecated: use NewPipeline
+func (s *Session) NewTextClassificationPipeline(modelPath string, name string, opts ...TextClassificationOption) (*pipelines.TextClassificationPipeline, error) {
+	config := pipelines.PipelineConfig[*pipelines.TextClassificationPipeline]{
+		ModelPath: modelPath,
+		Name:      name,
+		Options:   opts,
+	}
+	return NewPipeline(s, config)
+}
+
+// NewFeatureExtractionPipeline creates and returns a new feature extraction pipeline object.
+// modelPath should be the path to a folder with the onnx exported transformer model. Name is an identifier
+// for the pipeline (see GetFeatureExtractionPipeline).
+// Deprecated: use NewPipeline
+func (s *Session) NewFeatureExtractionPipeline(modelPath string, name string) (*pipelines.FeatureExtractionPipeline, error) {
+	config := pipelines.PipelineConfig[*pipelines.FeatureExtractionPipeline]{
+		ModelPath: modelPath,
+		Name:      name,
+	}
+	return NewPipeline(s, config)
+}
+
+// GetFeatureExtractionPipeline returns a feature extraction pipeline by name. If the name does not exist, it will return an error.
+// Deprecated: use GetPipeline.
+func (s *Session) GetFeatureExtractionPipeline(name string) (*pipelines.FeatureExtractionPipeline, error) {
+	return GetPipeline[*pipelines.FeatureExtractionPipeline](s, name)
+}
+
+// GetTextClassificationPipeline returns a text classification pipeline by name. If the name does not exist, it will return an error.
+// Deprecated: use GetPipeline.
+func (s *Session) GetTextClassificationPipeline(name string) (*pipelines.TextClassificationPipeline, error) {
+	return GetPipeline[*pipelines.TextClassificationPipeline](s, name)
+}
+
+// GetTokenClassificationPipeline returns a token classification pipeline by name. If the name does not exist, it will return an error.
+// Deprecated: use GetPipeline.
+func (s *Session) GetTokenClassificationPipeline(name string) (*pipelines.TokenClassificationPipeline, error) {
+	return GetPipeline[*pipelines.TokenClassificationPipeline](s, name)
 }

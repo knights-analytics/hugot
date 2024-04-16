@@ -25,7 +25,7 @@ For the golang developer or ML engineer who wants to run transformer piplines on
 Currently, we have implementations for the following transfomer pipelines:
 
 - [featureExtraction](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.FeatureExtractionPipeline)
-- [textClassification](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.TextClassificationPipeline) (single label classification only)
+- [textClassification](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.TextClassificationPipeline)
 - [tokenClassification](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.TokenClassificationPipeline)
 
 Implementations for additional pipelines will follow. We also very gladly accept PRs to expand the set of pipelines! See [here](https://huggingface.co/docs/transformers/en/main_classes/pipelines) for the missing pipelines that can be implemented, and the contributing section below if you want to lend a hand.
@@ -41,7 +41,7 @@ Apart from the fact that only the aforementioned pipelines are currently impleme
 Pipelines are also tested on specifically NLP use cases. In particular, we use the following models for testing:
 - feature extraction: all-MiniLM-L6-v2
 - text classification: distilbert-base-uncased-finetuned-sst-2-english
-- token classification: distilbert-NER
+- token classification: distilbert-NER and Roberta-base-go_emotions
 
 If you encounter any further issues or want further features, please open an issue.
 
@@ -100,20 +100,30 @@ defer func(session *hugot.Session) {
     err := session.Destroy()
     check(err)
 }(session)
+
 // Let's download an onnx sentiment test classification model in the current directory
 // note: if you compile your library with build flag NODOWNLOAD, this will exclude the downloader.
 // Useful in case you just want the core engine (because you already have the models) and want to
 // drop the dependency on huggingfaceModelDownloader.
 modelPath, err := session.DownloadModel("KnightsAnalytics/distilbert-base-uncased-finetuned-sst-2-english", "./", hugot.NewDownloadOptions())
 check(err)
-// we now create a text classification pipeline. It requires the path to the onnx model folder we just downloaded,
-// and a pipeline name
-sentimentPipeline, err := session.NewTextClassificationPipeline(modelPath, "testPipeline")
+
+// we now create the configuration for the text classification pipeline we want to create.
+// Options to the pipeline can be set here using the Options field
+config := TextClassificationConfig{
+    ModelPath: modelPath,
+    Name:      "testPipeline",
+}
+// then we create out pipeline.
+// Note: the pipeline will also be added to the session object so all pipelines can be destroyed at once
+sentimentPipeline, err := NewPipeline(session, config)
 check(err)
+
 // we can now use the pipeline for prediction on a batch of strings
 batch := []string{"This movie is disgustingly good !", "The director tried too much"}
 batchResult, err := sentimentPipeline.RunPipeline(batch)
 check(err)
+
 // and do whatever we want with it :)
 s, err := json.Marshal(batchResult)
 check(err)
