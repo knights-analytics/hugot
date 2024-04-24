@@ -14,6 +14,8 @@ import (
 	"time"
 
 	hfd "github.com/bodaay/HuggingFaceModelDownloader/hfdownloader"
+
+	util "github.com/knights-analytics/hugot/utils"
 )
 
 // DownloadOptions is a struct of options that can be passed to DownloadModel
@@ -137,4 +139,27 @@ func checkURL(client *http.Client, url string, authToken string) (bool, bool, er
 		}
 	}
 	return tokenizerFound, onnxFound, nil
+}
+
+func downloadModelIfNotExists(session *Session, modelName string, destination string) string {
+
+	modelNameFS := modelName
+	if strings.Contains(modelNameFS, ":") {
+		modelNameFS = strings.Split(modelName, ":")[0]
+	}
+	modelNameFS = path.Join(destination, strings.Replace(modelNameFS, "/", "_", -1))
+
+	fullModelPath := path.Join(destination, modelNameFS)
+	exists, err := util.FileSystem.Exists(context.Background(), fullModelPath)
+	if err != nil {
+		panic(err)
+	}
+	if exists {
+		return fullModelPath
+	}
+	fullModelPath, err = session.DownloadModel(modelName, destination, NewDownloadOptions())
+	if err != nil {
+		panic(err)
+	}
+	return fullModelPath
 }

@@ -11,4 +11,12 @@ services:
       - $test_folder/../scripts/run-unit-tests-container.sh:/run-unit-tests-container.sh
     environment:
       - HOST_UID=$host_uid
+      - CI=$CI
     command: /run-unit-tests-container.sh
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
