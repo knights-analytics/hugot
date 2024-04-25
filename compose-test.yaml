@@ -5,7 +5,7 @@ services:
     build:
       context: .
       dockerfile: ./Dockerfile
-      target: building
+      target: hugot-build
     volumes:
       - $test_folder:/test
       - $test_folder/../scripts/run-unit-tests-container.sh:/run-unit-tests-container.sh
@@ -13,10 +13,10 @@ services:
       - HOST_UID=$host_uid
       - CI=$CI
     command: /run-unit-tests-container.sh
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]

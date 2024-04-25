@@ -12,7 +12,7 @@ The goal of this library is to provide an easy, scalable, and hassle-free way to
 2. Hassle-free and performant production use: we exclusively support onnx exports of huggingface models. Pytorch transformer models that don't have an onnx version can be easily exported to onnx via [huggingface optimum](https://huggingface.co/docs/optimum/index), and used with the library
 3. Run on your hardware: this library is for those who want to run transformer models tightly coupled with their go applications, without the performance drawbacks of having to hit a rest API, or the hassle of setting up and maintaining e.g. a python RPC service that talks to go.
 
-We support all GPU/accelerator backends supported by ONNXRuntime.
+We support inference on CPU and on all accelerators supported by ONNXRuntime. Note, however, that currently only CPU and GPU inference on nvidia GPU (with cuda) are tested (see below).
 
 ## Why
 
@@ -22,7 +22,7 @@ Developing and fine-tuning transformer models with the huggingface python librar
 
 For the golang developer or ML engineer who wants to run transformer piplines on their own hardware, tightly coupled with their own application.
 
-## What is already there
+## Implemented pipelines
 
 Currently, we have implementations for the following transfomer pipelines:
 
@@ -34,8 +34,10 @@ Implementations for additional pipelines will follow. We also very gladly accept
 
 Hugot can be used both as a library and as a command-line application. See below for usage instructions.
 
-Hugot now also supports the following accelerator backends:
- - CUDA (tested)
+## Hardware acceleration 🚀
+
+Hugot now also supports the following accelerator backends for your inference:
+ - CUDA (tested). See below for setup instructions.
  - TensorRT (untested)
  - DirectML (untested)
  - CoreML (untested)
@@ -43,11 +45,23 @@ Hugot now also supports the following accelerator backends:
 
 Please help us out by testing the untested options above and providing feedback, good or bad!
 
+To use Hugot with nvidia gpu acceleration, you need to have the following:
+
+- The cuda gpu version of onnxruntime on the machine/docker container. You can see how we get that by looking at the [Dockerfile](./Dockerfile). You can also get the onnxruntime libraries that we use for testing from the release. Just download the gpu .so libraries and put them in /usr/lib64.
+- the nvidia driver for your graphics card
+- the required cuda libraries installed on your system that are compatible with the onnxruntime gpu version you use. See [here](https://onnxruntime.ai/docs/execution-providers/CUDA-ExecutionProvider.html). For instance, for onnxruntime-gpu 17.3, we need CUDA 12.x (any minor version should be compatible) and cuDNN 8.9.2.26.
+
+On the last point above, you can install CUDA 12.x by installing the full cuda toolkit, but that's quite a big package. In our testing on awslinux/fedora, we have been able to limit the libraries needed to run hugot with nvidia gpu acceleration to just these:
+
+- cuda-cudart-12-4 libcublas-12-4 libcurand-12-4 libcufft-12-4 (from fedora repo)
+- libcudnn8 (from RHEL repo, for cuDNN)
+
+On different distros (e.g. Ubuntu), you should be able to install the equivalent packages and gpu inference should work.
+
 ## Limitations
 
 Apart from the fact that only the aforementioned pipelines are currently implemented, the current limitations are:
-    - the library and cli are only tested on amd64-linux
-    - only CPU inference is supported
+    - the library and cli are only built/tested on amd64-linux
 
 Pipelines are also tested on specifically NLP use cases. In particular, we use the following models for testing:
 - feature extraction: all-MiniLM-L6-v2

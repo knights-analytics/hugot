@@ -11,9 +11,11 @@ permissions:
 
 jobs:
   test:
-      name: Run test suite
-      runs-on: ubuntu-latest
-      steps:
+    name: Run test suite
+    runs-on: ubuntu-latest
+    env:
+      CI: true
+    steps:
       - name: Set up Go
         uses: actions/setup-go@v2
         with:
@@ -37,12 +39,16 @@ jobs:
           path: ./artifacts/libtokenizers.a
       - uses: actions/upload-artifact@v4
         with:
-          name: onnxruntime.so
-          path: ./artifacts/onnxruntime.so
+          name: onnxruntime-linux-x64.so
+          path: ./artifacts/onnxruntime-linux-x64.so
       - uses: actions/upload-artifact@v4
         with:
-          name: hugot-cli-linux-amd64 
-          path: ./artifacts/hugot-cli-linux-amd64
+          name: onnxruntime-linux-x64-gpu
+          path: ./artifacts/onnxruntime-linux-x64-gpu
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hugot-cli-linux-x64
+          path: ./artifacts/hugot-cli-linux-x64
       - name: Publish Test Report
         uses: mikepenz/action-junit-report@v4
         if: success() || failure()
@@ -63,16 +69,20 @@ jobs:
           path: .
       - uses: actions/download-artifact@v4
         with:
-          name: onnxruntime.so
+          name: onnxruntime-linux-x64.so
           path: .
       - uses: actions/download-artifact@v4
         with:
-          name: hugot-cli-linux-amd64
+          name: hugot-cli-linux-x64
+          path: .
+      - uses: actions/download-artifact@v4
+        with:
+          name: onnxruntime-linux-x64-gpu
           path: .
       - name: Display structure of downloaded files
         run: ls -R
       - uses: ncipollo/release-action@v1
         with:
-          artifacts: "libtokenizers.a, onnxruntime.so, hugot-cli-linux-amd64"
+          artifacts: "libtokenizers.a, onnxruntime-linux-x64.so, onnxruntime-linux-x64-gpu, hugot-cli-linux-x64"
           generateReleaseNotes: true
           skipIfReleaseExists: true
