@@ -28,6 +28,8 @@ github.com/knights-analytics/afsc v0.0.0-20240419150436-7b7def176954 h1:r3BqdreW
 github.com/knights-analytics/afsc v0.0.0-20240419150436-7b7def176954/go.mod h1:yZo80n1EB2eMwmmec7BekX6clpd7uY+joUpDRIBbeYs=
 github.com/knights-analytics/tokenizers v0.11.1 h1:YP6SWTQ71zwolgjgRjTORKeelMipa7aU7MOlYazqc/Y=
 github.com/knights-analytics/tokenizers v0.11.1/go.mod h1:2ngD6H76uCx8TzGUnsdkji1fI6ehQDzU5RgdO6KQenc=
+github.com/knights-analytics/tokenizers v0.12.0 h1:WRdh9qGgD+Q3gB9wMDjUl0C4c2WLnMkl9KuIvNGKxfk=
+github.com/knights-analytics/tokenizers v0.12.0/go.mod h1:2ngD6H76uCx8TzGUnsdkji1fI6ehQDzU5RgdO6KQenc=
 github.com/kr/pretty v0.1.0 h1:L/CwN0zerZDmRFUapSPitk6f+Q3+0za1rQkzVuMiMFI=
 github.com/kr/pretty v0.1.0/go.mod h1:dAy3ld7l9f0ibDNOQOHHMYYIIbhfbHSm3C4ZsoJORNo=
 github.com/kr/text v0.2.0 h1:5Nx0Ya0ZqY2ygV366QzturHI13Jq95ApcVaJBhpS+AY=
