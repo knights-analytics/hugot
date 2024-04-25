@@ -1,10 +1,5 @@
-cloud.google.com/go v0.112.1 h1:uJSeirPke5UNZHIb4SxfZklVSiWWVqW4oXlETwZziwM=
-cloud.google.com/go/compute v1.25.1 h1:ZRpHJedLtTpKgr3RV1Fx23NuaAEN1Zfx9hw1u4aJdjU=
-cloud.google.com/go/compute v1.25.1/go.mod h1:oopOIR53ly6viBYxaDhBfJwzUAxf1zE//uf3IB011ls=
-cloud.google.com/go/compute/metadata v0.2.3 h1:mg4jlk7mCAj6xXp9UJ4fjI9VUI5rubuGBW5aJ7UnBMY=
-cloud.google.com/go/compute/metadata v0.2.3/go.mod h1:VAV5nSsACxMJvgaAuX6Pk2AawlZn8kiOGuCv6gTkwuA=
-github.com/aws/aws-sdk-go v1.51.28 h1:x3CV5xjnL4EbVLaPXulBOxqiq2dkc9o6+50xxT3tvXY=
-github.com/aws/aws-sdk-go v1.51.28/go.mod h1:LF8svs817+Nz+DmiMQKTO3ubZ/6IaTpq3TjupRn3Eqk=
+github.com/aws/aws-sdk-go v1.51.29 h1:18I5kjEcbyJOH4l2EjQyJJG6v3uPjrzwG0uiSD3vJEM=
+github.com/aws/aws-sdk-go v1.51.29/go.mod h1:LF8svs817+Nz+DmiMQKTO3ubZ/6IaTpq3TjupRn3Eqk=
 github.com/bodaay/HuggingFaceModelDownloader v0.0.0-20240307153905-2f38356a6d6c h1:3TPq2BhzOquTGmbS53KeGcM1yalBUb/4zQM1wmaINrE=
 github.com/bodaay/HuggingFaceModelDownloader v0.0.0-20240307153905-2f38356a6d6c/go.mod h1:p6JQ7mJjWx82F+SrFfj9RkoHlKEGXR4959uX/vkMbzE=
 github.com/cpuguy83/go-md2man/v2 v2.0.4 h1:wfIWP927BUkWJb2NmU/kNDYIBTh/ziUX91+lVfRxZq4=
@@ -24,10 +19,8 @@ github.com/jmespath/go-jmespath/internal/testify v1.5.1 h1:shLQSRRSCCPj3f2gpwzGw
 github.com/jmespath/go-jmespath/internal/testify v1.5.1/go.mod h1:L3OGu8Wl2/fWfCI6z80xFu9LTZmf1ZRjMHUOPmWr69U=
 github.com/json-iterator/go v1.1.12 h1:PV8peI4a0ysnczrg+LtxykD8LfKY9ML6u2jnxaEnrnM=
 github.com/json-iterator/go v1.1.12/go.mod h1:e30LSqwooZae/UwlEbR2852Gd8hjQvJoHmT4TnhNGBo=
-github.com/knights-analytics/afsc v0.0.0-20240419150436-7b7def176954 h1:r3BqdreWuwOOqIZW/RXZ+FyKVGoQ7nAtBdU8TJVO96k=
-github.com/knights-analytics/afsc v0.0.0-20240419150436-7b7def176954/go.mod h1:yZo80n1EB2eMwmmec7BekX6clpd7uY+joUpDRIBbeYs=
-github.com/knights-analytics/tokenizers v0.11.1 h1:YP6SWTQ71zwolgjgRjTORKeelMipa7aU7MOlYazqc/Y=
-github.com/knights-analytics/tokenizers v0.11.1/go.mod h1:2ngD6H76uCx8TzGUnsdkji1fI6ehQDzU5RgdO6KQenc=
+github.com/knights-analytics/afsc v0.0.0-20240425201009-7e46526445df h1:rVna1iJaI7gj5RonGys0dZ0iLy7upULdcbRQd9F2qg8=
+github.com/knights-analytics/afsc v0.0.0-20240425201009-7e46526445df/go.mod h1:yZo80n1EB2eMwmmec7BekX6clpd7uY+joUpDRIBbeYs=
 github.com/knights-analytics/tokenizers v0.12.0 h1:WRdh9qGgD+Q3gB9wMDjUl0C4c2WLnMkl9KuIvNGKxfk=
 github.com/knights-analytics/tokenizers v0.12.0/go.mod h1:2ngD6H76uCx8TzGUnsdkji1fI6ehQDzU5RgdO6KQenc=
 github.com/kr/pretty v0.1.0 h1:L/CwN0zerZDmRFUapSPitk6f+Q3+0za1rQkzVuMiMFI=
@@ -64,8 +57,8 @@ github.com/yalue/onnxruntime_go v1.9.0 h1:AhgkpBjphJZsHT5karKt93xPkPFNP0Iz6ENUbN
 github.com/yalue/onnxruntime_go v1.9.0/go.mod h1:b4X26A8pekNb1ACJ58wAXgNKeUCGEAQ9dmACut9Sm/4=
 golang.org/x/crypto v0.22.0 h1:g1v0xeRhjcugydODzvb3mEM9SQ0HGp9s/nh3COQ/C30=
 golang.org/x/crypto v0.22.0/go.mod h1:vr6Su+7cTlO45qkww3VDJlzDn0ctJvRgYbC2NvXHt+M=
-golang.org/x/net v0.24.0 h1:1PcaxkF854Fu3+lvBIx5SYn9wRlBzzcnHZSiaFFAb0w=
-golang.org/x/net v0.24.0/go.mod h1:2Q7sJY5mzlzWjKtYUEXSlBWCdyaioyXzRB2RtU8KVE8=
+golang.org/x/net v0.21.0 h1:AQyQV4dYCvJ7vGmJyKki9+PBdyvhkSd8EIx/qb0AYv4=
+golang.org/x/net v0.21.0/go.mod h1:bIjVDfnllIU7BJ2DNgfnXvpSvtn8VRwhlsaeUTyUS44=
 golang.org/x/oauth2 v0.19.0 h1:9+E/EZBCbTLNrbN35fHv/a/d/mOBatymz1zbtQrXpIg=
 golang.org/x/oauth2 v0.19.0/go.mod h1:vYi7skDa1x015PmRRYZ7+s1cWyPgrPiSYRe4rnsexc8=
 golang.org/x/sys v0.0.0-20220811171246-fbc7d0a398ab/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=

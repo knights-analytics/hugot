@@ -2,7 +2,7 @@ module github.com/knights-analytics/hugot
 
 go 1.22
 
-replace github.com/viant/afsc => github.com/knights-analytics/afsc v0.0.0-20240419150436-7b7def176954
+replace github.com/viant/afsc => github.com/knights-analytics/afsc v0.0.0-20240425201009-7e46526445df
 
 require (
 	github.com/bodaay/HuggingFaceModelDownloader v0.0.0-20240307153905-2f38356a6d6c
@@ -17,12 +17,13 @@ require (
 )
 
 require (
-	github.com/aws/aws-sdk-go v1.51.28 // indirect
+	github.com/aws/aws-sdk-go v1.51.29 // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.4 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/fatih/color v1.16.0 // indirect
 	github.com/go-errors/errors v1.5.1 // indirect
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
+	github.com/kr/text v0.2.0 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
@@ -31,6 +32,7 @@ require (
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/xrash/smetrics v0.0.0-20240312152122-5f08fbb34913 // indirect
 	golang.org/x/crypto v0.22.0 // indirect
+	golang.org/x/oauth2 v0.19.0 // indirect
 	golang.org/x/sys v0.19.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
