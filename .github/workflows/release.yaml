@@ -83,6 +83,6 @@ jobs:
         run: ls -R
       - uses: ncipollo/release-action@v1
         with:
-          artifacts: "libtokenizers.a, onnxruntime-linux-x64.so, onnxruntime-linux-x64-gpu, hugot-cli-linux-x64"
+          artifacts: "libtokenizers.a, onnxruntime-linux-x64.so, onnxruntime-linux-x64-gpu.zip, hugot-cli-linux-x64"
           generateReleaseNotes: true
           skipIfReleaseExists: true
