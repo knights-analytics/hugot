@@ -2,15 +2,15 @@ package main
 
 import (
 	"context"
+	_ "embed"
 	"fmt"
 	"os"
 	"path"
 	"testing"
 
-	_ "embed"
+	"github.com/urfave/cli/v2"
 
 	util "github.com/knights-analytics/hugot/utils"
-	"github.com/urfave/cli/v2"
 )
 
 //go:embed testData/textClassification.jsonl

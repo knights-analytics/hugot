@@ -10,9 +10,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	util "github.com/knights-analytics/hugot/utils"
 	"github.com/knights-analytics/tokenizers"
 	ort "github.com/yalue/onnxruntime_go"
+
+	util "github.com/knights-analytics/hugot/utils"
 )
 
 // BasePipeline is a basic pipeline type used for struct composition in the other pipelines.

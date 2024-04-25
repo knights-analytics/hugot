@@ -6,13 +6,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
-	"path"
+	"os"
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+
 	"github.com/knights-analytics/hugot/pipelines"
 	util "github.com/knights-analytics/hugot/utils"
-	"github.com/stretchr/testify/assert"
 )
 
 //go:embed testData/tokenExpected.json
@@ -47,10 +48,10 @@ func TestTextClassificationPipeline(t *testing.T) {
 	)
 	check(t, err)
 	defer func(session *Session) {
-		err := session.Destroy()
-		check(t, err)
+		errDestroy := session.Destroy()
+		check(t, errDestroy)
 	}(session)
-	modelPath := path.Join("./models", "KnightsAnalytics_distilbert-base-uncased-finetuned-sst-2-english")
+	modelPath := downloadModelIfNotExists(session, "KnightsAnalytics/distilbert-base-uncased-finetuned-sst-2-english", "./models")
 	config := TextClassificationConfig{
 		ModelPath: modelPath,
 		Name:      "testPipelineSimple",
@@ -61,7 +62,7 @@ func TestTextClassificationPipeline(t *testing.T) {
 	sentimentPipeline, err := NewPipeline(session, config)
 	check(t, err)
 
-	modelPathMulti := path.Join("./models", "SamLowe_roberta-base-go_emotions-onnx")
+	modelPathMulti := downloadModelIfNotExists(session, "SamLowe/roberta-base-go_emotions-onnx", "./models")
 	configMulti := TextClassificationConfig{
 		ModelPath:    modelPathMulti,
 		Name:         "testPipelineSimpleMulti",
@@ -247,7 +248,7 @@ func TestTextClassificationPipelineValidation(t *testing.T) {
 		err := session.Destroy()
 		check(t, err)
 	}(session)
-	modelPath := path.Join("./models", "KnightsAnalytics_distilbert-base-uncased-finetuned-sst-2-english")
+	modelPath := downloadModelIfNotExists(session, "KnightsAnalytics/distilbert-base-uncased-finetuned-sst-2-english", "./models")
 
 	config := TextClassificationConfig{
 		ModelPath: modelPath,
@@ -284,7 +285,7 @@ func TestTokenClassificationPipeline(t *testing.T) {
 		check(t, err)
 	}(session)
 
-	modelPath := path.Join("./models", "KnightsAnalytics_distilbert-NER")
+	modelPath := downloadModelIfNotExists(session, "KnightsAnalytics/distilbert-NER", "./models")
 	configSimple := TokenClassificationConfig{
 		ModelPath: modelPath,
 		Name:      "testPipelineSimple",
@@ -361,7 +362,7 @@ func TestTokenClassificationPipelineValidation(t *testing.T) {
 		check(t, err)
 	}(session)
 
-	modelPath := path.Join("./models", "KnightsAnalytics_distilbert-NER")
+	modelPath := downloadModelIfNotExists(session, "KnightsAnalytics/distilbert-NER", "./models")
 	configSimple := TokenClassificationConfig{
 		ModelPath: modelPath,
 		Name:      "testPipelineSimple",
@@ -397,7 +398,7 @@ func TestNoSameNamePipeline(t *testing.T) {
 		check(t, err)
 	}(session)
 
-	modelPath := path.Join("./models", "KnightsAnalytics_distilbert-NER")
+	modelPath := downloadModelIfNotExists(session, "KnightsAnalytics/distilbert-NER", "./models")
 	configSimple := TokenClassificationConfig{
 		ModelPath: modelPath,
 		Name:      "testPipelineSimple",
@@ -424,7 +425,7 @@ func TestFeatureExtractionPipeline(t *testing.T) {
 		check(t, err)
 	}(session)
 
-	modelPath := path.Join("./models", "KnightsAnalytics_all-MiniLM-L6-v2")
+	modelPath := downloadModelIfNotExists(session, "KnightsAnalytics/all-MiniLM-L6-v2", "./models")
 	config := FeatureExtractionConfig{
 		ModelPath: modelPath,
 		Name:      "testPipeline",
@@ -502,7 +503,7 @@ func TestFeatureExtractionPipelineValidation(t *testing.T) {
 		check(t, err)
 	}(session)
 
-	modelPath := path.Join("./models", "KnightsAnalytics_all-MiniLM-L6-v2")
+	modelPath := downloadModelIfNotExists(session, "KnightsAnalytics/all-MiniLM-L6-v2", "./models")
 	config := FeatureExtractionConfig{
 		ModelPath: modelPath,
 		Name:      "testPipeline",
@@ -570,6 +571,108 @@ func TestReadmeExample(t *testing.T) {
 	check(err)
 	fmt.Println(string(s))
 	// {"ClassificationOutputs":[[{"Label":"POSITIVE","Score":0.9998536}],[{"Label":"NEGATIVE","Score":0.99752176}]]}
+}
+
+func TestCuda(t *testing.T) {
+	if os.Getenv("CI") != "" {
+		t.SkipNow()
+	}
+	opts := []WithOption{
+		WithOnnxLibraryPath("/usr/lib64/onnxruntime-gpu/libonnxruntime.so"),
+		WithCuda(map[string]string{
+			"device_id": "0",
+		}),
+	}
+
+	session, err := NewSession(opts...)
+	check(t, err)
+
+	defer func(session *Session) {
+		errDestroy := session.Destroy()
+		if errDestroy != nil {
+			panic(errDestroy)
+		}
+	}(session)
+
+	modelPath := downloadModelIfNotExists(session, "KnightsAnalytics/all-MiniLM-L6-v2", "./models")
+	config := FeatureExtractionConfig{
+		ModelPath: modelPath,
+		Name:      "benchmarkEmbedding",
+	}
+	pipelineEmbedder, err2 := NewPipeline(session, config)
+	check(t, err2)
+	res, err := pipelineEmbedder.Run([]string{"Test with cuda", "Test with cuda 1"})
+	check(t, err)
+	fmt.Println(res.GetOutput())
+}
+
+// Benchmarks
+
+func runBenchmarkEmbedding(strings *[]string, cuda bool) {
+	var opts []WithOption
+	switch cuda {
+	case true:
+		opts = []WithOption{
+			WithOnnxLibraryPath("/usr/lib64/onnxruntime-gpu/libonnxruntime.so"),
+			WithCuda(map[string]string{
+				"device_id": "0",
+			}),
+		}
+	default:
+		opts = []WithOption{WithOnnxLibraryPath("/usr/lib64/onnxruntime.so")}
+	}
+	session, err := NewSession(opts...)
+	if err != nil {
+		panic(err)
+	}
+
+	defer func(session *Session) {
+		errDestroy := session.Destroy()
+		if errDestroy != nil {
+			panic(errDestroy)
+		}
+	}(session)
+
+	modelPath := downloadModelIfNotExists(session, "KnightsAnalytics/all-MiniLM-L6-v2", "./models")
+	config := FeatureExtractionConfig{
+		ModelPath: modelPath,
+		Name:      "benchmarkEmbedding",
+	}
+	pipelineEmbedder, err2 := NewPipeline(session, config)
+	if err2 != nil {
+		panic(err2)
+	}
+	res, err := pipelineEmbedder.Run(*strings)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(len(res.GetOutput()))
+}
+
+func BenchmarkCudaEmbedding(b *testing.B) {
+	if os.Getenv("CI") != "" {
+		b.SkipNow()
+	}
+	p := make([]string, 30000)
+	for i := range 30000 {
+		p[i] = "The goal of this library is to provide an easy, scalable, and hassle-free way to run huggingface transformer pipelines in golang applications."
+	}
+	for i := 0; i < b.N; i++ {
+		runBenchmarkEmbedding(&p, true)
+	}
+}
+
+func BenchmarkCPUEmbedding(b *testing.B) {
+	if os.Getenv("CI") != "" {
+		b.SkipNow()
+	}
+	p := make([]string, 30000)
+	for i := range 30000 {
+		p[i] = "The goal of this library is to provide an easy, scalable, and hassle-free way to run huggingface transformer pipelines in golang applications."
+	}
+	for i := 0; i < b.N; i++ {
+		runBenchmarkEmbedding(&p, false)
+	}
 }
 
 // utilities

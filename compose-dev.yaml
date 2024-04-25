@@ -4,7 +4,14 @@ services:
     build:
       context: .
       dockerfile: ./Dockerfile
-      target: building
+      target: hugot-build
     volumes:
       - $src_dir:/home/testuser/repositories/hugot
     entrypoint: ["tail", "-f", "/dev/null"]
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]

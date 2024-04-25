@@ -13,11 +13,12 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/mattn/go-isatty"
+	"github.com/urfave/cli/v2"
+
 	"github.com/knights-analytics/hugot"
 	"github.com/knights-analytics/hugot/pipelines"
 	util "github.com/knights-analytics/hugot/utils"
-	"github.com/mattn/go-isatty"
-	"github.com/urfave/cli/v2"
 )
 
 var modelPath string

@@ -8,8 +8,9 @@ import (
 
 	util "github.com/knights-analytics/hugot/utils"
 
-	"github.com/knights-analytics/hugot/pipelines"
 	ort "github.com/yalue/onnxruntime_go"
+
+	"github.com/knights-analytics/hugot/pipelines"
 )
 
 // Session allows for the creation of new pipelines and holds the pipeline already created.
@@ -123,6 +124,8 @@ func (s *Session) initialiseORT(options ...WithOption) (bool, error) {
 	if optionsError != nil {
 		return true, optionsError
 	}
+	s.ortOptions = sessionOptions
+
 	if o.intraOpNumThreads != 0 {
 		if err := sessionOptions.SetIntraOpNumThreads(o.intraOpNumThreads); err != nil {
 			return true, err
@@ -133,18 +136,62 @@ func (s *Session) initialiseORT(options ...WithOption) (bool, error) {
 			return true, err
 		}
 	}
-	if !o.cpuMemArenaSet {
+	if o.cpuMemArenaSet {
 		if err := sessionOptions.SetCpuMemArena(o.cpuMemArena); err != nil {
 			return true, err
 		}
 	}
-	if !o.memPatternSet {
+	if o.memPatternSet {
 		if err := sessionOptions.SetMemPattern(o.memPattern); err != nil {
 			return true, err
 		}
 	}
+	if o.cudaOptionsSet {
+		cudaOptions, optErr := ort.NewCUDAProviderOptions()
+		if optErr != nil {
+			return true, optErr
+		}
+		if len(o.cudaOptions) > 0 {
+			optErr = cudaOptions.Update(o.cudaOptions)
+			if optErr != nil {
+				return true, optErr
+			}
+		}
+		if err := sessionOptions.AppendExecutionProviderCUDA(cudaOptions); err != nil {
+			return true, err
+		}
+	}
+	if o.coreMLOptionsSet {
+		if err := sessionOptions.AppendExecutionProviderCoreML(o.coreMLOptions); err != nil {
+			return true, err
+		}
+	}
+	if o.directMLOptionsSet {
+		if err := sessionOptions.AppendExecutionProviderDirectML(o.directMLOptions); err != nil {
+			return true, err
+		}
+	}
+	if o.openVINOOptionsSet {
+		if err := sessionOptions.AppendExecutionProviderOpenVINO(o.openVINOOptions); err != nil {
+			return true, err
+		}
+	}
+	if o.tensorRTOptionsSet {
+		tensorRTOptions, optErr := ort.NewTensorRTProviderOptions()
+		if optErr != nil {
+			return true, optErr
+		}
+		if len(o.cudaOptions) > 0 {
+			optErr = tensorRTOptions.Update(o.tensorRTOptions)
+			if optErr != nil {
+				return true, optErr
+			}
+		}
+		if err := sessionOptions.AppendExecutionProviderTensorRT(tensorRTOptions); err != nil {
+			return true, err
+		}
+	}
 
-	s.ortOptions = sessionOptions
 	return true, nil
 }
 
