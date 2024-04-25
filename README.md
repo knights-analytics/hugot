@@ -12,6 +12,8 @@ The goal of this library is to provide an easy, scalable, and hassle-free way to
 2. Hassle-free and performant production use: we exclusively support onnx exports of huggingface models. Pytorch transformer models that don't have an onnx version can be easily exported to onnx via [huggingface optimum](https://huggingface.co/docs/optimum/index), and used with the library
 3. Run on your hardware: this library is for those who want to run transformer models tightly coupled with their go applications, without the performance drawbacks of having to hit a rest API, or the hassle of setting up and maintaining e.g. a python RPC service that talks to go.
 
+We support all GPU/accelerator backends supported by ONNXRuntime.
+
 ## Why
 
 Developing and fine-tuning transformer models with the huggingface python library is a great experience, but if your production stack is golang-based being able to reliably deploy and scale the resulting pytorch models can be challenging and require quite some setup. This library aims to allow you to just lift-and-shift your python model and use the same huggingface pipelines you use for development for inference in a go application.
@@ -31,6 +33,15 @@ Currently, we have implementations for the following transfomer pipelines:
 Implementations for additional pipelines will follow. We also very gladly accept PRs to expand the set of pipelines! See [here](https://huggingface.co/docs/transformers/en/main_classes/pipelines) for the missing pipelines that can be implemented, and the contributing section below if you want to lend a hand.
 
 Hugot can be used both as a library and as a command-line application. See below for usage instructions.
+
+Hugot now also supports the following accelerator backends:
+ - CUDA (tested)
+ - TensorRT (untested)
+ - DirectML (untested)
+ - CoreML (untested)
+ - OpenVINO (untested)
+
+Please help us out by testing the untested options above and providing feedback, good or bad!
 
 ## Limitations
 
@@ -195,6 +206,8 @@ session, err := hugot.NewSession(
 ```
 
 InterOpNumThreads and IntraOpNumThreads constricts each goroutine's call to a single core, greatly reducing locking and cache penalties. Disabling CpuMemArena and MemPattern skips pre-allocation of some memory structures, increasing latency, but also throughput efficiency.
+
+For GPU the config above also applies. We are still testing the optimum GPU configuration, whether it is better to run in parallel or with a single thread, and what size of input batch is fastest.
 
 ## Contributing
 
