@@ -426,6 +426,7 @@ func TestFeatureExtractionPipeline(t *testing.T) {
 	}(session)
 
 	modelPath := downloadModelIfNotExists(session, "KnightsAnalytics/all-MiniLM-L6-v2", "./models")
+
 	config := FeatureExtractionConfig{
 		ModelPath: modelPath,
 		Name:      "testPipeline",
@@ -493,6 +494,27 @@ func TestFeatureExtractionPipeline(t *testing.T) {
 	assert.Greater(t, pipeline.PipelineTimings.TotalNS, zero, "PipelineTimings.TotalNS should be greater than 0")
 	assert.Greater(t, pipeline.TokenizerTimings.NumCalls, zero, "TokenizerTimings.NumCalls should be greater than 0")
 	assert.Greater(t, pipeline.TokenizerTimings.TotalNS, zero, "TokenizerTimings.TotalNS should be greater than 0")
+
+	// test normalization
+	testResults = expectedResults["normalizedOutput"]
+	config = FeatureExtractionConfig{
+		ModelPath: modelPath,
+		Name:      "testPipelineNormalise",
+		Options: []FeatureExtractionOption{
+			pipelines.WithNormalization(),
+		},
+	}
+	pipeline, err = NewPipeline(session, config)
+	check(t, err)
+	normalizationStrings := []string{"Onnxruntime is a great inference backend"}
+	normalizedEmbedding, err := pipeline.RunPipeline(normalizationStrings)
+	check(t, err)
+	for i, embedding := range normalizedEmbedding.Embeddings {
+		e := floatsEqual(embedding, testResults[i])
+		if e != nil {
+			t.Fatalf("Normalization test failed: %s", normalizationStrings[i])
+		}
+	}
 }
 
 func TestFeatureExtractionPipelineValidation(t *testing.T) {

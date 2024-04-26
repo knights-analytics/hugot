@@ -1,4 +1,5 @@
 .vscode
+.history
 .idea
 models
 testTarget
