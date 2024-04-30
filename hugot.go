@@ -54,6 +54,9 @@ type TokenClassificationOption = pipelines.PipelineOption[*pipelines.TokenClassi
 // TextClassificationOption is an option for a text classification pipeline
 type TextClassificationOption = pipelines.PipelineOption[*pipelines.TextClassificationPipeline]
 
+// FeatureExtractionOption is an option for a text classification pipeline
+type FeatureExtractionOption = pipelines.PipelineOption[*pipelines.FeatureExtractionPipeline]
+
 // NewSession is the main entrypoint to hugot and is used to create a new hugot session object.
 // ortLibraryPath should be the path to onnxruntime.so. If it's the empty string, hugot will try
 // to load the library from the default location (/usr/lib/onnxruntime.so).
@@ -337,10 +340,11 @@ func (s *Session) NewTextClassificationPipeline(modelPath string, name string, o
 // modelPath should be the path to a folder with the onnx exported transformer model. Name is an identifier
 // for the pipeline (see GetFeatureExtractionPipeline).
 // Deprecated: use NewPipeline
-func (s *Session) NewFeatureExtractionPipeline(modelPath string, name string) (*pipelines.FeatureExtractionPipeline, error) {
+func (s *Session) NewFeatureExtractionPipeline(modelPath string, name string, opts ...FeatureExtractionOption) (*pipelines.FeatureExtractionPipeline, error) {
 	config := pipelines.PipelineConfig[*pipelines.FeatureExtractionPipeline]{
 		ModelPath: modelPath,
 		Name:      name,
+		Options:   opts,
 	}
 	return NewPipeline(s, config)
 }
