@@ -1,6 +1,6 @@
 module github.com/knights-analytics/hugot
 
-go 1.22
+go 1.20
 
 replace github.com/viant/afsc => github.com/knights-analytics/afsc v0.0.0-20240425201009-7e46526445df
 
@@ -14,6 +14,7 @@ require (
 	github.com/viant/afs v1.25.1
 	github.com/viant/afsc v1.9.2
 	github.com/yalue/onnxruntime_go v1.9.0
+	golang.org/x/exp v0.0.0-20240416160154-fe59bbe5cc7f
 )
 
 require (
