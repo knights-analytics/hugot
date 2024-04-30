@@ -7,7 +7,7 @@ replace github.com/viant/afsc => github.com/knights-analytics/afsc v0.0.0-202404
 require (
 	github.com/bodaay/HuggingFaceModelDownloader v0.0.0-20240307153905-2f38356a6d6c
 	github.com/json-iterator/go v1.1.12
-	github.com/knights-analytics/tokenizers v0.12.0
+	github.com/knights-analytics/tokenizers v0.12.1
 	github.com/mattn/go-isatty v0.0.20
 	github.com/stretchr/testify v1.9.0
 	github.com/urfave/cli/v2 v2.27.1
@@ -17,7 +17,7 @@ require (
 )
 
 require (
-	github.com/aws/aws-sdk-go v1.51.29 // indirect
+	github.com/aws/aws-sdk-go v1.51.31 // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.4 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/fatih/color v1.16.0 // indirect

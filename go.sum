@@ -1,5 +1,7 @@
 github.com/aws/aws-sdk-go v1.51.29 h1:18I5kjEcbyJOH4l2EjQyJJG6v3uPjrzwG0uiSD3vJEM=
 github.com/aws/aws-sdk-go v1.51.29/go.mod h1:LF8svs817+Nz+DmiMQKTO3ubZ/6IaTpq3TjupRn3Eqk=
+github.com/aws/aws-sdk-go v1.51.31 h1:4TM+sNc+Dzs7wY1sJ0+J8i60c6rkgnKP1pvPx8ghsSY=
+github.com/aws/aws-sdk-go v1.51.31/go.mod h1:LF8svs817+Nz+DmiMQKTO3ubZ/6IaTpq3TjupRn3Eqk=
 github.com/bodaay/HuggingFaceModelDownloader v0.0.0-20240307153905-2f38356a6d6c h1:3TPq2BhzOquTGmbS53KeGcM1yalBUb/4zQM1wmaINrE=
 github.com/bodaay/HuggingFaceModelDownloader v0.0.0-20240307153905-2f38356a6d6c/go.mod h1:p6JQ7mJjWx82F+SrFfj9RkoHlKEGXR4959uX/vkMbzE=
 github.com/cpuguy83/go-md2man/v2 v2.0.4 h1:wfIWP927BUkWJb2NmU/kNDYIBTh/ziUX91+lVfRxZq4=
@@ -23,6 +25,8 @@ github.com/knights-analytics/afsc v0.0.0-20240425201009-7e46526445df h1:rVna1iJa
 github.com/knights-analytics/afsc v0.0.0-20240425201009-7e46526445df/go.mod h1:yZo80n1EB2eMwmmec7BekX6clpd7uY+joUpDRIBbeYs=
 github.com/knights-analytics/tokenizers v0.12.0 h1:WRdh9qGgD+Q3gB9wMDjUl0C4c2WLnMkl9KuIvNGKxfk=
 github.com/knights-analytics/tokenizers v0.12.0/go.mod h1:2ngD6H76uCx8TzGUnsdkji1fI6ehQDzU5RgdO6KQenc=
+github.com/knights-analytics/tokenizers v0.12.1 h1:5bIxk3SQKXIHKxlzAOmqPXgFeKE+LCvbXS3hpTgOAX4=
+github.com/knights-analytics/tokenizers v0.12.1/go.mod h1:TD+zVXlFlS4QyP6/RN8SPSAKkT2hpMmF64WdrdbBfts=
 github.com/kr/pretty v0.1.0 h1:L/CwN0zerZDmRFUapSPitk6f+Q3+0za1rQkzVuMiMFI=
 github.com/kr/pretty v0.1.0/go.mod h1:dAy3ld7l9f0ibDNOQOHHMYYIIbhfbHSm3C4ZsoJORNo=
 github.com/kr/text v0.2.0 h1:5Nx0Ya0ZqY2ygV366QzturHI13Jq95ApcVaJBhpS+AY=

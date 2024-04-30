@@ -65,3 +65,23 @@ func Sigmoid(s []float32) []float32 {
 	}
 	return sigmoid
 }
+
+// Norm of a vector.
+func Norm(v []float32, p int) float64 {
+	sum := 0.0
+	pNorm := float64(p)
+	for _, e := range v {
+		sum += math.Pow(float64(e), pNorm)
+	}
+	return math.Sqrt(sum)
+}
+
+// Normalize single vector according to: https://pytorch.org/docs/stable/generated/torch.nn.functional.normalize.html
+func Normalize(embedding []float32, p int) []float32 {
+	const eps = 1e-12
+	normalizeDenominator := float32(max(Norm(embedding, p), eps))
+	for i, v := range embedding {
+		embedding[i] = v / normalizeDenominator
+	}
+	return embedding
+}
