@@ -3,8 +3,10 @@ package pipelines
 import (
 	"errors"
 	"fmt"
-	"slices"
 	"strings"
+
+	// according to https://freshman.tech/snippets/go/check-if-slice-contains-element
+	"golang.org/x/exp/slices"
 
 	ort "github.com/yalue/onnxruntime_go"
 

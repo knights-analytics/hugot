@@ -676,7 +676,7 @@ func BenchmarkCudaEmbedding(b *testing.B) {
 		b.SkipNow()
 	}
 	p := make([]string, 30000)
-	for i := range 30000 {
+	for i := 0; i < 30000; i++ {
 		p[i] = "The goal of this library is to provide an easy, scalable, and hassle-free way to run huggingface transformer pipelines in golang applications."
 	}
 	for i := 0; i < b.N; i++ {
@@ -689,7 +689,7 @@ func BenchmarkCPUEmbedding(b *testing.B) {
 		b.SkipNow()
 	}
 	p := make([]string, 30000)
-	for i := range 30000 {
+	for i := 0; i < 30000; i++ {
 		p[i] = "The goal of this library is to provide an easy, scalable, and hassle-free way to run huggingface transformer pipelines in golang applications."
 	}
 	for i := 0; i < b.N; i++ {

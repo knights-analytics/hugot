@@ -195,7 +195,7 @@ var runCommand = &cli.Command{
 		nProcessWorkers := 1
 		var processedWg, writeWg sync.WaitGroup
 
-		for range nProcessWorkers {
+		for i := 0; i < nProcessWorkers; i++ {
 			go processWithPipeline(&processedWg, inputChannel, processedChannel, errorsChannel, pipe)
 			processedWg.Add(1)
 		}
@@ -205,7 +205,7 @@ var runCommand = &cli.Command{
 			Type   string
 		}
 
-		for i := range nWriteWorkers {
+		for i := 0; i < nWriteWorkers; i++ {
 			var writer io.WriteCloser
 
 			if outputPath != "" {
@@ -329,7 +329,7 @@ func writeOutputs(wg *sync.WaitGroup, processedChannel chan []byte, errorChannel
 func processWithPipeline(wg *sync.WaitGroup, inputChannel chan []input, processedChannel chan []byte, errorsChannel chan error, p pipelines.Pipeline) {
 	for inputBatch := range inputChannel {
 		inputStrings := make([]string, len(inputBatch))
-		for i := range len(inputBatch) {
+		for i := 0; i < len(inputBatch); i++ {
 			inputStrings[i] = inputBatch[i].Input
 		}
 		output, err := p.Run(inputStrings)
