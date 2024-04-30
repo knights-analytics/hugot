@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"slices"
 
 	util "github.com/knights-analytics/hugot/utils"
 
@@ -34,7 +33,7 @@ func (m pipelineMap[T]) Destroy() error {
 func (m pipelineMap[T]) GetStats() []string {
 	var stats []string
 	for _, p := range m {
-		stats = slices.Concat(stats, p.GetStats())
+		stats = append(stats, p.GetStats()...)
 	}
 	return stats
 }
@@ -302,9 +301,10 @@ func (s *Session) Destroy() error {
 // the number of batch calls to the onnxruntime inference
 // the average time per onnxruntime inference batch call
 func (s *Session) GetStats() []string {
-	return slices.Concat(s.tokenClassificationPipelines.GetStats(),
-		s.textClassificationPipelines.GetStats(),
-		s.featureExtractionPipelines.GetStats(),
+	// slices.Concat() is not implemented in experimental x/exp/slices package
+	return append(append(s.tokenClassificationPipelines.GetStats(),
+		s.textClassificationPipelines.GetStats()...),
+		s.featureExtractionPipelines.GetStats()...,
 	)
 }
 
