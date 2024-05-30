@@ -53,7 +53,7 @@ type TokenClassificationOption = pipelines.PipelineOption[*pipelines.TokenClassi
 // TextClassificationOption is an option for a text classification pipeline
 type TextClassificationOption = pipelines.PipelineOption[*pipelines.TextClassificationPipeline]
 
-// FeatureExtractionOption is an option for a text classification pipeline
+// FeatureExtractionOption is an option for a feature extraction pipeline
 type FeatureExtractionOption = pipelines.PipelineOption[*pipelines.FeatureExtractionPipeline]
 
 // NewSession is the main entrypoint to hugot and is used to create a new hugot session object.

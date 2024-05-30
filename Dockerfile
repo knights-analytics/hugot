@@ -1,7 +1,6 @@
-ARG GO_VERSION=1.22.2
-ARG RUST_VERSION=1.77
-ARG ONNXRUNTIME_VERSION=1.17.3
-ARG CUDA_VERSION=12.4
+ARG GO_VERSION=1.22.3
+ARG RUST_VERSION=1.78
+ARG ONNXRUNTIME_VERSION=1.18.0
 
 #--- rust build of tokenizer ---
 
@@ -48,8 +47,8 @@ RUN curl -LO https://github.com/microsoft/onnxruntime/releases/download/v${ONNXR
 
 # build gotestsum and test2json
 RUN GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o test2json -ldflags="-s -w" cmd/test2json && mv test2json /usr/local/bin/test2json && \
-    curl -LO https://github.com/gotestyourself/gotestsum/releases/download/v1.11.0/gotestsum_1.11.0_linux_amd64.tar.gz && \
-    tar -xzf gotestsum_1.11.0_linux_amd64.tar.gz --directory /usr/local/bin
+    curl -LO https://github.com/gotestyourself/gotestsum/releases/download/v1.12.0/gotestsum_1.12.0_linux_amd64.tar.gz && \
+    tar -xzf gotestsum_1.12.0_linux_amd64.tar.gz --directory /usr/local/bin
 
 # build cli binary
 COPY . /build

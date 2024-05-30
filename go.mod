@@ -10,18 +10,18 @@ require (
 	github.com/knights-analytics/tokenizers v0.12.1
 	github.com/mattn/go-isatty v0.0.20
 	github.com/stretchr/testify v1.9.0
-	github.com/urfave/cli/v2 v2.27.1
+	github.com/urfave/cli/v2 v2.27.2
 	github.com/viant/afs v1.25.1
 	github.com/viant/afsc v1.9.2
-	github.com/yalue/onnxruntime_go v1.9.0
-	golang.org/x/exp v0.0.0-20240416160154-fe59bbe5cc7f
+	github.com/yalue/onnxruntime_go v1.10.0
+	golang.org/x/exp v0.0.0-20240529005216-23cca8864a10
 )
 
 require (
-	github.com/aws/aws-sdk-go v1.51.31 // indirect
+	github.com/aws/aws-sdk-go v1.53.12 // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.4 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
-	github.com/fatih/color v1.16.0 // indirect
+	github.com/fatih/color v1.17.0 // indirect
 	github.com/go-errors/errors v1.5.1 // indirect
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	github.com/kr/text v0.2.0 // indirect
@@ -31,9 +31,9 @@ require (
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
-	github.com/xrash/smetrics v0.0.0-20240312152122-5f08fbb34913 // indirect
-	golang.org/x/crypto v0.22.0 // indirect
-	golang.org/x/oauth2 v0.19.0 // indirect
-	golang.org/x/sys v0.19.0 // indirect
+	github.com/xrash/smetrics v0.0.0-20240521201337-686a1a2994c1 // indirect
+	golang.org/x/crypto v0.23.0 // indirect
+	golang.org/x/oauth2 v0.20.0 // indirect
+	golang.org/x/sys v0.20.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
