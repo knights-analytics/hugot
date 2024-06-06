@@ -119,6 +119,8 @@ func checkURL(client *http.Client, url string, authToken string) (bool, bool, er
 	if e != nil {
 		return false, false, e
 	}
+
+	var dirs []hfFile
 	for _, f := range filesList {
 		if f.Path == "tokenizer.json" {
 			tokenizerFound = true
@@ -126,18 +128,29 @@ func checkURL(client *http.Client, url string, authToken string) (bool, bool, er
 		if filepath.Ext(f.Path) == ".onnx" {
 			onnxFound = true
 		}
-		if f.Type == "directory" && !(tokenizerFound && onnxFound) {
-			tokenizerFoundRec, onnxFoundRec, err := checkURL(client, url+"/"+f.Path, authToken)
-			if err != nil {
-				return false, false, err
-			}
-			tokenizerFound = tokenizerFound || tokenizerFoundRec
-			onnxFound = onnxFound || onnxFoundRec
+		if f.Type == "directory" {
+			// Do dirs later if files not found at this level
+			dirs = append(dirs, f)
 		}
 		if onnxFound && tokenizerFound {
 			break
 		}
 	}
+
+	if !(onnxFound && tokenizerFound) {
+		for _, dir := range dirs {
+			tokenizerFoundRec, onnxFoundRec, dirErr := checkURL(client, url+"/"+dir.Path, authToken)
+			if dirErr != nil {
+				return false, false, dirErr
+			}
+			tokenizerFound = tokenizerFound || tokenizerFoundRec
+			onnxFound = onnxFound || onnxFoundRec
+			if onnxFound && tokenizerFound {
+				break
+			}
+		}
+	}
+
 	return tokenizerFound, onnxFound, nil
 }
 
