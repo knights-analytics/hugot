@@ -1,10 +1,11 @@
 ARG GO_VERSION=1.22.3
 ARG RUST_VERSION=1.78
 ARG ONNXRUNTIME_VERSION=1.18.0
+ARG BUILD_PLATFORM=linux/amd64
 
 #--- rust build of tokenizer ---
 
-FROM rust:$RUST_VERSION AS tokenizer
+FROM --platform=$BUILD_PLATFORM rust:$RUST_VERSION AS tokenizer
 
 RUN git clone https://github.com/knights-analytics/tokenizers -b main && \
     cd tokenizers && \
@@ -12,7 +13,7 @@ RUN git clone https://github.com/knights-analytics/tokenizers -b main && \
 
 #--- build and test layer ---
 
-FROM public.ecr.aws/amazonlinux/amazonlinux:2023 AS hugot-build
+FROM --platform=$BUILD_PLATFORM public.ecr.aws/amazonlinux/amazonlinux:2023 AS hugot-build
 ARG GO_VERSION
 ARG ONNXRUNTIME_VERSION
 
@@ -69,7 +70,7 @@ RUN chmod +x /entrypoint.sh
 ENTRYPOINT ["/entrypoint.sh"]
 
 # artifacts layer
-FROM scratch AS artifacts
+FROM --platform=$BUILD_PLATFORM scratch AS artifacts
 
 COPY --from=hugot-build /usr/lib64/onnxruntime.so onnxruntime-linux-x64.so
 COPY --from=hugot-build /usr/lib64/onnxruntime-gpu onnxruntime-linux-x64-gpu
