@@ -1,6 +1,7 @@
 services:
   hugot:
     image: hugot:$commit_hash
+    platform: linux/amd64
     container_name: hugot
     build:
       context: .
