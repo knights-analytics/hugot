@@ -1,6 +1,7 @@
 services:
   hugot:
     image: hugot:dev
+    platform: linux/amd64
     build:
       context: .
       dockerfile: ./Dockerfile
@@ -8,10 +9,10 @@ services:
     volumes:
       - $src_dir:/home/testuser/repositories/hugot
     entrypoint: ["tail", "-f", "/dev/null"]
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
+#    deploy:
+#      resources:
+#        reservations:
+#          devices:
+#            - driver: nvidia
+#              count: 1
+#              capabilities: [gpu]
