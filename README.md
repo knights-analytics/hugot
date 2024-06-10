@@ -4,6 +4,8 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/knights-analytics/hugot)](https://goreportcard.com/report/github.com/knights-analytics/hugot)
 [![Coverage Status](https://coveralls.io/repos/github/knights-analytics/hugot/badge.svg?branch=main)](https://coveralls.io/github/knights-analytics/hugot?branch=main)
 
+<img src="./hug-gopher.webp" width="300">
+
 ## What
 
 The goal of this library is to provide an easy, scalable, and hassle-free way to run huggingface transformer pipelines in golang applications. It is built on the following principles:
@@ -61,7 +63,8 @@ On different distros (e.g. Ubuntu), you should be able to install the equivalent
 ## Limitations
 
 Apart from the fact that only the aforementioned pipelines are currently implemented, the current limitations are:
-    - the library and cli are only built/tested on amd64-linux
+
+- the library and cli are only built/tested on amd64-linux currently.
 
 Pipelines are also tested on specifically NLP use cases. In particular, we use the following models for testing:
 - feature extraction: all-MiniLM-L6-v2
@@ -160,6 +163,8 @@ See also hugot_test.go for further examples.
 
 ### Use it as a cli: Huggingface 🤗 pipelines from the command line
 
+Note: the cli is currently only built and tested on amd64-linux.
+
 With hugot you don't need python, pytorch, or even go to run huggingface transformers. Simply install the hugot cli (alpha):
 
 ```
@@ -225,55 +230,4 @@ For GPU the config above also applies. We are still testing the optimum GPU conf
 
 ## Contributing
 
-### Development environment
-
-The easiest way to contribute to hugot is by developing inside a docker container that has the tokenizer and onnxruntime libraries.
-From the source folder, it should be as easy as:
-
-```bash
-make start-dev-container
-```
-
-which will download the test models, build the test container, and launch it (see [compose-dev](./compose-dev.yaml)), mounting the source code at /home/testuser/repositories/hugot. Then you can attach to the container with e.g. vscode remote extension as testuser. The vscode attached container configuration file can be set to:
-
-```
-{
-    "remoteUser": "testuser",
-    "workspaceFolder": "/home/testuser/repositories/hugot",
-    "extensions": [
-		"bierner.markdown-preview-github-styles",
-		"golang.go",
-		"ms-azuretools.vscode-docker"
-	],
-    "remoteEnv": {"GOPATH": "/home/testuser/go"}
-}
-```
-
-Once you're done, you can tear the container down with:
-
-```bash
-make stop-dev-container
-```
-
-Alternatively, you can use your IDE devcontainer support, and point it to the [Dockerfile](./Dockerfile).
-
-If you prefer to develop on bare metal, you will need to download the tokenizers.a to /usr/lib/tokenizers.a and onnxruntime.so to /usr/lib/onnxruntime.so.
-
-### Run the tests
-
-The full test suite can be run as follows. From the source folder:
-
-```bash
-make clean run-tests
-```
-
-This will build a test image and run all tests in a container. A testTarget folder will appear in the source directory with the test results.
-
-### Contribution process
-
-1. create or find an issue for your contribution
-2. fork and develop
-3. add tests and make sure the full test suite passes and test coverage does not dip below 80%
-4. create a MR linking to the relevant issue
-
-Thank you for contributing to hugot!
+If you would like to contribute to Hugot, please see the (contribution guidelines)[contrib.MD].
