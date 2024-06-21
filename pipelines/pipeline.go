@@ -5,11 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"math"
 	"os"
 	"strings"
-	"sync/atomic"
-	"time"
 
 	"github.com/knights-analytics/tokenizers"
 	ort "github.com/yalue/onnxruntime_go"
@@ -17,8 +14,8 @@ import (
 	util "github.com/knights-analytics/hugot/utils"
 )
 
-// BasePipeline is a basic pipeline type used for struct composition in the other pipelines.
-type BasePipeline struct {
+// BasePipeline can be embedded by a pipeline.
+type basePipeline struct {
 	ModelPath        string
 	OnnxFilename     string
 	PipelineName     string
@@ -28,27 +25,27 @@ type BasePipeline struct {
 	TokenizerOptions []tokenizers.EncodeOption
 	InputsMeta       []ort.InputOutputInfo
 	OutputsMeta      []ort.InputOutputInfo
-	hasTokenTypeIds  bool
-	hasAttentionMask bool
-	OutputDim        int
-	TokenizerTimings *Timings
-	PipelineTimings  *Timings
+	TokenizerTimings *timings
+	PipelineTimings  *timings
 }
 
 type PipelineBatchOutput interface {
 	GetOutput() []any
 }
 
+// Pipeline is the interface that any pipeline must implement.
 type Pipeline interface {
-	Destroy() error
-	GetStats() []string
-	GetOutputDim() int
-	Validate() error
-	Run([]string) (PipelineBatchOutput, error)
+	Destroy() error                            // Destroy the pipeline along with its onnx session
+	GetStats() []string                        // Get the pipeline running stats
+	Validate() error                           // Validate the pipeline for correctness
+	Run([]string) (PipelineBatchOutput, error) // Run the pipeline on an input
 }
 
+// PipelineOption is an option for a pipeline type.
 type PipelineOption[T Pipeline] func(eo T)
 
+// PipelineConfig is a configuration for a pipeline type that can be used
+// to create that pipeline.
 type PipelineConfig[T Pipeline] struct {
 	ModelPath    string
 	Name         string
@@ -56,33 +53,120 @@ type PipelineConfig[T Pipeline] struct {
 	Options      []PipelineOption[T]
 }
 
-type Timings struct {
+type timings struct {
 	NumCalls uint64
 	TotalNS  uint64
 }
 
-type TokenizedInput struct {
+// tokenizedInput holds the result of running tokenizer on an input.
+type tokenizedInput struct {
 	Raw               string
 	Tokens            []string
-	TokenIds          []uint32
-	TypeIds           []uint32
+	TokenIDs          []uint32
+	TypeIDs           []uint32
 	AttentionMask     []uint32
 	SpecialTokensMask []uint32
 	MaxAttentionIndex int
 	Offsets           []tokenizers.Offset
 }
 
+// pipelineBatch represents a batch of inputs that runs through the pipeline.
 type PipelineBatch struct {
-	Input                []TokenizedInput
-	IdsTensor            []int64
-	TypeIdsTensor        []int64
-	AttentionMasksTensor []int64
-	MaxSequence          int
-	OutputTensor         []float32
+	Input             []tokenizedInput
+	InputTensors      []*ort.Tensor[int64]
+	MaxSequenceLength int
+	OutputTensors     []*ort.Tensor[float32]
 }
 
-func (p *BasePipeline) GetOutputDim() int {
-	return p.OutputDim
+func (b *PipelineBatch) Destroy() error {
+	destroyErrors := make([]error, 0, len(b.InputTensors)+len(b.OutputTensors))
+
+	for _, tensor := range b.InputTensors {
+		destroyErrors = append(destroyErrors, tensor.Destroy())
+	}
+
+	for _, tensor := range b.OutputTensors {
+		destroyErrors = append(destroyErrors, tensor.Destroy())
+	}
+	return errors.Join(destroyErrors...)
+}
+
+// NewBatch initializes a new batch for inference.
+func NewBatch() *PipelineBatch {
+	return &PipelineBatch{}
+}
+
+func loadTokenizer(modelPath string) (*tokenizers.Tokenizer, error) {
+	tokenizerBytes, err := util.ReadFileBytes(util.PathJoinSafe(modelPath, "tokenizer.json"))
+	if err != nil {
+		return nil, err
+	}
+
+	tk, err := tokenizers.FromBytes(tokenizerBytes)
+	if err != nil {
+		return nil, err
+	}
+	return tk, nil
+}
+
+func loadOnnxModelBytes(modelPath string, modelFilename string) ([]byte, error) {
+	var modelOnnxFile string
+	onnxFiles, err := getOnnxFiles(modelPath)
+	if err != nil {
+		return nil, err
+	}
+	if len(onnxFiles) == 0 {
+		return nil, fmt.Errorf("no .onnx file detected at %s. There should be exactly .onnx file", modelPath)
+	}
+	if len(onnxFiles) > 1 {
+		if modelFilename == "" {
+			return nil, fmt.Errorf("multiple .onnx file detected at %s and no OnnxFilename specified", modelPath)
+		}
+		modelNameFound := false
+		for i := range onnxFiles {
+			if onnxFiles[i][1] == modelFilename {
+				modelNameFound = true
+				modelOnnxFile = util.PathJoinSafe(onnxFiles[i]...)
+			}
+		}
+		if !modelNameFound {
+			return nil, fmt.Errorf("file %s not found at %s", modelFilename, modelPath)
+		}
+	} else {
+		modelOnnxFile = util.PathJoinSafe(onnxFiles[0]...)
+	}
+
+	onnxBytes, err := util.ReadFileBytes(modelOnnxFile)
+	if err != nil {
+		return nil, err
+	}
+	return onnxBytes, err
+}
+
+func loadInputOutputMeta(onnxBytes []byte) ([]ort.InputOutputInfo, []ort.InputOutputInfo, error) {
+	inputs, outputs, err := ort.GetInputOutputInfoWithONNXData(onnxBytes)
+	if err != nil {
+		return nil, nil, err
+	}
+	return inputs, outputs, nil
+}
+
+func createSession(onnxBytes []byte, inputs, outputs []ort.InputOutputInfo, options *ort.SessionOptions) (*ort.DynamicAdvancedSession, error) {
+	inputNames := []string{}
+	outputNames := []string{}
+	for _, v := range inputs {
+		inputNames = append(inputNames, v.Name)
+	}
+	for _, v := range outputs {
+		outputNames = append(outputNames, v.Name)
+	}
+	session, err := ort.NewDynamicAdvancedSessionWithONNXData(
+		onnxBytes,
+		inputNames,
+		outputNames,
+		options,
+	)
+	return session, err
 }
 
 func getOnnxFiles(path string) ([][]string, error) {
@@ -97,111 +181,14 @@ func getOnnxFiles(path string) ([][]string, error) {
 	return onnxFiles, err
 }
 
-// Load the ort model supporting the pipeline.
-func (p *BasePipeline) loadModel() error {
-	tokenizerBytes, err := util.ReadFileBytes(util.PathJoinSafe(p.ModelPath, "tokenizer.json"))
-	if err != nil {
-		return err
-	}
-
-	tk, err := tokenizers.FromBytes(tokenizerBytes)
-	if err != nil {
-		return err
-	}
-
-	// we look for .onnx files.
-	var modelOnnxFile string
-	onnxFiles, err := getOnnxFiles(p.ModelPath)
-	if err != nil {
-		return err
-	}
-	if len(onnxFiles) == 0 {
-		return fmt.Errorf("no .onnx file detected at %s. There should be exactly .onnx file", p.ModelPath)
-	}
-	if len(onnxFiles) > 1 {
-		if p.OnnxFilename == "" {
-			return fmt.Errorf("multiple .onnx file detected at %s and no OnnxFilename specified", p.ModelPath)
-		}
-		modelNameFound := false
-		for i := range onnxFiles {
-			if onnxFiles[i][1] == p.OnnxFilename {
-				modelNameFound = true
-				modelOnnxFile = util.PathJoinSafe(onnxFiles[i]...)
-			}
-		}
-		if !modelNameFound {
-			return fmt.Errorf("file %s not found at %s", p.OnnxFilename, p.ModelPath)
-		}
-	} else {
-		modelOnnxFile = util.PathJoinSafe(onnxFiles[0]...)
-	}
-
-	onnxBytes, err := util.ReadFileBytes(modelOnnxFile)
-	if err != nil {
-		return err
-	}
-
-	inputs, outputs, err := ort.GetInputOutputInfoWithONNXData(onnxBytes)
-	if err != nil {
-		return err
-	}
-
-	p.InputsMeta = inputs
-	p.OutputsMeta = outputs
-
-	inputNames := make([]string, len(inputs))
-	for i, meta := range inputs {
-		inputNames[i] = meta.Name
-		switch meta.Name {
-		case "token_type_ids":
-			p.hasTokenTypeIds = true
-		case "attention_mask":
-			p.hasAttentionMask = true
-		}
-	}
-	outputNames := make([]string, len(outputs))
-	for i, meta := range outputs {
-		outputNames[i] = meta.Name
-	}
-	session, err := ort.NewDynamicAdvancedSessionWithONNXData(
-		onnxBytes,
-		inputNames,
-		outputNames,
-		p.OrtOptions,
-	)
-	if err != nil {
-		return err
-	}
-
-	p.OrtSession = session
-	p.Tokenizer = tk
-	return nil
-}
-
-func (p *BasePipeline) Destroy() error {
-	var finalErr error
-	errTokenizer := p.Tokenizer.Close()
-	if errTokenizer != nil {
-		finalErr = errTokenizer
-	}
-	ortError := p.OrtSession.Destroy()
-	if ortError != nil {
-		finalErr = ortError
-	}
-	return finalErr
-}
-
-// Preprocess the input strings in the batch
-func (p *BasePipeline) Preprocess(inputs []string) PipelineBatch {
-	start := time.Now()
-
-	outputs := make([]TokenizedInput, len(inputs))
+func tokenizeInputs(batch *PipelineBatch, tk *tokenizers.Tokenizer, inputs []string, options []tokenizers.EncodeOption) {
+	outputs := make([]tokenizedInput, len(inputs))
 	maxSequence := 0
 	for i, input := range inputs {
 
-		output := p.Tokenizer.EncodeWithOptions(input,
+		output := tk.EncodeWithOptions(input,
 			true,
-			p.TokenizerOptions...,
+			options...,
 		)
 
 		maxAttentionIndex := 0
@@ -211,11 +198,11 @@ func (p *BasePipeline) Preprocess(inputs []string) PipelineBatch {
 			}
 		}
 
-		outputs[i] = TokenizedInput{
+		outputs[i] = tokenizedInput{
 			Raw:               input,
 			Tokens:            output.Tokens,
-			TokenIds:          output.IDs,
-			TypeIds:           output.TypeIDs,
+			TokenIDs:          output.IDs,
+			TypeIDs:           output.TypeIDs,
 			AttentionMask:     output.AttentionMask,
 			MaxAttentionIndex: maxAttentionIndex,
 			SpecialTokensMask: output.SpecialTokensMask,
@@ -225,114 +212,121 @@ func (p *BasePipeline) Preprocess(inputs []string) PipelineBatch {
 			maxSequence = maxAttentionIndex
 		}
 	}
-
-	atomic.AddUint64(&p.TokenizerTimings.NumCalls, 1)
-	atomic.AddUint64(&p.TokenizerTimings.TotalNS, uint64(time.Since(start)))
-	batch := p.convertInputToTensors(outputs, maxSequence+1)
-	return batch
+	batch.Input = outputs
+	batch.MaxSequenceLength = maxSequence + 1
 }
 
-func (p *BasePipeline) getInputTensors(batch PipelineBatch, actualBatchSize int64, maxSequence int64) ([]ort.ArbitraryTensor, error) {
-	inputTensors := make([]ort.ArbitraryTensor, len(p.InputsMeta))
-	var err error
+// createInputTensors creates ort input tensors.
+func createInputTensors(batch *PipelineBatch, inputsMeta []ort.InputOutputInfo) error {
+	tensorSize := len(batch.Input) * (batch.MaxSequenceLength)
+	batchSize := int64(len(batch.Input))
 
-	for i, input := range p.InputsMeta {
-		var inputTensor *ort.Tensor[int64]
+	inputTensors := make([]*ort.Tensor[int64], len(inputsMeta))
+	var tensorCreationErr error
 
-		// create the tensor for the input name
-		switch input.Name {
-		case "input_ids":
-			inputTensor, err = ort.NewTensor(ort.NewShape(actualBatchSize, maxSequence), batch.IdsTensor)
-		case "token_type_ids":
-			inputTensor, err = ort.NewTensor(ort.NewShape(actualBatchSize, maxSequence), batch.TypeIdsTensor)
-		case "attention_mask":
-			inputTensor, err = ort.NewTensor(ort.NewShape(actualBatchSize, maxSequence), batch.AttentionMasksTensor)
-		}
+	for i, inputMeta := range inputsMeta {
+		backingSlice := make([]int64, tensorSize)
+		counter := 0
 
-		inputTensors[i] = inputTensor
-	}
-	return inputTensors, err
-}
-
-// Forward pass of the neural network on the tokenized input
-func (p *BasePipeline) Forward(batch PipelineBatch) (PipelineBatch, error) {
-	start := time.Now()
-
-	actualBatchSize := int64(len(batch.Input))
-	maxSequence := int64(batch.MaxSequence)
-	inputTensors, err := p.getInputTensors(batch, actualBatchSize, maxSequence)
-	if err != nil {
-		return batch, err
-	}
-
-	outputTensor, err4 := ort.NewEmptyTensor[float32](ort.NewShape(actualBatchSize, maxSequence, int64(p.OutputDim)))
-	if err4 != nil {
-		return batch, err4
-	}
-
-	defer func(inputTensors []ort.ArbitraryTensor) {
-		for _, tensor := range inputTensors {
-			err = errors.Join(err, tensor.Destroy())
-		}
-	}(inputTensors)
-
-	// Run Onnx model
-	errOnnx := p.OrtSession.Run(inputTensors, []ort.ArbitraryTensor{outputTensor})
-	if errOnnx != nil {
-		return batch, errOnnx
-	}
-	batch.OutputTensor = outputTensor.GetData()
-	defer func(outputTensor *ort.Tensor[float32]) {
-		err = errors.Join(err, outputTensor.Destroy())
-	}(outputTensor)
-
-	atomic.AddUint64(&p.PipelineTimings.NumCalls, 1)
-	atomic.AddUint64(&p.PipelineTimings.TotalNS, uint64(time.Since(start)))
-	return batch, err
-}
-
-// convert tokenized input to the format required by the onnxruntime library
-func (p *BasePipeline) convertInputToTensors(inputs []TokenizedInput, maxSequence int) PipelineBatch {
-	tensorSize := len(inputs) * maxSequence
-	counter := 0
-
-	idsTensor := make([]int64, tensorSize)
-	typeIdsTensor := make([]int64, tensorSize)
-	attentionMasksTensor := make([]int64, tensorSize)
-
-	for _, input := range inputs {
-		length := len(input.TokenIds)
-		for j := 0; j < maxSequence; j++ {
-			if j+1 <= length {
-				idsTensor[counter] = int64(input.TokenIds[j])
-				if p.hasTokenTypeIds {
-					typeIdsTensor[counter] = int64(input.TypeIds[j])
+		for _, input := range batch.Input {
+			length := len(input.TokenIDs)
+			for j := 0; j < batch.MaxSequenceLength; j++ {
+				if j+1 <= length {
+					switch inputMeta.Name {
+					case "input_ids":
+						backingSlice[counter] = int64(input.TokenIDs[j])
+					case "token_type_ids":
+						backingSlice[counter] = int64(input.TypeIDs[j])
+					case "attention_mask":
+						backingSlice[counter] = int64(input.AttentionMask[j])
+					default:
+						return fmt.Errorf("input %s not recognized", inputMeta.Name)
+					}
+				} else {
+					backingSlice[counter] = 0 // pad with zero
 				}
-				if p.hasAttentionMask {
-					attentionMasksTensor[counter] = int64(input.AttentionMask[j])
+				counter++
+			}
+		}
+		inputTensors[i], tensorCreationErr = ort.NewTensor(ort.NewShape(batchSize, int64(batch.MaxSequenceLength)), backingSlice)
+		if tensorCreationErr != nil {
+			return tensorCreationErr
+		}
+	}
+	batch.InputTensors = inputTensors
+	return nil
+}
+
+func getNames(info []ort.InputOutputInfo) []string {
+	names := make([]string, 0, len(info))
+	for _, v := range info {
+		names = append(names, v.Name)
+	}
+	return names
+}
+
+func runSessionOnBatch(batch *PipelineBatch, session *ort.DynamicAdvancedSession, outputs []ort.InputOutputInfo) error {
+	actualBatchSize := int64(len(batch.Input))
+	maxSequenceLength := int64(batch.MaxSequenceLength)
+
+	// allocate vectors with right dimensions for the output
+	outputTensors := make([]*ort.Tensor[float32], len(outputs))
+	arbitraryOutputTensors := make([]ort.ArbitraryTensor, len(outputs))
+	var outputCreationErr error
+
+	for outputIndex, meta := range outputs {
+		var batchDimSet bool
+		var tokenDimSet bool
+		actualDims := make([]int64, 0, len(meta.Dimensions))
+
+		for _, dim := range meta.Dimensions {
+			if dim == -1 {
+				if !batchDimSet {
+					actualDims = append(actualDims, actualBatchSize)
+					batchDimSet = true
+				} else if !tokenDimSet {
+					actualDims = append(actualDims, maxSequenceLength)
+					tokenDimSet = true
+				} else {
+					return fmt.Errorf("only two axis can be dynamic (batch size and number of tokens)")
 				}
 			} else {
-				// padding all vectors to max sequence length
-				idsTensor[counter] = 0
-				typeIdsTensor[counter] = 0
-				attentionMasksTensor[counter] = 0
+				actualDims = append(actualDims, dim)
 			}
-			counter++
 		}
+		outputShape := ort.NewShape(actualDims...)
+		outputTensors[outputIndex], outputCreationErr = ort.NewEmptyTensor[float32](outputShape)
+		if outputCreationErr != nil {
+			return outputCreationErr
+		}
+		arbitraryOutputTensors[outputIndex] = ort.ArbitraryTensor(outputTensors[outputIndex])
 	}
-	return PipelineBatch{
-		Input:                inputs,
-		IdsTensor:            idsTensor,
-		TypeIdsTensor:        typeIdsTensor,
-		AttentionMasksTensor: attentionMasksTensor,
-		MaxSequence:          maxSequence,
+
+	// Run Onnx model
+	arbitraryInputTensors := make([]ort.ArbitraryTensor, len(batch.InputTensors))
+	for i, t := range batch.InputTensors {
+		arbitraryInputTensors[i] = ort.ArbitraryTensor(t)
 	}
+
+	errOnnx := session.Run(arbitraryInputTensors, arbitraryOutputTensors)
+	if errOnnx != nil {
+		return errOnnx
+	}
+
+	// store resulting tensors
+	batch.OutputTensors = outputTensors
+	return nil
 }
 
-func (p *BasePipeline) GetStats() []string {
-	return []string{
-		fmt.Sprintf("Statistics for pipeline: %s", p.PipelineName),
-		fmt.Sprintf("Tokenizer: Total time=%s, Execution count=%d, Average query time=%s", time.Duration(p.TokenizerTimings.TotalNS), p.TokenizerTimings.NumCalls, time.Duration(float64(p.TokenizerTimings.TotalNS)/math.Max(1, float64(p.TokenizerTimings.NumCalls)))),
-		fmt.Sprintf("ONNX: Total time=%s, Execution count=%d, Average query time=%s", time.Duration(p.PipelineTimings.TotalNS), p.PipelineTimings.NumCalls, time.Duration(float64(p.PipelineTimings.TotalNS)/math.Max(1, float64(p.PipelineTimings.NumCalls)))),
+func destroySession(tk *tokenizers.Tokenizer, session *ort.DynamicAdvancedSession) error {
+	var finalErr error
+	errTokenizer := tk.Close()
+	if errTokenizer != nil {
+		finalErr = errTokenizer
 	}
+	ortError := session.Destroy()
+	if ortError != nil {
+		finalErr = ortError
+	}
+	return finalErr
 }
