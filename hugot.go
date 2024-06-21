@@ -38,20 +38,20 @@ func (m pipelineMap[T]) GetStats() []string {
 	return stats
 }
 
-// TokenClassificationConfig is the configuration for a token classification pipeline
-type TokenClassificationConfig = pipelines.PipelineConfig[*pipelines.TokenClassificationPipeline]
+// FeatureExtractionConfig is the configuration for a feature extraction pipeline
+type FeatureExtractionConfig = pipelines.PipelineConfig[*pipelines.FeatureExtractionPipeline]
 
 // TextClassificationConfig is the configuration for a text classification pipeline
 type TextClassificationConfig = pipelines.PipelineConfig[*pipelines.TextClassificationPipeline]
 
-// FeatureExtractionConfig is the configuration for a feature extraction pipeline
-type FeatureExtractionConfig = pipelines.PipelineConfig[*pipelines.FeatureExtractionPipeline]
-
-// TokenClassificationOption is an option for a token classification pipeline
-type TokenClassificationOption = pipelines.PipelineOption[*pipelines.TokenClassificationPipeline]
-
 // TextClassificationOption is an option for a text classification pipeline
 type TextClassificationOption = pipelines.PipelineOption[*pipelines.TextClassificationPipeline]
+
+// TokenClassificationConfig is the configuration for a token classification pipeline
+type TokenClassificationConfig = pipelines.PipelineConfig[*pipelines.TokenClassificationPipeline]
+
+// // TokenClassificationOption is an option for a token classification pipeline
+type TokenClassificationOption = pipelines.PipelineOption[*pipelines.TokenClassificationPipeline]
 
 // FeatureExtractionOption is an option for a feature extraction pipeline
 type FeatureExtractionOption = pipelines.PipelineOption[*pipelines.FeatureExtractionPipeline]
@@ -70,8 +70,8 @@ func NewSession(options ...WithOption) (*Session, error) {
 
 	session := &Session{
 		featureExtractionPipelines:   map[string]*pipelines.FeatureExtractionPipeline{},
-		tokenClassificationPipelines: map[string]*pipelines.TokenClassificationPipeline{},
 		textClassificationPipelines:  map[string]*pipelines.TextClassificationPipeline{},
+		tokenClassificationPipelines: map[string]*pipelines.TokenClassificationPipeline{},
 	}
 
 	// set session options and initialise
@@ -286,7 +286,7 @@ func GetPipeline[T pipelines.Pipeline](s *Session, name string) (T, error) {
 func (s *Session) Destroy() error {
 	return errors.Join(
 		s.featureExtractionPipelines.Destroy(),
-		s.tokenClassificationPipelines.Destroy(),
+		// s.tokenClassificationPipelines.Destroy(),
 		s.textClassificationPipelines.Destroy(),
 		s.ortOptions.Destroy(),
 		ort.DestroyEnvironment(),
@@ -302,7 +302,8 @@ func (s *Session) Destroy() error {
 // the average time per onnxruntime inference batch call
 func (s *Session) GetStats() []string {
 	// slices.Concat() is not implemented in experimental x/exp/slices package
-	return append(append(s.tokenClassificationPipelines.GetStats(),
+	return append(append(
+		s.tokenClassificationPipelines.GetStats(),
 		s.textClassificationPipelines.GetStats()...),
 		s.featureExtractionPipelines.GetStats()...,
 	)
