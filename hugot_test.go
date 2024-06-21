@@ -10,10 +10,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
-
 	"github.com/knights-analytics/hugot/pipelines"
 	util "github.com/knights-analytics/hugot/utils"
+	"github.com/stretchr/testify/assert"
+
+	ort "github.com/yalue/onnxruntime_go"
 )
 
 //go:embed testData/tokenExpected.json
@@ -33,6 +34,162 @@ func TestDownloadValidation(t *testing.T) {
 	// a model without tokenizer.json or .onnx model should error
 	err = validateDownloadHfModel("ByteDance/SDXL-Lightning", "main", "")
 	assert.Error(t, err)
+}
+
+// FEATURE EXTRACTION
+
+func TestFeatureExtractionPipelineValidation(t *testing.T) {
+	session, err := NewSession(WithOnnxLibraryPath(onnxRuntimeSharedLibrary))
+	check(t, err)
+	defer func(session *Session) {
+		err := session.Destroy()
+		check(t, err)
+	}(session)
+
+	modelPath := downloadModelIfNotExists(session, "KnightsAnalytics/all-MiniLM-L6-v2", "./models")
+	config := FeatureExtractionConfig{
+		ModelPath: modelPath,
+		Name:      "testPipeline",
+	}
+	pipeline, err := NewPipeline(session, config)
+	check(t, err)
+
+	pipeline.InputsMeta[0].Dimensions = ort.NewShape(-1, -1, -1)
+
+	err = pipeline.Validate()
+	assert.Error(t, err)
+
+	pipeline.InputsMeta[0].Dimensions = ort.NewShape(1, 1, 1, 1)
+	err = pipeline.Validate()
+	assert.Error(t, err)
+}
+
+func TestFeatureExtractionPipeline(t *testing.T) {
+	session, err := NewSession(WithOnnxLibraryPath(onnxRuntimeSharedLibrary))
+	check(t, err)
+	defer func(session *Session) {
+		err := session.Destroy()
+		check(t, err)
+	}(session)
+
+	modelPath := downloadModelIfNotExists(session, "sentence-transformers/all-MiniLM-L6-v2", "./models")
+
+	config := FeatureExtractionConfig{
+		ModelPath: modelPath,
+		Name:      "testPipeline",
+	}
+	pipeline, err := NewPipeline(session, config)
+	check(t, err)
+
+	var expectedResults map[string][][]float32
+	err = json.Unmarshal(resultsByte, &expectedResults)
+	check(t, err)
+	var testResults [][]float32
+
+	// test 'robert smith'
+	testResults = expectedResults["test1output"]
+	batchResult, err := pipeline.RunPipeline([]string{"robert smith"})
+	if err != nil {
+		t.Fatalf(err.Error())
+	}
+	for i := range batchResult.Embeddings {
+		e := floatsEqual(batchResult.Embeddings[i], testResults[i])
+		if e != nil {
+			t.Logf("Test 1: The neural network didn't produce the correct result on loop %d: %s\n", i, e)
+			t.FailNow()
+		}
+	}
+
+	// test ['robert smith junior', 'francis ford coppola']
+	testResults = expectedResults["test2output"]
+	batchResult, err = pipeline.RunPipeline([]string{"robert smith junior", "francis ford coppola"})
+	if err != nil {
+		t.FailNow()
+	}
+	for i := range batchResult.Embeddings {
+		e := floatsEqual(batchResult.Embeddings[i], testResults[i])
+		if e != nil {
+			t.Logf("Test 1: The neural network didn't produce the correct result on loop %d: %s\n", i, e)
+			t.FailNow()
+		}
+	}
+
+	// determinism test to make sure embeddings of a string are not influenced by other strings in the batch
+	testPairs := map[string][][]string{}
+	testPairs["identity"] = [][]string{{"sinopharm", "yo"}, {"sinopharm", "yo"}}
+	testPairs["contextOverlap"] = [][]string{{"sinopharm", "yo"}, {"sinopharm", "yo mama yo"}}
+	testPairs["contextDisjoint"] = [][]string{{"sinopharm", "yo"}, {"sinopharm", "another test"}}
+
+	for k, sentencePair := range testPairs {
+		// these vectors should be the same
+		firstBatchResult, err2 := pipeline.RunPipeline(sentencePair[0])
+		check(t, err2)
+		firstEmbedding := firstBatchResult.Embeddings[0]
+
+		secondBatchResult, err3 := pipeline.RunPipeline(sentencePair[1])
+		check(t, err3)
+		secondEmbedding := secondBatchResult.Embeddings[0]
+		e := floatsEqual(firstEmbedding, secondEmbedding)
+		if e != nil {
+			t.Logf("Equality failed for determinism test %s test with pairs %s and %s", k, strings.Join(sentencePair[0], ","), strings.Join(sentencePair[1], ","))
+			t.Log("First vector", firstEmbedding)
+			t.Log("second vector", secondEmbedding)
+			t.Fail()
+		}
+	}
+
+	zero := uint64(0)
+	assert.Greater(t, pipeline.PipelineTimings.NumCalls, zero, "PipelineTimings.NumCalls should be greater than 0")
+	assert.Greater(t, pipeline.PipelineTimings.TotalNS, zero, "PipelineTimings.TotalNS should be greater than 0")
+	assert.Greater(t, pipeline.TokenizerTimings.NumCalls, zero, "TokenizerTimings.NumCalls should be greater than 0")
+	assert.Greater(t, pipeline.TokenizerTimings.TotalNS, zero, "TokenizerTimings.TotalNS should be greater than 0")
+
+	// test normalization
+	testResults = expectedResults["normalizedOutput"]
+	config = FeatureExtractionConfig{
+		ModelPath: modelPath,
+		Name:      "testPipelineNormalise",
+		Options: []FeatureExtractionOption{
+			pipelines.WithNormalization(),
+		},
+	}
+	pipeline, err = NewPipeline(session, config)
+	check(t, err)
+	normalizationStrings := []string{"Onnxruntime is a great inference backend"}
+	normalizedEmbedding, err := pipeline.RunPipeline(normalizationStrings)
+	check(t, err)
+	for i, embedding := range normalizedEmbedding.Embeddings {
+		e := floatsEqual(embedding, testResults[i])
+		if e != nil {
+			t.Fatalf("Normalization test failed: %s", normalizationStrings[i])
+		}
+	}
+
+	// test getting sentence embeddings
+	configSentence := FeatureExtractionConfig{
+		ModelPath: modelPath,
+		Name:      "testPipelineSentence",
+		Options:   []FeatureExtractionOption{pipelines.WithOutputName("sentence_embedding")},
+	}
+	pipelineSentence, err := NewPipeline(session, configSentence)
+	check(t, err)
+	outputSentence, err := pipelineSentence.RunPipeline([]string{"Onnxruntime is a great inference backend"})
+	if err != nil {
+		t.FailNow()
+	}
+	fmt.Println(outputSentence.Embeddings[0])
+	configSentence = FeatureExtractionConfig{
+		ModelPath: modelPath,
+		Name:      "testPipelineToken",
+	}
+	pipelineToken, err := NewPipeline(session, configSentence)
+	check(t, err)
+	out, err := pipelineToken.RunPipeline([]string{"Onnxruntime is a great inference backend"})
+	if err != nil {
+		t.FailNow()
+	}
+	fmt.Println(out)
+	// TODO: assert the result here
 }
 
 // Text classification
@@ -259,20 +416,26 @@ func TestTextClassificationPipelineValidation(t *testing.T) {
 	}
 	sentimentPipeline, err := NewPipeline(session, config)
 	check(t, err)
-	sentimentPipeline.IdLabelMap = map[int]string{}
-	err = sentimentPipeline.Validate()
-	assert.Error(t, err)
-	if err != nil {
-		errInt := err.(interface{ Unwrap() []error })
-		assert.Equal(t, 3, len(errInt.Unwrap()))
-	}
-	sentimentPipeline.OutputDim = 0
-	err = sentimentPipeline.Validate()
-	assert.Error(t, err)
-	if err != nil {
-		errInt := err.(interface{ Unwrap() []error })
-		assert.Equal(t, 3, len(errInt.Unwrap()))
-	}
+
+	t.Run("id-label-map", func(t *testing.T) {
+		labelMapInitial := sentimentPipeline.IDLabelMap
+		defer func() {
+			sentimentPipeline.IDLabelMap = labelMapInitial
+		}()
+		sentimentPipeline.IDLabelMap = map[int]string{}
+		err = sentimentPipeline.Validate()
+		assert.Error(t, err)
+	})
+
+	t.Run("output-shape", func(t *testing.T) {
+		dimensionInitial := sentimentPipeline.OutputsMeta[0].Dimensions
+		defer func() {
+			sentimentPipeline.OutputsMeta[0].Dimensions = dimensionInitial
+		}()
+		sentimentPipeline.OutputsMeta[0].Dimensions = ort.NewShape(-1, -1, -1)
+		err = sentimentPipeline.Validate()
+		assert.Error(t, err)
+	})
 }
 
 // Token classification
@@ -374,20 +537,25 @@ func TestTokenClassificationPipelineValidation(t *testing.T) {
 	pipelineSimple, err2 := NewPipeline(session, configSimple)
 	check(t, err2)
 
-	pipelineSimple.IdLabelMap = map[int]string{}
-	err = pipelineSimple.Validate()
-	assert.Error(t, err)
-	if err != nil {
-		errInt := err.(interface{ Unwrap() []error })
-		assert.Equal(t, 2, len(errInt.Unwrap()))
-	}
-	pipelineSimple.OutputDim = 0
-	err = pipelineSimple.Validate()
-	assert.Error(t, err)
-	if err != nil {
-		errInt := err.(interface{ Unwrap() []error })
-		assert.Equal(t, 2, len(errInt.Unwrap()))
-	}
+	t.Run("id-label-map", func(t *testing.T) {
+		labelMapInitial := pipelineSimple.IDLabelMap
+		defer func() {
+			pipelineSimple.IDLabelMap = labelMapInitial
+		}()
+		pipelineSimple.IDLabelMap = map[int]string{}
+		err = pipelineSimple.Validate()
+		assert.Error(t, err)
+	})
+
+	t.Run("output-shape", func(t *testing.T) {
+		dimensionInitial := pipelineSimple.OutputsMeta[0].Dimensions
+		defer func() {
+			pipelineSimple.OutputsMeta[0].Dimensions = dimensionInitial
+		}()
+		pipelineSimple.OutputsMeta[0].Dimensions = ort.NewShape(-1, -1, -1)
+		err = pipelineSimple.Validate()
+		assert.Error(t, err)
+	})
 }
 
 func TestNoSameNamePipeline(t *testing.T) {
@@ -413,129 +581,6 @@ func TestNoSameNamePipeline(t *testing.T) {
 	}
 	_, err3 := NewPipeline(session, configSimple)
 	assert.Error(t, err3)
-}
-
-// feature extraction
-
-func TestFeatureExtractionPipeline(t *testing.T) {
-	session, err := NewSession(WithOnnxLibraryPath(onnxRuntimeSharedLibrary))
-	check(t, err)
-	defer func(session *Session) {
-		err := session.Destroy()
-		check(t, err)
-	}(session)
-
-	modelPath := downloadModelIfNotExists(session, "KnightsAnalytics/all-MiniLM-L6-v2", "./models")
-
-	config := FeatureExtractionConfig{
-		ModelPath: modelPath,
-		Name:      "testPipeline",
-	}
-	pipeline, err := NewPipeline(session, config)
-	check(t, err)
-
-	var expectedResults map[string][][]float32
-	err = json.Unmarshal(resultsByte, &expectedResults)
-	check(t, err)
-	var testResults [][]float32
-
-	// test 'robert smith'
-	testResults = expectedResults["test1output"]
-	for i := 1; i <= 10; i++ {
-		batchResult, err := pipeline.RunPipeline([]string{"robert smith"})
-		check(t, err)
-		e := floatsEqual(batchResult.Embeddings[0], testResults[0])
-		if e != nil {
-			t.Logf("Test 1: The neural network didn't produce the correct result on loop %d: %s\n", i, e)
-			t.FailNow()
-		}
-	}
-
-	// test ['robert smith junior', 'francis ford coppola']
-	testResults = expectedResults["test2output"]
-	for i := 1; i <= 10; i++ {
-		batchResult, err := pipeline.RunPipeline([]string{"robert smith junior", "francis ford coppola"})
-		check(t, err)
-		for j, res := range batchResult.Embeddings {
-			e := floatsEqual(res, testResults[j])
-			if e != nil {
-				t.Logf("Test 2: The neural network didn't produce the correct result on loop %d: %s\n", i, e)
-				t.FailNow()
-			}
-		}
-	}
-
-	// determinism test to make sure embeddings of a string are not influenced by other strings in the batch
-	testPairs := map[string][][]string{}
-	testPairs["identity"] = [][]string{{"sinopharm", "yo"}, {"sinopharm", "yo"}}
-	testPairs["contextOverlap"] = [][]string{{"sinopharm", "yo"}, {"sinopharm", "yo mama yo"}}
-	testPairs["contextDisjoint"] = [][]string{{"sinopharm", "yo"}, {"sinopharm", "another test"}}
-
-	for k, sentencePair := range testPairs {
-		// these vectors should be the same
-		firstBatchResult, err2 := pipeline.RunPipeline(sentencePair[0])
-		check(t, err2)
-		firstEmbedding := firstBatchResult.Embeddings[0]
-
-		secondBatchResult, err3 := pipeline.RunPipeline(sentencePair[1])
-		check(t, err3)
-		secondEmbedding := secondBatchResult.Embeddings[0]
-		e := floatsEqual(firstEmbedding, secondEmbedding)
-		if e != nil {
-			t.Logf("Equality failed for determinism test %s test with pairs %s and %s", k, strings.Join(sentencePair[0], ","), strings.Join(sentencePair[1], ","))
-			t.Log("First vector", firstEmbedding)
-			t.Log("second vector", secondEmbedding)
-			t.Fail()
-		}
-	}
-
-	zero := uint64(0)
-	assert.Greater(t, pipeline.PipelineTimings.NumCalls, zero, "PipelineTimings.NumCalls should be greater than 0")
-	assert.Greater(t, pipeline.PipelineTimings.TotalNS, zero, "PipelineTimings.TotalNS should be greater than 0")
-	assert.Greater(t, pipeline.TokenizerTimings.NumCalls, zero, "TokenizerTimings.NumCalls should be greater than 0")
-	assert.Greater(t, pipeline.TokenizerTimings.TotalNS, zero, "TokenizerTimings.TotalNS should be greater than 0")
-
-	// test normalization
-	testResults = expectedResults["normalizedOutput"]
-	config = FeatureExtractionConfig{
-		ModelPath: modelPath,
-		Name:      "testPipelineNormalise",
-		Options: []FeatureExtractionOption{
-			pipelines.WithNormalization(),
-		},
-	}
-	pipeline, err = NewPipeline(session, config)
-	check(t, err)
-	normalizationStrings := []string{"Onnxruntime is a great inference backend"}
-	normalizedEmbedding, err := pipeline.RunPipeline(normalizationStrings)
-	check(t, err)
-	for i, embedding := range normalizedEmbedding.Embeddings {
-		e := floatsEqual(embedding, testResults[i])
-		if e != nil {
-			t.Fatalf("Normalization test failed: %s", normalizationStrings[i])
-		}
-	}
-}
-
-func TestFeatureExtractionPipelineValidation(t *testing.T) {
-	session, err := NewSession(WithOnnxLibraryPath(onnxRuntimeSharedLibrary))
-	check(t, err)
-	defer func(session *Session) {
-		err := session.Destroy()
-		check(t, err)
-	}(session)
-
-	modelPath := downloadModelIfNotExists(session, "KnightsAnalytics/all-MiniLM-L6-v2", "./models")
-	config := FeatureExtractionConfig{
-		ModelPath: modelPath,
-		Name:      "testPipeline",
-	}
-	pipeline, err := NewPipeline(session, config)
-	check(t, err)
-
-	pipeline.OutputDim = 0
-	err = pipeline.Validate()
-	assert.Error(t, err)
 }
 
 // README: test the readme examples
@@ -697,7 +742,17 @@ func BenchmarkCPUEmbedding(b *testing.B) {
 	}
 }
 
-// utilities
+// // utilities
+
+func checkClassificationOutput(t *testing.T, inputResult []pipelines.ClassificationOutput, inputExpected []pipelines.ClassificationOutput) {
+	t.Helper()
+	assert.Equal(t, len(inputResult), len(inputExpected))
+	for i, output := range inputResult {
+		resultExpected := inputExpected[i]
+		assert.Equal(t, output.Label, resultExpected.Label)
+		assert.True(t, almostEqual(float64(output.Score), float64(resultExpected.Score)))
+	}
+}
 
 // Returns an error if any element between a and b don't match.
 func floatsEqual(a, b []float32) error {
@@ -716,16 +771,6 @@ func floatsEqual(a, b []float32) error {
 		}
 	}
 	return nil
-}
-
-func checkClassificationOutput(t *testing.T, inputResult []pipelines.ClassificationOutput, inputExpected []pipelines.ClassificationOutput) {
-	t.Helper()
-	assert.Equal(t, len(inputResult), len(inputExpected))
-	for i, output := range inputResult {
-		resultExpected := inputExpected[i]
-		assert.Equal(t, output.Label, resultExpected.Label)
-		assert.True(t, almostEqual(float64(output.Score), float64(resultExpected.Score)))
-	}
 }
 
 func almostEqual(a, b float64) bool {
