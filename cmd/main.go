@@ -296,7 +296,6 @@ func main() {
 }
 
 func writeOutputs(wg *sync.WaitGroup, processedChannel chan []byte, errorChannel chan error, writeTarget io.WriteCloser) {
-
 	for processedChannel != nil || errorChannel != nil {
 		select {
 		case output, ok := <-processedChannel:
