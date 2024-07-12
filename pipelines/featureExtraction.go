@@ -18,9 +18,9 @@ import (
 // https://github.com/huggingface/transformers/blob/main/src/transformers/pipelines/feature_extraction.py
 type FeatureExtractionPipeline struct {
 	basePipeline
-	normalization bool
-	outputName    string
-	output        ort.InputOutputInfo
+	Normalization bool
+	OutputName    string
+	Output        ort.InputOutputInfo
 }
 
 type FeatureExtractionOutput struct {
@@ -40,7 +40,7 @@ func (t *FeatureExtractionOutput) GetOutput() []any {
 // WithNormalization applies normalization to the mean pooled output of the feature pipeline.
 func WithNormalization() PipelineOption[*FeatureExtractionPipeline] {
 	return func(pipeline *FeatureExtractionPipeline) {
-		pipeline.normalization = true
+		pipeline.Normalization = true
 	}
 }
 
@@ -48,7 +48,7 @@ func WithNormalization() PipelineOption[*FeatureExtractionPipeline] {
 // be returned. If not passed, the first output from the feature pipeline is returned.
 func WithOutputName(outputName string) PipelineOption[*FeatureExtractionPipeline] {
 	return func(pipeline *FeatureExtractionPipeline) {
-		pipeline.outputName = outputName
+		pipeline.OutputName = outputName
 	}
 }
 
@@ -87,22 +87,22 @@ func NewFeatureExtractionPipeline(config PipelineConfig[*FeatureExtractionPipeli
 	pipeline.OutputsMeta = outputs
 
 	// filter outputs
-	if pipeline.outputName != "" {
+	if pipeline.OutputName != "" {
 		for _, output := range outputs {
-			if output.Name == pipeline.outputName {
-				pipeline.output = output
+			if output.Name == pipeline.OutputName {
+				pipeline.Output = output
 				break
 			}
 		}
-		if pipeline.output.Name == "" {
-			return nil, fmt.Errorf("output %s is not available, outputs are: %s", pipeline.outputName, strings.Join(getNames(outputs), ", "))
+		if pipeline.Output.Name == "" {
+			return nil, fmt.Errorf("output %s is not available, outputs are: %s", pipeline.OutputName, strings.Join(getNames(outputs), ", "))
 		}
 	} else {
-		pipeline.output = outputs[0] // we take the first output otherwise, like transformers does
+		pipeline.Output = outputs[0] // we take the first output otherwise, like transformers does
 	}
 
 	// creation of the session. Only one output (either token or sentence embedding).
-	session, err := createSession(model, inputs, []ort.InputOutputInfo{pipeline.output}, ortOptions)
+	session, err := createSession(model, inputs, []ort.InputOutputInfo{pipeline.Output}, ortOptions)
 	if err != nil {
 		return nil, err
 	}
@@ -123,6 +123,19 @@ func NewFeatureExtractionPipeline(config PipelineConfig[*FeatureExtractionPipeli
 }
 
 // INTERFACE IMPLEMENTATION
+
+// GetMetadata returns metadata information about the pipeline, in particular:
+// OutputInfo: names and dimensions of the output layer.
+func (p *FeatureExtractionPipeline) GetMetadata() PipelineMetadata {
+	return PipelineMetadata{
+		OutputsInfo: []OutputInfo{
+			{
+				Name:       p.OutputName,
+				Dimensions: []int64(p.Output.Dimensions),
+			},
+		},
+	}
+}
 
 // Destroy frees the feature extraction pipeline resources.
 func (p *FeatureExtractionPipeline) Destroy() error {
@@ -181,7 +194,7 @@ func (p *FeatureExtractionPipeline) Preprocess(batch *PipelineBatch, inputs []st
 // Forward performs the forward inference of the feature extraction pipeline.
 func (p *FeatureExtractionPipeline) Forward(batch *PipelineBatch) error {
 	start := time.Now()
-	err := runSessionOnBatch(batch, p.OrtSession, []ort.InputOutputInfo{p.output})
+	err := runSessionOnBatch(batch, p.OrtSession, []ort.InputOutputInfo{p.Output})
 	if err != nil {
 		return err
 	}
@@ -199,7 +212,7 @@ func (p *FeatureExtractionPipeline) Postprocess(batch *PipelineBatch) (*FeatureE
 	// about how to do this in a lightweight manner.
 
 	batchEmbeddings := make([][]float32, len(batch.Input))
-	outputDimensions := []int64(p.output.Dimensions)
+	outputDimensions := []int64(p.Output.Dimensions)
 	embeddingDimension := outputDimensions[len(outputDimensions)-1]
 	maxSequenceLength := batch.MaxSequenceLength
 
@@ -242,7 +255,7 @@ func (p *FeatureExtractionPipeline) Postprocess(batch *PipelineBatch) (*FeatureE
 	}
 
 	// Normalize embeddings (if asked), like in https://huggingface.co/sentence-transformers/all-mpnet-base-v2
-	if p.normalization {
+	if p.Normalization {
 		for i, output := range batchEmbeddings {
 			batchEmbeddings[i] = util.Normalize(output, 2)
 		}

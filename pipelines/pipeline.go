@@ -29,6 +29,15 @@ type basePipeline struct {
 	PipelineTimings  *timings
 }
 
+type OutputInfo struct {
+	Name       string
+	Dimensions []int64
+}
+
+type PipelineMetadata struct {
+	OutputsInfo []OutputInfo
+}
+
 type PipelineBatchOutput interface {
 	GetOutput() []any
 }
@@ -38,6 +47,7 @@ type Pipeline interface {
 	Destroy() error                            // Destroy the pipeline along with its onnx session
 	GetStats() []string                        // Get the pipeline running stats
 	Validate() error                           // Validate the pipeline for correctness
+	GetMetadata() PipelineMetadata             // Return metadata information for the pipeline
 	Run([]string) (PipelineBatchOutput, error) // Run the pipeline on an input
 }
 
@@ -70,7 +80,7 @@ type tokenizedInput struct {
 	Offsets           []tokenizers.Offset
 }
 
-// pipelineBatch represents a batch of inputs that runs through the pipeline.
+// PipelineBatch represents a batch of inputs that runs through the pipeline.
 type PipelineBatch struct {
 	Input             []tokenizedInput
 	InputTensors      []*ort.Tensor[int64]
@@ -152,8 +162,8 @@ func loadInputOutputMeta(onnxBytes []byte) ([]ort.InputOutputInfo, []ort.InputOu
 }
 
 func createSession(onnxBytes []byte, inputs, outputs []ort.InputOutputInfo, options *ort.SessionOptions) (*ort.DynamicAdvancedSession, error) {
-	inputNames := []string{}
-	outputNames := []string{}
+	var inputNames []string
+	var outputNames []string
 	for _, v := range inputs {
 		inputNames = append(inputNames, v.Name)
 	}

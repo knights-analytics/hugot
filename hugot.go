@@ -41,6 +41,9 @@ func (m pipelineMap[T]) GetStats() []string {
 // FeatureExtractionConfig is the configuration for a feature extraction pipeline
 type FeatureExtractionConfig = pipelines.PipelineConfig[*pipelines.FeatureExtractionPipeline]
 
+// FeatureExtractionOption is an option for a feature extraction pipeline
+type FeatureExtractionOption = pipelines.PipelineOption[*pipelines.FeatureExtractionPipeline]
+
 // TextClassificationConfig is the configuration for a text classification pipeline
 type TextClassificationConfig = pipelines.PipelineConfig[*pipelines.TextClassificationPipeline]
 
@@ -50,16 +53,13 @@ type TextClassificationOption = pipelines.PipelineOption[*pipelines.TextClassifi
 // TokenClassificationConfig is the configuration for a token classification pipeline
 type TokenClassificationConfig = pipelines.PipelineConfig[*pipelines.TokenClassificationPipeline]
 
-// // TokenClassificationOption is an option for a token classification pipeline
+// TokenClassificationOption is an option for a token classification pipeline
 type TokenClassificationOption = pipelines.PipelineOption[*pipelines.TokenClassificationPipeline]
-
-// FeatureExtractionOption is an option for a feature extraction pipeline
-type FeatureExtractionOption = pipelines.PipelineOption[*pipelines.FeatureExtractionPipeline]
 
 // NewSession is the main entrypoint to hugot and is used to create a new hugot session object.
 // ortLibraryPath should be the path to onnxruntime.so. If it's the empty string, hugot will try
 // to load the library from the default location (/usr/lib/onnxruntime.so).
-// A new session must be destroyed when it's not needed anymore to avoid memory leaks. See the Destroy method.
+// A new session must be destroyed when it's not needed any more to avoid memory leaks. See the Destroy method.
 // Note moreover that there can be at most one hugot session active (i.e., the Session object is a singleton),
 // otherwise NewSession will return an error.
 func NewSession(options ...WithOption) (*Session, error) {
@@ -282,11 +282,11 @@ func GetPipeline[T pipelines.Pipeline](s *Session, name string) (T, error) {
 }
 
 // Destroy deletes the hugot session and onnxruntime environment and all initialized pipelines, freeing memory.
-// A hugot session should be destroyed when not neeeded anymore, preferably with a defer() call.
+// A hugot session should be destroyed when not neeeded any more, preferably with a defer() call.
 func (s *Session) Destroy() error {
 	return errors.Join(
 		s.featureExtractionPipelines.Destroy(),
-		// s.tokenClassificationPipelines.Destroy(),
+		s.tokenClassificationPipelines.Destroy(),
 		s.textClassificationPipelines.Destroy(),
 		s.ortOptions.Destroy(),
 		ort.DestroyEnvironment(),
@@ -307,63 +307,4 @@ func (s *Session) GetStats() []string {
 		s.textClassificationPipelines.GetStats()...),
 		s.featureExtractionPipelines.GetStats()...,
 	)
-}
-
-// deprecated methods
-
-// NewTokenClassificationPipeline creates and returns a new token classification pipeline object.
-// modelPath should be the path to a folder with the onnx exported transformer model. Name is an identifier
-// for the pipeline (see GetTokenClassificationPipeline).
-// Deprecated: use NewPipeline
-func (s *Session) NewTokenClassificationPipeline(modelPath string, name string, opts ...TokenClassificationOption) (*pipelines.TokenClassificationPipeline, error) {
-	config := pipelines.PipelineConfig[*pipelines.TokenClassificationPipeline]{
-		ModelPath: modelPath,
-		Name:      name,
-		Options:   opts,
-	}
-	return NewPipeline(s, config)
-}
-
-// NewTextClassificationPipeline creates and returns a new text classification pipeline object.
-// modelPath should be the path to a folder with the onnx exported transformer model. Name is an identifier
-// for the pipeline (see GetTextClassificationPipeline).
-// Deprecated: use NewPipeline
-func (s *Session) NewTextClassificationPipeline(modelPath string, name string, opts ...TextClassificationOption) (*pipelines.TextClassificationPipeline, error) {
-	config := pipelines.PipelineConfig[*pipelines.TextClassificationPipeline]{
-		ModelPath: modelPath,
-		Name:      name,
-		Options:   opts,
-	}
-	return NewPipeline(s, config)
-}
-
-// NewFeatureExtractionPipeline creates and returns a new feature extraction pipeline object.
-// modelPath should be the path to a folder with the onnx exported transformer model. Name is an identifier
-// for the pipeline (see GetFeatureExtractionPipeline).
-// Deprecated: use NewPipeline
-func (s *Session) NewFeatureExtractionPipeline(modelPath string, name string, opts ...FeatureExtractionOption) (*pipelines.FeatureExtractionPipeline, error) {
-	config := pipelines.PipelineConfig[*pipelines.FeatureExtractionPipeline]{
-		ModelPath: modelPath,
-		Name:      name,
-		Options:   opts,
-	}
-	return NewPipeline(s, config)
-}
-
-// GetFeatureExtractionPipeline returns a feature extraction pipeline by name. If the name does not exist, it will return an error.
-// Deprecated: use GetPipeline.
-func (s *Session) GetFeatureExtractionPipeline(name string) (*pipelines.FeatureExtractionPipeline, error) {
-	return GetPipeline[*pipelines.FeatureExtractionPipeline](s, name)
-}
-
-// GetTextClassificationPipeline returns a text classification pipeline by name. If the name does not exist, it will return an error.
-// Deprecated: use GetPipeline.
-func (s *Session) GetTextClassificationPipeline(name string) (*pipelines.TextClassificationPipeline, error) {
-	return GetPipeline[*pipelines.TextClassificationPipeline](s, name)
-}
-
-// GetTokenClassificationPipeline returns a token classification pipeline by name. If the name does not exist, it will return an error.
-// Deprecated: use GetPipeline.
-func (s *Session) GetTokenClassificationPipeline(name string) (*pipelines.TokenClassificationPipeline, error) {
-	return GetPipeline[*pipelines.TokenClassificationPipeline](s, name)
 }
