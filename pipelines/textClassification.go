@@ -155,6 +155,19 @@ func NewTextClassificationPipeline(config PipelineConfig[*TextClassificationPipe
 
 // INTERFACE IMPLEMENTATION
 
+// GetMetadata returns metadata information about the pipeline, in particular:
+// OutputInfo: names and dimensions of the output layer used for text classification.
+func (p *TextClassificationPipeline) GetMetadata() PipelineMetadata {
+	return PipelineMetadata{
+		OutputsInfo: []OutputInfo{
+			{
+				Name:       p.OutputsMeta[0].Name,
+				Dimensions: []int64(p.OutputsMeta[0].Dimensions),
+			},
+		},
+	}
+}
+
 // Destroy frees the text classification pipeline resources.
 func (p *TextClassificationPipeline) Destroy() error {
 	return destroySession(p.Tokenizer, p.OrtSession)
