@@ -159,6 +159,19 @@ func NewTokenClassificationPipeline(config PipelineConfig[*TokenClassificationPi
 
 // INTERFACE IMPLEMENTATION
 
+// GetMetadata returns metadata information about the pipeline, in particular:
+// OutputInfo: names and dimensions of the output layer used for token classification.
+func (p *TokenClassificationPipeline) GetMetadata() PipelineMetadata {
+	return PipelineMetadata{
+		OutputsInfo: []OutputInfo{
+			{
+				Name:       p.OutputsMeta[0].Name,
+				Dimensions: []int64(p.OutputsMeta[0].Dimensions),
+			},
+		},
+	}
+}
+
 // Destroy frees the feature extraction pipeline resources.
 func (p *TokenClassificationPipeline) Destroy() error {
 	return destroySession(p.Tokenizer, p.OrtSession)

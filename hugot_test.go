@@ -742,7 +742,7 @@ func BenchmarkCPUEmbedding(b *testing.B) {
 	}
 }
 
-// // utilities
+// Utilities
 
 func checkClassificationOutput(t *testing.T, inputResult []pipelines.ClassificationOutput, inputExpected []pipelines.ClassificationOutput) {
 	t.Helper()
