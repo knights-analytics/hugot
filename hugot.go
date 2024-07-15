@@ -14,10 +14,11 @@ import (
 
 // Session allows for the creation of new pipelines and holds the pipeline already created.
 type Session struct {
-	featureExtractionPipelines   pipelineMap[*pipelines.FeatureExtractionPipeline]
-	tokenClassificationPipelines pipelineMap[*pipelines.TokenClassificationPipeline]
-	textClassificationPipelines  pipelineMap[*pipelines.TextClassificationPipeline]
-	ortOptions                   *ort.SessionOptions
+	featureExtractionPipelines     pipelineMap[*pipelines.FeatureExtractionPipeline]
+	tokenClassificationPipelines   pipelineMap[*pipelines.TokenClassificationPipeline]
+	textClassificationPipelines    pipelineMap[*pipelines.TextClassificationPipeline]
+	zeroShotClassifcationPipelines pipelineMap[*pipelines.ZeroShotClassificationPipeline]
+	ortOptions                     *ort.SessionOptions
 }
 
 type pipelineMap[T pipelines.Pipeline] map[string]T
@@ -47,6 +48,10 @@ type FeatureExtractionOption = pipelines.PipelineOption[*pipelines.FeatureExtrac
 // TextClassificationConfig is the configuration for a text classification pipeline
 type TextClassificationConfig = pipelines.PipelineConfig[*pipelines.TextClassificationPipeline]
 
+// type ZSCConfig = pipelines.PipelineConfig[*pipelines.ZeroShotClassificationPipeline]
+
+type ZeroShotClassificationConfig = pipelines.PipelineConfig[*pipelines.ZeroShotClassificationPipeline]
+
 // TextClassificationOption is an option for a text classification pipeline
 type TextClassificationOption = pipelines.PipelineOption[*pipelines.TextClassificationPipeline]
 
@@ -69,9 +74,10 @@ func NewSession(options ...WithOption) (*Session, error) {
 	}
 
 	session := &Session{
-		featureExtractionPipelines:   map[string]*pipelines.FeatureExtractionPipeline{},
-		textClassificationPipelines:  map[string]*pipelines.TextClassificationPipeline{},
-		tokenClassificationPipelines: map[string]*pipelines.TokenClassificationPipeline{},
+		featureExtractionPipelines:     map[string]*pipelines.FeatureExtractionPipeline{},
+		textClassificationPipelines:    map[string]*pipelines.TextClassificationPipeline{},
+		tokenClassificationPipelines:   map[string]*pipelines.TokenClassificationPipeline{},
+		zeroShotClassifcationPipelines: map[string]*pipelines.ZeroShotClassificationPipeline{},
 	}
 
 	// set session options and initialise
@@ -248,6 +254,16 @@ func NewPipeline[T pipelines.Pipeline](s *Session, pipelineConfig pipelines.Pipe
 		}
 		s.featureExtractionPipelines[config.Name] = pipelineInitialised
 		pipeline = any(pipelineInitialised).(T)
+	case *pipelines.ZeroShotClassificationPipeline:
+		config := any(pipelineConfig).(pipelines.PipelineConfig[*pipelines.ZeroShotClassificationPipeline])
+		pipelineInitialised, err := pipelines.NewZeroShotClassificationPipeline(config, s.ortOptions)
+		if err != nil {
+			fmt.Println("error in if statement")
+			return pipeline, err
+		}
+		fmt.Println("config name:", config.Name)
+		s.zeroShotClassifcationPipelines[config.Name] = pipelineInitialised
+		pipeline = any(pipelineInitialised).(T)
 	default:
 		return pipeline, fmt.Errorf("not implemented")
 	}
@@ -272,6 +288,12 @@ func GetPipeline[T pipelines.Pipeline](s *Session, name string) (T, error) {
 		return any(p).(T), nil
 	case *pipelines.FeatureExtractionPipeline:
 		p, ok := s.featureExtractionPipelines[name]
+		if !ok {
+			return pipeline, &pipelineNotFoundError{pipelineName: name}
+		}
+		return any(p).(T), nil
+	case *pipelines.ZeroShotClassificationPipeline:
+		p, ok := s.zeroShotClassifcationPipelines[name]
 		if !ok {
 			return pipeline, &pipelineNotFoundError{pipelineName: name}
 		}
