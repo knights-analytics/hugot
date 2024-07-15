@@ -438,6 +438,272 @@ func TestTextClassificationPipelineValidation(t *testing.T) {
 	})
 }
 
+func TestZeroShotClassificationPipeline(t *testing.T) {
+	session, err := NewSession()
+	check(t, err)
+	defer func(session *Session) {
+		err := session.Destroy()
+		check(t, err)
+	}(session)
+
+	modelPath := downloadModelIfNotExists(session, "protectai/deberta-v3-base-zeroshot-v1-onnx", "./models")
+
+	config := ZeroShotClassificationConfig{
+		ModelPath: modelPath,
+		Name:      "testPipeline",
+		Options: []pipelines.PipelineOption[*pipelines.ZeroShotClassificationPipeline]{
+			pipelines.WithHypothesisTemplate("This example is {}."),
+			pipelines.WithLabels([]string{"fun", "dangerous"}),
+		},
+	}
+
+	classificationPipeline, err := NewPipeline(session, config)
+	check(t, err)
+
+	tests := []struct {
+		pipeline   *pipelines.ZeroShotClassificationPipeline
+		name       string
+		sequences  []string
+		labels     []string
+		multilabel bool
+		expected   pipelines.ZeroShotOutput
+	}{
+		{
+			pipeline:   classificationPipeline,
+			name:       "single sequence, single label, no multilabel",
+			sequences:  []string{"I am going to the park"},
+			labels:     []string{"fun"},
+			multilabel: false,
+			expected: pipelines.ZeroShotOutput{
+				ClassificationOutputs: []pipelines.ZeroShotClassificationOutput{
+					{
+						Sequence: "I am going to the park",
+						SortedValues: []struct {
+							Key   string
+							Value float64
+						}{
+							{
+								Key:   "fun",
+								Value: 0.0009069009101949632,
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			pipeline:   classificationPipeline,
+			name:       "multiple sequences, multiple labels, no multilabel",
+			sequences:  []string{"I am going to the park", "I will watch Interstellar tonight"},
+			labels:     []string{"fun", "movie"},
+			multilabel: false,
+			expected: pipelines.ZeroShotOutput{
+				ClassificationOutputs: []pipelines.ZeroShotClassificationOutput{
+					{
+						Sequence: "I am going to the park",
+						SortedValues: []struct {
+							Key   string
+							Value float64
+						}{
+							{
+								Key:   "fun",
+								Value: 0.7746766209602356,
+							},
+							{
+								Key:   "movie",
+								Value: 0.2253233790397644,
+							},
+						},
+					},
+					{
+						Sequence: "I will watch Interstellar tonight",
+						SortedValues: []struct {
+							Key   string
+							Value float64
+						}{
+							{
+								Key:   "movie",
+								Value: 0.9984978437423706,
+							},
+							{
+								Key:   "fun",
+								Value: 0.001502170693129301,
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			pipeline:   classificationPipeline,
+			name:       "multiple sequences, multiple labels, multilabel",
+			sequences:  []string{"I am going to the park", "I will watch Interstellar tonight"},
+			labels:     []string{"fun", "movie"},
+			multilabel: true,
+			expected: pipelines.ZeroShotOutput{
+				ClassificationOutputs: []pipelines.ZeroShotClassificationOutput{
+					{
+						Sequence: "I am going to the park",
+						SortedValues: []struct {
+							Key   string
+							Value float64
+						}{
+							{
+								Key:   "fun",
+								Value: 0.0009069009101949632,
+							},
+							{
+								Key:   "movie",
+								Value: 0.00009480675362283364,
+							},
+						},
+					},
+					{
+						Sequence: "I will watch Interstellar tonight",
+						SortedValues: []struct {
+							Key   string
+							Value float64
+						}{
+							{
+								Key:   "movie",
+								Value: 0.9985591769218445,
+							},
+							{
+								Key:   "fun",
+								Value: 0.0006653196760453284,
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			pipeline:   classificationPipeline,
+			name:       "multiple sequences, single label, multilabel",
+			sequences:  []string{"I am going to the park", "I will watch Interstellar tonight"},
+			labels:     []string{"fun"},
+			multilabel: true,
+			expected: pipelines.ZeroShotOutput{
+				ClassificationOutputs: []pipelines.ZeroShotClassificationOutput{
+					{
+						Sequence: "I am going to the park",
+						SortedValues: []struct {
+							Key   string
+							Value float64
+						}{
+							{
+								Key:   "fun",
+								Value: 0.0009069009101949632,
+							},
+						},
+					},
+					{
+						Sequence: "I will watch Interstellar tonight",
+						SortedValues: []struct {
+							Key   string
+							Value float64
+						}{
+							{
+								Key:   "fun",
+								Value: 0.0006653196760453284,
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			pipeline:   classificationPipeline,
+			name:       "single sequence, multiple labels, multilabel=false",
+			sequences:  []string{"Please don't bother me, I'm in a rush"},
+			labels:     []string{"busy", "relaxed", "stressed"},
+			multilabel: false,
+			expected: pipelines.ZeroShotOutput{
+				ClassificationOutputs: []pipelines.ZeroShotClassificationOutput{
+					{
+						Sequence: "Please don't bother me, I'm in a rush",
+						SortedValues: []struct {
+							Key   string
+							Value float64
+						}{
+							{
+								Key:   "stressed",
+								Value: 0.8865461349487305,
+							},
+							{
+								Key:   "busy",
+								Value: 0.10629364103078842,
+							},
+							{
+								Key:   "relaxed",
+								Value: 0.007160270120948553,
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			classificationPipeline.Labels = tt.labels
+			classificationPipeline.Multilabel = tt.multilabel
+			batchResult, _ := tt.pipeline.RunPipeline(tt.sequences)
+			assert.Equal(t, len(batchResult.GetOutput()), len(tt.expected.ClassificationOutputs))
+
+			for ind, expected := range tt.expected.ClassificationOutputs {
+				expectedResult := expected.SortedValues
+				testResult := batchResult.ClassificationOutputs[ind].SortedValues
+				assert.Equal(t, len(expectedResult), len(testResult))
+				assert.Equal(t, tt.expected.ClassificationOutputs[ind].Sequence, batchResult.ClassificationOutputs[ind].Sequence)
+				for i := range testResult {
+					fmt.Println(testResult[i].Key, expectedResult[i].Key)
+
+					assert.True(t, almostEqual(testResult[i].Value, expectedResult[i].Value))
+				}
+			}
+		})
+	}
+}
+
+func TestZeroShotClassificationPipelineValidation(t *testing.T) {
+	session, err := NewSession(WithOnnxLibraryPath(onnxRuntimeSharedLibrary))
+	check(t, err)
+	defer func(session *Session) {
+		err := session.Destroy()
+		check(t, err)
+	}(session)
+	modelPath := downloadModelIfNotExists(session, "protectai/deberta-v3-base-zeroshot-v1-onnx", "./models")
+
+	config := TextClassificationConfig{
+		ModelPath: modelPath,
+		Name:      "testPipelineSimple",
+	}
+	sentimentPipeline, err := NewPipeline(session, config)
+	check(t, err)
+
+	t.Run("id-label-map", func(t *testing.T) {
+		labelMapInitial := sentimentPipeline.IDLabelMap
+		defer func() {
+			sentimentPipeline.IDLabelMap = labelMapInitial
+		}()
+		sentimentPipeline.IDLabelMap = map[int]string{}
+		err = sentimentPipeline.Validate()
+		assert.Error(t, err)
+	})
+
+	t.Run("output-shape", func(t *testing.T) {
+		dimensionInitial := sentimentPipeline.OutputsMeta[0].Dimensions
+		defer func() {
+			sentimentPipeline.OutputsMeta[0].Dimensions = dimensionInitial
+		}()
+		sentimentPipeline.OutputsMeta[0].Dimensions = ort.NewShape(-1, -1, -1)
+		err = sentimentPipeline.Validate()
+		assert.Error(t, err)
+	})
+}
+
 // Token classification
 
 func TestTokenClassificationPipeline(t *testing.T) {
