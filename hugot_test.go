@@ -34,6 +34,9 @@ func TestDownloadValidation(t *testing.T) {
 	// a model without tokenizer.json or .onnx model should error
 	err = validateDownloadHfModel("ByteDance/SDXL-Lightning", "main", "")
 	assert.Error(t, err)
+	// a model with the required files in a subfolder should not error
+	err = validateDownloadHfModel("distilbert/distilbert-base-uncased-finetuned-sst-2-english", "main", "")
+	assert.NoError(t, err)
 }
 
 // FEATURE EXTRACTION
