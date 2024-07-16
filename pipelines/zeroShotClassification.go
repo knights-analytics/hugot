@@ -112,7 +112,7 @@ func WithHypothesisTemplate(hypothesisTemplate string) PipelineOption[*ZeroShotC
 
 // GetOutput converts raw output to readable output.
 func (t *ZeroShotOutput) GetOutput() []any {
-	out := make([]any, 0, len(t.ClassificationOutputs))
+	out := make([]any, len(t.ClassificationOutputs))
 	for i, o := range t.ClassificationOutputs {
 		out[i] = any(o)
 	}
