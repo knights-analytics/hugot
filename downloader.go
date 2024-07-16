@@ -122,7 +122,7 @@ func checkURL(client *http.Client, url string, authToken string) (bool, bool, er
 
 	var dirs []hfFile
 	for _, f := range filesList {
-		if f.Path == "tokenizer.json" {
+		if filepath.Base(f.Path) == "tokenizer.json" {
 			tokenizerFound = true
 		}
 		if filepath.Ext(f.Path) == ".onnx" {
@@ -155,7 +155,6 @@ func checkURL(client *http.Client, url string, authToken string) (bool, bool, er
 }
 
 func downloadModelIfNotExists(session *Session, modelName string, destination string) string {
-
 	modelNameFS := modelName
 	if strings.Contains(modelNameFS, ":") {
 		modelNameFS = strings.Split(modelName, ":")[0]
