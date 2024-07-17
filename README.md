@@ -31,6 +31,7 @@ Currently, we have implementations for the following transfomer pipelines:
 - [featureExtraction](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.FeatureExtractionPipeline)
 - [textClassification](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.TextClassificationPipeline)
 - [tokenClassification](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.TokenClassificationPipeline)
+- [zeroShotClassification](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.ZeroShotClassificationPipeline)
 
 Implementations for additional pipelines will follow. We also very gladly accept PRs to expand the set of pipelines! See [here](https://huggingface.co/docs/transformers/en/main_classes/pipelines) for the missing pipelines that can be implemented, and the contributing section below if you want to lend a hand.
 
@@ -70,6 +71,7 @@ Pipelines are also tested on specifically NLP use cases. In particular, we use t
 - feature extraction: all-MiniLM-L6-v2
 - text classification: distilbert-base-uncased-finetuned-sst-2-english
 - token classification: distilbert-NER and Roberta-base-go_emotions
+- zero shot classification: protectai/deberta-v3-base-zeroshot-v1-onnx
 
 If you encounter any further issues or want further features, please open an issue.
 
