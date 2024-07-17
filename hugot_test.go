@@ -49,7 +49,7 @@ func TestFeatureExtractionPipelineValidation(t *testing.T) {
 		check(t, err)
 	}(session)
 
-	modelPath := downloadModelIfNotExists(session, "KnightsAnalytics/all-MiniLM-L6-v2", "./models")
+	modelPath := "./models/sentence-transformers_all-MiniLM-L6-v2"
 	config := FeatureExtractionConfig{
 		ModelPath: modelPath,
 		Name:      "testPipeline",
@@ -75,7 +75,7 @@ func TestFeatureExtractionPipeline(t *testing.T) {
 		check(t, err)
 	}(session)
 
-	modelPath := downloadModelIfNotExists(session, "sentence-transformers/all-MiniLM-L6-v2", "./models")
+	modelPath := "./models/sentence-transformers_all-MiniLM-L6-v2"
 
 	config := FeatureExtractionConfig{
 		ModelPath: modelPath,
@@ -187,12 +187,10 @@ func TestFeatureExtractionPipeline(t *testing.T) {
 	}
 	pipelineToken, err := NewPipeline(session, configSentence)
 	check(t, err)
-	out, err := pipelineToken.RunPipeline([]string{"Onnxruntime is a great inference backend"})
+	_, err = pipelineToken.RunPipeline([]string{"Onnxruntime is a great inference backend"})
 	if err != nil {
 		t.FailNow()
 	}
-	fmt.Println(out)
-	// TODO: assert the result here
 }
 
 // Text classification
@@ -211,7 +209,9 @@ func TestTextClassificationPipeline(t *testing.T) {
 		errDestroy := session.Destroy()
 		check(t, errDestroy)
 	}(session)
-	modelPath := downloadModelIfNotExists(session, "KnightsAnalytics/distilbert-base-uncased-finetuned-sst-2-english", "./models")
+	modelPath := "./models/KnightsAnalytics_distilbert-base-uncased-finetuned-sst-2-english"
+	modelPathMulti := "./models/SamLowe_roberta-base-go_emotions-onnx"
+
 	config := TextClassificationConfig{
 		ModelPath: modelPath,
 		Name:      "testPipelineSimple",
@@ -222,7 +222,6 @@ func TestTextClassificationPipeline(t *testing.T) {
 	sentimentPipeline, err := NewPipeline(session, config)
 	check(t, err)
 
-	modelPathMulti := downloadModelIfNotExists(session, "SamLowe/roberta-base-go_emotions-onnx", "./models")
 	configMulti := TextClassificationConfig{
 		ModelPath:    modelPathMulti,
 		Name:         "testPipelineSimpleMulti",
@@ -408,7 +407,7 @@ func TestTextClassificationPipelineValidation(t *testing.T) {
 		err := session.Destroy()
 		check(t, err)
 	}(session)
-	modelPath := downloadModelIfNotExists(session, "KnightsAnalytics/distilbert-base-uncased-finetuned-sst-2-english", "./models")
+	modelPath := "./models/KnightsAnalytics_distilbert-base-uncased-finetuned-sst-2-english"
 
 	config := TextClassificationConfig{
 		ModelPath: modelPath,
@@ -449,7 +448,7 @@ func TestZeroShotClassificationPipeline(t *testing.T) {
 		check(t, err)
 	}(session)
 
-	modelPath := downloadModelIfNotExists(session, "protectai/deberta-v3-base-zeroshot-v1-onnx", "./models")
+	modelPath := "./models/protectai_deberta-v3-base-zeroshot-v1-onnx"
 
 	config := ZeroShotClassificationConfig{
 		ModelPath: modelPath,
@@ -661,8 +660,6 @@ func TestZeroShotClassificationPipeline(t *testing.T) {
 				assert.Equal(t, len(expectedResult), len(testResult))
 				assert.Equal(t, tt.expected.ClassificationOutputs[ind].Sequence, batchResult.ClassificationOutputs[ind].Sequence)
 				for i := range testResult {
-					fmt.Println(testResult[i].Key, expectedResult[i].Key)
-
 					assert.True(t, almostEqual(testResult[i].Value, expectedResult[i].Value))
 				}
 			}
@@ -677,7 +674,7 @@ func TestZeroShotClassificationPipelineValidation(t *testing.T) {
 		err := session.Destroy()
 		check(t, err)
 	}(session)
-	modelPath := downloadModelIfNotExists(session, "protectai/deberta-v3-base-zeroshot-v1-onnx", "./models")
+	modelPath := "./models/protectai_deberta-v3-base-zeroshot-v1-onnx"
 
 	config := TextClassificationConfig{
 		ModelPath: modelPath,
@@ -717,7 +714,7 @@ func TestTokenClassificationPipeline(t *testing.T) {
 		check(t, err)
 	}(session)
 
-	modelPath := downloadModelIfNotExists(session, "KnightsAnalytics/distilbert-NER", "./models")
+	modelPath := "./models/KnightsAnalytics_distilbert-NER"
 	configSimple := TokenClassificationConfig{
 		ModelPath: modelPath,
 		Name:      "testPipelineSimple",
@@ -794,7 +791,7 @@ func TestTokenClassificationPipelineValidation(t *testing.T) {
 		check(t, err)
 	}(session)
 
-	modelPath := downloadModelIfNotExists(session, "KnightsAnalytics/distilbert-NER", "./models")
+	modelPath := "./models/KnightsAnalytics_distilbert-NER"
 	configSimple := TokenClassificationConfig{
 		ModelPath: modelPath,
 		Name:      "testPipelineSimple",
@@ -835,7 +832,7 @@ func TestNoSameNamePipeline(t *testing.T) {
 		check(t, err)
 	}(session)
 
-	modelPath := downloadModelIfNotExists(session, "KnightsAnalytics/distilbert-NER", "./models")
+	modelPath := "./models/KnightsAnalytics_distilbert-NER"
 	configSimple := TokenClassificationConfig{
 		ModelPath: modelPath,
 		Name:      "testPipelineSimple",
@@ -930,7 +927,7 @@ func TestCuda(t *testing.T) {
 		}
 	}(session)
 
-	modelPath := downloadModelIfNotExists(session, "KnightsAnalytics/all-MiniLM-L6-v2", "./models")
+	modelPath := "./models/KnightsAnalytics_all-MiniLM-L6-v2"
 	config := FeatureExtractionConfig{
 		ModelPath: modelPath,
 		Name:      "benchmarkEmbedding",
@@ -969,7 +966,7 @@ func runBenchmarkEmbedding(strings *[]string, cuda bool) {
 		}
 	}(session)
 
-	modelPath := downloadModelIfNotExists(session, "KnightsAnalytics/all-MiniLM-L6-v2", "./models")
+	modelPath := "./models/KnightsAnalytics_all-MiniLM-L6-v2"
 	config := FeatureExtractionConfig{
 		ModelPath: modelPath,
 		Name:      "benchmarkEmbedding",

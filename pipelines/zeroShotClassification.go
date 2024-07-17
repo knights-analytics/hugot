@@ -15,8 +15,8 @@ import (
 	util "github.com/knights-analytics/hugot/utils"
 	ort "github.com/yalue/onnxruntime_go"
 
+	"github.com/daulet/tokenizers"
 	jsoniter "github.com/json-iterator/go"
-	"github.com/knights-analytics/tokenizers"
 )
 
 /**
@@ -207,17 +207,14 @@ func NewZeroShotClassificationPipeline(config PipelineConfig[*ZeroShotClassifica
 		}
 	}
 
-	// TODO: figure out logging
-	// if pipeline.entailmentID == -1 {
-	// 	fmt.Println("Failed to determine `entailment` label id from the id2label mapping in the model config. Setting to -1. Define a descriptive id2labelmapping in the model config to ensure correct outputs")
-	// }
-
 	configPath1 := util.PathJoinSafe(pipeline.ModelPath, "special_tokens_map.json")
 	file, err := os.Open(configPath1)
 	if err != nil {
 		return nil, fmt.Errorf("cannot read special_tokens_map.json at %s", pipeline.ModelPath)
 	}
-	defer file.Close()
+	defer func() {
+		err = file.Close()
+	}()
 
 	byteValue, _ := io.ReadAll(file)
 	var result map[string]interface{}
@@ -269,7 +266,7 @@ func NewZeroShotClassificationPipeline(config PipelineConfig[*ZeroShotClassifica
 
 	pipeline.PipelineTimings = &timings{}
 	pipeline.TokenizerTimings = &timings{}
-	return pipeline, nil
+	return pipeline, err
 }
 
 func (p *ZeroShotClassificationPipeline) Preprocess(batch *PipelineBatch, inputs []string) error {
@@ -481,7 +478,7 @@ func (p *ZeroShotClassificationPipeline) GetMetadata() PipelineMetadata {
 		OutputsInfo: []OutputInfo{
 			{
 				Name:       p.OutputsMeta[0].Name,
-				Dimensions: []int64(p.OutputsMeta[0].Dimensions),
+				Dimensions: p.OutputsMeta[0].Dimensions,
 			},
 		},
 	}

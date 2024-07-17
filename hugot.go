@@ -258,10 +258,8 @@ func NewPipeline[T pipelines.Pipeline](s *Session, pipelineConfig pipelines.Pipe
 		config := any(pipelineConfig).(pipelines.PipelineConfig[*pipelines.ZeroShotClassificationPipeline])
 		pipelineInitialised, err := pipelines.NewZeroShotClassificationPipeline(config, s.ortOptions)
 		if err != nil {
-			fmt.Println("error in if statement")
 			return pipeline, err
 		}
-		fmt.Println("config name:", config.Name)
 		s.zeroShotClassifcationPipelines[config.Name] = pipelineInitialised
 		pipeline = any(pipelineInitialised).(T)
 	default:
@@ -310,6 +308,7 @@ func (s *Session) Destroy() error {
 		s.featureExtractionPipelines.Destroy(),
 		s.tokenClassificationPipelines.Destroy(),
 		s.textClassificationPipelines.Destroy(),
+		s.zeroShotClassifcationPipelines.Destroy(),
 		s.ortOptions.Destroy(),
 		ort.DestroyEnvironment(),
 	)
@@ -324,9 +323,10 @@ func (s *Session) Destroy() error {
 // the average time per onnxruntime inference batch call
 func (s *Session) GetStats() []string {
 	// slices.Concat() is not implemented in experimental x/exp/slices package
-	return append(append(
+	return append(append(append(
 		s.tokenClassificationPipelines.GetStats(),
 		s.textClassificationPipelines.GetStats()...),
-		s.featureExtractionPipelines.GetStats()...,
+		s.featureExtractionPipelines.GetStats()...),
+		s.zeroShotClassifcationPipelines.GetStats()...,
 	)
 }

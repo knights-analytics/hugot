@@ -1,13 +1,13 @@
-ARG GO_VERSION=1.22.3
-ARG RUST_VERSION=1.78
+ARG GO_VERSION=1.22.5
+ARG RUST_VERSION=1.79
 ARG ONNXRUNTIME_VERSION=1.18.0
 ARG BUILD_PLATFORM=linux/amd64
-
+ARG CGO_LDFLAGS="-L./usr/lib/libtokenizers.a"
 #--- rust build of tokenizer ---
 
 FROM --platform=$BUILD_PLATFORM rust:$RUST_VERSION AS tokenizer
 
-RUN git clone https://github.com/knights-analytics/tokenizers -b main && \
+RUN git clone https://github.com/knights-analytics/tokenizers -b rebase && \
     cd tokenizers && \
     cargo build --release
 
@@ -16,6 +16,7 @@ RUN git clone https://github.com/knights-analytics/tokenizers -b main && \
 FROM --platform=$BUILD_PLATFORM public.ecr.aws/amazonlinux/amazonlinux:2023 AS hugot-build
 ARG GO_VERSION
 ARG ONNXRUNTIME_VERSION
+ARG CGO_LDFLAGS
 
 RUN dnf -y install gcc jq bash tar xz gzip glibc-static libstdc++ wget zip git && \
     ln -s /usr/lib64/libstdc++.so.6 /usr/lib64/libstdc++.so && \
