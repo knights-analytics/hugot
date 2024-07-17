@@ -37,75 +37,22 @@ Implementations for additional pipelines will follow. We also very gladly accept
 
 Hugot can be used both as a library and as a command-line application. See below for usage instructions.
 
-## Hardware acceleration 🚀
-
-Hugot now also supports the following accelerator backends for your inference:
- - CUDA (tested). See below for setup instructions.
- - TensorRT (untested)
- - DirectML (untested)
- - CoreML (untested)
- - OpenVINO (untested)
-
-Please help us out by testing the untested options above and providing feedback, good or bad!
-
-To use Hugot with nvidia gpu acceleration, you need to have the following:
-
-- The cuda gpu version of onnxruntime on the machine/docker container. You can see how we get that by looking at the [Dockerfile](./Dockerfile). You can also get the onnxruntime libraries that we use for testing from the release. Just download the gpu .so libraries and put them in /usr/lib64.
-- the nvidia driver for your graphics card
-- the required cuda libraries installed on your system that are compatible with the onnxruntime gpu version you use. See [here](https://onnxruntime.ai/docs/execution-providers/CUDA-ExecutionProvider.html). For instance, for onnxruntime-gpu 17.3, we need CUDA 12.x (any minor version should be compatible) and cuDNN 8.9.2.26.
-
-On the last point above, you can install CUDA 12.x by installing the full cuda toolkit, but that's quite a big package. In our testing on awslinux/fedora, we have been able to limit the libraries needed to run hugot with nvidia gpu acceleration to just these:
-
-- cuda-cudart-12-4 libcublas-12-4 libcurand-12-4 libcufft-12-4 (from fedora repo)
-- libcudnn8 (from RHEL repo, for cuDNN)
-
-On different distros (e.g. Ubuntu), you should be able to install the equivalent packages and gpu inference should work.
-
-## Limitations
-
-Apart from the fact that only the aforementioned pipelines are currently implemented, the current limitations are:
-
-- the library and cli are only built/tested on amd64-linux currently.
-
-Pipelines are also tested on specifically NLP use cases. In particular, we use the following models for testing:
-- feature extraction: all-MiniLM-L6-v2
-- text classification: distilbert-base-uncased-finetuned-sst-2-english
-- token classification: distilbert-NER and Roberta-base-go_emotions
-- zero shot classification: protectai/deberta-v3-base-zeroshot-v1-onnx
-
-If you encounter any further issues or want further features, please open an issue.
-
 ## Installation and usage
 
 Hugot can be used in two ways: as a library in your go application, or as a command-line binary.
 
 ### Use it as a library
 
-To use Hugot as a library in your application, you will need the following dependencies on your system:
+To use Hugot as a library in your application, you will need the following two dependencies on your system:
 
-- the tokenizers.a file obtained from building the [tokenizer](https://github.com/daulet/tokenizers) go library (which is itself a fork of https://github.com/daulet/tokenizers). This file should be at /usr/lib/tokenizers.a so that hugot can load it.
-- the onnxruntime.go file obtained from the onnxruntime project. This is dynamically linked by hugot and used by the onnxruntime inference library [onnxruntime_go](https://github.com/yalue/onnxruntime_go). This file should be at /usr/lib/onnxruntime.so or /usr/lib64/onnxruntime.so
-
-You can get the libtokenizers.a in two ways. Assuming you have rust installed, you can compile the tokenizers library and get the required libtokenizers.a:
+- the tokenizers.a file obtained from the releases section of this page (if you want to use alternative architecture from `linux/amd64` you will have to build the tokenizers.a yourself, see [here](https://github.com/knights-analytics/tokenizers). This file should be at /usr/lib/tokenizers.a so that hugot can load it.
+- the onnxruntime.go file obtained from the releases section of this page (if you want to use alternative architectures from `linux/amd64` you will have to download it from [the onnxruntime releases page](https://github.com/microsoft/onnxruntime/releases/), see the [dockerfile](./Dockerfile) as an example). Hugot looks for this file at /usr/lib/onnxruntime.so or /usr/lib64/onnxruntime.so by default. A different location can be specified by passing the `WithOnnxLibraryPath()` option to `NewSession()`, e.g:
 
 ```
-git clone https://github.com/daulet/tokenizers -b main && \
-    cd tokenizers && \
-    cargo build --release
-mv target/release/libtokenizers.a /usr/lib/libtokenizers.a
+session, err := NewSession(
+    WithOnnxLibraryPath("/path/to/onnxruntime.so"),
+)
 ```
-
-Alternatively, you can just download libtokenizers.a from the release section of the repo.
-
-For onnxruntime, it suffices to download it, untar it, and place it in the right location:
-
-```
-curl -LO https://github.com/microsoft/onnxruntime/releases/download/v${ONNXRUNTIME_VERSION}/onnxruntime-linux-x64-${ONNXRUNTIME_VERSION}.tgz && \
-   tar -xzf onnxruntime-linux-x64-${ONNXRUNTIME_VERSION}.tgz && \
-   mv ./onnxruntime-linux-x64-${ONNXRUNTIME_VERSION}/lib/libonnxruntime.so.${ONNXRUNTIME_VERSION} /usr/lib/onnxruntime.so
-```
-
-See also the [dockerfile](./Dockerfile) used for building & testing.
 
 Once these pieces are in place, the library can be used as follows:
 
@@ -208,6 +155,44 @@ To be able to run transformers fully from the command line.
 Note that the --model parameter can be:
     1. the full path to a model to load
     2. the name of a huggingface model. Hugot will first try to look for the model at $HOME/hugot, or will try to download the model from huggingface.
+
+## Hardware acceleration 🚀
+
+Hugot now also supports the following accelerator backends for your inference:
+ - CUDA (tested). See below for setup instructions.
+ - TensorRT (untested)
+ - DirectML (untested)
+ - CoreML (untested)
+ - OpenVINO (untested)
+
+Please help us out by testing the untested options above and providing feedback, good or bad!
+
+To use Hugot with nvidia gpu acceleration, you need to have the following:
+
+- The cuda gpu version of onnxruntime on the machine/docker container. You can see how we get that by looking at the [Dockerfile](./Dockerfile). You can also get the onnxruntime libraries that we use for testing from the release. Just download the gpu .so libraries and put them in /usr/lib64.
+- the nvidia driver for your graphics card
+- the required cuda libraries installed on your system that are compatible with the onnxruntime gpu version you use. See [here](https://onnxruntime.ai/docs/execution-providers/CUDA-ExecutionProvider.html). For instance, for onnxruntime-gpu 17.3, we need CUDA 12.x (any minor version should be compatible) and cuDNN 8.9.2.26.
+
+On the last point above, you can install CUDA 12.x by installing the full cuda toolkit, but that's quite a big package. In our testing on awslinux/fedora, we have been able to limit the libraries needed to run hugot with nvidia gpu acceleration to just these:
+
+- cuda-cudart-12-4 libcublas-12-4 libcurand-12-4 libcufft-12-4 (from fedora repo)
+- libcudnn8 (from RHEL repo, for cuDNN)
+
+On different distros (e.g. Ubuntu), you should be able to install the equivalent packages and gpu inference should work.
+
+## Limitations
+
+Apart from the fact that only the aforementioned pipelines are currently implemented, the current limitations are:
+
+- the library and cli are only built/tested on amd64-linux currently.
+
+Pipelines are also tested on specifically NLP use cases. In particular, we use the following models for testing:
+- feature extraction: all-MiniLM-L6-v2
+- text classification: distilbert-base-uncased-finetuned-sst-2-english
+- token classification: distilbert-NER and Roberta-base-go_emotions
+- zero shot classification: protectai/deberta-v3-base-zeroshot-v1-onnx
+
+If you encounter any further issues or want further features, please open an issue.
 
 ## Performance Tuning
 
