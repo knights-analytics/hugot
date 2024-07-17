@@ -13,8 +13,8 @@ import (
 
 	util "github.com/knights-analytics/hugot/utils"
 
+	"github.com/daulet/tokenizers"
 	jsoniter "github.com/json-iterator/go"
-	"github.com/knights-analytics/tokenizers"
 )
 
 // TokenClassificationPipeline is a go version of huggingface tokenClassificationPipeline.
@@ -166,7 +166,7 @@ func (p *TokenClassificationPipeline) GetMetadata() PipelineMetadata {
 		OutputsInfo: []OutputInfo{
 			{
 				Name:       p.OutputsMeta[0].Name,
-				Dimensions: []int64(p.OutputsMeta[0].Dimensions),
+				Dimensions: p.OutputsMeta[0].Dimensions,
 			},
 		},
 	}

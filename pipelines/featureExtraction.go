@@ -10,8 +10,8 @@ import (
 
 	ort "github.com/yalue/onnxruntime_go"
 
+	"github.com/daulet/tokenizers"
 	util "github.com/knights-analytics/hugot/utils"
-	"github.com/knights-analytics/tokenizers"
 )
 
 // FeatureExtractionPipeline A feature extraction pipeline is a go version of
@@ -131,7 +131,7 @@ func (p *FeatureExtractionPipeline) GetMetadata() PipelineMetadata {
 		OutputsInfo: []OutputInfo{
 			{
 				Name:       p.OutputName,
-				Dimensions: []int64(p.Output.Dimensions),
+				Dimensions: p.Output.Dimensions,
 			},
 		},
 	}
