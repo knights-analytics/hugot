@@ -31,7 +31,8 @@ func main() {
 			}
 			downloadOptions := hugot.NewDownloadOptions()
 			for _, modelName := range []string{
-				"KnightsAnalytics/all-MiniLM-L6-v2",
+				"sentence-transformers/all-MiniLM-L6-v2",
+				"protectai/deberta-v3-base-zeroshot-v1-onnx",
 				"KnightsAnalytics/distilbert-base-uncased-finetuned-sst-2-english",
 				"KnightsAnalytics/distilbert-NER",
 				"SamLowe/roberta-base-go_emotions-onnx"} {

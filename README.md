@@ -83,13 +83,13 @@ Hugot can be used in two ways: as a library in your go application, or as a comm
 
 To use Hugot as a library in your application, you will need the following dependencies on your system:
 
-- the tokenizers.a file obtained from building the [tokenizer](https://github.com/Knights-Analytics/tokenizers) go library (which is itself a fork of https://github.com/daulet/tokenizers). This file should be at /usr/lib/tokenizers.a so that hugot can load it.
+- the tokenizers.a file obtained from building the [tokenizer](https://github.com/daulet/tokenizers) go library (which is itself a fork of https://github.com/daulet/tokenizers). This file should be at /usr/lib/tokenizers.a so that hugot can load it.
 - the onnxruntime.go file obtained from the onnxruntime project. This is dynamically linked by hugot and used by the onnxruntime inference library [onnxruntime_go](https://github.com/yalue/onnxruntime_go). This file should be at /usr/lib/onnxruntime.so or /usr/lib64/onnxruntime.so
 
 You can get the libtokenizers.a in two ways. Assuming you have rust installed, you can compile the tokenizers library and get the required libtokenizers.a:
 
 ```
-git clone https://github.com/Knights-Analytics/tokenizers -b main && \
+git clone https://github.com/daulet/tokenizers -b main && \
     cd tokenizers && \
     cargo build --release
 mv target/release/libtokenizers.a /usr/lib/libtokenizers.a

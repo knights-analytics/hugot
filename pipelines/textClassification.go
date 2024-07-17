@@ -9,8 +9,8 @@ import (
 
 	util "github.com/knights-analytics/hugot/utils"
 
+	"github.com/daulet/tokenizers"
 	jsoniter "github.com/json-iterator/go"
-	"github.com/knights-analytics/tokenizers"
 	ort "github.com/yalue/onnxruntime_go"
 )
 
@@ -162,7 +162,7 @@ func (p *TextClassificationPipeline) GetMetadata() PipelineMetadata {
 		OutputsInfo: []OutputInfo{
 			{
 				Name:       p.OutputsMeta[0].Name,
-				Dimensions: []int64(p.OutputsMeta[0].Dimensions),
+				Dimensions: p.OutputsMeta[0].Dimensions,
 			},
 		},
 	}

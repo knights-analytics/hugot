@@ -87,7 +87,7 @@ func TestFeatureExtractionCli(t *testing.T) {
 	}
 	baseArgs := os.Args[0:1]
 
-	testModel := path.Join("../models", "KnightsAnalytics_all-MiniLM-L6-v2")
+	testModel := path.Join("../models", "sentence-transformers_all-MiniLM-L6-v2")
 
 	testDataDir := path.Join(os.TempDir(), "hugoTestData")
 	err := os.MkdirAll(testDataDir, os.ModePerm)
