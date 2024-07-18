@@ -13,8 +13,8 @@ import (
 
 	util "github.com/knights-analytics/hugot/utils"
 
-	"github.com/daulet/tokenizers"
 	jsoniter "github.com/json-iterator/go"
+	"github.com/knights-analytics/tokenizers"
 )
 
 // TokenClassificationPipeline is a go version of huggingface tokenClassificationPipeline.

@@ -10,7 +10,8 @@ import (
 
 	ort "github.com/yalue/onnxruntime_go"
 
-	"github.com/daulet/tokenizers"
+	"github.com/knights-analytics/tokenizers"
+
 	util "github.com/knights-analytics/hugot/utils"
 )
 

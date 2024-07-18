@@ -12,11 +12,12 @@ import (
 	"sync/atomic"
 	"time"
 
-	util "github.com/knights-analytics/hugot/utils"
 	ort "github.com/yalue/onnxruntime_go"
 
-	"github.com/daulet/tokenizers"
+	util "github.com/knights-analytics/hugot/utils"
+
 	jsoniter "github.com/json-iterator/go"
+	"github.com/knights-analytics/tokenizers"
 )
 
 /**
