@@ -45,7 +45,7 @@ Hugot can be used in two ways: as a library in your go application, or as a comm
 
 To use Hugot as a library in your application, you will need the following two dependencies on your system:
 
-- the tokenizers.a file obtained from the releases section of this page (if you want to use alternative architecture from `linux/amd64` you will have to build the tokenizers.a yourself, see [here](https://github.com/knights-analytics/tokenizers). This file should be at /usr/lib/tokenizers.a so that hugot can load it.
+- the tokenizers.a file obtained from the releases section of this page (if you want to use alternative architecture from `linux/amd64` you will have to build the tokenizers.a yourself, see [here](https://github.com/knights-analytics/tokenizers). This file should be at /usr/lib/tokenizers.a so that hugot can load it. Alternatively, you can explicitly specify the path to the folder with the `libtokenizers.a` file using the `CGO_LDFLAGS` env variable, see the [dockerfile](./Dockerfile).
 - the onnxruntime.go file obtained from the releases section of this page (if you want to use alternative architectures from `linux/amd64` you will have to download it from [the onnxruntime releases page](https://github.com/microsoft/onnxruntime/releases/), see the [dockerfile](./Dockerfile) as an example). Hugot looks for this file at /usr/lib/onnxruntime.so or /usr/lib64/onnxruntime.so by default. A different location can be specified by passing the `WithOnnxLibraryPath()` option to `NewSession()`, e.g:
 
 ```
