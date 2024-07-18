@@ -5,7 +5,7 @@ services:
     container_name: hugot
     build:
       context: .
-      dockerfile: ./Dockerfile
+      dockerfile: ./Dockerfile.test
       target: hugot-build
     volumes:
       - $test_folder:/test

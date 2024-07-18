@@ -7,7 +7,14 @@ on:
 
 permissions:
   contents: write
+  packages: write
   checks: write
+  attestations: write
+  id-token: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
 
 jobs:
   test:
@@ -56,6 +63,43 @@ jobs:
           report_paths: './testTarget/unit/*.xml'
           fail_on_failure: true
           require_tests: true
+
+  build-and-push:
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@65b78e6e13532edd9afa3aa52ac7964289d1a9c1
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata (tags, labels) for Docker
+        id: meta
+        uses: docker/metadata-action@9ec57ed1fcdbf14dcef7dfbe97b2010124a938b7
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+
+      - name: Build and push Docker image
+        id: push
+        uses: docker/build-push-action@f2a1d5e99d037542a71f64918e516c093c6f3fc4
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+      - name: Generate artifact attestation
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME}}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
+
   release:
     name: Release
     runs-on: ubuntu-latest
@@ -78,11 +122,11 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: onnxruntime-linux-x64-gpu
-          path: .
+          path: ./onnxruntime-linux-x64-gpu
       - name: Display structure of downloaded files
         run: ls -R
       - uses: ncipollo/release-action@v1
         with:
-          artifacts: "libtokenizers.a, onnxruntime-linux-x64.so, onnxruntime-linux-x64-gpu.zip, hugot-cli-linux-x64"
+          artifacts: "libtokenizers.a, onnxruntime-linux-x64.so, onnxruntime-linux-x64-gpu, hugot-cli-linux-x64"
           generateReleaseNotes: true
           skipIfReleaseExists: true
