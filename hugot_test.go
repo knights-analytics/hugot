@@ -10,9 +10,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+
 	"github.com/knights-analytics/hugot/pipelines"
 	util "github.com/knights-analytics/hugot/utils"
-	"github.com/stretchr/testify/assert"
 
 	ort "github.com/yalue/onnxruntime_go"
 )

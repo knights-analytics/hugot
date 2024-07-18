@@ -8,7 +8,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/daulet/tokenizers"
+	"github.com/knights-analytics/tokenizers"
 	ort "github.com/yalue/onnxruntime_go"
 
 	util "github.com/knights-analytics/hugot/utils"
