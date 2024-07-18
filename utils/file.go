@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/viant/afs"
-	_ "github.com/viant/afsc/s3"
+	"github.com/knights-analytics/afs"
+	_ "github.com/knights-analytics/afsc/s3"
 )
 
 var FileSystem = afs.New()

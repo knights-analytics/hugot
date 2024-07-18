@@ -7,7 +7,7 @@ ARG CGO_LDFLAGS="-L./usr/lib/libtokenizers.a"
 
 FROM --platform=$BUILD_PLATFORM rust:$RUST_VERSION AS tokenizer
 
-RUN git clone https://github.com/knights-analytics/tokenizers -b rebase && \
+RUN git clone https://github.com/knights-analytics/tokenizers -b namespace && \
     cd tokenizers && \
     cargo build --release
 
