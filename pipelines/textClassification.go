@@ -98,6 +98,7 @@ func NewTextClassificationPipeline(config PipelineConfig[*TextClassificationPipe
 	// tokenizer init
 	pipeline.TokenizerOptions = []tokenizers.EncodeOption{
 		tokenizers.WithReturnAttentionMask(),
+		tokenizers.WithReturnTypeIDs(),
 	}
 	tk, err := loadTokenizer(pipeline.ModelPath)
 	if err != nil {
