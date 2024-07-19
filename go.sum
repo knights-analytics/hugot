@@ -22,8 +22,8 @@ github.com/knights-analytics/afs v0.0.0-20240718075927-c142c3b151dc h1:Sb44tb3Ey
 github.com/knights-analytics/afs v0.0.0-20240718075927-c142c3b151dc/go.mod h1:wABEWemufPlgyTjP1dQMZHfYpNy5QpnudpJzdUWYXGQ=
 github.com/knights-analytics/afsc v0.0.0-20240718080420-8bb598c8addc h1:HacVNN/5UTKbp90iLlT5iGCqzxAF9AotolVDYSUMIf8=
 github.com/knights-analytics/afsc v0.0.0-20240718080420-8bb598c8addc/go.mod h1:v4MjD7X6iX20Xo+ZCJ1t63loMLR58N3jls3ZY/wfkjs=
-github.com/knights-analytics/tokenizers v0.13.0 h1:xQv7Ycw5NAmqrajeRt3mBN/adfwSpdN6U6IwCoL60FA=
-github.com/knights-analytics/tokenizers v0.13.0/go.mod h1:QCmtYGTdiEQYNFOf+MiRSNYZvDnFjJONcs9ZUmfKK6g=
+github.com/knights-analytics/tokenizers v0.14.0 h1:Ww8dBnlhfCcchVFQxoIJp+kl9N+6/e5Vg4OkQqozXEw=
+github.com/knights-analytics/tokenizers v0.14.0/go.mod h1:QCmtYGTdiEQYNFOf+MiRSNYZvDnFjJONcs9ZUmfKK6g=
 github.com/mattn/go-colorable v0.1.13 h1:fFA4WZxdEF4tXPZVKMLwD8oUnCTTo08duU7wxecdEvA=
 github.com/mattn/go-colorable v0.1.13/go.mod h1:7S9/ev0klgBDR4GtXTXX8a3vIGJpMovkB8vQcUbaXHg=
 github.com/mattn/go-isatty v0.0.16/go.mod h1:kYGgaQfpe5nmfYZH+SKPsOc2e4SrIfOl2e/yFXSvRLM=
