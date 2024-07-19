@@ -54,6 +54,8 @@ session, err := NewSession(
 )
 ```
 
+Alternatively, you can also use the [docker image](https://github.com/knights-analytics/hugot/pkgs/container/hugot) which has the dependencies already baked in.
+
 Once these pieces are in place, the library can be used as follows:
 
 ```go
