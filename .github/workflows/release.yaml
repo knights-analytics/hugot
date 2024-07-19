@@ -125,8 +125,10 @@ jobs:
           path: ./onnxruntime-linux-x64-gpu
       - name: Display structure of downloaded files
         run: ls -R
+      - name: zip onnxruntime gpu
+        run: zip onnxruntime-linux-x64-gpu.zip ./onnxruntime-linux-x64-gpu -r
       - uses: ncipollo/release-action@v1
         with:
-          artifacts: "libtokenizers.a, onnxruntime-linux-x64.so, onnxruntime-linux-x64-gpu, hugot-cli-linux-x64"
+          artifacts: "libtokenizers.a, onnxruntime-linux-x64.so, onnxruntime-linux-x64-gpu.zip, hugot-cli-linux-x64"
           generateReleaseNotes: true
           skipIfReleaseExists: true
