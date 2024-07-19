@@ -7,7 +7,7 @@ require (
 	github.com/json-iterator/go v1.1.12
 	github.com/knights-analytics/afs v0.0.0-20240718075927-c142c3b151dc
 	github.com/knights-analytics/afsc v0.0.0-20240718080420-8bb598c8addc
-	github.com/knights-analytics/tokenizers v0.13.0
+	github.com/knights-analytics/tokenizers v0.14.0
 	github.com/mattn/go-isatty v0.0.20
 	github.com/stretchr/testify v1.9.0
 	github.com/urfave/cli/v2 v2.27.2

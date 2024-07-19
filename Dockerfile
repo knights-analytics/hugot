@@ -9,7 +9,11 @@ ARG BUILD_PLATFORM=linux/amd64
 
 FROM --platform=$BUILD_PLATFORM rust:$RUST_VERSION AS tokenizer
 
-RUN git clone https://github.com/knights-analytics/tokenizers -b namespace && \
+COPY ./go.mod .
+
+RUN tokenizer_version=$(grep 'github.com/knights-analytics/tokenizers' go.mod | awk '{print $2}') && \
+    echo "tokenizer_version: $tokenizer_version" && \
+    git clone --depth 1 --branch $tokenizer_version https://github.com/knights-analytics/tokenizers && \
     cd tokenizers && \
     cargo build --release
 
