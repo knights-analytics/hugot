@@ -10,7 +10,6 @@ import (
 	util "github.com/knights-analytics/hugot/utils"
 
 	jsoniter "github.com/json-iterator/go"
-	"github.com/knights-analytics/tokenizers"
 	ort "github.com/yalue/onnxruntime_go"
 )
 
@@ -95,16 +94,6 @@ func NewTextClassificationPipeline(config PipelineConfig[*TextClassificationPipe
 		}
 	}
 
-	// tokenizer init
-	pipeline.TokenizerOptions = []tokenizers.EncodeOption{
-		tokenizers.WithReturnAttentionMask(),
-	}
-	tk, err := loadTokenizer(pipeline.ModelPath)
-	if err != nil {
-		return nil, err
-	}
-	pipeline.Tokenizer = tk
-
 	// read id to label map
 	configPath := util.PathJoinSafe(pipeline.ModelPath, "config.json")
 	pipelineInputConfig := TextClassificationPipelineConfig{}
@@ -132,6 +121,18 @@ func NewTextClassificationPipeline(config PipelineConfig[*TextClassificationPipe
 	}
 	pipeline.InputsMeta = inputs
 	pipeline.OutputsMeta = outputs
+
+	// tokenizer init
+	pipeline.TokenizerOptions, err = getTokenizerOptions(inputs)
+	if err != nil {
+		return nil, err
+	}
+
+	tk, tkErr := loadTokenizer(pipeline.ModelPath)
+	if tkErr != nil {
+		return nil, tkErr
+	}
+	pipeline.Tokenizer = tk
 
 	// creation of the session
 	session, err := createSession(model, inputs, pipeline.OutputsMeta, ortOptions)

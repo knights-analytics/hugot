@@ -10,8 +10,6 @@ import (
 
 	ort "github.com/yalue/onnxruntime_go"
 
-	"github.com/knights-analytics/tokenizers"
-
 	util "github.com/knights-analytics/hugot/utils"
 )
 
@@ -65,14 +63,6 @@ func NewFeatureExtractionPipeline(config PipelineConfig[*FeatureExtractionPipeli
 		o(pipeline)
 	}
 
-	// tokenizer init
-	pipeline.TokenizerOptions = []tokenizers.EncodeOption{tokenizers.WithReturnTypeIDs(), tokenizers.WithReturnAttentionMask()}
-	tk, err := loadTokenizer(pipeline.ModelPath)
-	if err != nil {
-		return nil, err
-	}
-	pipeline.Tokenizer = tk
-
 	// onnx model init
 	model, err := loadOnnxModelBytes(pipeline.ModelPath, pipeline.OnnxFilename)
 	if err != nil {
@@ -101,6 +91,18 @@ func NewFeatureExtractionPipeline(config PipelineConfig[*FeatureExtractionPipeli
 	} else {
 		pipeline.Output = outputs[0] // we take the first output otherwise, like transformers does
 	}
+
+	// tokenizer init
+	pipeline.TokenizerOptions, err = getTokenizerOptions(inputs)
+	if err != nil {
+		return nil, err
+	}
+
+	tk, tkErr := loadTokenizer(pipeline.ModelPath)
+	if tkErr != nil {
+		return nil, tkErr
+	}
+	pipeline.Tokenizer = tk
 
 	// creation of the session. Only one output (either token or sentence embedding).
 	session, err := createSession(model, inputs, []ort.InputOutputInfo{pipeline.Output}, ortOptions)

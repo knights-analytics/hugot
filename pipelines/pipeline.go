@@ -275,6 +275,23 @@ func getNames(info []ort.InputOutputInfo) []string {
 	return names
 }
 
+func getTokenizerOptions(inputs []ort.InputOutputInfo) ([]tokenizers.EncodeOption, error) {
+	var encodeOptions []tokenizers.EncodeOption
+	for _, input := range inputs {
+		switch input.Name {
+		case "input_ids":
+			encodeOptions = append(encodeOptions, tokenizers.WithReturnTokens())
+		case "token_type_ids":
+			encodeOptions = append(encodeOptions, tokenizers.WithReturnTypeIDs())
+		case "attention_mask":
+			encodeOptions = append(encodeOptions, tokenizers.WithReturnAttentionMask())
+		default:
+			return nil, fmt.Errorf("input %s not recognized", input.Name)
+		}
+	}
+	return encodeOptions, nil
+}
+
 func runSessionOnBatch(batch *PipelineBatch, session *ort.DynamicAdvancedSession, outputs []ort.InputOutputInfo) error {
 	actualBatchSize := int64(len(batch.Input))
 	maxSequenceLength := int64(batch.MaxSequenceLength)
