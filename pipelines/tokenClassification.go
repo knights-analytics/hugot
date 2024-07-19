@@ -9,12 +9,12 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/knights-analytics/tokenizers"
 	ort "github.com/yalue/onnxruntime_go"
 
 	util "github.com/knights-analytics/hugot/utils"
 
 	jsoniter "github.com/json-iterator/go"
-	"github.com/knights-analytics/tokenizers"
 )
 
 // TokenClassificationPipeline is a go version of huggingface tokenClassificationPipeline.
@@ -90,20 +90,6 @@ func NewTokenClassificationPipeline(config PipelineConfig[*TokenClassificationPi
 		o(pipeline)
 	}
 
-	// tokenizer init
-	pipeline.TokenizerOptions = []tokenizers.EncodeOption{
-		tokenizers.WithReturnTokens(),
-		tokenizers.WithReturnTypeIDs(),
-		tokenizers.WithReturnAttentionMask(),
-		tokenizers.WithReturnSpecialTokensMask(),
-		tokenizers.WithReturnOffsets(),
-	}
-	tk, err := loadTokenizer(pipeline.ModelPath)
-	if err != nil {
-		return nil, err
-	}
-	pipeline.Tokenizer = tk
-
 	// onnx model init
 	model, err := loadOnnxModelBytes(pipeline.ModelPath, pipeline.OnnxFilename)
 	if err != nil {
@@ -142,6 +128,22 @@ func NewTokenClassificationPipeline(config PipelineConfig[*TokenClassificationPi
 
 	pipeline.PipelineTimings = &timings{}
 	pipeline.TokenizerTimings = &timings{}
+
+	// tokenizer init
+	pipeline.TokenizerOptions, err = getTokenizerOptions(inputs)
+	if err != nil {
+		return nil, err
+	}
+	// Additional options needed for postprocessing
+	pipeline.TokenizerOptions = append(pipeline.TokenizerOptions,
+		tokenizers.WithReturnSpecialTokensMask(),
+		tokenizers.WithReturnOffsets(),
+	)
+	tk, tkErr := loadTokenizer(pipeline.ModelPath)
+	if tkErr != nil {
+		return nil, tkErr
+	}
+	pipeline.Tokenizer = tk
 
 	// creation of the session. Only one output (either token or sentence embedding).
 	session, err := createSession(model, inputs, outputs, ortOptions)

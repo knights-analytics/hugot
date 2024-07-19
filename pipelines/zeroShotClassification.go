@@ -17,7 +17,6 @@ import (
 	util "github.com/knights-analytics/hugot/utils"
 
 	jsoniter "github.com/json-iterator/go"
-	"github.com/knights-analytics/tokenizers"
 )
 
 /**
@@ -174,17 +173,6 @@ func NewZeroShotClassificationPipeline(config PipelineConfig[*ZeroShotClassifica
 		return nil, fmt.Errorf("no labels provided, please provide labels using the WithLabels() option")
 	}
 
-	pipeline.TokenizerOptions = []tokenizers.EncodeOption{
-		tokenizers.WithReturnTypeIDs(),
-		tokenizers.WithReturnAttentionMask(),
-	}
-
-	tk, err := loadTokenizer(pipeline.ModelPath)
-	if err != nil {
-		return nil, err
-	}
-	pipeline.Tokenizer = tk
-
 	// read id to label map
 	configPath := util.PathJoinSafe(pipeline.ModelPath, "config.json")
 	pipelineInputConfig := ZeroShotClassificationPipelineConfig{}
@@ -258,6 +246,18 @@ func NewZeroShotClassificationPipeline(config PipelineConfig[*ZeroShotClassifica
 	}
 	pipeline.InputsMeta = inputs
 	pipeline.OutputsMeta = outputs
+
+	// tokenizer init
+	pipeline.TokenizerOptions, err = getTokenizerOptions(inputs)
+	if err != nil {
+		return nil, err
+	}
+
+	tk, tkErr := loadTokenizer(pipeline.ModelPath)
+	if tkErr != nil {
+		return nil, tkErr
+	}
+	pipeline.Tokenizer = tk
 
 	session, err := createSession(model, inputs, pipeline.OutputsMeta, ortOptions)
 	if err != nil {
