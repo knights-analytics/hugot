@@ -14,11 +14,11 @@ import (
 
 // Session allows for the creation of new pipelines and holds the pipeline already created.
 type Session struct {
-	featureExtractionPipelines     pipelineMap[*pipelines.FeatureExtractionPipeline]
-	tokenClassificationPipelines   pipelineMap[*pipelines.TokenClassificationPipeline]
-	textClassificationPipelines    pipelineMap[*pipelines.TextClassificationPipeline]
-	zeroShotClassifcationPipelines pipelineMap[*pipelines.ZeroShotClassificationPipeline]
-	ortOptions                     *ort.SessionOptions
+	featureExtractionPipelines      pipelineMap[*pipelines.FeatureExtractionPipeline]
+	tokenClassificationPipelines    pipelineMap[*pipelines.TokenClassificationPipeline]
+	textClassificationPipelines     pipelineMap[*pipelines.TextClassificationPipeline]
+	zeroShotClassificationPipelines pipelineMap[*pipelines.ZeroShotClassificationPipeline]
+	ortOptions                      *ort.SessionOptions
 }
 
 type pipelineMap[T pipelines.Pipeline] map[string]T
@@ -74,10 +74,10 @@ func NewSession(options ...WithOption) (*Session, error) {
 	}
 
 	session := &Session{
-		featureExtractionPipelines:     map[string]*pipelines.FeatureExtractionPipeline{},
-		textClassificationPipelines:    map[string]*pipelines.TextClassificationPipeline{},
-		tokenClassificationPipelines:   map[string]*pipelines.TokenClassificationPipeline{},
-		zeroShotClassifcationPipelines: map[string]*pipelines.ZeroShotClassificationPipeline{},
+		featureExtractionPipelines:      map[string]*pipelines.FeatureExtractionPipeline{},
+		textClassificationPipelines:     map[string]*pipelines.TextClassificationPipeline{},
+		tokenClassificationPipelines:    map[string]*pipelines.TokenClassificationPipeline{},
+		zeroShotClassificationPipelines: map[string]*pipelines.ZeroShotClassificationPipeline{},
 	}
 
 	// set session options and initialise
@@ -260,7 +260,7 @@ func NewPipeline[T pipelines.Pipeline](s *Session, pipelineConfig pipelines.Pipe
 		if err != nil {
 			return pipeline, err
 		}
-		s.zeroShotClassifcationPipelines[config.Name] = pipelineInitialised
+		s.zeroShotClassificationPipelines[config.Name] = pipelineInitialised
 		pipeline = any(pipelineInitialised).(T)
 	default:
 		return pipeline, fmt.Errorf("not implemented")
@@ -291,7 +291,7 @@ func GetPipeline[T pipelines.Pipeline](s *Session, name string) (T, error) {
 		}
 		return any(p).(T), nil
 	case *pipelines.ZeroShotClassificationPipeline:
-		p, ok := s.zeroShotClassifcationPipelines[name]
+		p, ok := s.zeroShotClassificationPipelines[name]
 		if !ok {
 			return pipeline, &pipelineNotFoundError{pipelineName: name}
 		}
@@ -308,7 +308,7 @@ func (s *Session) Destroy() error {
 		s.featureExtractionPipelines.Destroy(),
 		s.tokenClassificationPipelines.Destroy(),
 		s.textClassificationPipelines.Destroy(),
-		s.zeroShotClassifcationPipelines.Destroy(),
+		s.zeroShotClassificationPipelines.Destroy(),
 		s.ortOptions.Destroy(),
 		ort.DestroyEnvironment(),
 	)
@@ -327,6 +327,6 @@ func (s *Session) GetStats() []string {
 		s.tokenClassificationPipelines.GetStats(),
 		s.textClassificationPipelines.GetStats()...),
 		s.featureExtractionPipelines.GetStats()...),
-		s.zeroShotClassifcationPipelines.GetStats()...,
+		s.zeroShotClassificationPipelines.GetStats()...,
 	)
 }
