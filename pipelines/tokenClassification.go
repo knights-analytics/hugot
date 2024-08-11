@@ -9,7 +9,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/knights-analytics/tokenizers"
+	"github.com/daulet/tokenizers"
 	ort "github.com/yalue/onnxruntime_go"
 
 	util "github.com/knights-analytics/hugot/utils"
