@@ -4,7 +4,7 @@ services:
     platform: linux/amd64
     build:
       context: .
-      dockerfile: ./Dockerfile.test
+      dockerfile: ./test.Dockerfile
       target: hugot-build
     volumes:
       - $src_dir:/home/testuser/repositories/hugot
