@@ -3,16 +3,16 @@ module github.com/knights-analytics/hugot
 go 1.22
 
 require (
-	github.com/bodaay/HuggingFaceModelDownloader v0.0.0-20240307153905-2f38356a6d6c
 	github.com/daulet/tokenizers v0.9.0
 	github.com/json-iterator/go v1.1.12
+	github.com/knights-analytics/HuggingFaceModelDownloader v1.3.5
 	github.com/mattn/go-isatty v0.0.20
 	github.com/stretchr/testify v1.9.0
 	github.com/urfave/cli/v2 v2.27.4
 	github.com/viant/afs v1.25.1
-	github.com/viant/afsc v1.9.3-0.20240719110652-735d07c594f3
+	github.com/viant/afsc v1.9.3
 	github.com/yalue/onnxruntime_go v1.11.0
-	golang.org/x/exp v0.0.0-20240808152545-0cdaa3abc0fa
+	golang.org/x/exp v0.0.0-20240823005443-9b4947da3948
 )
 
 require (

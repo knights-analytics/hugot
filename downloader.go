@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	hfd "github.com/bodaay/HuggingFaceModelDownloader/hfdownloader"
+	hfd "github.com/knights-analytics/HuggingFaceModelDownloader/hfdownloader"
 )
 
 // DownloadOptions is a struct of options that can be passed to DownloadModel
@@ -56,11 +56,15 @@ func (s *Session) DownloadModel(modelName string, destination string, options Do
 
 	for i := 0; i < options.MaxRetries; i++ {
 		if err := hfd.DownloadModel(modelName, false, options.SkipSha, false, destination, options.Branch, options.ConcurrentConnections, options.AuthToken, !options.Verbose); err != nil {
-			fmt.Printf("Warning: attempt %d / %d failed, error: %s\n", i+1, options.MaxRetries, err)
+			if options.Verbose {
+				fmt.Printf("Warning: attempt %d / %d failed, error: %s\n", i+1, options.MaxRetries, err)
+			}
 			time.Sleep(time.Duration(options.RetryInterval) * time.Second)
 			continue
 		}
-		fmt.Printf("\nDownload of %s completed successfully\n", modelName)
+		if options.Verbose {
+			fmt.Printf("\nDownload of %s completed successfully\n", modelName)
+		}
 		return modelPath, nil
 	}
 	return "", fmt.Errorf("failed to download %s after %d attempts", modelName, options.MaxRetries)
