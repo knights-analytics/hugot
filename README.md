@@ -173,12 +173,12 @@ To use Hugot with nvidia gpu acceleration, you need to have the following:
 
 - The cuda gpu version of onnxruntime on the machine/docker container. You can see how we get that by looking at the [Dockerfile](./Dockerfile). You can also get the onnxruntime libraries that we use for testing from the release. Just download the gpu .so libraries and put them in /usr/lib64.
 - the nvidia driver for your graphics card
-- the required cuda libraries installed on your system that are compatible with the onnxruntime gpu version you use. See [here](https://onnxruntime.ai/docs/execution-providers/CUDA-ExecutionProvider.html). For instance, for onnxruntime-gpu 17.3, we need CUDA 12.x (any minor version should be compatible) and cuDNN 8.9.2.26.
+- the required cuda libraries installed on your system that are compatible with the onnxruntime gpu version you use. See [here](https://onnxruntime.ai/docs/execution-providers/CUDA-ExecutionProvider.html). For instance, for onnxruntime-gpu 19.0, we need CUDA 12.x (any minor version should be compatible) and cuDNN 9.x.
 
 On the last point above, you can install CUDA 12.x by installing the full cuda toolkit, but that's quite a big package. In our testing on awslinux/fedora, we have been able to limit the libraries needed to run hugot with nvidia gpu acceleration to just these:
 
-- cuda-cudart-12-4 libcublas-12-4 libcurand-12-4 libcufft-12-4 (from fedora repo)
-- libcudnn8 (from RHEL repo, for cuDNN)
+- cuda-cudart-12-6 libcublas-12-6 libcurand-12-6 libcufft-12-6 (from fedora repo)
+- libcudnn9 (from RHEL repo, for cuDNN)
 
 On different distros (e.g. Ubuntu), you should be able to install the equivalent packages and gpu inference should work.
 

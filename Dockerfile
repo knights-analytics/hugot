@@ -1,7 +1,7 @@
 #--- dockerfile with hugot dependencies and cli (cpu only) ---
 
-ARG GO_VERSION=1.22.6
-ARG ONNXRUNTIME_VERSION=1.18.0
+ARG GO_VERSION=1.23.1
+ARG ONNXRUNTIME_VERSION=1.19.0
 ARG BUILD_PLATFORM=linux/amd64
 
 #--- build layer ---

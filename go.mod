@@ -11,8 +11,8 @@ require (
 	github.com/urfave/cli/v2 v2.27.4
 	github.com/viant/afs v1.25.1
 	github.com/viant/afsc v1.9.3
-	github.com/yalue/onnxruntime_go v1.11.0
-	golang.org/x/exp v0.0.0-20240823005443-9b4947da3948
+	github.com/yalue/onnxruntime_go v1.12.0
+	golang.org/x/exp v0.0.0-20240904232852-e7e105dedf7e
 )
 
 require (
@@ -30,8 +30,8 @@ require (
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/xrash/smetrics v0.0.0-20240521201337-686a1a2994c1 // indirect
-	golang.org/x/crypto v0.26.0 // indirect
-	golang.org/x/oauth2 v0.22.0 // indirect
-	golang.org/x/sys v0.24.0 // indirect
+	golang.org/x/crypto v0.27.0 // indirect
+	golang.org/x/oauth2 v0.23.0 // indirect
+	golang.org/x/sys v0.25.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
