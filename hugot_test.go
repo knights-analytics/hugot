@@ -928,7 +928,7 @@ func TestCuda(t *testing.T) {
 		}
 	}(session)
 
-	modelPath := "./models/KnightsAnalytics_all-MiniLM-L6-v2"
+	modelPath := "./models/sentence-transformers_all-MiniLM-L6-v2"
 	config := FeatureExtractionConfig{
 		ModelPath: modelPath,
 		Name:      "benchmarkEmbedding",

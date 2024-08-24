@@ -1,7 +1,7 @@
 #--- dockerfile to test hugot  ---
 
-ARG GO_VERSION=1.22.6
-ARG ONNXRUNTIME_VERSION=1.18.0
+ARG GO_VERSION=1.23.1
+ARG ONNXRUNTIME_VERSION=1.19.0
 ARG BUILD_PLATFORM=linux/amd64
 
 #--- build and test layer ---
@@ -18,10 +18,10 @@ RUN dnf -y install gcc jq bash tar xz gzip glibc-static libstdc++ wget zip git &
     dnf config-manager --add-repo https://download.fedoraproject.org/pub/fedora/linux/releases/39/Everything/x86_64/os/ && \
     # from fedora
     dnf config-manager --add-repo https://developer.download.nvidia.com/compute/cuda/repos/fedora39/x86_64/cuda-fedora39.repo && \
-    dnf install -y cuda-cudart-12-4 libcublas-12-4 libcurand-12-4 libcufft-12-4 && \
+    dnf install -y cuda-cudart-12-6 libcublas-12-6 libcurand-12-6 libcufft-12-6 && \
     # from rhel
     dnf config-manager --add-repo https://developer.download.nvidia.com/compute/cuda/repos/rhel9/x86_64/cuda-rhel9.repo && \
-    dnf install -y libcudnn8 && \
+    dnf install -y libcudnn9-cuda-12 && \
     dnf clean all
 
 RUN tokenizer_version=$(grep 'github.com/daulet/tokenizers' go.mod | awk '{print $2}') && \
@@ -41,8 +41,8 @@ ENV PATH="$PATH:/usr/local/go/bin"
 RUN curl -LO https://github.com/microsoft/onnxruntime/releases/download/v${ONNXRUNTIME_VERSION}/onnxruntime-linux-x64-${ONNXRUNTIME_VERSION}.tgz && \
    tar -xzf onnxruntime-linux-x64-${ONNXRUNTIME_VERSION}.tgz && \
    mv ./onnxruntime-linux-x64-${ONNXRUNTIME_VERSION}/lib/libonnxruntime.so.${ONNXRUNTIME_VERSION} /usr/lib64/onnxruntime.so && \
-   curl -LO https://github.com/microsoft/onnxruntime/releases/download/v${ONNXRUNTIME_VERSION}/onnxruntime-linux-x64-gpu-cuda12-${ONNXRUNTIME_VERSION}.tgz && \
-   tar -xzf onnxruntime-linux-x64-gpu-cuda12-${ONNXRUNTIME_VERSION}.tgz && \
+   curl -LO https://github.com/microsoft/onnxruntime/releases/download/v${ONNXRUNTIME_VERSION}/onnxruntime-linux-x64-gpu-${ONNXRUNTIME_VERSION}.tgz && \
+   tar -xzf onnxruntime-linux-x64-gpu-${ONNXRUNTIME_VERSION}.tgz && \
    mv ./onnxruntime-linux-x64-gpu-${ONNXRUNTIME_VERSION}/lib /usr/lib64/onnxruntime-gpu
 
 # build gotestsum and test2json
