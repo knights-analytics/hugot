@@ -18,6 +18,7 @@ type Session struct {
 	tokenClassificationPipelines    pipelineMap[*pipelines.TokenClassificationPipeline]
 	textClassificationPipelines     pipelineMap[*pipelines.TextClassificationPipeline]
 	zeroShotClassificationPipelines pipelineMap[*pipelines.ZeroShotClassificationPipeline]
+	textGenerationPipelines         pipelineMap[*pipelines.TextGenerationPipeline]
 	ortOptions                      *ort.SessionOptions
 }
 
@@ -61,6 +62,12 @@ type TokenClassificationConfig = pipelines.PipelineConfig[*pipelines.TokenClassi
 // TokenClassificationOption is an option for a token classification pipeline
 type TokenClassificationOption = pipelines.PipelineOption[*pipelines.TokenClassificationPipeline]
 
+// TokenClassificationConfig is the configuration for a token classification pipeline
+type TextGenerationConfig = pipelines.PipelineConfig[*pipelines.TextGenerationPipeline]
+
+// TokenClassificationOption is an option for a token classification pipeline
+type TextGenerationOption = pipelines.PipelineOption[*pipelines.TextGenerationPipeline]
+
 // NewSession is the main entrypoint to hugot and is used to create a new hugot session object.
 // ortLibraryPath should be the path to onnxruntime.so. If it's the empty string, hugot will try
 // to load the library from the default location (/usr/lib/onnxruntime.so).
@@ -68,7 +75,6 @@ type TokenClassificationOption = pipelines.PipelineOption[*pipelines.TokenClassi
 // Note moreover that there can be at most one hugot session active (i.e., the Session object is a singleton),
 // otherwise NewSession will return an error.
 func NewSession(options ...WithOption) (*Session, error) {
-
 	if ort.IsInitialized() {
 		return nil, errors.New("another session is currently active, and only one session can be active at one time")
 	}
@@ -78,6 +84,7 @@ func NewSession(options ...WithOption) (*Session, error) {
 		textClassificationPipelines:     map[string]*pipelines.TextClassificationPipeline{},
 		tokenClassificationPipelines:    map[string]*pipelines.TokenClassificationPipeline{},
 		zeroShotClassificationPipelines: map[string]*pipelines.ZeroShotClassificationPipeline{},
+		textGenerationPipelines:         map[string]*pipelines.TextGenerationPipeline{},
 	}
 
 	// set session options and initialise
@@ -262,6 +269,14 @@ func NewPipeline[T pipelines.Pipeline](s *Session, pipelineConfig pipelines.Pipe
 		}
 		s.zeroShotClassificationPipelines[config.Name] = pipelineInitialised
 		pipeline = any(pipelineInitialised).(T)
+	case *pipelines.TextGenerationPipeline:
+		config := any(pipelineConfig).(pipelines.PipelineConfig[*pipelines.TextGenerationPipeline])
+		pipelineInitialised, err := pipelines.NewTextGenerationPipeline(config, s.ortOptions)
+		if err != nil {
+			return pipeline, err
+		}
+		s.textGenerationPipelines[config.Name] = pipelineInitialised
+		pipeline = any(pipelineInitialised).(T)
 	default:
 		return pipeline, fmt.Errorf("not implemented")
 	}
@@ -292,6 +307,12 @@ func GetPipeline[T pipelines.Pipeline](s *Session, name string) (T, error) {
 		return any(p).(T), nil
 	case *pipelines.ZeroShotClassificationPipeline:
 		p, ok := s.zeroShotClassificationPipelines[name]
+		if !ok {
+			return pipeline, &pipelineNotFoundError{pipelineName: name}
+		}
+		return any(p).(T), nil
+	case *pipelines.TextGenerationPipeline:
+		p, ok := s.textGenerationPipelines[name]
 		if !ok {
 			return pipeline, &pipelineNotFoundError{pipelineName: name}
 		}

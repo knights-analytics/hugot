@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"slices"
 	"strings"
 
 	"github.com/daulet/tokenizers"
@@ -235,6 +236,16 @@ func createInputTensors(batch *PipelineBatch, inputsMeta []ort.InputOutputInfo) 
 	var tensorCreationErr error
 
 	for i, inputMeta := range inputsMeta {
+		// TODO how to assign default values to these non standard inputs
+		if !slices.Contains([]string{"input_ids", "token_type_ids", "attention_mask"}, inputMeta.Name) {
+			n, err := ort.NewEmptyTensor[float32](ort.NewShape(1, 32, 1, 96))
+			if err != nil {
+				panic(err)
+			}
+			inputTensors[i] = n
+			continue
+		}
+
 		backingSlice := make([]int64, tensorSize)
 		counter := 0
 
@@ -250,7 +261,7 @@ func createInputTensors(batch *PipelineBatch, inputsMeta []ort.InputOutputInfo) 
 					case "attention_mask":
 						backingSlice[counter] = int64(input.AttentionMask[j])
 					default:
-						return fmt.Errorf("input %s not recognized", inputMeta.Name)
+						// return fmt.Errorf("input %s not recognized", inputMeta.Name)
 					}
 				} else {
 					backingSlice[counter] = 0 // pad with zero
@@ -258,6 +269,7 @@ func createInputTensors(batch *PipelineBatch, inputsMeta []ort.InputOutputInfo) 
 				counter++
 			}
 		}
+
 		inputTensors[i], tensorCreationErr = ort.NewTensor(ort.NewShape(batchSize, int64(batch.MaxSequenceLength)), backingSlice)
 		if tensorCreationErr != nil {
 			return tensorCreationErr
@@ -286,7 +298,9 @@ func getTokenizerOptions(inputs []ort.InputOutputInfo) ([]tokenizers.EncodeOptio
 		case "attention_mask":
 			encodeOptions = append(encodeOptions, tokenizers.WithReturnAttentionMask())
 		default:
-			return nil, fmt.Errorf("input %s not recognized", input.Name)
+			continue
+			// return nil, fmt.Errorf("input %s not recognized", input.Name)
+			// TODO: see what to do here
 		}
 	}
 	return encodeOptions, nil

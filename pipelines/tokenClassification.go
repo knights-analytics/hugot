@@ -220,8 +220,7 @@ func (p *TokenClassificationPipeline) Preprocess(batch *PipelineBatch, inputs []
 	tokenizeInputs(batch, p.Tokenizer, inputs, p.TokenizerOptions)
 	atomic.AddUint64(&p.TokenizerTimings.NumCalls, 1)
 	atomic.AddUint64(&p.TokenizerTimings.TotalNS, uint64(time.Since(start)))
-	err := createInputTensors(batch, p.InputsMeta)
-	return err
+	return createInputTensors(batch, p.InputsMeta)
 }
 
 // Forward performs the forward inference of the pipeline.

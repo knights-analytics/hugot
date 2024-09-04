@@ -1059,3 +1059,26 @@ func printTokenEntities(o *pipelines.TokenClassificationOutput) {
 		}
 	}
 }
+
+func TestTextGenerationPipeline(t *testing.T) {
+	session, err := NewSession(WithOnnxLibraryPath(onnxRuntimeSharedLibrary))
+	check(t, err)
+	defer func(session *Session) {
+		err := session.Destroy()
+		check(t, err)
+	}(session)
+
+	modelPath := "./models/Microsoft_Phi-3-mini-4k-instruct-onnx"
+
+	config := TextGenerationConfig{
+		ModelPath: modelPath,
+		Name:      "testPipeline",
+	}
+	pipeline, err := NewPipeline(session, config)
+	check(t, err)
+	output, err := pipeline.RunPipeline([]string{"How are you today?"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	fmt.Println(output)
+}
