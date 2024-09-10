@@ -420,6 +420,8 @@ func (p *ZeroShotClassificationPipeline) RunPipeline(inputs []string) (*ZeroShot
 		runErrors = append(runErrors, batch.Destroy())
 	}(batch)
 
+	outputTensor := batch.OutputValues[0].(*ort.Tensor[float32])
+
 	sequencePairs, _, err := createSequencePairs(inputs, p.Labels, p.HypothesisTemplate)
 	if err != nil {
 		return nil, err
@@ -444,7 +446,7 @@ func (p *ZeroShotClassificationPipeline) RunPipeline(inputs []string) (*ZeroShot
 			if e := errors.Join(runErrors...); e != nil {
 				return nil, e
 			}
-			sequenceTensors = append(sequenceTensors, batch.OutputTensors[0].GetData())
+			sequenceTensors = append(sequenceTensors, outputTensor.GetData())
 		}
 		outputTensors = append(outputTensors, sequenceTensors)
 	}

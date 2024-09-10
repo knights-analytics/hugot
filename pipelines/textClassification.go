@@ -240,7 +240,7 @@ func (p *TextClassificationPipeline) Forward(batch *PipelineBatch) error {
 }
 
 func (p *TextClassificationPipeline) Postprocess(batch *PipelineBatch) (*TextClassificationOutput, error) {
-	outputTensor := batch.OutputTensors[0]
+	outputValue := batch.OutputValues[0]
 	outputDims := p.OutputsMeta[0].Dimensions
 	nLogit := outputDims[len(outputDims)-1]
 	output := make([][]float32, len(batch.Input))
@@ -257,7 +257,9 @@ func (p *TextClassificationPipeline) Postprocess(batch *PipelineBatch) (*TextCla
 		return nil, fmt.Errorf("aggregation function %s is not supported", p.AggregationFunctionName)
 	}
 
-	for _, result := range outputTensor.GetData() {
+	resultTensor := outputValue.(*ort.Tensor[float32])
+
+	for _, result := range resultTensor.GetData() {
 		inputVector[vectorCounter] = result
 		if vectorCounter == int(nLogit)-1 {
 			output[inputCounter] = aggregationFunction(inputVector)

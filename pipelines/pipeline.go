@@ -83,19 +83,19 @@ type tokenizedInput struct {
 // PipelineBatch represents a batch of inputs that runs through the pipeline.
 type PipelineBatch struct {
 	Input             []tokenizedInput
-	InputTensors      []*ort.Tensor[int64]
 	MaxSequenceLength int
-	OutputTensors     []*ort.Tensor[float32]
+	InputValues       []ort.Value
+	OutputValues      []ort.Value
 }
 
 func (b *PipelineBatch) Destroy() error {
-	destroyErrors := make([]error, 0, len(b.InputTensors)+len(b.OutputTensors))
+	destroyErrors := make([]error, 0, len(b.InputValues)+len(b.OutputValues))
 
-	for _, tensor := range b.InputTensors {
+	for _, tensor := range b.InputValues {
 		destroyErrors = append(destroyErrors, tensor.Destroy())
 	}
 
-	for _, tensor := range b.OutputTensors {
+	for _, tensor := range b.OutputValues {
 		destroyErrors = append(destroyErrors, tensor.Destroy())
 	}
 	return errors.Join(destroyErrors...)
@@ -231,7 +231,7 @@ func createInputTensors(batch *PipelineBatch, inputsMeta []ort.InputOutputInfo) 
 	tensorSize := len(batch.Input) * (batch.MaxSequenceLength)
 	batchSize := int64(len(batch.Input))
 
-	inputTensors := make([]*ort.Tensor[int64], len(inputsMeta))
+	inputTensors := make([]ort.Value, len(inputsMeta))
 	var tensorCreationErr error
 
 	for i, inputMeta := range inputsMeta {
@@ -263,7 +263,7 @@ func createInputTensors(batch *PipelineBatch, inputsMeta []ort.InputOutputInfo) 
 			return tensorCreationErr
 		}
 	}
-	batch.InputTensors = inputTensors
+	batch.InputValues = inputTensors
 	return nil
 }
 
@@ -297,8 +297,7 @@ func runSessionOnBatch(batch *PipelineBatch, session *ort.DynamicAdvancedSession
 	maxSequenceLength := int64(batch.MaxSequenceLength)
 
 	// allocate vectors with right dimensions for the output
-	outputTensors := make([]*ort.Tensor[float32], len(outputs))
-	arbitraryOutputTensors := make([]ort.ArbitraryTensor, len(outputs))
+	outputTensors := make([]ort.Value, len(outputs))
 	var outputCreationErr error
 
 	for outputIndex, meta := range outputs {
@@ -326,22 +325,15 @@ func runSessionOnBatch(batch *PipelineBatch, session *ort.DynamicAdvancedSession
 		if outputCreationErr != nil {
 			return outputCreationErr
 		}
-		arbitraryOutputTensors[outputIndex] = ort.ArbitraryTensor(outputTensors[outputIndex])
 	}
 
-	// Run Onnx model
-	arbitraryInputTensors := make([]ort.ArbitraryTensor, len(batch.InputTensors))
-	for i, t := range batch.InputTensors {
-		arbitraryInputTensors[i] = ort.ArbitraryTensor(t)
-	}
-
-	errOnnx := session.Run(arbitraryInputTensors, arbitraryOutputTensors)
+	errOnnx := session.Run(batch.InputValues, outputTensors)
 	if errOnnx != nil {
 		return errOnnx
 	}
 
 	// store resulting tensors
-	batch.OutputTensors = outputTensors
+	batch.OutputValues = outputTensors
 	return nil
 }
 

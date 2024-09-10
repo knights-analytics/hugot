@@ -225,8 +225,9 @@ func (p *FeatureExtractionPipeline) Postprocess(batch *PipelineBatch) (*FeatureE
 	tokenEmbeddings := make([][]float32, maxSequenceLength)
 	tokenEmbeddingsCounter := 0
 	batchInputCounter := 0
+	outputTensor := batch.OutputValues[0].(*ort.Tensor[float32])
 
-	for _, result := range batch.OutputTensors[0].GetData() {
+	for _, result := range outputTensor.GetData() {
 		outputEmbedding[outputEmbeddingCounter] = result
 		if outputEmbeddingCounter == int(embeddingDimension)-1 {
 			// we gathered one embedding
