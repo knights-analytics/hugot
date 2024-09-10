@@ -256,7 +256,8 @@ func (p *TokenClassificationPipeline) Postprocess(batch *PipelineBatch) (*TokenC
 	// construct the output vectors by gathering the logits,
 	// however discard the embeddings of the padding tokens so that the output vector length
 	// for an input is equal to the number of original tokens
-	for _, result := range batch.OutputTensors[0].GetData() {
+	outputTensor := batch.OutputValues[0].(*ort.Tensor[float32])
+	for _, result := range outputTensor.GetData() {
 		tokenVector[tokenVectorCounter] = result
 		if tokenVectorCounter == tokenLogitsDim-1 {
 			// raw result vector for token is now complete
