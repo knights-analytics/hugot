@@ -11,7 +11,7 @@ require (
 	github.com/urfave/cli/v2 v2.27.4
 	github.com/viant/afs v1.25.1
 	github.com/viant/afsc v1.9.3
-	github.com/yalue/onnxruntime_go v1.12.0
+	github.com/yalue/onnxruntime_go v1.12.1
 	golang.org/x/exp v0.0.0-20240909161429-701f63a606c0
 )
 
