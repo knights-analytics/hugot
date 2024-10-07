@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	hfd "github.com/knights-analytics/HuggingFaceModelDownloader/hfdownloader"
+	hfd "github.com/bodaay/HuggingFaceModelDownloader/hfdownloader"
 )
 
 // DownloadOptions is a struct of options that can be passed to DownloadModel
