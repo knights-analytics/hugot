@@ -7,5 +7,8 @@ this_dir="$( cd "$( dirname "$0" )" && pwd )"
 src_dir="$(realpath "${this_dir}/..")"
 export src_dir
 
+# build with compose
+export DOCKER_BUILDKIT=1
+
 docker compose -f ./compose-dev.yaml build
 docker compose -f ./compose-dev.yaml up -d

@@ -16,7 +16,10 @@ host_uid=$(id -u "$USER")
 export host_uid
 
 # build with compose
+export DOCKER_BUILDKIT=1
+
 docker compose -f "$src_dir/compose-test.yaml" build
+
 echo "Running tests for commit hash: $commit_hash"
 docker compose -f "$src_dir/compose-test.yaml" up && \
 docker compose -f "$src_dir/compose-test.yaml" logs --no-color >& "$test_folder/logs.txt"

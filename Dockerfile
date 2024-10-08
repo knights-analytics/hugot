@@ -40,6 +40,7 @@ WORKDIR /build
 RUN cd ./cmd && CGO_ENABLED=1 CGO_LDFLAGS="-L/usr/lib/" GOOS=linux GOARCH=amd64 go build -a -o ./target main.go
 
 #--- final layer ---
+
 FROM --platform=$BUILD_PLATFORM public.ecr.aws/amazonlinux/amazonlinux:2023 AS final
 
 COPY --from=hugot-build /usr/lib/libtokenizers.a /usr/lib/libtokenizers.a
