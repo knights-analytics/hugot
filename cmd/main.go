@@ -22,6 +22,7 @@ import (
 )
 
 var modelPath string
+var onnxFilename string
 var inputPath string
 var outputPath string
 var pipelineType string
@@ -49,6 +50,13 @@ var runCommand = &cli.Command{
 			Aliases:     []string{"p"},
 			Destination: &modelPath,
 			Required:    true,
+		},
+		&cli.StringFlag{
+			Name:        "onnxFilename",
+			Usage:       "name of the onnx file",
+			Aliases:     []string{"n"},
+			Destination: &onnxFilename,
+			Required:    false,
 		},
 		&cli.StringFlag{
 			Name:        "input",
@@ -162,27 +170,30 @@ var runCommand = &cli.Command{
 		switch pipelineType {
 		case "tokenClassification":
 			config := hugot.TokenClassificationConfig{
-				ModelPath: modelPath,
-				Name:      "cliPipeline",
+				ModelPath:    modelPath,
+				OnnxFilename: onnxFilename,
+				Name:         "cliPipeline",
 			}
 			pipe, err = hugot.NewPipeline(session, config)
 			setupErrs = append(setupErrs, err)
 		case "textClassification":
 			config := hugot.TextClassificationConfig{
-				ModelPath: modelPath,
-				Name:      "cliPipeline",
+				ModelPath:    modelPath,
+				OnnxFilename: onnxFilename,
+				Name:         "cliPipeline",
 			}
 			pipe, err = hugot.NewPipeline(session, config)
 			setupErrs = append(setupErrs, err)
 		case "featureExtraction":
 			config := hugot.FeatureExtractionConfig{
-				ModelPath: modelPath,
-				Name:      "cliPipeline",
+				ModelPath:    modelPath,
+				OnnxFilename: onnxFilename,
+				Name:         "cliPipeline",
 			}
 			pipe, err = hugot.NewPipeline(session, config)
 			setupErrs = append(setupErrs, err)
 		default:
-			setupErrs = append(setupErrs, fmt.Errorf("pipeline type %s not implemented", pipelineType))
+			setupErrs = append(setupErrs, fmt.Errorf("pipeline type %s not implemented for the cli", pipelineType))
 		}
 		if e := errors.Join(setupErrs...); e != nil {
 			return e

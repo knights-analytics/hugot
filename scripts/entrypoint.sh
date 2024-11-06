@@ -1,6 +1,6 @@
 #!/bin/bash
 
-#--- entrypoint script to the alchemia stack container
+#--- entrypoint script
 # This script should be called with arguments as follows:
 #
 # `command arg1 arg2 ...`
