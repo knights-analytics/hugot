@@ -4,8 +4,8 @@ services:
     platform: linux/amd64
     build:
       context: .
-      dockerfile: ./test.Dockerfile
-      target: hugot-build
+      dockerfile: ./Dockerfile
+      target: hugot-runtime
     volumes:
       - $src_dir:/home/testuser/repositories/hugot
     entrypoint: ["tail", "-f", "/dev/null"]
