@@ -23,5 +23,5 @@ docker compose -f "$src_dir/compose-test.yaml" logs --no-color >& "$test_folder/
 docker compose -f "$src_dir/compose-test.yaml" rm -fsv
 
 echo "Extracting lib artifacts"
-docker build -f ./test.Dockerfile . --output "$src_dir/artifacts" --target artifacts
+docker build -f ./Dockerfile . --output "$src_dir/artifacts" --target artifacts
 echo "lib artifacts extracted"

@@ -52,8 +52,9 @@ func TestFeatureExtractionPipelineValidation(t *testing.T) {
 
 	modelPath := "./models/sentence-transformers_all-MiniLM-L6-v2"
 	config := FeatureExtractionConfig{
-		ModelPath: modelPath,
-		Name:      "testPipeline",
+		ModelPath:    modelPath,
+		OnnxFilename: "model.onnx",
+		Name:         "testPipeline",
 	}
 	pipeline, err := NewPipeline(session, config)
 	check(t, err)
@@ -79,8 +80,9 @@ func TestFeatureExtractionPipeline(t *testing.T) {
 	modelPath := "./models/sentence-transformers_all-MiniLM-L6-v2"
 
 	config := FeatureExtractionConfig{
-		ModelPath: modelPath,
-		Name:      "testPipeline",
+		ModelPath:    modelPath,
+		Name:         "testPipeline",
+		OnnxFilename: "model.onnx",
 	}
 	pipeline, err := NewPipeline(session, config)
 	check(t, err)
@@ -94,7 +96,7 @@ func TestFeatureExtractionPipeline(t *testing.T) {
 	testResults = expectedResults["test1output"]
 	batchResult, err := pipeline.RunPipeline([]string{"robert smith"})
 	if err != nil {
-		t.Fatalf(err.Error())
+		t.Fatal(err)
 	}
 	for i := range batchResult.Embeddings {
 		e := floatsEqual(batchResult.Embeddings[i], testResults[i])
@@ -151,8 +153,9 @@ func TestFeatureExtractionPipeline(t *testing.T) {
 	// test normalization
 	testResults = expectedResults["normalizedOutput"]
 	config = FeatureExtractionConfig{
-		ModelPath: modelPath,
-		Name:      "testPipelineNormalise",
+		ModelPath:    modelPath,
+		Name:         "testPipelineNormalise",
+		OnnxFilename: "model.onnx",
 		Options: []FeatureExtractionOption{
 			pipelines.WithNormalization(),
 		},
@@ -169,11 +172,12 @@ func TestFeatureExtractionPipeline(t *testing.T) {
 		}
 	}
 
-	// test getting sentence embeddings
+	// test getting output by name
 	configSentence := FeatureExtractionConfig{
-		ModelPath: modelPath,
-		Name:      "testPipelineSentence",
-		Options:   []FeatureExtractionOption{pipelines.WithOutputName("sentence_embedding")},
+		ModelPath:    modelPath,
+		Name:         "testPipelineSentence",
+		OnnxFilename: "model.onnx",
+		Options:      []FeatureExtractionOption{pipelines.WithOutputName("last_hidden_state")},
 	}
 	pipelineSentence, err := NewPipeline(session, configSentence)
 	check(t, err)
@@ -183,8 +187,9 @@ func TestFeatureExtractionPipeline(t *testing.T) {
 	}
 	fmt.Println(outputSentence.Embeddings[0])
 	configSentence = FeatureExtractionConfig{
-		ModelPath: modelPath,
-		Name:      "testPipelineToken",
+		ModelPath:    modelPath,
+		Name:         "testPipelineToken",
+		OnnxFilename: "model.onnx",
 	}
 	pipelineToken, err := NewPipeline(session, configSentence)
 	check(t, err)
