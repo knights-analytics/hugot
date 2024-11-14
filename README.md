@@ -24,6 +24,10 @@ Developing and fine-tuning transformer models with the huggingface python librar
 
 For the golang developer or ML engineer who wants to run transformer piplines on their own hardware, tightly coupled with their own application.
 
+## By whom
+
+Hugot is brought to you by the friendly folks at [Knights Analytics](https://knightsanalytics.com), who use Hugot in production to automate next-generation master data management.
+
 ## Implemented pipelines
 
 Currently, we have implementations for the following transfomer pipelines:
