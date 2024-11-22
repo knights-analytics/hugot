@@ -19,7 +19,7 @@ type FeatureExtractionPipeline struct {
 	basePipeline
 	Normalization bool
 	OutputName    string
-	Output        ort.InputOutputInfo
+	Output        InputOutputInfo
 }
 
 type FeatureExtractionOutput struct {
@@ -51,12 +51,13 @@ func WithOutputName(outputName string) PipelineOption[*FeatureExtractionPipeline
 	}
 }
 
-// NewFeatureExtractionPipeline init a feature extraction pipeline.
-func NewFeatureExtractionPipeline(config PipelineConfig[*FeatureExtractionPipeline], ortOptions *ort.SessionOptions) (*FeatureExtractionPipeline, error) {
+// NewFeatureExtractionPipelineORT init a feature extraction pipeline.
+func NewFeatureExtractionPipelineORT(config PipelineConfig[*FeatureExtractionPipeline], ortOptions *ort.SessionOptions) (*FeatureExtractionPipeline, error) {
 	pipeline := &FeatureExtractionPipeline{}
+	pipeline.Runtime = "ORT"
 	pipeline.ModelPath = config.ModelPath
 	pipeline.PipelineName = config.Name
-	pipeline.OrtOptions = ortOptions
+	pipeline.ORTOptions = ortOptions
 	pipeline.OnnxFilename = config.OnnxFilename
 
 	for _, o := range config.Options {
@@ -70,7 +71,7 @@ func NewFeatureExtractionPipeline(config PipelineConfig[*FeatureExtractionPipeli
 	}
 
 	// init of inputs and outputs
-	inputs, outputs, err := loadInputOutputMeta(model)
+	inputs, outputs, err := loadInputOutputMetaORT(model)
 	if err != nil {
 		return nil, err
 	}
@@ -105,11 +106,85 @@ func NewFeatureExtractionPipeline(config PipelineConfig[*FeatureExtractionPipeli
 	pipeline.Tokenizer = tk
 
 	// creation of the session. Only one output (either token or sentence embedding).
-	session, err := createSession(model, inputs, []ort.InputOutputInfo{pipeline.Output}, ortOptions)
+	session, err := createORTSession(model, pipeline.InputsMeta, pipeline.OutputsMeta, ortOptions)
 	if err != nil {
 		return nil, err
 	}
-	pipeline.OrtSession = session
+	pipeline.ORTSession = session
+
+	// initialize timings
+
+	pipeline.PipelineTimings = &timings{}
+	pipeline.TokenizerTimings = &timings{}
+
+	// validate pipeline
+	err = pipeline.Validate()
+	if err != nil {
+		errDestroy := pipeline.Destroy()
+		return nil, errors.Join(err, errDestroy)
+	}
+	return pipeline, nil
+}
+
+// NewFeatureExtractionPipelineGo init a feature extraction pipeline.
+func NewFeatureExtractionPipelineGo(config PipelineConfig[*FeatureExtractionPipeline]) (*FeatureExtractionPipeline, error) {
+	pipeline := &FeatureExtractionPipeline{}
+	pipeline.Runtime = "GO"
+	pipeline.ModelPath = config.ModelPath
+	pipeline.PipelineName = config.Name
+	pipeline.OnnxFilename = config.OnnxFilename
+
+	for _, o := range config.Options {
+		o(pipeline)
+	}
+
+	// onnx model init
+	model, err := loadOnnxModelBytes(pipeline.ModelPath, pipeline.OnnxFilename)
+	if err != nil {
+		return nil, err
+	}
+
+	// init of inputs and outputs
+	inputs, outputs, err := loadInputOutputMetaGo(model)
+	if err != nil {
+		return nil, err
+	}
+	pipeline.InputsMeta = inputs
+	pipeline.OutputsMeta = outputs
+
+	// filter outputs
+	if pipeline.OutputName != "" {
+		for _, output := range outputs {
+			if output.Name == pipeline.OutputName {
+				pipeline.Output = output
+				break
+			}
+		}
+		if pipeline.Output.Name == "" {
+			return nil, fmt.Errorf("output %s is not available, outputs are: %s", pipeline.OutputName, strings.Join(getNames(outputs), ", "))
+		}
+	} else {
+		pipeline.Output = outputs[0] // we take the first output otherwise, like transformers does
+	}
+
+	// tokenizer init
+	pipeline.TokenizerOptions, err = getTokenizerOptions(inputs)
+	if err != nil {
+		return nil, err
+	}
+
+	tk, tkErr := loadTokenizer(pipeline.ModelPath)
+	if tkErr != nil {
+		return nil, tkErr
+	}
+	pipeline.Tokenizer = tk
+
+	// creation of the session. Only one output (either token or sentence embedding).
+	session, err := createGoSession(model)
+	if err != nil {
+		return nil, err
+	}
+	pipeline.GoSession = session
 
 	// initialize timings
 
@@ -142,7 +217,7 @@ func (p *FeatureExtractionPipeline) GetMetadata() PipelineMetadata {
 
 // Destroy frees the feature extraction pipeline resources.
 func (p *FeatureExtractionPipeline) Destroy() error {
-	return destroySession(p.Tokenizer, p.OrtSession)
+	return destroySession(p.Tokenizer, p.ORTSession)
 }
 
 // GetStats returns the runtime statistics for the pipeline.
@@ -190,16 +265,18 @@ func (p *FeatureExtractionPipeline) Preprocess(batch *PipelineBatch, inputs []st
 	tokenizeInputs(batch, p.Tokenizer, inputs, p.TokenizerOptions)
 	atomic.AddUint64(&p.TokenizerTimings.NumCalls, 1)
 	atomic.AddUint64(&p.TokenizerTimings.TotalNS, uint64(time.Since(start)))
-	err := createInputTensors(batch, p.InputsMeta)
+	err := createInputTensors(batch, p.InputsMeta, p.Runtime)
 	return err
 }
 
 // Forward performs the forward inference of the feature extraction pipeline.
 func (p *FeatureExtractionPipeline) Forward(batch *PipelineBatch) error {
 	start := time.Now()
-	err := runSessionOnBatch(batch, p.OrtSession, []ort.InputOutputInfo{p.Output})
-	if err != nil {
-		return err
+	if p.ORTSession != nil {
+		err := runSessionOnBatch(batch, p.ORTSession, p.GoSession, p.OutputsMeta)
+		if err != nil {
+			return err
+		}
 	}
 	atomic.AddUint64(&p.PipelineTimings.NumCalls, 1)
 	atomic.AddUint64(&p.PipelineTimings.TotalNS, uint64(time.Since(start)))
@@ -225,7 +302,7 @@ func (p *FeatureExtractionPipeline) Postprocess(batch *PipelineBatch) (*FeatureE
 	tokenEmbeddings := make([][]float32, maxSequenceLength)
 	tokenEmbeddingsCounter := 0
 	batchInputCounter := 0
-	outputTensor := batch.OutputValues[0].(*ort.Tensor[float32])
+	outputTensor := batch.OutputValuesORT[0].(*ort.Tensor[float32])
 
 	for _, result := range outputTensor.GetData() {
 		outputEmbedding[outputEmbeddingCounter] = result

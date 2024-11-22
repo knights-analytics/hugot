@@ -79,12 +79,13 @@ func WithIgnoreLabels(ignoreLabels []string) PipelineOption[*TokenClassification
 	}
 }
 
-// NewTokenClassificationPipeline Initializes a feature extraction pipeline.
-func NewTokenClassificationPipeline(config PipelineConfig[*TokenClassificationPipeline], ortOptions *ort.SessionOptions) (*TokenClassificationPipeline, error) {
+// NewTokenClassificationPipelineORT Initializes a feature extraction pipeline.
+func NewTokenClassificationPipelineORT(config PipelineConfig[*TokenClassificationPipeline], ortOptions *ort.SessionOptions) (*TokenClassificationPipeline, error) {
 	pipeline := &TokenClassificationPipeline{}
+	pipeline.Runtime = "ORT"
 	pipeline.ModelPath = config.ModelPath
 	pipeline.PipelineName = config.Name
-	pipeline.OrtOptions = ortOptions
+	pipeline.ORTOptions = ortOptions
 	pipeline.OnnxFilename = config.OnnxFilename
 	for _, o := range config.Options {
 		o(pipeline)
@@ -97,7 +98,7 @@ func NewTokenClassificationPipeline(config PipelineConfig[*TokenClassificationPi
 	}
 
 	// init of inputs and outputs
-	inputs, outputs, err := loadInputOutputMeta(model)
+	inputs, outputs, err := loadInputOutputMetaORT(model)
 	if err != nil {
 		return nil, err
 	}
@@ -146,11 +147,91 @@ func NewTokenClassificationPipeline(config PipelineConfig[*TokenClassificationPi
 	pipeline.Tokenizer = tk
 
 	// creation of the session. Only one output (either token or sentence embedding).
-	session, err := createSession(model, inputs, outputs, ortOptions)
+	session, err := createORTSession(model, inputs, outputs, ortOptions)
 	if err != nil {
 		return nil, err
 	}
-	pipeline.OrtSession = session
+	pipeline.ORTSession = session
+
+	err = pipeline.Validate()
+	if err != nil {
+		return nil, err
+	}
+	return pipeline, nil
+}
+
+// NewTokenClassificationPipelineGo Initializes a feature extraction pipeline.
+func NewTokenClassificationPipelineGo(config PipelineConfig[*TokenClassificationPipeline]) (*TokenClassificationPipeline, error) {
+	pipeline := &TokenClassificationPipeline{}
+	pipeline.Runtime = "GO"
+	pipeline.ModelPath = config.ModelPath
+	pipeline.PipelineName = config.Name
+	pipeline.OnnxFilename = config.OnnxFilename
+	for _, o := range config.Options {
+		o(pipeline)
+	}
+
+	// onnx model init
+	model, err := loadOnnxModelBytes(pipeline.ModelPath, pipeline.OnnxFilename)
+	if err != nil {
+		return nil, err
+	}
+
+	// init of inputs and outputs
+	inputs, outputs, err := loadInputOutputMetaGo(model)
+	if err != nil {
+		return nil, err
+	}
+	pipeline.InputsMeta = inputs
+	pipeline.OutputsMeta = outputs
+
+	// Id label map
+	configPath := util.PathJoinSafe(config.ModelPath, "config.json")
+	pipelineInputConfig := TokenClassificationPipelineConfig{}
+	mapBytes, err := util.ReadFileBytes(configPath)
+	if err != nil {
+		return nil, err
+	}
+
+	err = jsoniter.Unmarshal(mapBytes, &pipelineInputConfig)
+	if err != nil {
+		return nil, err
+	}
+	pipeline.IDLabelMap = pipelineInputConfig.IDLabelMap
+
+	// default strategies if not set
+	if pipeline.AggregationStrategy == "" {
+		pipeline.AggregationStrategy = "SIMPLE"
+	}
+	if len(pipeline.IgnoreLabels) == 0 {
+		pipeline.IgnoreLabels = []string{"O"}
+	}
+
+	pipeline.PipelineTimings = &timings{}
+	pipeline.TokenizerTimings = &timings{}
+
+	// tokenizer init
+	pipeline.TokenizerOptions, err = getTokenizerOptions(inputs)
+	if err != nil {
+		return nil, err
+	}
+	// Additional options needed for postprocessing
+	pipeline.TokenizerOptions = append(pipeline.TokenizerOptions,
+		tokenizers.WithReturnSpecialTokensMask(),
+		tokenizers.WithReturnOffsets(),
+	)
+	tk, tkErr := loadTokenizer(pipeline.ModelPath)
+	if tkErr != nil {
+		return nil, tkErr
+	}
+	pipeline.Tokenizer = tk
+
+	// creation of the session. Only one output (either token or sentence embedding).
+	session, err := createGoSession(model)
+	if err != nil {
+		return nil, err
+	}
+	pipeline.GoSession = session
 
 	err = pipeline.Validate()
 	if err != nil {
@@ -176,7 +257,7 @@ func (p *TokenClassificationPipeline) GetMetadata() PipelineMetadata {
 
 // Destroy frees the feature extraction pipeline resources.
 func (p *TokenClassificationPipeline) Destroy() error {
-	return destroySession(p.Tokenizer, p.OrtSession)
+	return destroySession(p.Tokenizer, p.ORTSession)
 }
 
 // GetStats returns the runtime statistics for the pipeline.
@@ -220,14 +301,14 @@ func (p *TokenClassificationPipeline) Preprocess(batch *PipelineBatch, inputs []
 	tokenizeInputs(batch, p.Tokenizer, inputs, p.TokenizerOptions)
 	atomic.AddUint64(&p.TokenizerTimings.NumCalls, 1)
 	atomic.AddUint64(&p.TokenizerTimings.TotalNS, uint64(time.Since(start)))
-	err := createInputTensors(batch, p.InputsMeta)
+	err := createInputTensors(batch, p.InputsMeta, p.Runtime)
 	return err
 }
 
 // Forward performs the forward inference of the pipeline.
 func (p *TokenClassificationPipeline) Forward(batch *PipelineBatch) error {
 	start := time.Now()
-	err := runSessionOnBatch(batch, p.OrtSession, p.OutputsMeta)
+	err := runORTSessionOnBatch(batch, p.ORTSession, p.OutputsMeta)
 	if err != nil {
 		return err
 	}
@@ -256,7 +337,7 @@ func (p *TokenClassificationPipeline) Postprocess(batch *PipelineBatch) (*TokenC
 	// construct the output vectors by gathering the logits,
 	// however discard the embeddings of the padding tokens so that the output vector length
 	// for an input is equal to the number of original tokens
-	outputTensor := batch.OutputValues[0].(*ort.Tensor[float32])
+	outputTensor := batch.OutputValuesORT[0].(*ort.Tensor[float32])
 	for _, result := range outputTensor.GetData() {
 		tokenVector[tokenVectorCounter] = result
 		if tokenVectorCounter == tokenLogitsDim-1 {

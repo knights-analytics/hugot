@@ -12,8 +12,9 @@ ARG ONNXRUNTIME_VERSION
 
 ENV PATH="$PATH:/usr/local/go/bin"
 
+COPY ./scripts/download-onnxruntime.sh /download-onnxruntime.sh
 RUN --mount=src=./go.mod,dst=/go.mod \
-    --mount=src=./scripts/download-onnxruntime.sh,dst=/download-onnxruntime.sh \
+    sed -i 's/\r//g' /download-onnxruntime.sh && chmod +x /download-onnxruntime.sh && \
     dnf -y install gcc jq bash tar xz gzip glibc-static libstdc++ wget zip git && \
     ln -s /usr/lib64/libstdc++.so.6 /usr/lib64/libstdc++.so && \
     dnf install -y 'dnf-command(config-manager)' && \
@@ -41,7 +42,7 @@ RUN --mount=src=./go.mod,dst=/go.mod \
     curl -LO https://golang.org/dl/go${GO_VERSION}.linux-amd64.tar.gz && \
     tar -C /usr/local -xzf go${GO_VERSION}.linux-amd64.tar.gz && \
     rm go${GO_VERSION}.linux-amd64.tar.gz && \
-    # onnxruntime cpu and gpu
+    # onnxruntime cpu and gpu \
     /download-onnxruntime.sh ${ONNXRUNTIME_VERSION}
 
 #--- test layer ---

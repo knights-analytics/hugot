@@ -71,12 +71,13 @@ func WithMultiLabel() PipelineOption[*TextClassificationPipeline] {
 	}
 }
 
-// NewTextClassificationPipeline initializes a new text classification pipeline.
-func NewTextClassificationPipeline(config PipelineConfig[*TextClassificationPipeline], ortOptions *ort.SessionOptions) (*TextClassificationPipeline, error) {
+// NewTextClassificationPipelineORT initializes a new text classification pipeline.
+func NewTextClassificationPipelineORT(config PipelineConfig[*TextClassificationPipeline], ortOptions *ort.SessionOptions) (*TextClassificationPipeline, error) {
 	pipeline := &TextClassificationPipeline{}
+	pipeline.Runtime = "ORT"
 	pipeline.ModelPath = config.ModelPath
 	pipeline.PipelineName = config.Name
-	pipeline.OrtOptions = ortOptions
+	pipeline.ORTOptions = ortOptions
 	pipeline.OnnxFilename = config.OnnxFilename
 
 	for _, o := range config.Options {
@@ -115,7 +116,7 @@ func NewTextClassificationPipeline(config PipelineConfig[*TextClassificationPipe
 	}
 
 	// init of inputs and outputs
-	inputs, outputs, err := loadInputOutputMeta(model)
+	inputs, outputs, err := loadInputOutputMetaORT(model)
 	if err != nil {
 		return nil, err
 	}
@@ -135,11 +136,94 @@ func NewTextClassificationPipeline(config PipelineConfig[*TextClassificationPipe
 	pipeline.Tokenizer = tk
 
 	// creation of the session
-	session, err := createSession(model, inputs, pipeline.OutputsMeta, ortOptions)
+	session, err := createORTSession(model, inputs, pipeline.OutputsMeta, ortOptions)
 	if err != nil {
 		return nil, err
 	}
-	pipeline.OrtSession = session
+	pipeline.ORTSession = session
+
+	// initialize timings
+	pipeline.PipelineTimings = &timings{}
+	pipeline.TokenizerTimings = &timings{}
+
+	// validate
+	err = pipeline.Validate()
+	if err != nil {
+		errDestroy := pipeline.Destroy()
+		return nil, errors.Join(err, errDestroy)
+	}
+	return pipeline, nil
+}
+
+// NewTextClassificationPipelineGo initializes a new text classification pipeline.
+func NewTextClassificationPipelineGo(config PipelineConfig[*TextClassificationPipeline]) (*TextClassificationPipeline, error) {
+	pipeline := &TextClassificationPipeline{}
+	pipeline.Runtime = "GO"
+	pipeline.ModelPath = config.ModelPath
+	pipeline.PipelineName = config.Name
+	pipeline.OnnxFilename = config.OnnxFilename
+
+	for _, o := range config.Options {
+		o(pipeline)
+	}
+
+	if pipeline.ProblemType == "" {
+		pipeline.ProblemType = "singleLabel"
+	}
+	if pipeline.AggregationFunctionName == "" {
+		if pipeline.PipelineName == "singleLabel" {
+			pipeline.AggregationFunctionName = "SOFTMAX"
+		} else {
+			pipeline.AggregationFunctionName = "SIGMOID"
+		}
+	}
+
+	// read id to label map
+	configPath := util.PathJoinSafe(pipeline.ModelPath, "config.json")
+	pipelineInputConfig := TextClassificationPipelineConfig{}
+	mapBytes, err := util.ReadFileBytes(configPath)
+	if err != nil {
+		return nil, err
+	}
+	err = jsoniter.Unmarshal(mapBytes, &pipelineInputConfig)
+	if err != nil {
+		return nil, err
+	}
+
+	pipeline.IDLabelMap = pipelineInputConfig.IDLabelMap
+
+	// onnx model init
+	model, err := loadOnnxModelBytes(pipeline.ModelPath, pipeline.OnnxFilename)
+	if err != nil {
+		return nil, err
+	}
+
+	// init of inputs and outputs
+	inputs, outputs, err := loadInputOutputMetaGo(model)
+	if err != nil {
+		return nil, err
+	}
+	pipeline.InputsMeta = inputs
+	pipeline.OutputsMeta = outputs
+
+	// tokenizer init
+	pipeline.TokenizerOptions, err = getTokenizerOptions(inputs)
+	if err != nil {
+		return nil, err
+	}
+
+	tk, tkErr := loadTokenizer(pipeline.ModelPath)
+	if tkErr != nil {
+		return nil, tkErr
+	}
+	pipeline.Tokenizer = tk
+
+	// creation of the session
+	session, err := createGoSession(model)
+	if err != nil {
+		return nil, err
+	}
+	pipeline.GoSession = session
 
 	// initialize timings
 	pipeline.PipelineTimings = &timings{}
@@ -171,7 +255,7 @@ func (p *TextClassificationPipeline) GetMetadata() PipelineMetadata {
 
 // Destroy frees the text classification pipeline resources.
 func (p *TextClassificationPipeline) Destroy() error {
-	return destroySession(p.Tokenizer, p.OrtSession)
+	return destroySession(p.Tokenizer, p.ORTSession)
 }
 
 // GetStats returns the runtime statistics for the pipeline.
@@ -224,13 +308,13 @@ func (p *TextClassificationPipeline) Preprocess(batch *PipelineBatch, inputs []s
 	tokenizeInputs(batch, p.Tokenizer, inputs, p.TokenizerOptions)
 	atomic.AddUint64(&p.TokenizerTimings.NumCalls, 1)
 	atomic.AddUint64(&p.TokenizerTimings.TotalNS, uint64(time.Since(start)))
-	err := createInputTensors(batch, p.InputsMeta)
+	err := createInputTensors(batch, p.InputsMeta, p.Runtime)
 	return err
 }
 
 func (p *TextClassificationPipeline) Forward(batch *PipelineBatch) error {
 	start := time.Now()
-	err := runSessionOnBatch(batch, p.OrtSession, p.OutputsMeta)
+	err := runORTSessionOnBatch(batch, p.ORTSession, p.OutputsMeta)
 	if err != nil {
 		return err
 	}
@@ -240,7 +324,7 @@ func (p *TextClassificationPipeline) Forward(batch *PipelineBatch) error {
 }
 
 func (p *TextClassificationPipeline) Postprocess(batch *PipelineBatch) (*TextClassificationOutput, error) {
-	outputValue := batch.OutputValues[0]
+	outputValue := batch.OutputValuesORT[0]
 	outputDims := p.OutputsMeta[0].Dimensions
 	nLogit := outputDims[len(outputDims)-1]
 	output := make([][]float32, len(batch.Input))

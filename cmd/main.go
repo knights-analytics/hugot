@@ -123,7 +123,7 @@ var runCommand = &cli.Command{
 			}
 		}
 
-		session, err := hugot.NewSession(opts...)
+		session, err := hugot.NewORTSession(opts...)
 		if err != nil {
 			return err
 		}
@@ -174,7 +174,7 @@ var runCommand = &cli.Command{
 				OnnxFilename: onnxFilename,
 				Name:         "cliPipeline",
 			}
-			pipe, err = hugot.NewPipeline(session, config)
+			pipe, err = hugot.NewORTPipeline(session, config)
 			setupErrs = append(setupErrs, err)
 		case "textClassification":
 			config := hugot.TextClassificationConfig{
@@ -182,7 +182,7 @@ var runCommand = &cli.Command{
 				OnnxFilename: onnxFilename,
 				Name:         "cliPipeline",
 			}
-			pipe, err = hugot.NewPipeline(session, config)
+			pipe, err = hugot.NewORTPipeline(session, config)
 			setupErrs = append(setupErrs, err)
 		case "featureExtraction":
 			config := hugot.FeatureExtractionConfig{
@@ -190,7 +190,7 @@ var runCommand = &cli.Command{
 				OnnxFilename: onnxFilename,
 				Name:         "cliPipeline",
 			}
-			pipe, err = hugot.NewPipeline(session, config)
+			pipe, err = hugot.NewORTPipeline(session, config)
 			setupErrs = append(setupErrs, err)
 		default:
 			setupErrs = append(setupErrs, fmt.Errorf("pipeline type %s not implemented for the cli", pipelineType))
