@@ -16,7 +16,7 @@ import (
 // FeatureExtractionPipeline A feature extraction pipeline is a go version of
 // https://github.com/huggingface/transformers/blob/main/src/transformers/pipelines/feature_extraction.py
 type FeatureExtractionPipeline struct {
-	basePipeline
+	*basePipeline
 	Normalization bool
 	OutputName    string
 	Output        InputOutputInfo
@@ -51,145 +51,33 @@ func WithOutputName(outputName string) PipelineOption[*FeatureExtractionPipeline
 	}
 }
 
-// NewFeatureExtractionPipelineORT init a feature extraction pipeline.
-func NewFeatureExtractionPipelineORT(config PipelineConfig[*FeatureExtractionPipeline], ortOptions *ort.SessionOptions) (*FeatureExtractionPipeline, error) {
-	pipeline := &FeatureExtractionPipeline{}
-	pipeline.Runtime = "ORT"
-	pipeline.ModelPath = config.ModelPath
-	pipeline.PipelineName = config.Name
-	pipeline.ORTOptions = ortOptions
-	pipeline.OnnxFilename = config.OnnxFilename
+// NewFeatureExtractionPipeline init a feature extraction pipeline.
+func NewFeatureExtractionPipeline(config PipelineConfig[*FeatureExtractionPipeline], ortOptions *ort.SessionOptions) (*FeatureExtractionPipeline, error) {
 
+	defaultPipeline, err := newBasePipeline(config, ortOptions)
+	if err != nil {
+		return nil, err
+	}
+
+	pipeline := &FeatureExtractionPipeline{basePipeline: defaultPipeline}
 	for _, o := range config.Options {
 		o(pipeline)
 	}
 
-	// onnx model init
-	model, err := loadOnnxModelBytes(pipeline.ModelPath, pipeline.OnnxFilename)
-	if err != nil {
-		return nil, err
-	}
-
-	// init of inputs and outputs
-	inputs, outputs, err := loadInputOutputMetaORT(model)
-	if err != nil {
-		return nil, err
-	}
-	pipeline.InputsMeta = inputs
-	pipeline.OutputsMeta = outputs
-
 	// filter outputs
 	if pipeline.OutputName != "" {
-		for _, output := range outputs {
+		for _, output := range pipeline.OutputsMeta {
 			if output.Name == pipeline.OutputName {
 				pipeline.Output = output
 				break
 			}
 		}
 		if pipeline.Output.Name == "" {
-			return nil, fmt.Errorf("output %s is not available, outputs are: %s", pipeline.OutputName, strings.Join(getNames(outputs), ", "))
+			return nil, fmt.Errorf("output %s is not available, outputs are: %s", pipeline.OutputName, strings.Join(getNames(pipeline.OutputsMeta), ", "))
 		}
 	} else {
-		pipeline.Output = outputs[0] // we take the first output otherwise, like transformers does
+		pipeline.Output = pipeline.OutputsMeta[0] // we take the first output otherwise, like transformers does
 	}
-
-	// tokenizer init
-	pipeline.TokenizerOptions, err = getTokenizerOptions(inputs)
-	if err != nil {
-		return nil, err
-	}
-
-	tk, tkErr := loadTokenizer(pipeline.ModelPath)
-	if tkErr != nil {
-		return nil, tkErr
-	}
-	pipeline.Tokenizer = tk
-
-	// creation of the session. Only one output (either token or sentence embedding).
-	session, err := createORTSession(model, pipeline.InputsMeta, pipeline.OutputsMeta, ortOptions)
-	if err != nil {
-		return nil, err
-	}
-	pipeline.ORTSession = session
-
-	// initialize timings
-
-	pipeline.PipelineTimings = &timings{}
-	pipeline.TokenizerTimings = &timings{}
-
-	// validate pipeline
-	err = pipeline.Validate()
-	if err != nil {
-		errDestroy := pipeline.Destroy()
-		return nil, errors.Join(err, errDestroy)
-	}
-	return pipeline, nil
-}
-
-// NewFeatureExtractionPipelineGo init a feature extraction pipeline.
-func NewFeatureExtractionPipelineGo(config PipelineConfig[*FeatureExtractionPipeline]) (*FeatureExtractionPipeline, error) {
-	pipeline := &FeatureExtractionPipeline{}
-	pipeline.Runtime = "GO"
-	pipeline.ModelPath = config.ModelPath
-	pipeline.PipelineName = config.Name
-	pipeline.OnnxFilename = config.OnnxFilename
-
-	for _, o := range config.Options {
-		o(pipeline)
-	}
-
-	// onnx model init
-	model, err := loadOnnxModelBytes(pipeline.ModelPath, pipeline.OnnxFilename)
-	if err != nil {
-		return nil, err
-	}
-
-	// init of inputs and outputs
-	inputs, outputs, err := loadInputOutputMetaGo(model)
-	if err != nil {
-		return nil, err
-	}
-	pipeline.InputsMeta = inputs
-	pipeline.OutputsMeta = outputs
-
-	// filter outputs
-	if pipeline.OutputName != "" {
-		for _, output := range outputs {
-			if output.Name == pipeline.OutputName {
-				pipeline.Output = output
-				break
-			}
-		}
-		if pipeline.Output.Name == "" {
-			return nil, fmt.Errorf("output %s is not available, outputs are: %s", pipeline.OutputName, strings.Join(getNames(outputs), ", "))
-		}
-	} else {
-		pipeline.Output = outputs[0] // we take the first output otherwise, like transformers does
-	}
-
-	// tokenizer init
-	pipeline.TokenizerOptions, err = getTokenizerOptions(inputs)
-	if err != nil {
-		return nil, err
-	}
-
-	tk, tkErr := loadTokenizer(pipeline.ModelPath)
-	if tkErr != nil {
-		return nil, tkErr
-	}
-	pipeline.Tokenizer = tk
-
-	// creation of the session. Only one output (either token or sentence embedding).
-	session, err := createGoSession(model)
-	if err != nil {
-		return nil, err
-	}
-	pipeline.GoSession = session
-
-	// initialize timings
-
-	pipeline.PipelineTimings = &timings{}
-	pipeline.TokenizerTimings = &timings{}
 
 	// validate pipeline
 	err = pipeline.Validate()

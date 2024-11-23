@@ -20,7 +20,7 @@ import (
 // TokenClassificationPipeline is a go version of huggingface tokenClassificationPipeline.
 // https://github.com/huggingface/transformers/blob/main/src/transformers/pipelines/token_classification.py
 type TokenClassificationPipeline struct {
-	basePipeline
+	*basePipeline
 	IDLabelMap          map[int]string
 	AggregationStrategy string
 	IgnoreLabels        []string
@@ -79,31 +79,18 @@ func WithIgnoreLabels(ignoreLabels []string) PipelineOption[*TokenClassification
 	}
 }
 
-// NewTokenClassificationPipelineORT Initializes a feature extraction pipeline.
-func NewTokenClassificationPipelineORT(config PipelineConfig[*TokenClassificationPipeline], ortOptions *ort.SessionOptions) (*TokenClassificationPipeline, error) {
-	pipeline := &TokenClassificationPipeline{}
-	pipeline.Runtime = "ORT"
-	pipeline.ModelPath = config.ModelPath
-	pipeline.PipelineName = config.Name
-	pipeline.ORTOptions = ortOptions
-	pipeline.OnnxFilename = config.OnnxFilename
+// NewTokenClassificationPipeline Initializes a feature extraction pipeline.
+func NewTokenClassificationPipeline(config PipelineConfig[*TokenClassificationPipeline], ortOptions *ort.SessionOptions) (*TokenClassificationPipeline, error) {
+
+	defaultPipeline, err := newBasePipeline(config, ortOptions)
+	if err != nil {
+		return nil, err
+	}
+
+	pipeline := &TokenClassificationPipeline{basePipeline: defaultPipeline}
 	for _, o := range config.Options {
 		o(pipeline)
 	}
-
-	// onnx model init
-	model, err := loadOnnxModelBytes(pipeline.ModelPath, pipeline.OnnxFilename)
-	if err != nil {
-		return nil, err
-	}
-
-	// init of inputs and outputs
-	inputs, outputs, err := loadInputOutputMetaORT(model)
-	if err != nil {
-		return nil, err
-	}
-	pipeline.InputsMeta = inputs
-	pipeline.OutputsMeta = outputs
 
 	// Id label map
 	configPath := util.PathJoinSafe(config.ModelPath, "config.json")
@@ -127,111 +114,11 @@ func NewTokenClassificationPipelineORT(config PipelineConfig[*TokenClassificatio
 		pipeline.IgnoreLabels = []string{"O"}
 	}
 
-	pipeline.PipelineTimings = &timings{}
-	pipeline.TokenizerTimings = &timings{}
-
-	// tokenizer init
-	pipeline.TokenizerOptions, err = getTokenizerOptions(inputs)
-	if err != nil {
-		return nil, err
-	}
 	// Additional options needed for postprocessing
 	pipeline.TokenizerOptions = append(pipeline.TokenizerOptions,
 		tokenizers.WithReturnSpecialTokensMask(),
 		tokenizers.WithReturnOffsets(),
 	)
-	tk, tkErr := loadTokenizer(pipeline.ModelPath)
-	if tkErr != nil {
-		return nil, tkErr
-	}
-	pipeline.Tokenizer = tk
-
-	// creation of the session. Only one output (either token or sentence embedding).
-	session, err := createORTSession(model, inputs, outputs, ortOptions)
-	if err != nil {
-		return nil, err
-	}
-	pipeline.ORTSession = session
-
-	err = pipeline.Validate()
-	if err != nil {
-		return nil, err
-	}
-	return pipeline, nil
-}
-
-// NewTokenClassificationPipelineGo Initializes a feature extraction pipeline.
-func NewTokenClassificationPipelineGo(config PipelineConfig[*TokenClassificationPipeline]) (*TokenClassificationPipeline, error) {
-	pipeline := &TokenClassificationPipeline{}
-	pipeline.Runtime = "GO"
-	pipeline.ModelPath = config.ModelPath
-	pipeline.PipelineName = config.Name
-	pipeline.OnnxFilename = config.OnnxFilename
-	for _, o := range config.Options {
-		o(pipeline)
-	}
-
-	// onnx model init
-	model, err := loadOnnxModelBytes(pipeline.ModelPath, pipeline.OnnxFilename)
-	if err != nil {
-		return nil, err
-	}
-
-	// init of inputs and outputs
-	inputs, outputs, err := loadInputOutputMetaGo(model)
-	if err != nil {
-		return nil, err
-	}
-	pipeline.InputsMeta = inputs
-	pipeline.OutputsMeta = outputs
-
-	// Id label map
-	configPath := util.PathJoinSafe(config.ModelPath, "config.json")
-	pipelineInputConfig := TokenClassificationPipelineConfig{}
-	mapBytes, err := util.ReadFileBytes(configPath)
-	if err != nil {
-		return nil, err
-	}
-
-	err = jsoniter.Unmarshal(mapBytes, &pipelineInputConfig)
-	if err != nil {
-		return nil, err
-	}
-	pipeline.IDLabelMap = pipelineInputConfig.IDLabelMap
-
-	// default strategies if not set
-	if pipeline.AggregationStrategy == "" {
-		pipeline.AggregationStrategy = "SIMPLE"
-	}
-	if len(pipeline.IgnoreLabels) == 0 {
-		pipeline.IgnoreLabels = []string{"O"}
-	}
-
-	pipeline.PipelineTimings = &timings{}
-	pipeline.TokenizerTimings = &timings{}
-
-	// tokenizer init
-	pipeline.TokenizerOptions, err = getTokenizerOptions(inputs)
-	if err != nil {
-		return nil, err
-	}
-	// Additional options needed for postprocessing
-	pipeline.TokenizerOptions = append(pipeline.TokenizerOptions,
-		tokenizers.WithReturnSpecialTokensMask(),
-		tokenizers.WithReturnOffsets(),
-	)
-	tk, tkErr := loadTokenizer(pipeline.ModelPath)
-	if tkErr != nil {
-		return nil, tkErr
-	}
-	pipeline.Tokenizer = tk
-
-	// creation of the session. Only one output (either token or sentence embedding).
-	session, err := createGoSession(model)
-	if err != nil {
-		return nil, err
-	}
-	pipeline.GoSession = session
 
 	err = pipeline.Validate()
 	if err != nil {

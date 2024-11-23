@@ -8,7 +8,7 @@ require (
 	github.com/daulet/tokenizers v1.20.2
 	github.com/json-iterator/go v1.1.12
 	github.com/mattn/go-isatty v0.0.20
-	github.com/stretchr/testify v1.9.0
+	github.com/stretchr/testify v1.10.0
 	github.com/urfave/cli/v2 v2.27.5
 	github.com/viant/afs v1.25.1
 	github.com/viant/afsc v1.9.5-0.20241029213958-b40d6acbe9e3

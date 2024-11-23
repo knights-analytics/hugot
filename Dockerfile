@@ -42,7 +42,7 @@ RUN --mount=src=./go.mod,dst=/go.mod \
     curl -LO https://golang.org/dl/go${GO_VERSION}.linux-amd64.tar.gz && \
     tar -C /usr/local -xzf go${GO_VERSION}.linux-amd64.tar.gz && \
     rm go${GO_VERSION}.linux-amd64.tar.gz && \
-    # onnxruntime cpu and gpu \
+    # onnxruntime cpu and gpu
     /download-onnxruntime.sh ${ONNXRUNTIME_VERSION}
 
 #--- test layer ---

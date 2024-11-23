@@ -61,7 +61,7 @@ main()
 **/
 
 type ZeroShotClassificationPipeline struct {
-	basePipeline
+	*basePipeline
 	IDLabelMap         map[int]string
 	Sequences          []string
 	Labels             []string
@@ -155,20 +155,20 @@ func createSequencePairs(sequences interface{}, labels []string, hypothesisTempl
 	return sequencePairs, seqs, nil
 }
 
-// NewZeroShotClassificationPipelineORT create new Zero Shot Classification Pipeline.
-func NewZeroShotClassificationPipelineORT(config PipelineConfig[*ZeroShotClassificationPipeline], ortOptions *ort.SessionOptions) (*ZeroShotClassificationPipeline, error) {
-	pipeline := &ZeroShotClassificationPipeline{}
-	pipeline.Runtime = "ORT"
-	pipeline.ModelPath = config.ModelPath
-	pipeline.PipelineName = config.Name
-	pipeline.ORTOptions = ortOptions
-	pipeline.OnnxFilename = config.OnnxFilename
-	pipeline.entailmentID = -1 // Default value
-	pipeline.HypothesisTemplate = "This example is {}."
+// NewZeroShotClassificationPipeline create new Zero Shot Classification Pipeline.
+func NewZeroShotClassificationPipeline(config PipelineConfig[*ZeroShotClassificationPipeline], ortOptions *ort.SessionOptions) (*ZeroShotClassificationPipeline, error) {
 
+	defaultPipeline, err := newBasePipeline(config, ortOptions)
+	if err != nil {
+		return nil, err
+	}
+
+	pipeline := &ZeroShotClassificationPipeline{basePipeline: defaultPipeline}
 	for _, o := range config.Options {
 		o(pipeline)
 	}
+	pipeline.entailmentID = -1 // Default value
+	pipeline.HypothesisTemplate = "This example is {}."
 
 	if len(pipeline.Labels) == 0 {
 		return nil, fmt.Errorf("no labels provided, please provide labels using the WithLabels() option")
@@ -235,154 +235,6 @@ func NewZeroShotClassificationPipelineORT(config PipelineConfig[*ZeroShotClassif
 		return nil, fmt.Errorf("sep_token has unexpected type: %v", v)
 	}
 
-	// onnx model init
-	model, err := loadOnnxModelBytes(pipeline.ModelPath, pipeline.OnnxFilename)
-	if err != nil {
-		return nil, err
-	}
-
-	inputs, outputs, err := loadInputOutputMetaORT(model)
-	if err != nil {
-		return nil, err
-	}
-	pipeline.InputsMeta = inputs
-	pipeline.OutputsMeta = outputs
-
-	// tokenizer init
-	pipeline.TokenizerOptions, err = getTokenizerOptions(inputs)
-	if err != nil {
-		return nil, err
-	}
-
-	tk, tkErr := loadTokenizer(pipeline.ModelPath)
-	if tkErr != nil {
-		return nil, tkErr
-	}
-	pipeline.Tokenizer = tk
-
-	session, err := createORTSession(model, inputs, pipeline.OutputsMeta, ortOptions)
-	if err != nil {
-		return nil, err
-	}
-	pipeline.ORTSession = session
-
-	pipeline.PipelineTimings = &timings{}
-	pipeline.TokenizerTimings = &timings{}
-	return pipeline, err
-}
-
-// NewZeroShotClassificationPipelineGo create new Zero Shot Classification Pipeline.
-func NewZeroShotClassificationPipelineGo(config PipelineConfig[*ZeroShotClassificationPipeline]) (*ZeroShotClassificationPipeline, error) {
-	pipeline := &ZeroShotClassificationPipeline{}
-	pipeline.Runtime = "GO"
-	pipeline.ModelPath = config.ModelPath
-	pipeline.PipelineName = config.Name
-	pipeline.OnnxFilename = config.OnnxFilename
-	pipeline.entailmentID = -1 // Default value
-	pipeline.HypothesisTemplate = "This example is {}."
-
-	for _, o := range config.Options {
-		o(pipeline)
-	}
-
-	if len(pipeline.Labels) == 0 {
-		return nil, fmt.Errorf("no labels provided, please provide labels using the WithLabels() option")
-	}
-
-	// read id to label map
-	configPath := util.PathJoinSafe(pipeline.ModelPath, "config.json")
-	pipelineInputConfig := ZeroShotClassificationPipelineConfig{}
-	mapBytes, err := util.ReadFileBytes(configPath)
-	if err != nil {
-		return nil, err
-	}
-	err = jsoniter.Unmarshal(mapBytes, &pipelineInputConfig)
-	if err != nil {
-		return nil, err
-	}
-
-	// Set IDLabelMap
-	pipeline.IDLabelMap = pipelineInputConfig.IDLabelMap
-
-	// Find entailment ID
-	for id, label := range pipeline.IDLabelMap {
-		if strings.HasPrefix(strings.ToLower(label), "entail") {
-			pipeline.entailmentID = id
-			break
-		}
-	}
-
-	configPath1 := util.PathJoinSafe(pipeline.ModelPath, "special_tokens_map.json")
-	file, err := os.Open(configPath1)
-	if err != nil {
-		return nil, fmt.Errorf("cannot read special_tokens_map.json at %s", pipeline.ModelPath)
-	}
-	defer func() {
-		err = file.Close()
-	}()
-
-	byteValue, _ := io.ReadAll(file)
-	var result map[string]interface{}
-	err = json.Unmarshal(byteValue, &result)
-	if err != nil {
-		return nil, fmt.Errorf("cannot unmarshal special_tokens_map.json at %s", pipeline.ModelPath)
-	}
-
-	sepToken, ok := result["sep_token"]
-	if !ok {
-		return nil, fmt.Errorf("no sep token detected in special_tokens_map.json at %s", pipeline.ModelPath)
-	}
-
-	switch v := sepToken.(type) {
-	case map[string]interface{}:
-		t, ok := v["content"]
-		if !ok {
-			return nil, fmt.Errorf("sep_token is map but no content field is available")
-		}
-		tString, ok := t.(string)
-		if !ok {
-			return nil, fmt.Errorf("sep_token cannot be converted to string: %v", t)
-		}
-		pipeline.separatorToken = tString
-	case string:
-		pipeline.separatorToken = v
-	default:
-		return nil, fmt.Errorf("sep_token has unexpected type: %v", v)
-	}
-
-	// onnx model init
-	model, err := loadOnnxModelBytes(pipeline.ModelPath, pipeline.OnnxFilename)
-	if err != nil {
-		return nil, err
-	}
-
-	inputs, outputs, err := loadInputOutputMetaGo(model)
-	if err != nil {
-		return nil, err
-	}
-	pipeline.InputsMeta = inputs
-	pipeline.OutputsMeta = outputs
-
-	// tokenizer init
-	pipeline.TokenizerOptions, err = getTokenizerOptions(inputs)
-	if err != nil {
-		return nil, err
-	}
-
-	tk, tkErr := loadTokenizer(pipeline.ModelPath)
-	if tkErr != nil {
-		return nil, tkErr
-	}
-	pipeline.Tokenizer = tk
-
-	session, err := createGoSession(model)
-	if err != nil {
-		return nil, err
-	}
-	pipeline.GoSession = session
-
-	pipeline.PipelineTimings = &timings{}
-	pipeline.TokenizerTimings = &timings{}
 	return pipeline, err
 }
 

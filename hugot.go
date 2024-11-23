@@ -4,6 +4,9 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
+
+	ort "github.com/yalue/onnxruntime_go"
 
 	"github.com/knights-analytics/hugot/pipelines"
 )
@@ -14,6 +17,32 @@ type Session struct {
 	tokenClassificationPipelines    pipelineMap[*pipelines.TokenClassificationPipeline]
 	textClassificationPipelines     pipelineMap[*pipelines.TextClassificationPipeline]
 	zeroShotClassificationPipelines pipelineMap[*pipelines.ZeroShotClassificationPipeline]
+	runtime                         string
+	ortOptions                      *ort.SessionOptions
+}
+
+func NewSession(runtime string, options ...WithOption) (*Session, error) {
+	session := &Session{
+		featureExtractionPipelines:      map[string]*pipelines.FeatureExtractionPipeline{},
+		textClassificationPipelines:     map[string]*pipelines.TextClassificationPipeline{},
+		tokenClassificationPipelines:    map[string]*pipelines.TokenClassificationPipeline{},
+		zeroShotClassificationPipelines: map[string]*pipelines.ZeroShotClassificationPipeline{},
+	}
+
+	switch strings.ToUpper(runtime) {
+	case "GO", "":
+		session.runtime = "GO"
+		return session, nil
+	case "ORT":
+		session.runtime = "ORT"
+		err := ortSession(session, options)
+		if err != nil {
+			return nil, err
+		}
+		return session, nil
+	default:
+		return nil, errors.New("unsupported runtime: " + runtime)
+	}
 }
 
 type pipelineMap[T pipelines.Pipeline] map[string]T
@@ -89,6 +118,63 @@ func GetPipeline[T pipelines.Pipeline](s *Session, name string) (T, error) {
 	}
 }
 
+// NewPipeline can be used to create a new pipeline of type T. The initialised pipeline will be returned and it
+// will also be stored in the session object so that all created pipelines can be destroyed with session.Destroy()
+// at once.
+func NewPipeline[T pipelines.Pipeline](s *Session, pipelineConfig pipelines.PipelineConfig[T]) (T, error) {
+	var pipeline T
+	if pipelineConfig.Name == "" {
+		return pipeline, errors.New("a name for the pipeline is required")
+	}
+	pipelineConfig.Runtime = s.runtime
+
+	_, getError := GetPipeline[T](s, pipelineConfig.Name)
+	var notFoundError *pipelineNotFoundError
+	if getError == nil {
+		return pipeline, fmt.Errorf("pipeline %s has already been initialised", pipelineConfig.Name)
+	} else if !errors.As(getError, &notFoundError) {
+		return pipeline, getError
+	}
+
+	switch any(pipeline).(type) {
+	case *pipelines.TokenClassificationPipeline:
+		config := any(pipelineConfig).(pipelines.PipelineConfig[*pipelines.TokenClassificationPipeline])
+		pipelineInitialised, err := pipelines.NewTokenClassificationPipeline(config, s.ortOptions)
+		if err != nil {
+			return pipeline, err
+		}
+		s.tokenClassificationPipelines[config.Name] = pipelineInitialised
+		pipeline = any(pipelineInitialised).(T)
+	case *pipelines.TextClassificationPipeline:
+		config := any(pipelineConfig).(pipelines.PipelineConfig[*pipelines.TextClassificationPipeline])
+		pipelineInitialised, err := pipelines.NewTextClassificationPipeline(config, s.ortOptions)
+		if err != nil {
+			return pipeline, err
+		}
+		s.textClassificationPipelines[config.Name] = pipelineInitialised
+		pipeline = any(pipelineInitialised).(T)
+	case *pipelines.FeatureExtractionPipeline:
+		config := any(pipelineConfig).(pipelines.PipelineConfig[*pipelines.FeatureExtractionPipeline])
+		pipelineInitialised, err := pipelines.NewFeatureExtractionPipeline(config, s.ortOptions)
+		if err != nil {
+			return pipeline, err
+		}
+		s.featureExtractionPipelines[config.Name] = pipelineInitialised
+		pipeline = any(pipelineInitialised).(T)
+	case *pipelines.ZeroShotClassificationPipeline:
+		config := any(pipelineConfig).(pipelines.PipelineConfig[*pipelines.ZeroShotClassificationPipeline])
+		pipelineInitialised, err := pipelines.NewZeroShotClassificationPipeline(config, s.ortOptions)
+		if err != nil {
+			return pipeline, err
+		}
+		s.zeroShotClassificationPipelines[config.Name] = pipelineInitialised
+		pipeline = any(pipelineInitialised).(T)
+	default:
+		return pipeline, fmt.Errorf("not implemented")
+	}
+	return pipeline, nil
+}
+
 type pipelineNotFoundError struct {
 	pipelineName string
 }
@@ -112,4 +198,21 @@ func (s *Session) GetStats() []string {
 		s.featureExtractionPipelines.GetStats(),
 		s.zeroShotClassificationPipelines.GetStats(),
 	)
+}
+
+// Destroy deletes the hugot session and onnxruntime environment and all initialized pipelines, freeing memory.
+// A hugot session should be destroyed when not neeeded any more, preferably with a defer() call.
+func (s *Session) Destroy() error {
+	err := errors.Join(
+		s.featureExtractionPipelines.Destroy(),
+		s.tokenClassificationPipelines.Destroy(),
+		s.textClassificationPipelines.Destroy(),
+		s.zeroShotClassificationPipelines.Destroy(),
+	)
+	if s.ortOptions != nil {
+		err = errors.Join(s.ortOptions.Destroy(),
+			ort.DestroyEnvironment(),
+		)
+	}
+	return err
 }

@@ -83,7 +83,7 @@ func WithCuda(options map[string]string) WithOption {
 	}
 }
 
-// WithCoreML Use this function to set the CoreML options flags for the ONNX Runtime configuration.
+// WithCoreML Use this function to set the CoreML options flags for the ONNX runtime configuration.
 // The `flags` parameter represents the CoreML options flags.
 // The `o.coreMLOptions` field in `ortOptions` struct will be set to the provided flags parameter.
 // The `o.coreMLOptionsSet` field in `ortOptions` struct will be set to true.

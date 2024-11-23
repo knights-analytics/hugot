@@ -14,7 +14,7 @@ var onnxruntimeSharedLibrary = "/usr/lib64/onnxruntime.so"
 func main() {
 	if ok, err := util.FileSystem.Exists(context.Background(), "./models"); err == nil {
 		if !ok {
-			session, err := hugot.NewSession(hugot.WithOnnxLibraryPath(onnxruntimeSharedLibrary))
+			session, err := hugot.NewSession("ORT", hugot.WithOnnxLibraryPath(onnxruntimeSharedLibrary))
 			if err != nil {
 				panic(err)
 			}

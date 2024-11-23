@@ -16,7 +16,7 @@ import (
 // types
 
 type TextClassificationPipeline struct {
-	basePipeline
+	*basePipeline
 	IDLabelMap              map[int]string
 	AggregationFunctionName string
 	ProblemType             string
@@ -71,15 +71,15 @@ func WithMultiLabel() PipelineOption[*TextClassificationPipeline] {
 	}
 }
 
-// NewTextClassificationPipelineORT initializes a new text classification pipeline.
-func NewTextClassificationPipelineORT(config PipelineConfig[*TextClassificationPipeline], ortOptions *ort.SessionOptions) (*TextClassificationPipeline, error) {
-	pipeline := &TextClassificationPipeline{}
-	pipeline.Runtime = "ORT"
-	pipeline.ModelPath = config.ModelPath
-	pipeline.PipelineName = config.Name
-	pipeline.ORTOptions = ortOptions
-	pipeline.OnnxFilename = config.OnnxFilename
+// NewTextClassificationPipeline initializes a new text classification pipeline.
+func NewTextClassificationPipeline(config PipelineConfig[*TextClassificationPipeline], ortOptions *ort.SessionOptions) (*TextClassificationPipeline, error) {
 
+	defaultPipeline, err := newBasePipeline(config, ortOptions)
+	if err != nil {
+		return nil, err
+	}
+
+	pipeline := &TextClassificationPipeline{basePipeline: defaultPipeline}
 	for _, o := range config.Options {
 		o(pipeline)
 	}
@@ -108,126 +108,6 @@ func NewTextClassificationPipelineORT(config PipelineConfig[*TextClassificationP
 	}
 
 	pipeline.IDLabelMap = pipelineInputConfig.IDLabelMap
-
-	// onnx model init
-	model, err := loadOnnxModelBytes(pipeline.ModelPath, pipeline.OnnxFilename)
-	if err != nil {
-		return nil, err
-	}
-
-	// init of inputs and outputs
-	inputs, outputs, err := loadInputOutputMetaORT(model)
-	if err != nil {
-		return nil, err
-	}
-	pipeline.InputsMeta = inputs
-	pipeline.OutputsMeta = outputs
-
-	// tokenizer init
-	pipeline.TokenizerOptions, err = getTokenizerOptions(inputs)
-	if err != nil {
-		return nil, err
-	}
-
-	tk, tkErr := loadTokenizer(pipeline.ModelPath)
-	if tkErr != nil {
-		return nil, tkErr
-	}
-	pipeline.Tokenizer = tk
-
-	// creation of the session
-	session, err := createORTSession(model, inputs, pipeline.OutputsMeta, ortOptions)
-	if err != nil {
-		return nil, err
-	}
-	pipeline.ORTSession = session
-
-	// initialize timings
-	pipeline.PipelineTimings = &timings{}
-	pipeline.TokenizerTimings = &timings{}
-
-	// validate
-	err = pipeline.Validate()
-	if err != nil {
-		errDestroy := pipeline.Destroy()
-		return nil, errors.Join(err, errDestroy)
-	}
-	return pipeline, nil
-}
-
-// NewTextClassificationPipelineGo initializes a new text classification pipeline.
-func NewTextClassificationPipelineGo(config PipelineConfig[*TextClassificationPipeline]) (*TextClassificationPipeline, error) {
-	pipeline := &TextClassificationPipeline{}
-	pipeline.Runtime = "GO"
-	pipeline.ModelPath = config.ModelPath
-	pipeline.PipelineName = config.Name
-	pipeline.OnnxFilename = config.OnnxFilename
-
-	for _, o := range config.Options {
-		o(pipeline)
-	}
-
-	if pipeline.ProblemType == "" {
-		pipeline.ProblemType = "singleLabel"
-	}
-	if pipeline.AggregationFunctionName == "" {
-		if pipeline.PipelineName == "singleLabel" {
-			pipeline.AggregationFunctionName = "SOFTMAX"
-		} else {
-			pipeline.AggregationFunctionName = "SIGMOID"
-		}
-	}
-
-	// read id to label map
-	configPath := util.PathJoinSafe(pipeline.ModelPath, "config.json")
-	pipelineInputConfig := TextClassificationPipelineConfig{}
-	mapBytes, err := util.ReadFileBytes(configPath)
-	if err != nil {
-		return nil, err
-	}
-	err = jsoniter.Unmarshal(mapBytes, &pipelineInputConfig)
-	if err != nil {
-		return nil, err
-	}
-
-	pipeline.IDLabelMap = pipelineInputConfig.IDLabelMap
-
-	// onnx model init
-	model, err := loadOnnxModelBytes(pipeline.ModelPath, pipeline.OnnxFilename)
-	if err != nil {
-		return nil, err
-	}
-
-	// init of inputs and outputs
-	inputs, outputs, err := loadInputOutputMetaGo(model)
-	if err != nil {
-		return nil, err
-	}
-	pipeline.InputsMeta = inputs
-	pipeline.OutputsMeta = outputs
-
-	// tokenizer init
-	pipeline.TokenizerOptions, err = getTokenizerOptions(inputs)
-	if err != nil {
-		return nil, err
-	}
-
-	tk, tkErr := loadTokenizer(pipeline.ModelPath)
-	if tkErr != nil {
-		return nil, tkErr
-	}
-	pipeline.Tokenizer = tk
-
-	// creation of the session
-	session, err := createGoSession(model)
-	if err != nil {
-		return nil, err
-	}
-	pipeline.GoSession = session
-
-	// initialize timings
-	pipeline.PipelineTimings = &timings{}
-	pipeline.TokenizerTimings = &timings{}
 
 	// validate
 	err = pipeline.Validate()

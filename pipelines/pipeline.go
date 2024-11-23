@@ -17,7 +17,7 @@ import (
 	util "github.com/knights-analytics/hugot/utils"
 )
 
-// BasePipeline can be embedded by a pipeline.
+// basePipeline can be embedded by a pipeline.
 type basePipeline struct {
 	ModelPath        string
 	OnnxFilename     string
@@ -86,6 +86,7 @@ type PipelineConfig[T Pipeline] struct {
 	Name         string
 	OnnxFilename string
 	Options      []PipelineOption[T]
+	Runtime      string
 }
 
 type timings struct {
@@ -274,4 +275,83 @@ func createInputTensors(batch *PipelineBatch, inputsMeta []InputOutputInfo, runt
 		return createInputTensorsGo(batch, inputsMeta)
 	}
 	return nil
+}
+
+func loadInputOutput(pipeline *basePipeline, model []byte) error {
+
+	switch pipeline.Runtime {
+	case "GO":
+		// init of inputs and outputs
+		inputs, outputs, err := loadInputOutputMetaGo(model)
+		if err != nil {
+			return err
+		}
+		pipeline.InputsMeta = inputs
+		pipeline.OutputsMeta = outputs
+	case "ORT":
+		// init of inputs and outputs
+		inputs, outputs, err := loadInputOutputMetaORT(model)
+		if err != nil {
+			return err
+		}
+		pipeline.InputsMeta = inputs
+		pipeline.OutputsMeta = outputs
+	}
+	return nil
+}
+
+func newBasePipeline[T Pipeline](config PipelineConfig[T], ortOptions *ort.SessionOptions) (*basePipeline, error) {
+	pipeline := &basePipeline{}
+	pipeline.Runtime = config.Runtime
+	pipeline.ModelPath = config.ModelPath
+	pipeline.PipelineName = config.Name
+	pipeline.ORTOptions = ortOptions
+	pipeline.OnnxFilename = config.OnnxFilename
+
+	// onnx model init
+	model, err := loadOnnxModelBytes(pipeline.ModelPath, pipeline.OnnxFilename)
+	if err != nil {
+		return nil, err
+	}
+
+	err = loadInputOutput(pipeline, model)
+	if err != nil {
+		return nil, err
+	}
+
+	// tokenizer init
+	pipeline.TokenizerOptions, err = getTokenizerOptions(pipeline.InputsMeta)
+	if err != nil {
+		return nil, err
+	}
+
+	tk, tkErr := loadTokenizer(pipeline.ModelPath)
+	if tkErr != nil {
+		return nil, tkErr
+	}
+	pipeline.Tokenizer = tk
+
+	// creation of the session. Only one output (either token or sentence embedding).
+	switch pipeline.Runtime {
+	case "GO":
+		// creation of the session. Only one output (either token or sentence embedding).
+		session, sessionErr := createGoSession(model)
+		if sessionErr != nil {
+			return nil, sessionErr
+		}
+		pipeline.GoSession = session
+	case "ORT":
+		session, sessionErr := createORTSession(model, pipeline.InputsMeta, pipeline.OutputsMeta, ortOptions)
+		if sessionErr != nil {
+			return nil, sessionErr
+		}
+		pipeline.ORTSession = session
+	}
+
+	// initialize timings
+
+	pipeline.PipelineTimings = &timings{}
+	pipeline.TokenizerTimings = &timings{}
+
+	return pipeline, nil
 }
