@@ -115,7 +115,7 @@ func NewTokenClassificationPipeline(config PipelineConfig[*TokenClassificationPi
 	}
 
 	// Additional options needed for postprocessing
-	pipeline.TokenizerOptions = append(pipeline.TokenizerOptions,
+	pipeline.Tokenizer.RustOptions = append(pipeline.Tokenizer.RustOptions,
 		tokenizers.WithReturnSpecialTokensMask(),
 		tokenizers.WithReturnOffsets(),
 	)
@@ -152,9 +152,9 @@ func (p *TokenClassificationPipeline) GetStats() []string {
 	return []string{
 		fmt.Sprintf("Statistics for pipeline: %s", p.PipelineName),
 		fmt.Sprintf("Tokenizer: Total time=%s, Execution count=%d, Average query time=%s",
-			time.Duration(p.TokenizerTimings.TotalNS),
-			p.TokenizerTimings.NumCalls,
-			time.Duration(float64(p.TokenizerTimings.TotalNS)/math.Max(1, float64(p.TokenizerTimings.NumCalls)))),
+			time.Duration(p.Tokenizer.TokenizerTimings.TotalNS),
+			p.Tokenizer.TokenizerTimings.NumCalls,
+			time.Duration(float64(p.Tokenizer.TokenizerTimings.TotalNS)/math.Max(1, float64(p.Tokenizer.TokenizerTimings.NumCalls)))),
 		fmt.Sprintf("ONNX: Total time=%s, Execution count=%d, Average query time=%s",
 			time.Duration(p.PipelineTimings.TotalNS),
 			p.PipelineTimings.NumCalls,
@@ -185,9 +185,9 @@ func (p *TokenClassificationPipeline) Validate() error {
 // Preprocess tokenizes the input strings.
 func (p *TokenClassificationPipeline) Preprocess(batch *PipelineBatch, inputs []string) error {
 	start := time.Now()
-	tokenizeInputs(batch, p.Tokenizer, inputs, p.TokenizerOptions)
-	atomic.AddUint64(&p.TokenizerTimings.NumCalls, 1)
-	atomic.AddUint64(&p.TokenizerTimings.TotalNS, uint64(time.Since(start)))
+	tokenizeInputs(batch, p.Tokenizer, inputs)
+	atomic.AddUint64(&p.Tokenizer.TokenizerTimings.NumCalls, 1)
+	atomic.AddUint64(&p.Tokenizer.TokenizerTimings.TotalNS, uint64(time.Since(start)))
 	err := createInputTensors(batch, p.InputsMeta, p.Runtime)
 	return err
 }
@@ -374,7 +374,13 @@ func (p *TokenClassificationPipeline) groupSubEntities(entities []Entity) Entity
 	score := util.Mean(scores)
 	// note: here we directly appeal to the tokenizer decoder with the tokenIds
 	// in the python code they pass the words to a token_to_string_method
-	word := p.Tokenizer.Decode(tokens, false)
+	var word string
+	switch p.Tokenizer.Runtime {
+	case "GO":
+		word = p.Tokenizer.GoTokenizer.Decode(convertUintsToInts(tokens), false)
+	case "RUST":
+		word = p.Tokenizer.RustTokenizer.Decode(tokens, false)
+	}
 
 	return Entity{
 		Entity: entityType,

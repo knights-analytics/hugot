@@ -161,8 +161,8 @@ func featureExtractionPipeline(t *testing.T, runtime string, options ...WithOpti
 	zero := uint64(0)
 	assert.Greater(t, pipeline.PipelineTimings.NumCalls, zero, "PipelineTimings.NumCalls should be greater than 0")
 	assert.Greater(t, pipeline.PipelineTimings.TotalNS, zero, "PipelineTimings.TotalNS should be greater than 0")
-	assert.Greater(t, pipeline.TokenizerTimings.NumCalls, zero, "TokenizerTimings.NumCalls should be greater than 0")
-	assert.Greater(t, pipeline.TokenizerTimings.TotalNS, zero, "TokenizerTimings.TotalNS should be greater than 0")
+	assert.Greater(t, pipeline.Tokenizer.TokenizerTimings.NumCalls, zero, "TokenizerTimings.NumCalls should be greater than 0")
+	assert.Greater(t, pipeline.Tokenizer.TokenizerTimings.TotalNS, zero, "TokenizerTimings.TotalNS should be greater than 0")
 
 	// test normalization
 	testResults = expectedResults["normalizedOutput"]

@@ -3,7 +3,6 @@ package pipelines
 import (
 	"fmt"
 
-	"github.com/daulet/tokenizers"
 	ort "github.com/yalue/onnxruntime_go"
 )
 
@@ -119,10 +118,10 @@ func runORTSessionOnBatch(batch *PipelineBatch, session *ort.DynamicAdvancedSess
 	return nil
 }
 
-func destroySession(tk *tokenizers.Tokenizer, session *ort.DynamicAdvancedSession) error {
+func destroySession(tk *Tokenizer, session *ort.DynamicAdvancedSession) error {
 	var finalErr error
-	if tk != nil {
-		errTokenizer := tk.Close()
+	if tk.RustTokenizer != nil {
+		errTokenizer := tk.RustTokenizer.Close()
 		if errTokenizer != nil {
 			finalErr = errTokenizer
 		}

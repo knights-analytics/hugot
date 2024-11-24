@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	"github.com/advancedclimatesystems/gonnx"
-	"github.com/daulet/tokenizers"
 	ort "github.com/yalue/onnxruntime_go"
 	"gorgonia.org/tensor"
 
@@ -19,20 +18,18 @@ import (
 
 // basePipeline can be embedded by a pipeline.
 type basePipeline struct {
-	ModelPath        string
-	OnnxFilename     string
-	PipelineName     string
-	Type             string
-	Runtime          string
-	ORTSession       *ort.DynamicAdvancedSession
-	ORTOptions       *ort.SessionOptions
-	GoSession        *gonnx.Model
-	Tokenizer        *tokenizers.Tokenizer
-	TokenizerOptions []tokenizers.EncodeOption
-	InputsMeta       []InputOutputInfo
-	OutputsMeta      []InputOutputInfo
-	TokenizerTimings *timings
-	PipelineTimings  *timings
+	ModelPath       string
+	OnnxFilename    string
+	PipelineName    string
+	Type            string
+	Runtime         string
+	ORTSession      *ort.DynamicAdvancedSession
+	ORTOptions      *ort.SessionOptions
+	GoSession       *gonnx.Model
+	Tokenizer       *Tokenizer
+	InputsMeta      []InputOutputInfo
+	OutputsMeta     []InputOutputInfo
+	PipelineTimings *timings
 }
 
 type InputOutputInfo struct {
@@ -103,7 +100,7 @@ type tokenizedInput struct {
 	AttentionMask     []uint32
 	SpecialTokensMask []uint32
 	MaxAttentionIndex int
-	Offsets           []tokenizers.Offset
+	Offsets           [][2]uint
 }
 
 // PipelineBatch represents a batch of inputs that runs through the pipeline.
@@ -136,19 +133,6 @@ func (b *PipelineBatch) Destroy() error {
 // NewBatch initializes a new batch for inference.
 func NewBatch() *PipelineBatch {
 	return &PipelineBatch{}
-}
-
-func loadTokenizer(modelPath string) (*tokenizers.Tokenizer, error) {
-	tokenizerBytes, err := util.ReadFileBytes(util.PathJoinSafe(modelPath, "tokenizer.json"))
-	if err != nil {
-		return nil, err
-	}
-
-	tk, err := tokenizers.FromBytes(tokenizerBytes)
-	if err != nil {
-		return nil, err
-	}
-	return tk, nil
 }
 
 func loadOnnxModelBytes(modelPath string, modelFilename string) ([]byte, error) {
@@ -197,64 +181,12 @@ func getOnnxFiles(path string) ([][]string, error) {
 	return onnxFiles, err
 }
 
-func tokenizeInputs(batch *PipelineBatch, tk *tokenizers.Tokenizer, inputs []string, options []tokenizers.EncodeOption) {
-	outputs := make([]tokenizedInput, len(inputs))
-	maxSequence := 0
-	for i, input := range inputs {
-
-		output := tk.EncodeWithOptions(input,
-			true,
-			options...,
-		)
-
-		maxAttentionIndex := 0
-		for j, attentionMaskValue := range output.AttentionMask {
-			if attentionMaskValue != 0 {
-				maxAttentionIndex = j
-			}
-		}
-
-		outputs[i] = tokenizedInput{
-			Raw:               input,
-			Tokens:            output.Tokens,
-			TokenIDs:          output.IDs,
-			TypeIDs:           output.TypeIDs,
-			AttentionMask:     output.AttentionMask,
-			MaxAttentionIndex: maxAttentionIndex,
-			SpecialTokensMask: output.SpecialTokensMask,
-			Offsets:           output.Offsets, // we need the offsets here for postprocessing later
-		}
-		if maxAttentionIndex > maxSequence {
-			maxSequence = maxAttentionIndex
-		}
-	}
-	batch.Input = outputs
-	batch.MaxSequenceLength = maxSequence + 1
-}
-
 func getNames(info []InputOutputInfo) []string {
 	names := make([]string, 0, len(info))
 	for _, v := range info {
 		names = append(names, v.Name)
 	}
 	return names
-}
-
-func getTokenizerOptions(inputs []InputOutputInfo) ([]tokenizers.EncodeOption, error) {
-	var encodeOptions []tokenizers.EncodeOption
-	for _, input := range inputs {
-		switch input.Name {
-		case "input_ids":
-			encodeOptions = append(encodeOptions, tokenizers.WithReturnTokens())
-		case "token_type_ids":
-			encodeOptions = append(encodeOptions, tokenizers.WithReturnTypeIDs())
-		case "attention_mask":
-			encodeOptions = append(encodeOptions, tokenizers.WithReturnAttentionMask())
-		default:
-			return nil, fmt.Errorf("input %s not recognized", input.Name)
-		}
-	}
-	return encodeOptions, nil
 }
 
 func runSessionOnBatch(batch *PipelineBatch, ortSession *ort.DynamicAdvancedSession, goSession *gonnx.Model, outputsMeta []InputOutputInfo) error {
@@ -319,39 +251,38 @@ func newBasePipeline[T Pipeline](config PipelineConfig[T], ortOptions *ort.Sessi
 		return nil, err
 	}
 
-	// tokenizer init
-	pipeline.TokenizerOptions, err = getTokenizerOptions(pipeline.InputsMeta)
+	tkErr := loadTokenizer(pipeline)
+	if tkErr != nil {
+		return nil, tkErr
+	}
+
+	err = createSession(pipeline, ortOptions, model)
 	if err != nil {
 		return nil, err
 	}
 
-	tk, tkErr := loadTokenizer(pipeline.ModelPath)
-	if tkErr != nil {
-		return nil, tkErr
-	}
-	pipeline.Tokenizer = tk
+	// initialize timings
+	pipeline.PipelineTimings = &timings{}
 
+	return pipeline, nil
+}
+
+func createSession(pipeline *basePipeline, ortOptions *ort.SessionOptions, model []byte) error {
 	// creation of the session. Only one output (either token or sentence embedding).
 	switch pipeline.Runtime {
 	case "GO":
 		// creation of the session. Only one output (either token or sentence embedding).
 		session, sessionErr := createGoSession(model)
 		if sessionErr != nil {
-			return nil, sessionErr
+			return sessionErr
 		}
 		pipeline.GoSession = session
 	case "ORT":
 		session, sessionErr := createORTSession(model, pipeline.InputsMeta, pipeline.OutputsMeta, ortOptions)
 		if sessionErr != nil {
-			return nil, sessionErr
+			return sessionErr
 		}
 		pipeline.ORTSession = session
 	}
-
-	// initialize timings
-
-	pipeline.PipelineTimings = &timings{}
-	pipeline.TokenizerTimings = &timings{}
-
-	return pipeline, nil
+	return nil
 }

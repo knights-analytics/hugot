@@ -9,6 +9,7 @@ require (
 	github.com/json-iterator/go v1.1.12
 	github.com/mattn/go-isatty v0.0.20
 	github.com/stretchr/testify v1.10.0
+	github.com/sugarme/tokenizer v0.2.3-0.20240614115232-2b7834ea27fe
 	github.com/urfave/cli/v2 v2.27.5
 	github.com/viant/afs v1.25.1
 	github.com/viant/afsc v1.9.5-0.20241029213958-b40d6acbe9e3
@@ -42,6 +43,7 @@ require (
 	github.com/chewxy/math32 v1.11.1 // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.5 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
+	github.com/emirpasic/gods v1.18.1 // indirect
 	github.com/fatih/color v1.18.0 // indirect
 	github.com/go-errors/errors v1.5.1 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
@@ -49,16 +51,21 @@ require (
 	github.com/google/flatbuffers v24.3.25+incompatible // indirect
 	github.com/kr/text v0.2.0 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
+	github.com/mitchellh/colorstring v0.0.0-20190213212951-d06e56a500db // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
+	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
+	github.com/schollz/progressbar/v2 v2.15.0 // indirect
+	github.com/sugarme/regexpset v0.0.0-20200920021344-4d4ec8eaf93c // indirect
 	github.com/xrash/smetrics v0.0.0-20240521201337-686a1a2994c1 // indirect
 	github.com/xtgo/set v1.0.0 // indirect
 	go4.org/unsafe/assume-no-moving-gc v0.0.0-20231121144256-b99613f794b6 // indirect
 	golang.org/x/crypto v0.29.0 // indirect
 	golang.org/x/sys v0.27.0 // indirect
+	golang.org/x/text v0.20.0 // indirect
 	golang.org/x/xerrors v0.0.0-20240903120638-7835f813f4da // indirect
 	gonum.org/v1/gonum v0.15.1 // indirect
 	google.golang.org/protobuf v1.35.2 // indirect

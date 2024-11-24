@@ -143,9 +143,9 @@ func (p *TextClassificationPipeline) GetStats() []string {
 	return []string{
 		fmt.Sprintf("Statistics for pipeline: %s", p.PipelineName),
 		fmt.Sprintf("Tokenizer: Total time=%s, Execution count=%d, Average query time=%s",
-			time.Duration(p.TokenizerTimings.TotalNS),
-			p.TokenizerTimings.NumCalls,
-			time.Duration(float64(p.TokenizerTimings.TotalNS)/math.Max(1, float64(p.TokenizerTimings.NumCalls)))),
+			time.Duration(p.Tokenizer.TokenizerTimings.TotalNS),
+			p.Tokenizer.TokenizerTimings.NumCalls,
+			time.Duration(float64(p.Tokenizer.TokenizerTimings.TotalNS)/math.Max(1, float64(p.Tokenizer.TokenizerTimings.NumCalls)))),
 		fmt.Sprintf("ONNX: Total time=%s, Execution count=%d, Average query time=%s",
 			time.Duration(p.PipelineTimings.TotalNS),
 			p.PipelineTimings.NumCalls,
@@ -185,9 +185,9 @@ func (p *TextClassificationPipeline) Validate() error {
 // Preprocess tokenizes the input strings.
 func (p *TextClassificationPipeline) Preprocess(batch *PipelineBatch, inputs []string) error {
 	start := time.Now()
-	tokenizeInputs(batch, p.Tokenizer, inputs, p.TokenizerOptions)
-	atomic.AddUint64(&p.TokenizerTimings.NumCalls, 1)
-	atomic.AddUint64(&p.TokenizerTimings.TotalNS, uint64(time.Since(start)))
+	tokenizeInputs(batch, p.Tokenizer, inputs)
+	atomic.AddUint64(&p.Tokenizer.TokenizerTimings.NumCalls, 1)
+	atomic.AddUint64(&p.Tokenizer.TokenizerTimings.TotalNS, uint64(time.Since(start)))
 	err := createInputTensors(batch, p.InputsMeta, p.Runtime)
 	return err
 }
