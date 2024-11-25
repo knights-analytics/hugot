@@ -9,11 +9,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/advancedclimatesystems/gonnx"
-	ort "github.com/yalue/onnxruntime_go"
-	"gorgonia.org/tensor"
-
-	util "github.com/knights-analytics/hugot/utils"
+	"github.com/knights-analytics/hugot/options"
+	"github.com/knights-analytics/hugot/util"
 )
 
 // basePipeline can be embedded by a pipeline.
@@ -23,13 +20,24 @@ type basePipeline struct {
 	PipelineName    string
 	Type            string
 	Runtime         string
-	ORTSession      *ort.DynamicAdvancedSession
-	ORTOptions      *ort.SessionOptions
-	GoSession       *gonnx.Model
+	ORTSession      *ORTSession
+	GoSession       *GoSession
+	XLASession      *XLASession
 	Tokenizer       *Tokenizer
 	InputsMeta      []InputOutputInfo
 	OutputsMeta     []InputOutputInfo
 	PipelineTimings *timings
+}
+
+func (p *basePipeline) Destroy() error {
+	finalErr := p.Tokenizer.Destroy()
+	if p.ORTSession != nil {
+		finalErr = errors.Join(finalErr, p.ORTSession.Destroy())
+	}
+	if p.XLASession != nil {
+		p.XLASession.Destroy()
+	}
+	return finalErr
 }
 
 type InputOutputInfo struct {
@@ -44,6 +52,14 @@ type Shape []int64
 
 func (s Shape) String() string {
 	return fmt.Sprintf("%v", []int64(s))
+}
+
+func (s Shape) ValuesInt() []int {
+	output := make([]int, len(s))
+	for i, v := range s {
+		output[i] = int(v)
+	}
+	return output
 }
 
 // NewShape Returns a Shape, with the given dimensions.
@@ -83,7 +99,6 @@ type PipelineConfig[T Pipeline] struct {
 	Name         string
 	OnnxFilename string
 	Options      []PipelineOption[T]
-	Runtime      string
 }
 
 type timings struct {
@@ -107,32 +122,20 @@ type tokenizedInput struct {
 type PipelineBatch struct {
 	Input             []tokenizedInput
 	MaxSequenceLength int
-	InputValuesORT    []ort.Value
-	InputValuesGo     map[string]tensor.Tensor
-	OutputValuesORT   []ort.Value
-	OutputValuesGo    map[string]tensor.Tensor
+	InputValues       any
+	DestroyInputs     func() error
+	OutputValues      [][]float32
 }
 
 func (b *PipelineBatch) Destroy() error {
-
-	if len(b.InputValuesORT) > 0 {
-		destroyErrors := make([]error, 0, len(b.InputValuesORT)+len(b.OutputValuesORT))
-
-		for _, ortTensor := range b.InputValuesORT {
-			destroyErrors = append(destroyErrors, ortTensor.Destroy())
-		}
-
-		for _, ortTensor := range b.OutputValuesORT {
-			destroyErrors = append(destroyErrors, ortTensor.Destroy())
-		}
-		return errors.Join(destroyErrors...)
-	}
-	return nil
+	return b.DestroyInputs()
 }
 
 // NewBatch initializes a new batch for inference.
 func NewBatch() *PipelineBatch {
-	return &PipelineBatch{}
+	return &PipelineBatch{DestroyInputs: func() error {
+		return nil
+	}}
 }
 
 func loadOnnxModelBytes(modelPath string, modelFilename string) ([]byte, error) {
@@ -189,11 +192,14 @@ func getNames(info []InputOutputInfo) []string {
 	return names
 }
 
-func runSessionOnBatch(batch *PipelineBatch, ortSession *ort.DynamicAdvancedSession, goSession *gonnx.Model, outputsMeta []InputOutputInfo) error {
-	if ortSession != nil {
-		return runORTSessionOnBatch(batch, ortSession, outputsMeta)
-	} else if goSession != nil {
-		return runGoSessionOnBatch(batch, goSession)
+func runSessionOnBatch(batch *PipelineBatch, p *basePipeline) error {
+	switch p.Runtime {
+	case "GO":
+		return runGoSessionOnBatch(batch, p)
+	case "ORT":
+		return runORTSessionOnBatch(batch, p)
+	case "XLA":
+		return runXLASessionOnBatch(batch, p)
 	}
 	return nil
 }
@@ -205,16 +211,17 @@ func createInputTensors(batch *PipelineBatch, inputsMeta []InputOutputInfo, runt
 		return createInputTensorsORT(batch, inputsMeta)
 	case "GO":
 		return createInputTensorsGo(batch, inputsMeta)
+	case "XLA":
+		return createInputTensorsXLA(batch, inputsMeta)
 	}
 	return nil
 }
 
-func newBasePipeline[T Pipeline](config PipelineConfig[T], ortOptions *ort.SessionOptions) (*basePipeline, error) {
+func newBasePipeline[T Pipeline](config PipelineConfig[T], s *options.Options) (*basePipeline, error) {
 	pipeline := &basePipeline{}
-	pipeline.Runtime = config.Runtime
+	pipeline.Runtime = s.Runtime
 	pipeline.ModelPath = config.ModelPath
 	pipeline.PipelineName = config.Name
-	pipeline.ORTOptions = ortOptions
 	pipeline.OnnxFilename = config.OnnxFilename
 	pipeline.PipelineTimings = &timings{}
 
@@ -224,7 +231,7 @@ func newBasePipeline[T Pipeline](config PipelineConfig[T], ortOptions *ort.Sessi
 		return nil, err
 	}
 
-	err = createSession(pipeline, ortOptions, model)
+	err = createSession(pipeline, s, model)
 	if err != nil {
 		return nil, err
 	}
@@ -237,26 +244,16 @@ func newBasePipeline[T Pipeline](config PipelineConfig[T], ortOptions *ort.Sessi
 	return pipeline, nil
 }
 
-func createSession(pipeline *basePipeline, ortOptions *ort.SessionOptions, model []byte) error {
+func createSession(pipeline *basePipeline, s *options.Options, model []byte) error {
 	// creation of the session. Only one output (either token or sentence embedding).
+	var err error
 	switch pipeline.Runtime {
 	case "GO":
-		// creation of the session. Only one output (either token or sentence embedding).
-		session, inputs, outputs, sessionErr := createGoSession(model)
-		if sessionErr != nil {
-			return sessionErr
-		}
-		pipeline.GoSession = session
-		pipeline.InputsMeta = inputs
-		pipeline.OutputsMeta = outputs
+		err = createGoPipeline(pipeline, model, s)
 	case "ORT":
-		session, inputs, outputs, sessionErr := createORTSession(model, ortOptions)
-		if sessionErr != nil {
-			return sessionErr
-		}
-		pipeline.ORTSession = session
-		pipeline.InputsMeta = inputs
-		pipeline.OutputsMeta = outputs
+		err = createORTPipeline(pipeline, model, s)
+	case "XLA":
+		err = createXLAPipeline(pipeline, model, s)
 	}
-	return nil
+	return err
 }

@@ -50,10 +50,10 @@ Hugot can be used in two ways: as a library in your go application, or as a comm
 To use Hugot as a library in your application, you will need the following two dependencies on your system:
 
 - the tokenizers.a file obtained from the releases section of this page (if you want to use alternative architecture from `linux/amd64` you will have to build the tokenizers.a yourself, see [here](https://github.com/daulet/tokenizers). This file should be at /usr/lib/tokenizers.a so that hugot can load it. Alternatively, you can explicitly specify the path to the folder with the `libtokenizers.a` file using the `CGO_LDFLAGS` env variable, see the [dockerfile](./Dockerfile).
-- the onnxruntime.go file obtained from the releases section of this page (if you want to use alternative architectures from `linux/amd64` you will have to download it from [the onnxruntime releases page](https://github.com/microsoft/onnxruntime/releases/), see the [dockerfile](./Dockerfile) as an example). Hugot looks for this file at /usr/lib/onnxruntime.so or /usr/lib64/onnxruntime.so by default. A different location can be specified by passing the `WithOnnxLibraryPath()` option to `NewSession()`, e.g:
+- the onnxruntime.go file obtained from the releases section of this page (if you want to use alternative architectures from `linux/amd64` you will have to download it from [the onnxruntime releases page](https://github.com/microsoft/onnxruntime/releases/), see the [dockerfile](./Dockerfile) as an example). Hugot looks for this file at /usr/lib/onnxruntime.so or /usr/lib64/onnxruntime.so by default. A different location can be specified by passing the `WithOnnxLibraryPath()` option to `NewORTSession()`, e.g:
 
 ```
-session, err := NewSession(
+session, err := NewORTSession(
     WithOnnxLibraryPath("/path/to/onnxruntime.so"),
 )
 ```
@@ -74,9 +74,9 @@ func check(err error) {
     }
 }
 // start a new session. This looks for the onnxruntime.so library in its default path, e.g. /usr/lib/onnxruntime.so
-session, err := hugot.NewSession()
+session, err := hugot.NewORTSession()
 // if your onnxruntime.so is somewhere else, you can explicitly set it by using WithOnnxLibraryPath
-// session, err := hugot.NewSession(WithOnnxLibraryPath("/path/to/onnxruntime.so"))
+// session, err := hugot.NewORTSession(WithOnnxLibraryPath("/path/to/onnxruntime.so"))
 check(err)
 // A successfully created hugot session needs to be destroyed when you're done
 defer func(session *hugot.Session) {
@@ -209,7 +209,7 @@ The library defaults to onnxruntime's default tuning settings. These are optimis
 For maximum throughput, it is best to call a single shared hugot pipeline from multiple goroutines (1 per core), using a channel to pass the input data. In this scenario, the following settings will greatly increase inference throughput.
 
 ```go
-session, err := hugot.NewSession(
+session, err := hugot.NewORTSession(
 	hugot.WithInterOpNumThreads(1),
 	hugot.WithIntraOpNumThreads(1),
 	hugot.WithCpuMemArena(false),

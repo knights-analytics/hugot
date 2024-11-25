@@ -12,9 +12,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	ort "github.com/yalue/onnxruntime_go"
-
-	util "github.com/knights-analytics/hugot/utils"
+	"github.com/knights-analytics/hugot/options"
+	"github.com/knights-analytics/hugot/util"
 
 	jsoniter "github.com/json-iterator/go"
 )
@@ -30,7 +29,7 @@ import (
 )
 
 func main() {
-	session, err := hugot.NewSession()
+	session, err := hugot.NewORTSession()
 	check(err)
 	defer func(session *hugot.Session) {
 		err := session.Destroy()
@@ -156,9 +155,9 @@ func createSequencePairs(sequences interface{}, labels []string, hypothesisTempl
 }
 
 // NewZeroShotClassificationPipeline create new Zero Shot Classification Pipeline.
-func NewZeroShotClassificationPipeline(config PipelineConfig[*ZeroShotClassificationPipeline], ortOptions *ort.SessionOptions) (*ZeroShotClassificationPipeline, error) {
+func NewZeroShotClassificationPipeline(config PipelineConfig[*ZeroShotClassificationPipeline], s *options.Options) (*ZeroShotClassificationPipeline, error) {
 
-	defaultPipeline, err := newBasePipeline(config, ortOptions)
+	defaultPipeline, err := newBasePipeline(config, s)
 	if err != nil {
 		return nil, err
 	}
@@ -249,7 +248,7 @@ func (p *ZeroShotClassificationPipeline) Preprocess(batch *PipelineBatch, inputs
 
 func (p *ZeroShotClassificationPipeline) Forward(batch *PipelineBatch) error {
 	start := time.Now()
-	err := runORTSessionOnBatch(batch, p.ORTSession, p.OutputsMeta)
+	err := runSessionOnBatch(batch, p.basePipeline)
 	if err != nil {
 		return err
 	}
@@ -412,8 +411,7 @@ func (p *ZeroShotClassificationPipeline) RunPipeline(inputs []string) (*ZeroShot
 			if e := errors.Join(runErrors...); e != nil {
 				return nil, e
 			}
-			outputTensor := batch.OutputValuesORT[0].(*ort.Tensor[float32])
-			sequenceTensors = append(sequenceTensors, outputTensor.GetData())
+			sequenceTensors = append(sequenceTensors, batch.OutputValues[0])
 		}
 		outputTensors = append(outputTensors, sequenceTensors)
 	}
@@ -425,8 +423,20 @@ func (p *ZeroShotClassificationPipeline) RunPipeline(inputs []string) (*ZeroShot
 
 // PIPELINE INTERFACE IMPLEMENTATION
 
+func (p *ZeroShotClassificationPipeline) GetMetadata() PipelineMetadata {
+	return PipelineMetadata{
+		OutputsInfo: []OutputInfo{
+			{
+				Name:       p.OutputsMeta[0].Name,
+				Dimensions: p.OutputsMeta[0].Dimensions,
+			},
+		},
+	}
+}
+
+// Destroy frees the pipeline resources.
 func (p *ZeroShotClassificationPipeline) Destroy() error {
-	return destroySession(p.Tokenizer, p.ORTSession)
+	return p.basePipeline.Destroy()
 }
 
 func (p *ZeroShotClassificationPipeline) GetStats() []string {
@@ -440,17 +450,6 @@ func (p *ZeroShotClassificationPipeline) GetStats() []string {
 			time.Duration(p.PipelineTimings.TotalNS),
 			p.PipelineTimings.NumCalls,
 			time.Duration(float64(p.PipelineTimings.TotalNS)/math.Max(1, float64(p.PipelineTimings.NumCalls)))),
-	}
-}
-
-func (p *ZeroShotClassificationPipeline) GetMetadata() PipelineMetadata {
-	return PipelineMetadata{
-		OutputsInfo: []OutputInfo{
-			{
-				Name:       p.OutputsMeta[0].Name,
-				Dimensions: p.OutputsMeta[0].Dimensions,
-			},
-		},
 	}
 }
 

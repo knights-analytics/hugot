@@ -13,12 +13,14 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/knights-analytics/hugot/options"
+
 	"github.com/mattn/go-isatty"
 	"github.com/urfave/cli/v2"
 
 	"github.com/knights-analytics/hugot"
 	"github.com/knights-analytics/hugot/pipelines"
-	util "github.com/knights-analytics/hugot/utils"
+	"github.com/knights-analytics/hugot/util"
 )
 
 var modelPath string
@@ -102,8 +104,7 @@ var runCommand = &cli.Command{
 		},
 	},
 	Action: func(ctx *cli.Context) error {
-		var opts []hugot.WithOption
-
+		var opts []options.WithOption
 		if modelsDir == "" {
 			userDir, err := os.UserHomeDir()
 			if err != nil {
@@ -113,17 +114,17 @@ var runCommand = &cli.Command{
 		}
 
 		if sharedLibraryPath != "" {
-			opts = append(opts, hugot.WithOnnxLibraryPath(sharedLibraryPath))
+			opts = append(opts, options.WithOnnxLibraryPath(sharedLibraryPath))
 		} else {
 			homeDir, err := os.UserHomeDir()
 			if err != nil {
 				if exists, err := util.FileSystem.Exists(ctx.Context, path.Join(homeDir, "lib", "hugot", "onnxruntime.so")); err != nil && exists {
-					opts = append(opts, hugot.WithOnnxLibraryPath(path.Join(homeDir, "lib", "hugot", "onnxruntime.so")))
+					opts = append(opts, options.WithOnnxLibraryPath(path.Join(homeDir, "lib", "hugot", "onnxruntime.so")))
 				}
 			}
 		}
 
-		session, err := hugot.NewSession("ORT", opts...)
+		session, err := hugot.NewORTSession(opts...)
 		if err != nil {
 			return err
 		}

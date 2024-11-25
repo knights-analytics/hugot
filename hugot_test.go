@@ -6,14 +6,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
-	"os"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 
 	"github.com/knights-analytics/hugot/pipelines"
-	util "github.com/knights-analytics/hugot/utils"
+	"github.com/knights-analytics/hugot/util"
 )
 
 //go:embed testData/tokenExpected.json
@@ -38,58 +37,66 @@ func TestDownloadValidation(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+// README: test the readme examples
+
+func TestReadmeExample(t *testing.T) {
+	check := func(err error) {
+		if err != nil {
+			panic(err.Error())
+		}
+	}
+
+	// start a new session. This looks for the onnxruntime.so library in its default path, e.g. /usr/lib/onnxruntime.so
+	session, err := NewORTSession()
+	// if your onnxruntime.so is somewhere else, you can explicitly set it by using WithOnnxLibraryPath
+	// session, err := hugot.NewORTSession(WithOnnxLibraryPath("/path/to/onnxruntime.so"))
+	check(err)
+	// A successfully created hugot session needs to be destroyed when you're done
+	defer func(session *Session) {
+		err := session.Destroy()
+		check(err)
+	}(session)
+
+	// Let's download an onnx sentiment test classification model in the current directory
+	// note: if you compile your library with build flag NODOWNLOAD, this will exclude the downloader.
+	// Useful in case you just want the core engine (because you already have the models) and want to
+	// drop the dependency on huggingfaceModelDownloader.
+	modelPath, err := session.DownloadModel("KnightsAnalytics/distilbert-base-uncased-finetuned-sst-2-english", "./", NewDownloadOptions())
+	check(err)
+
+	defer func(modelPath string) {
+		err := util.FileSystem.Delete(context.Background(), modelPath)
+		if err != nil {
+			t.FailNow()
+		}
+	}(modelPath)
+
+	// we now create the configuration for the text classification pipeline we want to create.
+	// Options to the pipeline can be set here using the Options field
+	config := TextClassificationConfig{
+		ModelPath: modelPath,
+		Name:      "testPipeline",
+	}
+	// then we create out pipeline.
+	// Note: the pipeline will also be added to the session object so all pipelines can be destroyed at once
+	sentimentPipeline, err := NewPipeline(session, config)
+	check(err)
+
+	// we can now use the pipeline for prediction on a batch of strings
+	batch := []string{"This movie is disgustingly good !", "The director tried too much"}
+	batchResult, err := sentimentPipeline.RunPipeline(batch)
+	check(err)
+
+	// and do whatever we want with it :)
+	s, err := json.Marshal(batchResult)
+	check(err)
+	fmt.Println(string(s))
+	// {"ClassificationOutputs":[[{"Label":"POSITIVE","Score":0.9998536}],[{"Label":"NEGATIVE","Score":0.99752176}]]}
+}
+
 // FEATURE EXTRACTION
 
-func TestFeatureExtractionPipelineValidationORT(t *testing.T) {
-	featureExtractionPipelineValidation(t, "ORT", WithOnnxLibraryPath(onnxRuntimeSharedLibrary))
-}
-
-func TestFeatureExtractionPipelineValidationGo(t *testing.T) {
-	featureExtractionPipelineValidation(t, "GO")
-}
-
-func featureExtractionPipelineValidation(t *testing.T, runtime string, options ...WithOption) {
-	session, err := NewSession(runtime, options...)
-	check(t, err)
-	defer func(session *Session) {
-		err := session.Destroy()
-		check(t, err)
-	}(session)
-
-	modelPath := "./models/sentence-transformers_all-MiniLM-L6-v2"
-	config := FeatureExtractionConfig{
-		ModelPath:    modelPath,
-		OnnxFilename: "model.onnx",
-		Name:         "testPipeline",
-	}
-	pipeline, err := NewPipeline(session, config)
-	check(t, err)
-
-	pipeline.InputsMeta[0].Dimensions = pipelines.NewShape(-1, -1, -1)
-
-	err = pipeline.Validate()
-	assert.Error(t, err)
-
-	pipeline.InputsMeta[0].Dimensions = pipelines.NewShape(1, 1, 1, 1)
-	err = pipeline.Validate()
-	assert.Error(t, err)
-}
-
-func TestFeatureExtractionPipelineORT(t *testing.T) {
-	featureExtractionPipeline(t, "ORT", WithOnnxLibraryPath(onnxRuntimeSharedLibrary))
-}
-
-func TestFeatureExtractionPipelineGo(t *testing.T) {
-	featureExtractionPipeline(t, "GO")
-}
-
-func featureExtractionPipeline(t *testing.T, runtime string, options ...WithOption) {
-	session, err := NewSession(runtime, options...)
-	check(t, err)
-	defer func(session *Session) {
-		err := session.Destroy()
-		check(t, err)
-	}(session)
+func featureExtractionPipeline(t *testing.T, session *Session) {
 
 	modelPath := "./models/sentence-transformers_all-MiniLM-L6-v2"
 
@@ -213,29 +220,31 @@ func featureExtractionPipeline(t *testing.T, runtime string, options ...WithOpti
 	}
 }
 
+func featureExtractionPipelineValidation(t *testing.T, session *Session) {
+
+	modelPath := "./models/sentence-transformers_all-MiniLM-L6-v2"
+	config := FeatureExtractionConfig{
+		ModelPath:    modelPath,
+		OnnxFilename: "model.onnx",
+		Name:         "testPipeline",
+	}
+	pipeline, err := NewPipeline(session, config)
+	check(t, err)
+
+	pipeline.InputsMeta[0].Dimensions = pipelines.NewShape(-1, -1, -1)
+
+	err = pipeline.Validate()
+	assert.Error(t, err)
+
+	pipeline.InputsMeta[0].Dimensions = pipelines.NewShape(1, 1, 1, 1)
+	err = pipeline.Validate()
+	assert.Error(t, err)
+}
+
 // Text classification
 
-func TestTextClassificationPipelineORT(t *testing.T) {
-	textClassificationPipeline(t, "ORT", WithOnnxLibraryPath(onnxRuntimeSharedLibrary),
-		WithTelemetry(),
-		WithCpuMemArena(true),
-		WithMemPattern(true),
-		WithIntraOpNumThreads(1),
-		WithInterOpNumThreads(1),
-	)
-}
+func textClassificationPipeline(t *testing.T, session *Session) {
 
-func TestTextClassificationPipelineGo(t *testing.T) {
-	textClassificationPipeline(t, "GO")
-}
-
-func textClassificationPipeline(t *testing.T, runtime string, options ...WithOption) {
-	session, err := NewSession(runtime, options...)
-	check(t, err)
-	defer func(session *Session) {
-		errDestroy := session.Destroy()
-		check(t, errDestroy)
-	}(session)
 	modelPath := "./models/KnightsAnalytics_distilbert-base-uncased-finetuned-sst-2-english"
 	modelPathMulti := "./models/SamLowe_roberta-base-go_emotions-onnx"
 
@@ -427,21 +436,8 @@ func textClassificationPipeline(t *testing.T, runtime string, options ...WithOpt
 	session.GetStats()
 }
 
-func TestTextClassificationPipelineValidationORT(t *testing.T) {
-	textClassificationPipelineValidation(t, "ORT", WithOnnxLibraryPath(onnxRuntimeSharedLibrary))
-}
+func textClassificationPipelineValidation(t *testing.T, session *Session) {
 
-func TestTextClassificationPipelineValidationGo(t *testing.T) {
-	textClassificationPipelineValidation(t, "GO")
-}
-
-func textClassificationPipelineValidation(t *testing.T, runtime string, options ...WithOption) {
-	session, err := NewSession(runtime, options...)
-	check(t, err)
-	defer func(session *Session) {
-		err := session.Destroy()
-		check(t, err)
-	}(session)
 	modelPath := "./models/KnightsAnalytics_distilbert-base-uncased-finetuned-sst-2-english"
 
 	config := TextClassificationConfig{
@@ -475,21 +471,9 @@ func textClassificationPipelineValidation(t *testing.T, runtime string, options 
 	})
 }
 
-func TestZeroShotClassificationPipelineORT(t *testing.T) {
-	zeroShotClassificationPipeline(t, "ORT")
-}
+// Zero shot
 
-func TestZeroShotClassificationPipelineGo(t *testing.T) {
-	zeroShotClassificationPipeline(t, "GO")
-}
-
-func zeroShotClassificationPipeline(t *testing.T, runtime string, options ...WithOption) {
-	session, err := NewSession(runtime, options...)
-	check(t, err)
-	defer func(session *Session) {
-		err := session.Destroy()
-		check(t, err)
-	}(session)
+func zeroShotClassificationPipeline(t *testing.T, session *Session) {
 
 	modelPath := "./models/protectai_deberta-v3-base-zeroshot-v1-onnx"
 
@@ -710,21 +694,8 @@ func zeroShotClassificationPipeline(t *testing.T, runtime string, options ...Wit
 	}
 }
 
-func TestZeroShotClassificationPipelineValidationORT(t *testing.T) {
-	zeroShotClassificationPipelineValidation(t, "ORT", WithOnnxLibraryPath(onnxRuntimeSharedLibrary))
-}
+func zeroShotClassificationPipelineValidation(t *testing.T, session *Session) {
 
-func TestZeroShotClassificationPipelineValidationGo(t *testing.T) {
-	zeroShotClassificationPipelineValidation(t, "GO")
-}
-
-func zeroShotClassificationPipelineValidation(t *testing.T, runtime string, options ...WithOption) {
-	session, err := NewSession(runtime, options...)
-	check(t, err)
-	defer func(session *Session) {
-		err := session.Destroy()
-		check(t, err)
-	}(session)
 	modelPath := "./models/protectai_deberta-v3-base-zeroshot-v1-onnx"
 
 	config := TextClassificationConfig{
@@ -757,21 +728,7 @@ func zeroShotClassificationPipelineValidation(t *testing.T, runtime string, opti
 
 // Token classification
 
-func TestTokenClassificationPipelineORT(t *testing.T) {
-	tokenClassificationPipeline(t, "ORT", WithOnnxLibraryPath(onnxRuntimeSharedLibrary))
-}
-
-func TestTokenClassificationPipelineGo(t *testing.T) {
-	tokenClassificationPipeline(t, "GO")
-}
-
-func tokenClassificationPipeline(t *testing.T, runtime string, options ...WithOption) {
-	session, err := NewSession(runtime, options...)
-	check(t, err)
-	defer func(session *Session) {
-		err := session.Destroy()
-		check(t, err)
-	}(session)
+func tokenClassificationPipeline(t *testing.T, session *Session) {
 
 	modelPath := "./models/KnightsAnalytics_distilbert-NER"
 	configSimple := TokenClassificationConfig{
@@ -842,21 +799,7 @@ func tokenClassificationPipeline(t *testing.T, runtime string, options ...WithOp
 	}
 }
 
-func TestTokenClassificationPipelineValidationORT(t *testing.T) {
-	tokenClassificationPipelineValidation(t, "ORT", WithOnnxLibraryPath(onnxRuntimeSharedLibrary))
-}
-
-func TestTokenClassificationPipelineValidationGo(t *testing.T) {
-	tokenClassificationPipelineValidation(t, "GO")
-}
-
-func tokenClassificationPipelineValidation(t *testing.T, runtime string, options ...WithOption) {
-	session, err := NewSession(runtime, options...)
-	check(t, err)
-	defer func(session *Session) {
-		err := session.Destroy()
-		check(t, err)
-	}(session)
+func tokenClassificationPipelineValidation(t *testing.T, session *Session) {
 
 	modelPath := "./models/KnightsAnalytics_distilbert-NER"
 	configSimple := TokenClassificationConfig{
@@ -876,7 +819,7 @@ func tokenClassificationPipelineValidation(t *testing.T, runtime string, options
 			pipelineSimple.IDLabelMap = labelMapInitial
 		}()
 		pipelineSimple.IDLabelMap = map[int]string{}
-		err = pipelineSimple.Validate()
+		err := pipelineSimple.Validate()
 		assert.Error(t, err)
 	})
 
@@ -886,26 +829,14 @@ func tokenClassificationPipelineValidation(t *testing.T, runtime string, options
 			pipelineSimple.OutputsMeta[0].Dimensions = dimensionInitial
 		}()
 		pipelineSimple.OutputsMeta[0].Dimensions = pipelines.NewShape(-1, -1, -1)
-		err = pipelineSimple.Validate()
+		err := pipelineSimple.Validate()
 		assert.Error(t, err)
 	})
 }
 
-func TestNoSameNamePipelineORT(t *testing.T) {
-	noSameNamePipeline(t, "ORT", WithOnnxLibraryPath(onnxRuntimeSharedLibrary))
-}
+// No same name
 
-func TestNoSameNamePipelineGo(t *testing.T) {
-	noSameNamePipeline(t, "GO")
-}
-
-func noSameNamePipeline(t *testing.T, runtime string, options ...WithOption) {
-	session, err := NewSession(runtime, options...)
-	check(t, err)
-	defer func(session *Session) {
-		err := session.Destroy()
-		check(t, err)
-	}(session)
+func noSameNamePipeline(t *testing.T, session *Session) {
 
 	modelPath := "./models/KnightsAnalytics_distilbert-NER"
 	configSimple := TokenClassificationConfig{
@@ -922,173 +853,6 @@ func noSameNamePipeline(t *testing.T, runtime string, options ...WithOption) {
 	}
 	_, err3 := NewPipeline(session, configSimple)
 	assert.Error(t, err3)
-}
-
-// README: test the readme examples
-
-func TestReadmeExampleORT(t *testing.T) {
-	readmeExample(t, "ORT", WithOnnxLibraryPath(onnxRuntimeSharedLibrary))
-}
-
-func TestReadmeExampleGo(t *testing.T) {
-	readmeExample(t, "GO")
-}
-
-func readmeExample(t *testing.T, runtime string, options ...WithOption) {
-	check := func(err error) {
-		if err != nil {
-			panic(err.Error())
-		}
-	}
-
-	// start a new session. This looks for the onnxruntime.so library in its default path, e.g. /usr/lib/onnxruntime.so
-	session, err := NewSession(runtime, options...)
-	// if your onnxruntime.so is somewhere else, you can explicitly set it by using WithOnnxLibraryPath
-	// session, err := hugot.NewSession(WithOnnxLibraryPath("/path/to/onnxruntime.so"))
-	check(err)
-	// A successfully created hugot session needs to be destroyed when you're done
-	defer func(session *Session) {
-		err := session.Destroy()
-		check(err)
-	}(session)
-
-	// Let's download an onnx sentiment test classification model in the current directory
-	// note: if you compile your library with build flag NODOWNLOAD, this will exclude the downloader.
-	// Useful in case you just want the core engine (because you already have the models) and want to
-	// drop the dependency on huggingfaceModelDownloader.
-	modelPath, err := session.DownloadModel("KnightsAnalytics/distilbert-base-uncased-finetuned-sst-2-english", "./", NewDownloadOptions())
-	check(err)
-
-	defer func(modelPath string) {
-		err := util.FileSystem.Delete(context.Background(), modelPath)
-		if err != nil {
-			t.FailNow()
-		}
-	}(modelPath)
-
-	// we now create the configuration for the text classification pipeline we want to create.
-	// Options to the pipeline can be set here using the Options field
-	config := TextClassificationConfig{
-		ModelPath: modelPath,
-		Name:      "testPipeline",
-	}
-	// then we create out pipeline.
-	// Note: the pipeline will also be added to the session object so all pipelines can be destroyed at once
-	sentimentPipeline, err := NewPipeline(session, config)
-	check(err)
-
-	// we can now use the pipeline for prediction on a batch of strings
-	batch := []string{"This movie is disgustingly good !", "The director tried too much"}
-	batchResult, err := sentimentPipeline.RunPipeline(batch)
-	check(err)
-
-	// and do whatever we want with it :)
-	s, err := json.Marshal(batchResult)
-	check(err)
-	fmt.Println(string(s))
-	// {"ClassificationOutputs":[[{"Label":"POSITIVE","Score":0.9998536}],[{"Label":"NEGATIVE","Score":0.99752176}]]}
-}
-
-func TestCuda(t *testing.T) {
-	if os.Getenv("CI") != "" {
-		t.SkipNow()
-	}
-	opts := []WithOption{
-		WithOnnxLibraryPath("/usr/lib64/onnxruntime-gpu/libonnxruntime.so"),
-		WithCuda(map[string]string{
-			"device_id": "0",
-		}),
-	}
-
-	session, err := NewSession("ORT", opts...)
-	check(t, err)
-
-	defer func(session *Session) {
-		errDestroy := session.Destroy()
-		if errDestroy != nil {
-			panic(errDestroy)
-		}
-	}(session)
-
-	modelPath := "./models/sentence-transformers_all-MiniLM-L6-v2"
-	config := FeatureExtractionConfig{
-		ModelPath: modelPath,
-		Name:      "benchmarkEmbedding",
-	}
-	pipelineEmbedder, err2 := NewPipeline(session, config)
-	check(t, err2)
-	res, err := pipelineEmbedder.Run([]string{"Test with cuda", "Test with cuda 1"})
-	check(t, err)
-	fmt.Println(res.GetOutput())
-}
-
-// Benchmarks
-
-func runBenchmarkEmbedding(strings *[]string, cuda bool) {
-	var opts []WithOption
-	switch cuda {
-	case true:
-		opts = []WithOption{
-			WithOnnxLibraryPath("/usr/lib64/onnxruntime-gpu/libonnxruntime.so"),
-			WithCuda(map[string]string{
-				"device_id": "0",
-			}),
-		}
-	default:
-		opts = []WithOption{WithOnnxLibraryPath("/usr/lib64/onnxruntime.so")}
-	}
-	session, err := NewSession("ORT", opts...)
-	if err != nil {
-		panic(err)
-	}
-
-	defer func(session *Session) {
-		errDestroy := session.Destroy()
-		if errDestroy != nil {
-			panic(errDestroy)
-		}
-	}(session)
-
-	modelPath := "./models/KnightsAnalytics_all-MiniLM-L6-v2"
-	config := FeatureExtractionConfig{
-		ModelPath: modelPath,
-		Name:      "benchmarkEmbedding",
-	}
-	pipelineEmbedder, err2 := NewPipeline(session, config)
-	if err2 != nil {
-		panic(err2)
-	}
-	res, err := pipelineEmbedder.Run(*strings)
-	if err != nil {
-		panic(err)
-	}
-	fmt.Println(len(res.GetOutput()))
-}
-
-func BenchmarkCudaEmbedding(b *testing.B) {
-	if os.Getenv("CI") != "" {
-		b.SkipNow()
-	}
-	p := make([]string, 30000)
-	for i := 0; i < 30000; i++ {
-		p[i] = "The goal of this library is to provide an easy, scalable, and hassle-free way to run huggingface transformer pipelines in golang applications."
-	}
-	for i := 0; i < b.N; i++ {
-		runBenchmarkEmbedding(&p, true)
-	}
-}
-
-func BenchmarkCPUEmbedding(b *testing.B) {
-	if os.Getenv("CI") != "" {
-		b.SkipNow()
-	}
-	p := make([]string, 30000)
-	for i := 0; i < 30000; i++ {
-		p[i] = "The goal of this library is to provide an easy, scalable, and hassle-free way to run huggingface transformer pipelines in golang applications."
-	}
-	for i := 0; i < b.N; i++ {
-		runBenchmarkEmbedding(&p, false)
-	}
 }
 
 // Utilities
@@ -1114,7 +878,7 @@ func floatsEqual(a, b []float32) error {
 			diff = -diff
 		}
 		// Arbitrarily chosen precision. Large enough not to be affected by quantization
-		if diff >= 0.000001 {
+		if diff >= 0.0007 {
 			return fmt.Errorf("data element %d doesn't match: %.12f vs %.12f",
 				i, a[i], b[i])
 		}

@@ -9,10 +9,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/daulet/tokenizers"
-	ort "github.com/yalue/onnxruntime_go"
-
-	util "github.com/knights-analytics/hugot/utils"
+	"github.com/knights-analytics/hugot/options"
+	"github.com/knights-analytics/hugot/util"
 
 	jsoniter "github.com/json-iterator/go"
 )
@@ -80,9 +78,9 @@ func WithIgnoreLabels(ignoreLabels []string) PipelineOption[*TokenClassification
 }
 
 // NewTokenClassificationPipeline Initializes a feature extraction pipeline.
-func NewTokenClassificationPipeline(config PipelineConfig[*TokenClassificationPipeline], ortOptions *ort.SessionOptions) (*TokenClassificationPipeline, error) {
+func NewTokenClassificationPipeline(config PipelineConfig[*TokenClassificationPipeline], s *options.Options) (*TokenClassificationPipeline, error) {
 
-	defaultPipeline, err := newBasePipeline(config, ortOptions)
+	defaultPipeline, err := newBasePipeline(config, s)
 	if err != nil {
 		return nil, err
 	}
@@ -115,10 +113,7 @@ func NewTokenClassificationPipeline(config PipelineConfig[*TokenClassificationPi
 	}
 
 	// Additional options needed for postprocessing
-	pipeline.Tokenizer.RustOptions = append(pipeline.Tokenizer.RustOptions,
-		tokenizers.WithReturnSpecialTokensMask(),
-		tokenizers.WithReturnOffsets(),
-	)
+	allInputTokens(pipeline.basePipeline)
 
 	err = pipeline.Validate()
 	if err != nil {
@@ -142,9 +137,9 @@ func (p *TokenClassificationPipeline) GetMetadata() PipelineMetadata {
 	}
 }
 
-// Destroy frees the feature extraction pipeline resources.
+// Destroy frees the pipeline resources.
 func (p *TokenClassificationPipeline) Destroy() error {
-	return destroySession(p.Tokenizer, p.ORTSession)
+	return p.basePipeline.Destroy()
 }
 
 // GetStats returns the runtime statistics for the pipeline.
@@ -195,7 +190,7 @@ func (p *TokenClassificationPipeline) Preprocess(batch *PipelineBatch, inputs []
 // Forward performs the forward inference of the pipeline.
 func (p *TokenClassificationPipeline) Forward(batch *PipelineBatch) error {
 	start := time.Now()
-	err := runORTSessionOnBatch(batch, p.ORTSession, p.OutputsMeta)
+	err := runSessionOnBatch(batch, p.basePipeline)
 	if err != nil {
 		return err
 	}
@@ -224,8 +219,8 @@ func (p *TokenClassificationPipeline) Postprocess(batch *PipelineBatch) (*TokenC
 	// construct the output vectors by gathering the logits,
 	// however discard the embeddings of the padding tokens so that the output vector length
 	// for an input is equal to the number of original tokens
-	outputTensor := batch.OutputValuesORT[0].(*ort.Tensor[float32])
-	for _, result := range outputTensor.GetData() {
+	outputTensor := batch.OutputValues[0]
+	for _, result := range outputTensor {
 		tokenVector[tokenVectorCounter] = result
 		if tokenVectorCounter == tokenLogitsDim-1 {
 			// raw result vector for token is now complete
@@ -374,13 +369,7 @@ func (p *TokenClassificationPipeline) groupSubEntities(entities []Entity) Entity
 	score := util.Mean(scores)
 	// note: here we directly appeal to the tokenizer decoder with the tokenIds
 	// in the python code they pass the words to a token_to_string_method
-	var word string
-	switch p.Tokenizer.Runtime {
-	case "GO":
-		word = p.Tokenizer.GoTokenizer.Decode(convertUintsToInts(tokens), false)
-	case "RUST":
-		word = p.Tokenizer.RustTokenizer.Decode(tokens, false)
-	}
+	word := decode(tokens, p.Tokenizer)
 
 	return Entity{
 		Entity: entityType,

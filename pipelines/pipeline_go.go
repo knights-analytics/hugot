@@ -1,28 +1,37 @@
+//go:build GO || ALL
+
 package pipelines
 
 import (
 	"fmt"
 
+	"github.com/knights-analytics/hugot/options"
+
 	"github.com/advancedclimatesystems/gonnx"
 	"gorgonia.org/tensor"
 )
 
-func createGoSession(onnxBytes []byte) (*gonnx.Model, []InputOutputInfo, []InputOutputInfo, error) {
+type GoSession struct {
+	Model *gonnx.Model
+}
+
+func createGoPipeline(pipeline *basePipeline, onnxBytes []byte, _ *options.Options) error {
 
 	model, err := gonnx.NewModelFromBytes(onnxBytes)
 	if err != nil {
-		return nil, nil, nil, err
+		return err
 	}
 
-	inputs, outputs, errLoad := loadInputOutputMetaGo(model)
-	if errLoad != nil {
-		return nil, nil, nil, errLoad
-	}
+	inputs, outputs := loadInputOutputMetaGo(model)
 
-	return model, inputs, outputs, err
+	pipeline.GoSession = &GoSession{Model: model}
+	pipeline.InputsMeta = inputs
+	pipeline.OutputsMeta = outputs
+
+	return err
 }
 
-func loadInputOutputMetaGo(model *gonnx.Model) ([]InputOutputInfo, []InputOutputInfo, error) {
+func loadInputOutputMetaGo(model *gonnx.Model) ([]InputOutputInfo, []InputOutputInfo) {
 
 	var inputs, outputs []InputOutputInfo
 
@@ -50,10 +59,9 @@ func loadInputOutputMetaGo(model *gonnx.Model) ([]InputOutputInfo, []InputOutput
 			Dimensions: dimensions,
 		})
 	}
-	return inputs, outputs, nil
+	return inputs, outputs
 }
 
-// createInputTensorsGo creates ort input tensors.
 func createInputTensorsGo(batch *PipelineBatch, inputsMeta []InputOutputInfo) error {
 
 	inputMap := map[string]tensor.Tensor{}
@@ -87,17 +95,24 @@ func createInputTensorsGo(batch *PipelineBatch, inputsMeta []InputOutputInfo) er
 			tensor.WithBacking(backingSlice),
 		)
 	}
-	batch.InputValuesGo = inputMap
+	batch.InputValues = inputMap
 	return nil
 }
 
-func runGoSessionOnBatch(batch *PipelineBatch, session *gonnx.Model) error {
+func runGoSessionOnBatch(batch *PipelineBatch, p *basePipeline) error {
 
-	tensors, err := session.Run(batch.InputValuesGo)
+	tensors, err := p.GoSession.Model.Run(batch.InputValues.(map[string]tensor.Tensor))
 	if err != nil {
 		return err
 	}
+
+	convertedOutput := make([][]float32, len(p.OutputsMeta))
+	for i, meta := range p.OutputsMeta {
+		result := tensors[meta.Name]
+		convertedOutput[i] = result.Data().([]float32)
+	}
+
 	// store resulting tensors
-	batch.OutputValuesGo = tensors
+	batch.OutputValues = convertedOutput
 	return nil
 }

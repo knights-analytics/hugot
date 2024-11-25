@@ -8,9 +8,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	ort "github.com/yalue/onnxruntime_go"
+	"github.com/knights-analytics/hugot/options"
 
-	util "github.com/knights-analytics/hugot/utils"
+	"github.com/knights-analytics/hugot/util"
 )
 
 // FeatureExtractionPipeline A feature extraction pipeline is a go version of
@@ -52,9 +52,9 @@ func WithOutputName(outputName string) PipelineOption[*FeatureExtractionPipeline
 }
 
 // NewFeatureExtractionPipeline init a feature extraction pipeline.
-func NewFeatureExtractionPipeline(config PipelineConfig[*FeatureExtractionPipeline], ortOptions *ort.SessionOptions) (*FeatureExtractionPipeline, error) {
+func NewFeatureExtractionPipeline(config PipelineConfig[*FeatureExtractionPipeline], s *options.Options) (*FeatureExtractionPipeline, error) {
 
-	defaultPipeline, err := newBasePipeline(config, ortOptions)
+	defaultPipeline, err := newBasePipeline(config, s)
 	if err != nil {
 		return nil, err
 	}
@@ -103,9 +103,9 @@ func (p *FeatureExtractionPipeline) GetMetadata() PipelineMetadata {
 	}
 }
 
-// Destroy frees the feature extraction pipeline resources.
+// Destroy frees the pipeline resources.
 func (p *FeatureExtractionPipeline) Destroy() error {
-	return destroySession(p.Tokenizer, p.ORTSession)
+	return p.basePipeline.Destroy()
 }
 
 // GetStats returns the runtime statistics for the pipeline.
@@ -160,18 +160,16 @@ func (p *FeatureExtractionPipeline) Preprocess(batch *PipelineBatch, inputs []st
 // Forward performs the forward inference of the feature extraction pipeline.
 func (p *FeatureExtractionPipeline) Forward(batch *PipelineBatch) error {
 	start := time.Now()
-	if p.ORTSession != nil {
-		err := runSessionOnBatch(batch, p.ORTSession, p.GoSession, p.OutputsMeta)
-		if err != nil {
-			return err
-		}
+	err := runSessionOnBatch(batch, p.basePipeline)
+	if err != nil {
+		return err
 	}
 	atomic.AddUint64(&p.PipelineTimings.NumCalls, 1)
 	atomic.AddUint64(&p.PipelineTimings.TotalNS, uint64(time.Since(start)))
 	return nil
 }
 
-// Postprocess parses the first output from the network similar to the transformers implementation.
+// Postprocess parses the first output from the network similar to the transformers' implementation.
 func (p *FeatureExtractionPipeline) Postprocess(batch *PipelineBatch) (*FeatureExtractionOutput, error) {
 	// TODO: this works if token embeddings are returned or sentence embeddings are returned.
 	// in the former case embeddings are mean pooled. In the latter they are just returned.
@@ -190,9 +188,9 @@ func (p *FeatureExtractionPipeline) Postprocess(batch *PipelineBatch) (*FeatureE
 	tokenEmbeddings := make([][]float32, maxSequenceLength)
 	tokenEmbeddingsCounter := 0
 	batchInputCounter := 0
-	outputTensor := batch.OutputValuesORT[0].(*ort.Tensor[float32])
+	outputTensor := batch.OutputValues[0]
 
-	for _, result := range outputTensor.GetData() {
+	for _, result := range outputTensor {
 		outputEmbedding[outputEmbeddingCounter] = result
 		if outputEmbeddingCounter == int(embeddingDimension)-1 {
 			// we gathered one embedding

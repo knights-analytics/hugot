@@ -10,25 +10,20 @@ FROM --platform=$BUILD_PLATFORM public.ecr.aws/amazonlinux/amazonlinux:2023 AS h
 ARG GO_VERSION
 ARG ONNXRUNTIME_VERSION
 
-ENV PATH="$PATH:/usr/local/go/bin"
+ENV PATH="$PATH:/usr/local/go/bin" \
+    GOPJRT_NOSUDO=1
 
 COPY ./scripts/download-onnxruntime.sh /download-onnxruntime.sh
 RUN --mount=src=./go.mod,dst=/go.mod \
-    sed -i 's/\r//g' /download-onnxruntime.sh && chmod +x /download-onnxruntime.sh && \
-    dnf -y install gcc jq bash tar xz gzip glibc-static libstdc++ wget zip git && \
+    dnf --allowerasing -y install gcc jq bash tar xz gzip glibc-static libstdc++ wget zip git dirmngr sudo which && \
     ln -s /usr/lib64/libstdc++.so.6 /usr/lib64/libstdc++.so && \
     dnf install -y 'dnf-command(config-manager)' && \
-    dnf config-manager --add-repo https://download.fedoraproject.org/pub/fedora/linux/releases/39/Everything/x86_64/os/ && \
-    # from fedora
-    dnf config-manager --add-repo https://developer.download.nvidia.com/compute/cuda/repos/fedora39/x86_64/cuda-fedora39.repo && \
-    dnf install -y cuda-cudart-12-6 libcublas-12-6 libcurand-12-6 libcufft-12-6 && \
     # from rhel
     dnf config-manager --add-repo https://developer.download.nvidia.com/compute/cuda/repos/rhel9/x86_64/cuda-rhel9.repo && \
-    dnf install -y libcudnn9-cuda-12 && \
+    dnf install -y cuda-cudart-12-6 cuda-nvrtc-12-6 libcublas-12-6 libcurand-12-6 libcufft-12-6 libcudnn9-cuda-12 && \
     dnf clean all && \
-    # NON-PRIVILEDGED USER
-    # create non-priviledged testuser with id: 1000
-    dnf install --disablerepo=* --enablerepo=amazonlinux --allowerasing -y dirmngr sudo which && dnf clean all && \
+    # NON-PRIVILEGED USER
+    # create non-privileged testuser with id: 1000
     useradd -u 1000 -m testuser && usermod -a -G wheel testuser && \
     echo "testuser ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers.d/testuser && \
     # tokenizers
@@ -42,7 +37,10 @@ RUN --mount=src=./go.mod,dst=/go.mod \
     curl -LO https://golang.org/dl/go${GO_VERSION}.linux-amd64.tar.gz && \
     tar -C /usr/local -xzf go${GO_VERSION}.linux-amd64.tar.gz && \
     rm go${GO_VERSION}.linux-amd64.tar.gz && \
-    # onnxruntime cpu and gpu
+    # XLA/goMLX
+    curl -sSf https://raw.githubusercontent.com/gomlx/gopjrt/main/cmd/install_linux_amd64.sh | bash && \
+    # onnxruntime cpu and gpu \
+    sed -i 's/\r//g' /download-onnxruntime.sh && chmod +x /download-onnxruntime.sh && \
     /download-onnxruntime.sh ${ONNXRUNTIME_VERSION}
 
 #--- test layer ---
@@ -54,7 +52,7 @@ COPY . /build
 RUN cd /build && \
     chown -R testuser:testuser /build && \
     # cli binary
-    cd /build/cmd && CGO_ENABLED=1 CGO_LDFLAGS="-L/usr/lib/" GOOS=linux GOARCH=amd64 go build -a -o /cli main.go && \
+    cd /build/cmd && CGO_ENABLED=1 CGO_LDFLAGS="-L/usr/lib/" GOOS=linux GOARCH=amd64 go build -a -tags GO,ORT -o /cli main.go && \
     cd / && \
     curl -LO https://github.com/gotestyourself/gotestsum/releases/download/v1.12.0/gotestsum_1.12.0_linux_amd64.tar.gz && \
     tar -xzf gotestsum_1.12.0_linux_amd64.tar.gz --directory /usr/local/bin && \

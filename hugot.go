@@ -4,10 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"slices"
-	"strings"
 
-	ort "github.com/yalue/onnxruntime_go"
-
+	"github.com/knights-analytics/hugot/options"
 	"github.com/knights-analytics/hugot/pipelines"
 )
 
@@ -17,31 +15,41 @@ type Session struct {
 	tokenClassificationPipelines    pipelineMap[*pipelines.TokenClassificationPipeline]
 	textClassificationPipelines     pipelineMap[*pipelines.TextClassificationPipeline]
 	zeroShotClassificationPipelines pipelineMap[*pipelines.ZeroShotClassificationPipeline]
-	runtime                         string
-	ortOptions                      *ort.SessionOptions
+	options                         *options.Options
+	environmentDestroy              func() error
 }
 
-func NewSession(runtime string, options ...WithOption) (*Session, error) {
+func newSession(runtime string, opts ...options.WithOption) (*Session, error) {
+
+	parsedOptions := options.Defaults()
+	parsedOptions.Runtime = runtime
+	// Collect options into a struct, so they can be applied in the correct order later
+	for _, option := range opts {
+		err := option(parsedOptions)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	session := &Session{
 		featureExtractionPipelines:      map[string]*pipelines.FeatureExtractionPipeline{},
 		textClassificationPipelines:     map[string]*pipelines.TextClassificationPipeline{},
 		tokenClassificationPipelines:    map[string]*pipelines.TokenClassificationPipeline{},
 		zeroShotClassificationPipelines: map[string]*pipelines.ZeroShotClassificationPipeline{},
+		options:                         parsedOptions,
+		environmentDestroy: func() error {
+			return nil
+		},
 	}
 
-	switch strings.ToUpper(runtime) {
-	case "GO", "":
-		session.runtime = "GO"
+	switch parsedOptions.Runtime {
+	case "GO", "XLA":
+		// No session specific initialisation for these currently
 		return session, nil
 	case "ORT":
-		session.runtime = "ORT"
-		err := ortSession(session, options)
-		if err != nil {
-			return nil, err
-		}
-		return session, nil
+		return ortSession(session)
 	default:
-		return nil, errors.New("unsupported runtime: " + runtime)
+		return nil, errors.New("unsupported runtime: " + parsedOptions.Runtime)
 	}
 }
 
@@ -126,7 +134,6 @@ func NewPipeline[T pipelines.Pipeline](s *Session, pipelineConfig pipelines.Pipe
 	if pipelineConfig.Name == "" {
 		return pipeline, errors.New("a name for the pipeline is required")
 	}
-	pipelineConfig.Runtime = s.runtime
 
 	_, getError := GetPipeline[T](s, pipelineConfig.Name)
 	var notFoundError *pipelineNotFoundError
@@ -139,7 +146,7 @@ func NewPipeline[T pipelines.Pipeline](s *Session, pipelineConfig pipelines.Pipe
 	switch any(pipeline).(type) {
 	case *pipelines.TokenClassificationPipeline:
 		config := any(pipelineConfig).(pipelines.PipelineConfig[*pipelines.TokenClassificationPipeline])
-		pipelineInitialised, err := pipelines.NewTokenClassificationPipeline(config, s.ortOptions)
+		pipelineInitialised, err := pipelines.NewTokenClassificationPipeline(config, s.options)
 		if err != nil {
 			return pipeline, err
 		}
@@ -147,7 +154,7 @@ func NewPipeline[T pipelines.Pipeline](s *Session, pipelineConfig pipelines.Pipe
 		pipeline = any(pipelineInitialised).(T)
 	case *pipelines.TextClassificationPipeline:
 		config := any(pipelineConfig).(pipelines.PipelineConfig[*pipelines.TextClassificationPipeline])
-		pipelineInitialised, err := pipelines.NewTextClassificationPipeline(config, s.ortOptions)
+		pipelineInitialised, err := pipelines.NewTextClassificationPipeline(config, s.options)
 		if err != nil {
 			return pipeline, err
 		}
@@ -155,7 +162,7 @@ func NewPipeline[T pipelines.Pipeline](s *Session, pipelineConfig pipelines.Pipe
 		pipeline = any(pipelineInitialised).(T)
 	case *pipelines.FeatureExtractionPipeline:
 		config := any(pipelineConfig).(pipelines.PipelineConfig[*pipelines.FeatureExtractionPipeline])
-		pipelineInitialised, err := pipelines.NewFeatureExtractionPipeline(config, s.ortOptions)
+		pipelineInitialised, err := pipelines.NewFeatureExtractionPipeline(config, s.options)
 		if err != nil {
 			return pipeline, err
 		}
@@ -163,7 +170,7 @@ func NewPipeline[T pipelines.Pipeline](s *Session, pipelineConfig pipelines.Pipe
 		pipeline = any(pipelineInitialised).(T)
 	case *pipelines.ZeroShotClassificationPipeline:
 		config := any(pipelineConfig).(pipelines.PipelineConfig[*pipelines.ZeroShotClassificationPipeline])
-		pipelineInitialised, err := pipelines.NewZeroShotClassificationPipeline(config, s.ortOptions)
+		pipelineInitialised, err := pipelines.NewZeroShotClassificationPipeline(config, s.options)
 		if err != nil {
 			return pipeline, err
 		}
@@ -208,11 +215,8 @@ func (s *Session) Destroy() error {
 		s.tokenClassificationPipelines.Destroy(),
 		s.textClassificationPipelines.Destroy(),
 		s.zeroShotClassificationPipelines.Destroy(),
+		s.options.Destroy(),
+		s.environmentDestroy(),
 	)
-	if s.ortOptions != nil {
-		err = errors.Join(s.ortOptions.Destroy(),
-			ort.DestroyEnvironment(),
-		)
-	}
 	return err
 }

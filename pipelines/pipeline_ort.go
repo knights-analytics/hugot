@@ -1,16 +1,27 @@
 package pipelines
 
 import (
+	"errors"
 	"fmt"
+
+	"github.com/knights-analytics/hugot/options"
 
 	ort "github.com/yalue/onnxruntime_go"
 )
 
-func createORTSession(onnxBytes []byte, options *ort.SessionOptions) (*ort.DynamicAdvancedSession, []InputOutputInfo, []InputOutputInfo, error) {
+type ORTSession struct {
+	Session    *ort.DynamicAdvancedSession
+	ORTOptions *ort.SessionOptions
+	Destroy    func() error
+}
+
+func createORTPipeline(pipeline *basePipeline, onnxBytes []byte, options *options.Options) error {
+
+	optionsCast := options.RuntimeOptions.(*ort.SessionOptions)
 
 	inputs, outputs, err := loadInputOutputMetaORT(onnxBytes)
 	if err != nil {
-		return nil, nil, nil, err
+		return err
 	}
 
 	var inputNames []string
@@ -25,9 +36,19 @@ func createORTSession(onnxBytes []byte, options *ort.SessionOptions) (*ort.Dynam
 		onnxBytes,
 		inputNames,
 		outputNames,
-		options,
+		optionsCast,
 	)
-	return session, inputs, outputs, errSession
+	if errSession != nil {
+		return errSession
+	}
+
+	pipeline.ORTSession = &ORTSession{Session: session, ORTOptions: optionsCast, Destroy: func() error {
+		return session.Destroy()
+	}}
+	pipeline.InputsMeta = inputs
+	pipeline.OutputsMeta = outputs
+
+	return nil
 }
 
 func loadInputOutputMetaORT(onnxBytes []byte) ([]InputOutputInfo, []InputOutputInfo, error) {
@@ -38,7 +59,6 @@ func loadInputOutputMetaORT(onnxBytes []byte) ([]InputOutputInfo, []InputOutputI
 	return convertORTInputOutputs(inputs), convertORTInputOutputs(outputs), nil
 }
 
-// createInputTensorsORT creates ort input tensors.
 func createInputTensorsORT(batch *PipelineBatch, inputsMeta []InputOutputInfo) error {
 	tensorSize := len(batch.Input) * (batch.MaxSequenceLength)
 	batchSize := int64(len(batch.Input))
@@ -75,19 +95,32 @@ func createInputTensorsORT(batch *PipelineBatch, inputsMeta []InputOutputInfo) e
 			return tensorCreationErr
 		}
 	}
-	batch.InputValuesORT = inputTensors
+	batch.InputValues = inputTensors
+	batch.DestroyInputs = func() error {
+		var destroyError error
+		for _, ortTensor := range inputTensors {
+			destroyError = errors.Join(destroyError, ortTensor.Destroy())
+		}
+		return destroyError
+	}
+
 	return nil
 }
 
-func runORTSessionOnBatch(batch *PipelineBatch, session *ort.DynamicAdvancedSession, outputs []InputOutputInfo) error {
+func runORTSessionOnBatch(batch *PipelineBatch, p *basePipeline) error {
 	actualBatchSize := int64(len(batch.Input))
 	maxSequenceLength := int64(batch.MaxSequenceLength)
+	var err error
 
 	// allocate vectors with right dimensions for the output
-	outputTensors := make([]ort.Value, len(outputs))
-	var outputCreationErr error
+	outputTensors := make([]ort.Value, len(p.OutputsMeta))
+	defer func() {
+		for _, output := range outputTensors {
+			err = errors.Join(err, output.Destroy())
+		}
+	}()
 
-	for outputIndex, meta := range outputs {
+	for outputIndex, meta := range p.OutputsMeta {
 		var batchDimSet bool
 		var tokenDimSet bool
 		actualDims := make([]int64, 0, len(meta.Dimensions))
@@ -108,37 +141,26 @@ func runORTSessionOnBatch(batch *PipelineBatch, session *ort.DynamicAdvancedSess
 			}
 		}
 		outputShape := ort.NewShape(actualDims...)
-		outputTensors[outputIndex], outputCreationErr = ort.NewEmptyTensor[float32](outputShape)
-		if outputCreationErr != nil {
-			return outputCreationErr
+		outputTensors[outputIndex], err = ort.NewEmptyTensor[float32](outputShape)
+		if err != nil {
+			return err
 		}
 	}
 
-	errOnnx := session.Run(batch.InputValuesORT, outputTensors)
+	errOnnx := p.ORTSession.Session.Run(batch.InputValues.([]ort.Value), outputTensors)
 	if errOnnx != nil {
 		return errOnnx
 	}
 
-	// store resulting tensors
-	batch.OutputValuesORT = outputTensors
-	return nil
-}
+	convertedOutput := make([][]float32, len(outputTensors))
+	for i, t := range outputTensors {
+		convertedOutput[i] = t.(*ort.Tensor[float32]).GetData()
+	}
 
-func destroySession(tk *Tokenizer, session *ort.DynamicAdvancedSession) error {
-	var finalErr error
-	if tk.RustTokenizer != nil {
-		errTokenizer := tk.RustTokenizer.Close()
-		if errTokenizer != nil {
-			finalErr = errTokenizer
-		}
-	}
-	if session != nil {
-		ortError := session.Destroy()
-		if ortError != nil {
-			finalErr = ortError
-		}
-	}
-	return finalErr
+	// store resulting tensors
+	batch.OutputValues = convertedOutput
+
+	return err
 }
 
 func convertORTInputOutputs(inputOutputs []ort.InputOutputInfo) []InputOutputInfo {

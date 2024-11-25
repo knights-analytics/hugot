@@ -7,10 +7,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	util "github.com/knights-analytics/hugot/utils"
+	"github.com/knights-analytics/hugot/options"
+	"github.com/knights-analytics/hugot/util"
 
 	jsoniter "github.com/json-iterator/go"
-	ort "github.com/yalue/onnxruntime_go"
 )
 
 // types
@@ -72,9 +72,9 @@ func WithMultiLabel() PipelineOption[*TextClassificationPipeline] {
 }
 
 // NewTextClassificationPipeline initializes a new text classification pipeline.
-func NewTextClassificationPipeline(config PipelineConfig[*TextClassificationPipeline], ortOptions *ort.SessionOptions) (*TextClassificationPipeline, error) {
+func NewTextClassificationPipeline(config PipelineConfig[*TextClassificationPipeline], s *options.Options) (*TextClassificationPipeline, error) {
 
-	defaultPipeline, err := newBasePipeline(config, ortOptions)
+	defaultPipeline, err := newBasePipeline(config, s)
 	if err != nil {
 		return nil, err
 	}
@@ -133,9 +133,9 @@ func (p *TextClassificationPipeline) GetMetadata() PipelineMetadata {
 	}
 }
 
-// Destroy frees the text classification pipeline resources.
+// Destroy frees the pipeline resources.
 func (p *TextClassificationPipeline) Destroy() error {
-	return destroySession(p.Tokenizer, p.ORTSession)
+	return p.basePipeline.Destroy()
 }
 
 // GetStats returns the runtime statistics for the pipeline.
@@ -194,7 +194,7 @@ func (p *TextClassificationPipeline) Preprocess(batch *PipelineBatch, inputs []s
 
 func (p *TextClassificationPipeline) Forward(batch *PipelineBatch) error {
 	start := time.Now()
-	err := runORTSessionOnBatch(batch, p.ORTSession, p.OutputsMeta)
+	err := runSessionOnBatch(batch, p.basePipeline)
 	if err != nil {
 		return err
 	}
@@ -204,7 +204,7 @@ func (p *TextClassificationPipeline) Forward(batch *PipelineBatch) error {
 }
 
 func (p *TextClassificationPipeline) Postprocess(batch *PipelineBatch) (*TextClassificationOutput, error) {
-	outputValue := batch.OutputValuesORT[0]
+	outputValue := batch.OutputValues[0]
 	outputDims := p.OutputsMeta[0].Dimensions
 	nLogit := outputDims[len(outputDims)-1]
 	output := make([][]float32, len(batch.Input))
@@ -221,9 +221,7 @@ func (p *TextClassificationPipeline) Postprocess(batch *PipelineBatch) (*TextCla
 		return nil, fmt.Errorf("aggregation function %s is not supported", p.AggregationFunctionName)
 	}
 
-	resultTensor := outputValue.(*ort.Tensor[float32])
-
-	for _, result := range resultTensor.GetData() {
+	for _, result := range outputValue {
 		inputVector[vectorCounter] = result
 		if vectorCounter == int(nLogit)-1 {
 			output[inputCounter] = aggregationFunction(inputVector)

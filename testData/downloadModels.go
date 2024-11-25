@@ -5,16 +5,14 @@ import (
 	"os"
 
 	"github.com/knights-analytics/hugot"
-	util "github.com/knights-analytics/hugot/utils"
+	"github.com/knights-analytics/hugot/util"
 )
-
-var onnxruntimeSharedLibrary = "/usr/lib64/onnxruntime.so"
 
 // download the test models.
 func main() {
 	if ok, err := util.FileSystem.Exists(context.Background(), "./models"); err == nil {
 		if !ok {
-			session, err := hugot.NewSession("ORT", hugot.WithOnnxLibraryPath(onnxruntimeSharedLibrary))
+			session, err := hugot.NewGoSession()
 			if err != nil {
 				panic(err)
 			}
@@ -30,6 +28,7 @@ func main() {
 				panic(err)
 			}
 			downloadOptions := hugot.NewDownloadOptions()
+			downloadOptions.Verbose = true
 			for _, modelName := range []string{
 				"sentence-transformers/all-MiniLM-L6-v2",
 				"protectai/deberta-v3-base-zeroshot-v1-onnx",
