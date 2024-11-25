@@ -15,7 +15,7 @@ require (
 	github.com/viant/afsc v1.9.5-0.20241029213958-b40d6acbe9e3
 	github.com/yalue/onnxruntime_go v1.13.0
 	golang.org/x/exp v0.0.0-20241108190413-2d47ceb2692f
-	gorgonia.org/tensor v0.9.24
+	gorgonia.org/tensor v0.9.25-0.20240409020000-068d850921c0
 )
 
 require (
@@ -70,6 +70,6 @@ require (
 	gonum.org/v1/gonum v0.15.1 // indirect
 	google.golang.org/protobuf v1.35.2 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
-	gorgonia.org/vecf32 v0.9.0 // indirect
-	gorgonia.org/vecf64 v0.9.0 // indirect
+	gorgonia.org/vecf32 v0.9.1-0.20200604202942-a54163b7bf07 // indirect
+	gorgonia.org/vecf64 v0.9.1-0.20200604203017-530efa246ea5 // indirect
 )
