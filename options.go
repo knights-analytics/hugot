@@ -1,24 +1,17 @@
 package hugot
 
 type ortOptions struct {
-	libraryPath        string
-	telemetry          bool
-	intraOpNumThreads  int
-	interOpNumThreads  int
-	cpuMemArena        bool
-	cpuMemArenaSet     bool
-	memPattern         bool
-	memPatternSet      bool
-	cudaOptions        map[string]string
-	cudaOptionsSet     bool
-	coreMLOptions      uint32
-	coreMLOptionsSet   bool
-	directMLOptions    int
-	directMLOptionsSet bool
-	openVINOOptions    map[string]string
-	openVINOOptionsSet bool
-	tensorRTOptions    map[string]string
-	tensorRTOptionsSet bool
+	libraryPath       *string
+	telemetry         *bool
+	intraOpNumThreads *int
+	interOpNumThreads *int
+	cpuMemArena       *bool
+	memPattern        *bool
+	cudaOptions       map[string]string
+	coreMLOptions     *uint32
+	directMLOptions   *int
+	openVINOOptions   map[string]string
+	tensorRTOptions   map[string]string
 }
 
 // WithOption is the interface for all option functions
@@ -28,14 +21,15 @@ type WithOption func(o *ortOptions)
 // By default, it will be set to "onnxruntime.so" on non-Windows systems, and "onnxruntime.dll" on Windows.
 func WithOnnxLibraryPath(ortLibraryPath string) WithOption {
 	return func(o *ortOptions) {
-		o.libraryPath = ortLibraryPath
+		o.libraryPath = &ortLibraryPath
 	}
 }
 
 // WithTelemetry Enables telemetry events for the onnxruntime environment. Default is off.
 func WithTelemetry() WithOption {
 	return func(o *ortOptions) {
-		o.telemetry = true
+		enabled := true
+		o.telemetry = &enabled
 	}
 }
 
@@ -43,7 +37,7 @@ func WithTelemetry() WithOption {
 // graph nodes. If unspecified, onnxruntime uses the number of physical CPU cores.
 func WithIntraOpNumThreads(numThreads int) WithOption {
 	return func(o *ortOptions) {
-		o.intraOpNumThreads = numThreads
+		o.intraOpNumThreads = &numThreads
 	}
 }
 
@@ -51,7 +45,7 @@ func WithIntraOpNumThreads(numThreads int) WithOption {
 // onnxruntime graph nodes. If unspecified, onnxruntime uses the number of physical CPU cores.
 func WithInterOpNumThreads(numThreads int) WithOption {
 	return func(o *ortOptions) {
-		o.interOpNumThreads = numThreads
+		o.interOpNumThreads = &numThreads
 	}
 }
 
@@ -59,8 +53,7 @@ func WithInterOpNumThreads(numThreads int) WithOption {
 // Arena may pre-allocate memory for future usage. Default is true.
 func WithCpuMemArena(enable bool) WithOption {
 	return func(o *ortOptions) {
-		o.cpuMemArena = enable
-		o.cpuMemArenaSet = true
+		o.cpuMemArena = &enable
 	}
 }
 
@@ -68,8 +61,7 @@ func WithCpuMemArena(enable bool) WithOption {
 // If this is enabled memory is preallocated if all shapes are known. Default is true.
 func WithMemPattern(enable bool) WithOption {
 	return func(o *ortOptions) {
-		o.memPattern = enable
-		o.memPatternSet = true
+		o.memPattern = &enable
 	}
 }
 
@@ -79,7 +71,6 @@ func WithMemPattern(enable bool) WithOption {
 func WithCuda(options map[string]string) WithOption {
 	return func(o *ortOptions) {
 		o.cudaOptions = options
-		o.cudaOptionsSet = true
 	}
 }
 
@@ -89,8 +80,7 @@ func WithCuda(options map[string]string) WithOption {
 // The `o.coreMLOptionsSet` field in `ortOptions` struct will be set to true.
 func WithCoreML(flags uint32) WithOption {
 	return func(o *ortOptions) {
-		o.coreMLOptions = flags
-		o.coreMLOptionsSet = true
+		o.coreMLOptions = &flags
 	}
 }
 
@@ -98,8 +88,7 @@ func WithCoreML(flags uint32) WithOption {
 // onnxruntime. By default, this option is not set.
 func WithDirectML(deviceID int) WithOption {
 	return func(o *ortOptions) {
-		o.directMLOptions = deviceID
-		o.directMLOptionsSet = true
+		o.directMLOptions = &deviceID
 	}
 }
 
@@ -112,7 +101,6 @@ func WithDirectML(deviceID int) WithOption {
 func WithOpenVINO(options map[string]string) WithOption {
 	return func(o *ortOptions) {
 		o.openVINOOptions = options
-		o.openVINOOptionsSet = true
 	}
 }
 
@@ -130,6 +118,5 @@ func WithOpenVINO(options map[string]string) WithOption {
 func WithTensorRT(options map[string]string) WithOption {
 	return func(o *ortOptions) {
 		o.tensorRTOptions = options
-		o.tensorRTOptionsSet = true
 	}
 }

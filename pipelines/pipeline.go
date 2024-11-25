@@ -209,29 +209,6 @@ func createInputTensors(batch *PipelineBatch, inputsMeta []InputOutputInfo, runt
 	return nil
 }
 
-func loadInputOutput(pipeline *basePipeline, model []byte) error {
-
-	switch pipeline.Runtime {
-	case "GO":
-		// init of inputs and outputs
-		inputs, outputs, err := loadInputOutputMetaGo(model)
-		if err != nil {
-			return err
-		}
-		pipeline.InputsMeta = inputs
-		pipeline.OutputsMeta = outputs
-	case "ORT":
-		// init of inputs and outputs
-		inputs, outputs, err := loadInputOutputMetaORT(model)
-		if err != nil {
-			return err
-		}
-		pipeline.InputsMeta = inputs
-		pipeline.OutputsMeta = outputs
-	}
-	return nil
-}
-
 func newBasePipeline[T Pipeline](config PipelineConfig[T], ortOptions *ort.SessionOptions) (*basePipeline, error) {
 	pipeline := &basePipeline{}
 	pipeline.Runtime = config.Runtime
@@ -239,6 +216,7 @@ func newBasePipeline[T Pipeline](config PipelineConfig[T], ortOptions *ort.Sessi
 	pipeline.PipelineName = config.Name
 	pipeline.ORTOptions = ortOptions
 	pipeline.OnnxFilename = config.OnnxFilename
+	pipeline.PipelineTimings = &timings{}
 
 	// onnx model init
 	model, err := loadOnnxModelBytes(pipeline.ModelPath, pipeline.OnnxFilename)
@@ -246,7 +224,7 @@ func newBasePipeline[T Pipeline](config PipelineConfig[T], ortOptions *ort.Sessi
 		return nil, err
 	}
 
-	err = loadInputOutput(pipeline, model)
+	err = createSession(pipeline, ortOptions, model)
 	if err != nil {
 		return nil, err
 	}
@@ -256,14 +234,6 @@ func newBasePipeline[T Pipeline](config PipelineConfig[T], ortOptions *ort.Sessi
 		return nil, tkErr
 	}
 
-	err = createSession(pipeline, ortOptions, model)
-	if err != nil {
-		return nil, err
-	}
-
-	// initialize timings
-	pipeline.PipelineTimings = &timings{}
-
 	return pipeline, nil
 }
 
@@ -272,17 +242,21 @@ func createSession(pipeline *basePipeline, ortOptions *ort.SessionOptions, model
 	switch pipeline.Runtime {
 	case "GO":
 		// creation of the session. Only one output (either token or sentence embedding).
-		session, sessionErr := createGoSession(model)
+		session, inputs, outputs, sessionErr := createGoSession(model)
 		if sessionErr != nil {
 			return sessionErr
 		}
 		pipeline.GoSession = session
+		pipeline.InputsMeta = inputs
+		pipeline.OutputsMeta = outputs
 	case "ORT":
-		session, sessionErr := createORTSession(model, pipeline.InputsMeta, pipeline.OutputsMeta, ortOptions)
+		session, inputs, outputs, sessionErr := createORTSession(model, ortOptions)
 		if sessionErr != nil {
 			return sessionErr
 		}
 		pipeline.ORTSession = session
+		pipeline.InputsMeta = inputs
+		pipeline.OutputsMeta = outputs
 	}
 	return nil
 }

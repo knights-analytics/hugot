@@ -7,17 +7,22 @@ import (
 	"gorgonia.org/tensor"
 )
 
-func createGoSession(onnxBytes []byte) (*gonnx.Model, error) {
-
-	return gonnx.NewModelFromBytes(onnxBytes)
-}
-
-func loadInputOutputMetaGo(onnxBytes []byte) ([]InputOutputInfo, []InputOutputInfo, error) {
+func createGoSession(onnxBytes []byte) (*gonnx.Model, []InputOutputInfo, []InputOutputInfo, error) {
 
 	model, err := gonnx.NewModelFromBytes(onnxBytes)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
+
+	inputs, outputs, errLoad := loadInputOutputMetaGo(model)
+	if errLoad != nil {
+		return nil, nil, nil, errLoad
+	}
+
+	return model, inputs, outputs, err
+}
+
+func loadInputOutputMetaGo(model *gonnx.Model) ([]InputOutputInfo, []InputOutputInfo, error) {
 
 	var inputs, outputs []InputOutputInfo
 

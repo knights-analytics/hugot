@@ -43,15 +43,15 @@ func (s *Session) initialiseORT(options ...WithOption) (bool, error) {
 	}
 
 	// Set pre-initialisation options
-	if o.libraryPath != "" {
-		ortPathExists, err := util.FileSystem.Exists(context.Background(), o.libraryPath)
+	if o.libraryPath != nil {
+		ortPathExists, err := util.FileSystem.Exists(context.Background(), *o.libraryPath)
 		if err != nil {
 			return false, err
 		}
 		if !ortPathExists {
-			return false, fmt.Errorf("cannot find the ort library at: %s", o.libraryPath)
+			return false, fmt.Errorf("cannot find the ort library at: %s", *o.libraryPath)
 		}
-		ort.SetSharedLibraryPath(o.libraryPath)
+		ort.SetSharedLibraryPath(*o.libraryPath)
 	}
 
 	// Start OnnxRuntime
@@ -59,7 +59,7 @@ func (s *Session) initialiseORT(options ...WithOption) (bool, error) {
 		return false, err
 	}
 
-	if o.telemetry {
+	if o.telemetry != nil {
 		if err := ort.EnableTelemetry(); err != nil {
 			return true, err
 		}
@@ -76,27 +76,27 @@ func (s *Session) initialiseORT(options ...WithOption) (bool, error) {
 	}
 	s.ortOptions = sessionOptions
 
-	if o.intraOpNumThreads != 0 {
-		if err := sessionOptions.SetIntraOpNumThreads(o.intraOpNumThreads); err != nil {
+	if o.intraOpNumThreads != nil {
+		if err := sessionOptions.SetIntraOpNumThreads(*o.intraOpNumThreads); err != nil {
 			return true, err
 		}
 	}
-	if o.interOpNumThreads != 0 {
-		if err := sessionOptions.SetInterOpNumThreads(o.interOpNumThreads); err != nil {
+	if o.interOpNumThreads != nil {
+		if err := sessionOptions.SetInterOpNumThreads(*o.interOpNumThreads); err != nil {
 			return true, err
 		}
 	}
-	if o.cpuMemArenaSet {
-		if err := sessionOptions.SetCpuMemArena(o.cpuMemArena); err != nil {
+	if o.cpuMemArena != nil {
+		if err := sessionOptions.SetCpuMemArena(*o.cpuMemArena); err != nil {
 			return true, err
 		}
 	}
-	if o.memPatternSet {
-		if err := sessionOptions.SetMemPattern(o.memPattern); err != nil {
+	if o.memPattern != nil {
+		if err := sessionOptions.SetMemPattern(*o.memPattern); err != nil {
 			return true, err
 		}
 	}
-	if o.cudaOptionsSet {
+	if o.cudaOptions != nil {
 		cudaOptions, optErr := ort.NewCUDAProviderOptions()
 		if optErr != nil {
 			return true, optErr
@@ -111,22 +111,22 @@ func (s *Session) initialiseORT(options ...WithOption) (bool, error) {
 			return true, err
 		}
 	}
-	if o.coreMLOptionsSet {
-		if err := sessionOptions.AppendExecutionProviderCoreML(o.coreMLOptions); err != nil {
+	if o.coreMLOptions != nil {
+		if err := sessionOptions.AppendExecutionProviderCoreML(*o.coreMLOptions); err != nil {
 			return true, err
 		}
 	}
-	if o.directMLOptionsSet {
-		if err := sessionOptions.AppendExecutionProviderDirectML(o.directMLOptions); err != nil {
+	if o.directMLOptions != nil {
+		if err := sessionOptions.AppendExecutionProviderDirectML(*o.directMLOptions); err != nil {
 			return true, err
 		}
 	}
-	if o.openVINOOptionsSet {
+	if o.openVINOOptions != nil {
 		if err := sessionOptions.AppendExecutionProviderOpenVINO(o.openVINOOptions); err != nil {
 			return true, err
 		}
 	}
-	if o.tensorRTOptionsSet {
+	if o.tensorRTOptions != nil {
 		tensorRTOptions, optErr := ort.NewTensorRTProviderOptions()
 		if optErr != nil {
 			return true, optErr

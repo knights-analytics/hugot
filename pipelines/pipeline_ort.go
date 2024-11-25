@@ -6,15 +6,13 @@ import (
 	ort "github.com/yalue/onnxruntime_go"
 )
 
-func loadInputOutputMetaORT(onnxBytes []byte) ([]InputOutputInfo, []InputOutputInfo, error) {
-	inputs, outputs, err := ort.GetInputOutputInfoWithONNXData(onnxBytes)
-	if err != nil {
-		return nil, nil, err
-	}
-	return convertORTInputOutputs(inputs), convertORTInputOutputs(outputs), nil
-}
+func createORTSession(onnxBytes []byte, options *ort.SessionOptions) (*ort.DynamicAdvancedSession, []InputOutputInfo, []InputOutputInfo, error) {
 
-func createORTSession(onnxBytes []byte, inputs, outputs []InputOutputInfo, options *ort.SessionOptions) (*ort.DynamicAdvancedSession, error) {
+	inputs, outputs, err := loadInputOutputMetaORT(onnxBytes)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
 	var inputNames []string
 	var outputNames []string
 	for _, v := range inputs {
@@ -23,13 +21,21 @@ func createORTSession(onnxBytes []byte, inputs, outputs []InputOutputInfo, optio
 	for _, v := range outputs {
 		outputNames = append(outputNames, v.Name)
 	}
-	session, err := ort.NewDynamicAdvancedSessionWithONNXData(
+	session, errSession := ort.NewDynamicAdvancedSessionWithONNXData(
 		onnxBytes,
 		inputNames,
 		outputNames,
 		options,
 	)
-	return session, err
+	return session, inputs, outputs, errSession
+}
+
+func loadInputOutputMetaORT(onnxBytes []byte) ([]InputOutputInfo, []InputOutputInfo, error) {
+	inputs, outputs, err := ort.GetInputOutputInfoWithONNXData(onnxBytes)
+	if err != nil {
+		return nil, nil, err
+	}
+	return convertORTInputOutputs(inputs), convertORTInputOutputs(outputs), nil
 }
 
 // createInputTensorsORT creates ort input tensors.
