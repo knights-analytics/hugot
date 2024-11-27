@@ -2,6 +2,8 @@ module github.com/knights-analytics/hugot
 
 go 1.23.3
 
+replace github.com/advancedclimatesystems/gonnx => github.com/knights-analytics/gonnx v0.0.0-20241127221723-a0fd5a54decf
+
 require (
 	github.com/advancedclimatesystems/gonnx v1.1.0
 	github.com/bodaay/HuggingFaceModelDownloader v0.0.0-20241026025743-cbf2f5e84f54
