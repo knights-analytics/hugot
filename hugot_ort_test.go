@@ -71,7 +71,6 @@ func TestTextClassificationPipelineORT(t *testing.T) {
 		check(t, destroyErr)
 	}(session)
 	textClassificationPipeline(t, session)
-
 }
 
 func TestTextClassificationPipelineORTCuda(t *testing.T) {
@@ -88,6 +87,41 @@ func TestTextClassificationPipelineORTCuda(t *testing.T) {
 		check(t, destroyErr)
 	}(session)
 	textClassificationPipeline(t, session)
+}
+
+func TestTextClassificationPipelineMultiORT(t *testing.T) {
+	opts := []options.WithOption{
+		options.WithOnnxLibraryPath(onnxRuntimeSharedLibrary),
+		options.WithTelemetry(),
+		options.WithCpuMemArena(true),
+		options.WithMemPattern(true),
+		options.WithIntraOpNumThreads(1),
+		options.WithInterOpNumThreads(1),
+	}
+	session, err := NewORTSession(opts...)
+	check(t, err)
+	defer func(session *Session) {
+		destroyErr := session.Destroy()
+		check(t, destroyErr)
+	}(session)
+	textClassificationPipelineMulti(t, session)
+
+}
+
+func TestTextClassificationPipelineORTMultiCuda(t *testing.T) {
+	opts := []options.WithOption{
+		options.WithOnnxLibraryPath("/usr/lib64/onnxruntime-gpu/libonnxruntime.so"),
+		options.WithCuda(map[string]string{
+			"device_id": "0",
+		}),
+	}
+	session, err := NewORTSession(opts...)
+	check(t, err)
+	defer func(session *Session) {
+		destroyErr := session.Destroy()
+		check(t, destroyErr)
+	}(session)
+	textClassificationPipelineMulti(t, session)
 }
 
 func TestTextClassificationPipelineValidationORT(t *testing.T) {

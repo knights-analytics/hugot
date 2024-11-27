@@ -18,7 +18,6 @@ type BasePipeline struct {
 	ModelPath       string
 	OnnxFilename    string
 	PipelineName    string
-	Type            string
 	Runtime         string
 	ORTSession      *ORTSession
 	GoSession       *GoSession

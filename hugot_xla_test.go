@@ -40,6 +40,16 @@ func TestTextClassificationPipelineXLA(t *testing.T) {
 	textClassificationPipeline(t, session)
 }
 
+func TestTextClassificationPipelineMultiXLA(t *testing.T) {
+	session, err := NewXLASession()
+	check(t, err)
+	defer func(session *Session) {
+		destroyErr := session.Destroy()
+		check(t, destroyErr)
+	}(session)
+	textClassificationPipelineMulti(t, session)
+}
+
 func TestTextClassificationPipelineValidationXLA(t *testing.T) {
 	session, err := NewXLASession()
 	check(t, err)

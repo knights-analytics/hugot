@@ -10,8 +10,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/knights-analytics/hugot/hfPipelines"
 	"github.com/knights-analytics/hugot/pipelines"
+	"github.com/knights-analytics/hugot/taskPipelines"
 )
 
 //go:embed testData/tokenExpected.json
@@ -120,7 +120,7 @@ func featureExtractionPipeline(t *testing.T, session *Session) {
 		Name:         "testPipelineNormalise",
 		OnnxFilename: "model.onnx",
 		Options: []FeatureExtractionOption{
-			hfPipelines.WithNormalization(),
+			taskPipelines.WithNormalization(),
 		},
 	}
 	pipeline, err = NewPipeline(session, config)
@@ -140,7 +140,7 @@ func featureExtractionPipeline(t *testing.T, session *Session) {
 		ModelPath:    modelPath,
 		Name:         "testPipelineSentence",
 		OnnxFilename: "model.onnx",
-		Options:      []FeatureExtractionOption{hfPipelines.WithOutputName("last_hidden_state")},
+		Options:      []FeatureExtractionOption{taskPipelines.WithOutputName("last_hidden_state")},
 	}
 	pipelineSentence, err := NewPipeline(session, configSentence)
 	check(t, err)
@@ -188,191 +188,208 @@ func featureExtractionPipelineValidation(t *testing.T, session *Session) {
 func textClassificationPipeline(t *testing.T, session *Session) {
 
 	modelPath := "./models/KnightsAnalytics_distilbert-base-uncased-finetuned-sst-2-english"
-	modelPathMulti := "./models/SamLowe_roberta-base-go_emotions-onnx"
 
 	config := TextClassificationConfig{
 		ModelPath: modelPath,
 		Name:      "testPipelineSimple",
 		Options: []TextClassificationOption{
-			hfPipelines.WithSoftmax(),
+			taskPipelines.WithSoftmax(),
 		},
 	}
 	sentimentPipeline, err := NewPipeline(session, config)
 	check(t, err)
+
+	test := struct {
+		pipeline *taskPipelines.TextClassificationPipeline
+		name     string
+		strings  []string
+		expected taskPipelines.TextClassificationOutput
+	}{
+		pipeline: sentimentPipeline,
+		name:     "Basic tests",
+		strings:  []string{"This movie is disgustingly good!", "The director tried too much"},
+		expected: taskPipelines.TextClassificationOutput{
+			ClassificationOutputs: [][]taskPipelines.ClassificationOutput{
+				{
+					{
+						Label: "POSITIVE",
+						Score: 0.9998536109924316,
+					},
+				},
+				{
+					{
+						Label: "NEGATIVE",
+						Score: 0.9975218176841736,
+					},
+				},
+			},
+		},
+	}
+
+	t.Run(test.name, func(t *testing.T) {
+		batchResult, err := test.pipeline.RunPipeline(test.strings)
+		check(t, err)
+		for i, expected := range test.expected.ClassificationOutputs {
+			checkClassificationOutput(t, expected, batchResult.ClassificationOutputs[i])
+		}
+	})
+
+	// check get stats
+	session.GetStats()
+}
+
+func textClassificationPipelineMulti(t *testing.T, session *Session) {
+
+	modelPathMulti := "./models/SamLowe_roberta-base-go_emotions-onnx"
 
 	configMulti := TextClassificationConfig{
 		ModelPath:    modelPathMulti,
 		Name:         "testPipelineSimpleMulti",
 		OnnxFilename: "model.onnx",
 		Options: []TextClassificationOption{
-			hfPipelines.WithMultiLabel(),
-			hfPipelines.WithSigmoid(),
+			taskPipelines.WithMultiLabel(),
+			taskPipelines.WithSigmoid(),
 		},
 	}
 	sentimentPipelineMulti, err := NewPipeline(session, configMulti)
 	check(t, err)
 
-	tests := []struct {
-		pipeline *hfPipelines.TextClassificationPipeline
+	test := struct {
+		pipeline *taskPipelines.TextClassificationPipeline
 		name     string
 		strings  []string
-		expected hfPipelines.TextClassificationOutput
+		expected taskPipelines.TextClassificationOutput
 	}{
-		{
-			pipeline: sentimentPipeline,
-			name:     "Basic tests",
-			strings:  []string{"This movie is disgustingly good!", "The director tried too much"},
-			expected: hfPipelines.TextClassificationOutput{
-				ClassificationOutputs: [][]hfPipelines.ClassificationOutput{
+		pipeline: sentimentPipelineMulti,
+		name:     "Multiclass pipeline test",
+		strings:  []string{"ONNX is seriously fast for small batches. Impressive"},
+		expected: taskPipelines.TextClassificationOutput{
+			ClassificationOutputs: [][]taskPipelines.ClassificationOutput{
+				{
 					{
-						{
-							Label: "POSITIVE",
-							Score: 0.9998536109924316,
-						},
+						Label: "admiration",
+						Score: 0.9217681,
 					},
 					{
-						{
-							Label: "NEGATIVE",
-							Score: 0.9975218176841736,
-						},
+						Label: "amusement",
+						Score: 0.001201711,
 					},
-				},
-			},
-		},
-		{
-			pipeline: sentimentPipelineMulti,
-			name:     "Multiclass pipeline test",
-			strings:  []string{"ONNX is seriously fast for small batches. Impressive"},
-			expected: hfPipelines.TextClassificationOutput{
-				ClassificationOutputs: [][]hfPipelines.ClassificationOutput{
 					{
-						{
-							Label: "admiration",
-							Score: 0.9217681,
-						},
-						{
-							Label: "amusement",
-							Score: 0.001201711,
-						},
-						{
-							Label: "anger",
-							Score: 0.001109502,
-						},
-						{
-							Label: "annoyance",
-							Score: 0.0034009134,
-						},
-						{
-							Label: "approval",
-							Score: 0.05643816,
-						},
-						{
-							Label: "caring",
-							Score: 0.0011591336,
-						},
-						{
-							Label: "confusion",
-							Score: 0.0018672282,
-						},
-						{
-							Label: "curiosity",
-							Score: 0.0026787464,
-						},
-						{
-							Label: "desire",
-							Score: 0.00085846696,
-						},
-						{
-							Label: "disappointment",
-							Score: 0.0027759627,
-						},
-						{
-							Label: "disapproval",
-							Score: 0.004615115,
-						},
-						{
-							Label: "disgust",
-							Score: 0.00075303164,
-						},
-						{
-							Label: "embarrassment",
-							Score: 0.0003314704,
-						},
-						{
-							Label: "excitement",
-							Score: 0.005340109,
-						},
-						{
-							Label: "fear",
-							Score: 0.00042834174,
-						},
-						{
-							Label: "gratitude",
-							Score: 0.013405683,
-						},
-						{
-							Label: "grief",
-							Score: 0.00029952865,
-						},
-						{
-							Label: "joy",
-							Score: 0.0026875956,
-						},
-						{
-							Label: "love",
-							Score: 0.00092915917,
-						},
-						{
-							Label: "nervousness",
-							Score: 0.00012843,
-						},
-						{
-							Label: "optimism",
-							Score: 0.006792505,
-						},
-						{
-							Label: "pride",
-							Score: 0.0033409835,
-						},
-						{
-							Label: "realization",
-							Score: 0.007224476,
-						},
-						{
-							Label: "relief",
-							Score: 0.00071489986,
-						},
-						{
-							Label: "remorse",
-							Score: 0.00026071363,
-						},
-						{
-							Label: "sadness",
-							Score: 0.0009562365,
-						},
-						{
-							Label: "surprise",
-							Score: 0.0037120024,
-						},
-						{
-							Label: "neutral",
-							Score: 0.04079749,
-						},
+						Label: "anger",
+						Score: 0.001109502,
+					},
+					{
+						Label: "annoyance",
+						Score: 0.0034009134,
+					},
+					{
+						Label: "approval",
+						Score: 0.05643816,
+					},
+					{
+						Label: "caring",
+						Score: 0.0011591336,
+					},
+					{
+						Label: "confusion",
+						Score: 0.0018672282,
+					},
+					{
+						Label: "curiosity",
+						Score: 0.0026787464,
+					},
+					{
+						Label: "desire",
+						Score: 0.00085846696,
+					},
+					{
+						Label: "disappointment",
+						Score: 0.0027759627,
+					},
+					{
+						Label: "disapproval",
+						Score: 0.004615115,
+					},
+					{
+						Label: "disgust",
+						Score: 0.00075303164,
+					},
+					{
+						Label: "embarrassment",
+						Score: 0.0003314704,
+					},
+					{
+						Label: "excitement",
+						Score: 0.005340109,
+					},
+					{
+						Label: "fear",
+						Score: 0.00042834174,
+					},
+					{
+						Label: "gratitude",
+						Score: 0.013405683,
+					},
+					{
+						Label: "grief",
+						Score: 0.00029952865,
+					},
+					{
+						Label: "joy",
+						Score: 0.0026875956,
+					},
+					{
+						Label: "love",
+						Score: 0.00092915917,
+					},
+					{
+						Label: "nervousness",
+						Score: 0.00012843,
+					},
+					{
+						Label: "optimism",
+						Score: 0.006792505,
+					},
+					{
+						Label: "pride",
+						Score: 0.0033409835,
+					},
+					{
+						Label: "realization",
+						Score: 0.007224476,
+					},
+					{
+						Label: "relief",
+						Score: 0.00071489986,
+					},
+					{
+						Label: "remorse",
+						Score: 0.00026071363,
+					},
+					{
+						Label: "sadness",
+						Score: 0.0009562365,
+					},
+					{
+						Label: "surprise",
+						Score: 0.0037120024,
+					},
+					{
+						Label: "neutral",
+						Score: 0.04079749,
 					},
 				},
 			},
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			batchResult, err := tt.pipeline.RunPipeline(tt.strings)
-			check(t, err)
-			for i, expected := range tt.expected.ClassificationOutputs {
-				checkClassificationOutput(t, expected, batchResult.ClassificationOutputs[i])
-			}
-		})
-	}
+	t.Run(test.name, func(t *testing.T) {
+		batchResult, err := test.pipeline.RunPipeline(test.strings)
+		check(t, err)
+		for i, expected := range test.expected.ClassificationOutputs {
+			checkClassificationOutput(t, expected, batchResult.ClassificationOutputs[i])
+		}
+	})
 
 	// check get stats
 	session.GetStats()
@@ -386,7 +403,7 @@ func textClassificationPipelineValidation(t *testing.T, session *Session) {
 		ModelPath: modelPath,
 		Name:      "testPipelineSimple",
 		Options: []TextClassificationOption{
-			hfPipelines.WithSingleLabel(),
+			taskPipelines.WithSingleLabel(),
 		},
 	}
 	sentimentPipeline, err := NewPipeline(session, config)
@@ -422,9 +439,10 @@ func zeroShotClassificationPipeline(t *testing.T, session *Session) {
 	config := ZeroShotClassificationConfig{
 		ModelPath: modelPath,
 		Name:      "testPipeline",
-		Options: []pipelines.PipelineOption[*hfPipelines.ZeroShotClassificationPipeline]{
-			hfPipelines.WithHypothesisTemplate("This example is {}."),
-			hfPipelines.WithLabels([]string{"fun", "dangerous"}),
+		Options: []pipelines.PipelineOption[*taskPipelines.ZeroShotClassificationPipeline]{
+			taskPipelines.WithHypothesisTemplate("This example is {}."),
+			taskPipelines.WithLabels([]string{"fun", "dangerous"}),
+			taskPipelines.WithMultilabel(false), // Gets overridden per test, but included for coverage
 		},
 	}
 
@@ -432,12 +450,12 @@ func zeroShotClassificationPipeline(t *testing.T, session *Session) {
 	check(t, err)
 
 	tests := []struct {
-		pipeline   *hfPipelines.ZeroShotClassificationPipeline
+		pipeline   *taskPipelines.ZeroShotClassificationPipeline
 		name       string
 		sequences  []string
 		labels     []string
 		multilabel bool
-		expected   hfPipelines.ZeroShotOutput
+		expected   taskPipelines.ZeroShotOutput
 	}{
 		{
 			pipeline:   classificationPipeline,
@@ -445,8 +463,8 @@ func zeroShotClassificationPipeline(t *testing.T, session *Session) {
 			sequences:  []string{"I am going to the park"},
 			labels:     []string{"fun"},
 			multilabel: false,
-			expected: hfPipelines.ZeroShotOutput{
-				ClassificationOutputs: []hfPipelines.ZeroShotClassificationOutput{
+			expected: taskPipelines.ZeroShotOutput{
+				ClassificationOutputs: []taskPipelines.ZeroShotClassificationOutput{
 					{
 						Sequence: "I am going to the park",
 						SortedValues: []struct {
@@ -468,8 +486,8 @@ func zeroShotClassificationPipeline(t *testing.T, session *Session) {
 			sequences:  []string{"I am going to the park", "I will watch Interstellar tonight"},
 			labels:     []string{"fun", "movie"},
 			multilabel: false,
-			expected: hfPipelines.ZeroShotOutput{
-				ClassificationOutputs: []hfPipelines.ZeroShotClassificationOutput{
+			expected: taskPipelines.ZeroShotOutput{
+				ClassificationOutputs: []taskPipelines.ZeroShotClassificationOutput{
 					{
 						Sequence: "I am going to the park",
 						SortedValues: []struct {
@@ -511,8 +529,8 @@ func zeroShotClassificationPipeline(t *testing.T, session *Session) {
 			sequences:  []string{"I am going to the park", "I will watch Interstellar tonight"},
 			labels:     []string{"fun", "movie"},
 			multilabel: true,
-			expected: hfPipelines.ZeroShotOutput{
-				ClassificationOutputs: []hfPipelines.ZeroShotClassificationOutput{
+			expected: taskPipelines.ZeroShotOutput{
+				ClassificationOutputs: []taskPipelines.ZeroShotClassificationOutput{
 					{
 						Sequence: "I am going to the park",
 						SortedValues: []struct {
@@ -554,8 +572,8 @@ func zeroShotClassificationPipeline(t *testing.T, session *Session) {
 			sequences:  []string{"I am going to the park", "I will watch Interstellar tonight"},
 			labels:     []string{"fun"},
 			multilabel: true,
-			expected: hfPipelines.ZeroShotOutput{
-				ClassificationOutputs: []hfPipelines.ZeroShotClassificationOutput{
+			expected: taskPipelines.ZeroShotOutput{
+				ClassificationOutputs: []taskPipelines.ZeroShotClassificationOutput{
 					{
 						Sequence: "I am going to the park",
 						SortedValues: []struct {
@@ -589,8 +607,8 @@ func zeroShotClassificationPipeline(t *testing.T, session *Session) {
 			sequences:  []string{"Please don't bother me, I'm in a rush"},
 			labels:     []string{"busy", "relaxed", "stressed"},
 			multilabel: false,
-			expected: hfPipelines.ZeroShotOutput{
-				ClassificationOutputs: []hfPipelines.ZeroShotClassificationOutput{
+			expected: taskPipelines.ZeroShotOutput{
+				ClassificationOutputs: []taskPipelines.ZeroShotClassificationOutput{
 					{
 						Sequence: "Please don't bother me, I'm in a rush",
 						SortedValues: []struct {
@@ -677,8 +695,8 @@ func tokenClassificationPipeline(t *testing.T, session *Session) {
 		ModelPath: modelPath,
 		Name:      "testPipelineSimple",
 		Options: []TokenClassificationOption{
-			hfPipelines.WithSimpleAggregation(),
-			hfPipelines.WithIgnoreLabels([]string{"O"}),
+			taskPipelines.WithSimpleAggregation(),
+			taskPipelines.WithIgnoreLabels([]string{"O"}),
 		},
 	}
 	pipelineSimple, err2 := NewPipeline(session, configSimple)
@@ -688,21 +706,21 @@ func tokenClassificationPipeline(t *testing.T, session *Session) {
 		ModelPath: modelPath,
 		Name:      "testPipelineNone",
 		Options: []TokenClassificationOption{
-			hfPipelines.WithoutAggregation(),
+			taskPipelines.WithoutAggregation(),
 		},
 	}
 	pipelineNone, err3 := NewPipeline(session, configNone)
 	check(t, err3)
 
-	var expectedResults map[int]hfPipelines.TokenClassificationOutput
+	var expectedResults map[int]taskPipelines.TokenClassificationOutput
 	err4 := json.Unmarshal(tokenExpectedByte, &expectedResults)
 	check(t, err4)
 
 	tests := []struct {
-		pipeline *hfPipelines.TokenClassificationPipeline
+		pipeline *taskPipelines.TokenClassificationPipeline
 		name     string
 		strings  []string
-		expected hfPipelines.TokenClassificationOutput
+		expected taskPipelines.TokenClassificationOutput
 	}{
 		{
 			pipeline: pipelineSimple,
@@ -748,8 +766,8 @@ func tokenClassificationPipelineValidation(t *testing.T, session *Session) {
 		ModelPath: modelPath,
 		Name:      "testPipelineSimple",
 		Options: []TokenClassificationOption{
-			hfPipelines.WithSimpleAggregation(),
-			hfPipelines.WithIgnoreLabels([]string{"O"}),
+			taskPipelines.WithSimpleAggregation(),
+			taskPipelines.WithIgnoreLabels([]string{"O"}),
 		},
 	}
 	pipelineSimple, err2 := NewPipeline(session, configSimple)
@@ -785,8 +803,8 @@ func noSameNamePipeline(t *testing.T, session *Session) {
 		ModelPath: modelPath,
 		Name:      "testPipelineSimple",
 		Options: []TokenClassificationOption{
-			hfPipelines.WithSimpleAggregation(),
-			hfPipelines.WithIgnoreLabels([]string{"O"}),
+			taskPipelines.WithSimpleAggregation(),
+			taskPipelines.WithIgnoreLabels([]string{"O"}),
 		},
 	}
 	_, err2 := NewPipeline(session, configSimple)
@@ -799,7 +817,7 @@ func noSameNamePipeline(t *testing.T, session *Session) {
 
 // Utilities
 
-func checkClassificationOutput(t *testing.T, inputResult []hfPipelines.ClassificationOutput, inputExpected []hfPipelines.ClassificationOutput) {
+func checkClassificationOutput(t *testing.T, inputResult []taskPipelines.ClassificationOutput, inputExpected []taskPipelines.ClassificationOutput) {
 	t.Helper()
 	assert.Equal(t, len(inputResult), len(inputExpected))
 	for i, output := range inputResult {
@@ -839,7 +857,7 @@ func check(t *testing.T, err error) {
 	}
 }
 
-func printTokenEntities(o *hfPipelines.TokenClassificationOutput) {
+func printTokenEntities(o *taskPipelines.TokenClassificationOutput) {
 	for i, entities := range o.Entities {
 		fmt.Printf("Input %d\n", i)
 		for _, entity := range entities {

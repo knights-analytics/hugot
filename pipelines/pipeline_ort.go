@@ -62,8 +62,8 @@ func loadInputOutputMetaORT(onnxBytes []byte) ([]InputOutputInfo, []InputOutputI
 }
 
 func createInputTensorsORT(batch *PipelineBatch, inputsMeta []InputOutputInfo) error {
-	tensorSize := len(batch.Input) * (batch.MaxSequenceLength)
-	batchSize := int64(len(batch.Input))
+	batchSize := len(batch.Input)
+	tensorSize := batchSize * batch.MaxSequenceLength
 
 	inputTensors := make([]ort.Value, len(inputsMeta))
 	var tensorCreationErr error
@@ -92,7 +92,7 @@ func createInputTensorsORT(batch *PipelineBatch, inputsMeta []InputOutputInfo) e
 				counter++
 			}
 		}
-		inputTensors[i], tensorCreationErr = ort.NewTensor(ort.NewShape(batchSize, int64(batch.MaxSequenceLength)), backingSlice)
+		inputTensors[i], tensorCreationErr = ort.NewTensor(ort.NewShape(int64(batchSize), int64(batch.MaxSequenceLength)), backingSlice)
 		if tensorCreationErr != nil {
 			return tensorCreationErr
 		}

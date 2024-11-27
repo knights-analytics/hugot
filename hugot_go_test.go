@@ -38,6 +38,16 @@ func TestTextClassificationPipelineGo(t *testing.T) {
 	textClassificationPipeline(t, session)
 }
 
+func TestTextClassificationPipelineMultiGo(t *testing.T) {
+	session, err := NewGoSession()
+	check(t, err)
+	defer func(session *Session) {
+		destroyErr := session.Destroy()
+		check(t, destroyErr)
+	}(session)
+	textClassificationPipelineMulti(t, session)
+}
+
 func TestTextClassificationPipelineValidationGo(t *testing.T) {
 	session, err := NewGoSession()
 	check(t, err)

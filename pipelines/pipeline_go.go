@@ -40,7 +40,11 @@ func loadInputOutputMetaGo(model *gonnx.Model) ([]InputOutputInfo, []InputOutput
 		shape := inputShapes[name]
 		dimensions := make([]int64, len(shape))
 		for i, y := range shape {
-			dimensions[i] = y.Size
+			if y.IsDynamic {
+				dimensions[i] = -1
+			} else {
+				dimensions[i] = y.Size
+			}
 		}
 		inputs = append(inputs, InputOutputInfo{
 			Name:       name,
@@ -52,9 +56,13 @@ func loadInputOutputMetaGo(model *gonnx.Model) ([]InputOutputInfo, []InputOutput
 		shape := outputShapes[name]
 		dimensions := make([]int64, len(shape))
 		for i, y := range shape {
-			dimensions[i] = y.Size
+			if y.IsDynamic {
+				dimensions[i] = -1
+			} else {
+				dimensions[i] = y.Size
+			}
 		}
-		outputs = append(inputs, InputOutputInfo{
+		outputs = append(outputs, InputOutputInfo{
 			Name:       name,
 			Dimensions: dimensions,
 		})
@@ -63,10 +71,12 @@ func loadInputOutputMetaGo(model *gonnx.Model) ([]InputOutputInfo, []InputOutput
 }
 
 func createInputTensorsGo(batch *PipelineBatch, inputsMeta []InputOutputInfo) error {
+	batchSize := len(batch.Input)
+	tensorSize := batchSize * batch.MaxSequenceLength
 
 	inputMap := map[string]tensor.Tensor{}
 	for _, inputMeta := range inputsMeta {
-		backingSlice := make([]uint32, len(batch.Input))
+		backingSlice := make([]int64, tensorSize)
 		counter := 0
 
 		for _, input := range batch.Input {
@@ -75,11 +85,11 @@ func createInputTensorsGo(batch *PipelineBatch, inputsMeta []InputOutputInfo) er
 				if j+1 <= length {
 					switch inputMeta.Name {
 					case "input_ids":
-						backingSlice[counter] = input.TokenIDs[j]
+						backingSlice[counter] = int64(input.TokenIDs[j])
 					case "token_type_ids":
-						backingSlice[counter] = input.TypeIDs[j]
+						backingSlice[counter] = int64(input.TypeIDs[j])
 					case "attention_mask":
-						backingSlice[counter] = input.AttentionMask[j]
+						backingSlice[counter] = int64(input.AttentionMask[j])
 					default:
 						return fmt.Errorf("input %s not recognized", inputMeta.Name)
 					}
@@ -90,8 +100,7 @@ func createInputTensorsGo(batch *PipelineBatch, inputsMeta []InputOutputInfo) er
 			}
 		}
 		inputMap[inputMeta.Name] = tensor.New(
-			tensor.Of(tensor.Uint32),
-			tensor.WithShape(len(batch.Input), batch.MaxSequenceLength),
+			tensor.WithShape(batchSize, batch.MaxSequenceLength),
 			tensor.WithBacking(backingSlice),
 		)
 	}

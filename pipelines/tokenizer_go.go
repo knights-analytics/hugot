@@ -19,7 +19,7 @@ func loadGoTokenizer(tokenizerBytes []byte, pipeline *BasePipeline) error {
 	if tkErr != nil {
 		return tkErr
 	}
-	pipeline.Tokenizer = &Tokenizer{Runtime: "Go", GoTokenizer: &GoTokenizer{Tokenizer: tk}, TokenizerTimings: &timings{}, Destroy: func() error {
+	pipeline.Tokenizer = &Tokenizer{Runtime: "GO", GoTokenizer: &GoTokenizer{Tokenizer: tk}, TokenizerTimings: &timings{}, Destroy: func() error {
 		return nil
 	}}
 	return nil

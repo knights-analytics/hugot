@@ -1,4 +1,4 @@
-package hfPipelines
+package taskPipelines
 
 import (
 	"encoding/json"
