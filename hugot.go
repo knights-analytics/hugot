@@ -5,16 +5,17 @@ import (
 	"fmt"
 	"slices"
 
+	"github.com/knights-analytics/hugot/hfPipelines"
 	"github.com/knights-analytics/hugot/options"
 	"github.com/knights-analytics/hugot/pipelines"
 )
 
 // Session allows for the creation of new pipelines and holds the pipeline already created.
 type Session struct {
-	featureExtractionPipelines      pipelineMap[*pipelines.FeatureExtractionPipeline]
-	tokenClassificationPipelines    pipelineMap[*pipelines.TokenClassificationPipeline]
-	textClassificationPipelines     pipelineMap[*pipelines.TextClassificationPipeline]
-	zeroShotClassificationPipelines pipelineMap[*pipelines.ZeroShotClassificationPipeline]
+	featureExtractionPipelines      pipelineMap[*hfPipelines.FeatureExtractionPipeline]
+	tokenClassificationPipelines    pipelineMap[*hfPipelines.TokenClassificationPipeline]
+	textClassificationPipelines     pipelineMap[*hfPipelines.TextClassificationPipeline]
+	zeroShotClassificationPipelines pipelineMap[*hfPipelines.ZeroShotClassificationPipeline]
 	options                         *options.Options
 	environmentDestroy              func() error
 }
@@ -32,10 +33,10 @@ func newSession(runtime string, additionalSetup func(*Session) (*Session, error)
 	}
 
 	session := &Session{
-		featureExtractionPipelines:      map[string]*pipelines.FeatureExtractionPipeline{},
-		textClassificationPipelines:     map[string]*pipelines.TextClassificationPipeline{},
-		tokenClassificationPipelines:    map[string]*pipelines.TokenClassificationPipeline{},
-		zeroShotClassificationPipelines: map[string]*pipelines.ZeroShotClassificationPipeline{},
+		featureExtractionPipelines:      map[string]*hfPipelines.FeatureExtractionPipeline{},
+		textClassificationPipelines:     map[string]*hfPipelines.TextClassificationPipeline{},
+		tokenClassificationPipelines:    map[string]*hfPipelines.TokenClassificationPipeline{},
+		zeroShotClassificationPipelines: map[string]*hfPipelines.ZeroShotClassificationPipeline{},
 		options:                         parsedOptions,
 		environmentDestroy: func() error {
 			return nil
@@ -72,50 +73,50 @@ func (m pipelineMap[T]) GetStats() []string {
 }
 
 // FeatureExtractionConfig is the configuration for a feature extraction pipeline
-type FeatureExtractionConfig = pipelines.PipelineConfig[*pipelines.FeatureExtractionPipeline]
+type FeatureExtractionConfig = pipelines.PipelineConfig[*hfPipelines.FeatureExtractionPipeline]
 
 // FeatureExtractionOption is an option for a feature extraction pipeline
-type FeatureExtractionOption = pipelines.PipelineOption[*pipelines.FeatureExtractionPipeline]
+type FeatureExtractionOption = pipelines.PipelineOption[*hfPipelines.FeatureExtractionPipeline]
 
 // TextClassificationConfig is the configuration for a text classification pipeline
-type TextClassificationConfig = pipelines.PipelineConfig[*pipelines.TextClassificationPipeline]
+type TextClassificationConfig = pipelines.PipelineConfig[*hfPipelines.TextClassificationPipeline]
 
 // type ZSCConfig = pipelines.PipelineConfig[*pipelines.ZeroShotClassificationPipeline]
 
-type ZeroShotClassificationConfig = pipelines.PipelineConfig[*pipelines.ZeroShotClassificationPipeline]
+type ZeroShotClassificationConfig = pipelines.PipelineConfig[*hfPipelines.ZeroShotClassificationPipeline]
 
 // TextClassificationOption is an option for a text classification pipeline
-type TextClassificationOption = pipelines.PipelineOption[*pipelines.TextClassificationPipeline]
+type TextClassificationOption = pipelines.PipelineOption[*hfPipelines.TextClassificationPipeline]
 
 // TokenClassificationConfig is the configuration for a token classification pipeline
-type TokenClassificationConfig = pipelines.PipelineConfig[*pipelines.TokenClassificationPipeline]
+type TokenClassificationConfig = pipelines.PipelineConfig[*hfPipelines.TokenClassificationPipeline]
 
 // TokenClassificationOption is an option for a token classification pipeline
-type TokenClassificationOption = pipelines.PipelineOption[*pipelines.TokenClassificationPipeline]
+type TokenClassificationOption = pipelines.PipelineOption[*hfPipelines.TokenClassificationPipeline]
 
 // GetPipeline can be used to retrieve a pipeline of type T with the given name from the session
 func GetPipeline[T pipelines.Pipeline](s *Session, name string) (T, error) {
 	var pipeline T
 	switch any(pipeline).(type) {
-	case *pipelines.TokenClassificationPipeline:
+	case *hfPipelines.TokenClassificationPipeline:
 		p, ok := s.tokenClassificationPipelines[name]
 		if !ok {
 			return pipeline, &pipelineNotFoundError{pipelineName: name}
 		}
 		return any(p).(T), nil
-	case *pipelines.TextClassificationPipeline:
+	case *hfPipelines.TextClassificationPipeline:
 		p, ok := s.textClassificationPipelines[name]
 		if !ok {
 			return pipeline, &pipelineNotFoundError{pipelineName: name}
 		}
 		return any(p).(T), nil
-	case *pipelines.FeatureExtractionPipeline:
+	case *hfPipelines.FeatureExtractionPipeline:
 		p, ok := s.featureExtractionPipelines[name]
 		if !ok {
 			return pipeline, &pipelineNotFoundError{pipelineName: name}
 		}
 		return any(p).(T), nil
-	case *pipelines.ZeroShotClassificationPipeline:
+	case *hfPipelines.ZeroShotClassificationPipeline:
 		p, ok := s.zeroShotClassificationPipelines[name]
 		if !ok {
 			return pipeline, &pipelineNotFoundError{pipelineName: name}
@@ -144,33 +145,33 @@ func NewPipeline[T pipelines.Pipeline](s *Session, pipelineConfig pipelines.Pipe
 	}
 
 	switch any(pipeline).(type) {
-	case *pipelines.TokenClassificationPipeline:
-		config := any(pipelineConfig).(pipelines.PipelineConfig[*pipelines.TokenClassificationPipeline])
-		pipelineInitialised, err := pipelines.NewTokenClassificationPipeline(config, s.options)
+	case *hfPipelines.TokenClassificationPipeline:
+		config := any(pipelineConfig).(pipelines.PipelineConfig[*hfPipelines.TokenClassificationPipeline])
+		pipelineInitialised, err := hfPipelines.NewTokenClassificationPipeline(config, s.options)
 		if err != nil {
 			return pipeline, err
 		}
 		s.tokenClassificationPipelines[config.Name] = pipelineInitialised
 		pipeline = any(pipelineInitialised).(T)
-	case *pipelines.TextClassificationPipeline:
-		config := any(pipelineConfig).(pipelines.PipelineConfig[*pipelines.TextClassificationPipeline])
-		pipelineInitialised, err := pipelines.NewTextClassificationPipeline(config, s.options)
+	case *hfPipelines.TextClassificationPipeline:
+		config := any(pipelineConfig).(pipelines.PipelineConfig[*hfPipelines.TextClassificationPipeline])
+		pipelineInitialised, err := hfPipelines.NewTextClassificationPipeline(config, s.options)
 		if err != nil {
 			return pipeline, err
 		}
 		s.textClassificationPipelines[config.Name] = pipelineInitialised
 		pipeline = any(pipelineInitialised).(T)
-	case *pipelines.FeatureExtractionPipeline:
-		config := any(pipelineConfig).(pipelines.PipelineConfig[*pipelines.FeatureExtractionPipeline])
-		pipelineInitialised, err := pipelines.NewFeatureExtractionPipeline(config, s.options)
+	case *hfPipelines.FeatureExtractionPipeline:
+		config := any(pipelineConfig).(pipelines.PipelineConfig[*hfPipelines.FeatureExtractionPipeline])
+		pipelineInitialised, err := hfPipelines.NewFeatureExtractionPipeline(config, s.options)
 		if err != nil {
 			return pipeline, err
 		}
 		s.featureExtractionPipelines[config.Name] = pipelineInitialised
 		pipeline = any(pipelineInitialised).(T)
-	case *pipelines.ZeroShotClassificationPipeline:
-		config := any(pipelineConfig).(pipelines.PipelineConfig[*pipelines.ZeroShotClassificationPipeline])
-		pipelineInitialised, err := pipelines.NewZeroShotClassificationPipeline(config, s.options)
+	case *hfPipelines.ZeroShotClassificationPipeline:
+		config := any(pipelineConfig).(pipelines.PipelineConfig[*hfPipelines.ZeroShotClassificationPipeline])
+		pipelineInitialised, err := hfPipelines.NewZeroShotClassificationPipeline(config, s.options)
 		if err != nil {
 			return pipeline, err
 		}

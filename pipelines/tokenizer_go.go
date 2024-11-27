@@ -14,7 +14,7 @@ type GoTokenizer struct {
 	Tokenizer *tokenizer.Tokenizer
 }
 
-func loadGoTokenizer(tokenizerBytes []byte, pipeline *basePipeline) error {
+func loadGoTokenizer(tokenizerBytes []byte, pipeline *BasePipeline) error {
 	tk, tkErr := pretrained.FromReader(bytes.NewReader(tokenizerBytes))
 	if tkErr != nil {
 		return tkErr
@@ -26,7 +26,7 @@ func loadGoTokenizer(tokenizerBytes []byte, pipeline *basePipeline) error {
 }
 
 func tokenizeInputsGo(batch *PipelineBatch, tk *Tokenizer, inputs []string) {
-	outputs := make([]tokenizedInput, len(inputs))
+	outputs := make([]TokenizedInput, len(inputs))
 	maxSequence := 0
 	goTK := tk.GoTokenizer.Tokenizer
 	for i, input := range inputs {
@@ -43,7 +43,7 @@ func tokenizeInputsGo(batch *PipelineBatch, tk *Tokenizer, inputs []string) {
 			}
 		}
 
-		outputs[i] = tokenizedInput{
+		outputs[i] = TokenizedInput{
 			Raw:               input,
 			Tokens:            output.Tokens,
 			TokenIDs:          convertIntsToUints(output.Ids),

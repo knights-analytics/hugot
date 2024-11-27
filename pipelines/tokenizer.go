@@ -14,7 +14,7 @@ type Tokenizer struct {
 	Destroy          func() error
 }
 
-func loadTokenizer(pipeline *basePipeline) error {
+func loadTokenizer(pipeline *BasePipeline) error {
 	tokenizerBytes, err := util.ReadFileBytes(util.PathJoinSafe(pipeline.ModelPath, "tokenizer.json"))
 	if err != nil {
 		return err
@@ -30,7 +30,7 @@ func loadTokenizer(pipeline *basePipeline) error {
 	}
 }
 
-func tokenizeInputs(batch *PipelineBatch, tk *Tokenizer, inputs []string) {
+func TokenizeInputs(batch *PipelineBatch, tk *Tokenizer, inputs []string) {
 	switch tk.Runtime {
 	case "GO":
 		tokenizeInputsGo(batch, tk, inputs)
@@ -39,13 +39,13 @@ func tokenizeInputs(batch *PipelineBatch, tk *Tokenizer, inputs []string) {
 	}
 }
 
-func allInputTokens(pipeline *basePipeline) {
+func AllInputTokens(pipeline *BasePipeline) {
 	if pipeline.Tokenizer.Runtime == "RUST" {
 		allInputTokensRust(pipeline)
 	}
 }
 
-func decode(tokens []uint32, tokenizer *Tokenizer) string {
+func Decode(tokens []uint32, tokenizer *Tokenizer) string {
 	switch tokenizer.Runtime {
 	case "GO":
 		return decodeGo(tokens, tokenizer)

@@ -13,7 +13,7 @@ type RustTokenizer struct {
 	Options   []tokenizers.EncodeOption
 }
 
-func loadRustTokenizer(tokenizerBytes []byte, pipeline *basePipeline) error {
+func loadRustTokenizer(tokenizerBytes []byte, pipeline *BasePipeline) error {
 	tk, tkErr := tokenizers.FromBytes(tokenizerBytes)
 	if tkErr != nil {
 		return tkErr
@@ -48,7 +48,7 @@ func getRustTokenizerOptions(inputs []InputOutputInfo) ([]tokenizers.EncodeOptio
 }
 
 func tokenizeInputsRust(batch *PipelineBatch, tk *Tokenizer, inputs []string) {
-	outputs := make([]tokenizedInput, len(inputs))
+	outputs := make([]TokenizedInput, len(inputs))
 	maxSequence := 0
 	rustTK := tk.RustTokenizer
 	for i, input := range inputs {
@@ -64,7 +64,7 @@ func tokenizeInputsRust(batch *PipelineBatch, tk *Tokenizer, inputs []string) {
 			}
 		}
 
-		outputs[i] = tokenizedInput{
+		outputs[i] = TokenizedInput{
 			Raw:               input,
 			Tokens:            output.Tokens,
 			TokenIDs:          output.IDs,
@@ -94,7 +94,7 @@ func convertRustOffsets(input []tokenizers.Offset) [][2]uint {
 	return output
 }
 
-func allInputTokensRust(pipeline *basePipeline) {
+func allInputTokensRust(pipeline *BasePipeline) {
 	pipeline.Tokenizer.RustTokenizer.Options = append(pipeline.Tokenizer.RustTokenizer.Options,
 		tokenizers.WithReturnSpecialTokensMask(),
 		tokenizers.WithReturnOffsets(),

@@ -13,8 +13,8 @@ import (
 	"github.com/knights-analytics/hugot/util"
 )
 
-// basePipeline can be embedded by a pipeline.
-type basePipeline struct {
+// BasePipeline can be embedded by a pipeline.
+type BasePipeline struct {
 	ModelPath       string
 	OnnxFilename    string
 	PipelineName    string
@@ -29,7 +29,7 @@ type basePipeline struct {
 	PipelineTimings *timings
 }
 
-func (p *basePipeline) Destroy() error {
+func (p *BasePipeline) Destroy() error {
 	finalErr := p.Tokenizer.Destroy()
 	if p.ORTSession != nil {
 		finalErr = errors.Join(finalErr, p.ORTSession.Destroy())
@@ -106,8 +106,8 @@ type timings struct {
 	TotalNS  uint64
 }
 
-// tokenizedInput holds the result of running tokenizer on an input.
-type tokenizedInput struct {
+// TokenizedInput holds the result of running tokenizer on an input.
+type TokenizedInput struct {
 	Raw               string
 	Tokens            []string
 	TokenIDs          []uint32
@@ -120,7 +120,7 @@ type tokenizedInput struct {
 
 // PipelineBatch represents a batch of inputs that runs through the pipeline.
 type PipelineBatch struct {
-	Input             []tokenizedInput
+	Input             []TokenizedInput
 	MaxSequenceLength int
 	InputValues       any
 	DestroyInputs     func() error
@@ -184,7 +184,7 @@ func getOnnxFiles(path string) ([][]string, error) {
 	return onnxFiles, err
 }
 
-func getNames(info []InputOutputInfo) []string {
+func GetNames(info []InputOutputInfo) []string {
 	names := make([]string, 0, len(info))
 	for _, v := range info {
 		names = append(names, v.Name)
@@ -192,7 +192,7 @@ func getNames(info []InputOutputInfo) []string {
 	return names
 }
 
-func runSessionOnBatch(batch *PipelineBatch, p *basePipeline) error {
+func RunSessionOnBatch(batch *PipelineBatch, p *BasePipeline) error {
 	switch p.Runtime {
 	case "GO":
 		return runGoSessionOnBatch(batch, p)
@@ -204,7 +204,7 @@ func runSessionOnBatch(batch *PipelineBatch, p *basePipeline) error {
 	return nil
 }
 
-func createInputTensors(batch *PipelineBatch, inputsMeta []InputOutputInfo, runtime string) error {
+func CreateInputTensors(batch *PipelineBatch, inputsMeta []InputOutputInfo, runtime string) error {
 
 	switch runtime {
 	case "ORT":
@@ -217,8 +217,8 @@ func createInputTensors(batch *PipelineBatch, inputsMeta []InputOutputInfo, runt
 	return nil
 }
 
-func newBasePipeline[T Pipeline](config PipelineConfig[T], s *options.Options) (*basePipeline, error) {
-	pipeline := &basePipeline{}
+func NewBasePipeline[T Pipeline](config PipelineConfig[T], s *options.Options) (*BasePipeline, error) {
+	pipeline := &BasePipeline{}
 	pipeline.Runtime = s.Runtime
 	pipeline.ModelPath = config.ModelPath
 	pipeline.PipelineName = config.Name
@@ -244,7 +244,7 @@ func newBasePipeline[T Pipeline](config PipelineConfig[T], s *options.Options) (
 	return pipeline, nil
 }
 
-func createSession(pipeline *basePipeline, s *options.Options, model []byte) error {
+func createSession(pipeline *BasePipeline, s *options.Options, model []byte) error {
 	// creation of the session. Only one output (either token or sentence embedding).
 	var err error
 	switch pipeline.Runtime {

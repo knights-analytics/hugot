@@ -10,6 +10,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	"github.com/knights-analytics/hugot/hfPipelines"
 	"github.com/knights-analytics/hugot/pipelines"
 )
 
@@ -119,7 +120,7 @@ func featureExtractionPipeline(t *testing.T, session *Session) {
 		Name:         "testPipelineNormalise",
 		OnnxFilename: "model.onnx",
 		Options: []FeatureExtractionOption{
-			pipelines.WithNormalization(),
+			hfPipelines.WithNormalization(),
 		},
 	}
 	pipeline, err = NewPipeline(session, config)
@@ -139,7 +140,7 @@ func featureExtractionPipeline(t *testing.T, session *Session) {
 		ModelPath:    modelPath,
 		Name:         "testPipelineSentence",
 		OnnxFilename: "model.onnx",
-		Options:      []FeatureExtractionOption{pipelines.WithOutputName("last_hidden_state")},
+		Options:      []FeatureExtractionOption{hfPipelines.WithOutputName("last_hidden_state")},
 	}
 	pipelineSentence, err := NewPipeline(session, configSentence)
 	check(t, err)
@@ -193,7 +194,7 @@ func textClassificationPipeline(t *testing.T, session *Session) {
 		ModelPath: modelPath,
 		Name:      "testPipelineSimple",
 		Options: []TextClassificationOption{
-			pipelines.WithSoftmax(),
+			hfPipelines.WithSoftmax(),
 		},
 	}
 	sentimentPipeline, err := NewPipeline(session, config)
@@ -204,25 +205,25 @@ func textClassificationPipeline(t *testing.T, session *Session) {
 		Name:         "testPipelineSimpleMulti",
 		OnnxFilename: "model.onnx",
 		Options: []TextClassificationOption{
-			pipelines.WithMultiLabel(),
-			pipelines.WithSigmoid(),
+			hfPipelines.WithMultiLabel(),
+			hfPipelines.WithSigmoid(),
 		},
 	}
 	sentimentPipelineMulti, err := NewPipeline(session, configMulti)
 	check(t, err)
 
 	tests := []struct {
-		pipeline *pipelines.TextClassificationPipeline
+		pipeline *hfPipelines.TextClassificationPipeline
 		name     string
 		strings  []string
-		expected pipelines.TextClassificationOutput
+		expected hfPipelines.TextClassificationOutput
 	}{
 		{
 			pipeline: sentimentPipeline,
 			name:     "Basic tests",
 			strings:  []string{"This movie is disgustingly good!", "The director tried too much"},
-			expected: pipelines.TextClassificationOutput{
-				ClassificationOutputs: [][]pipelines.ClassificationOutput{
+			expected: hfPipelines.TextClassificationOutput{
+				ClassificationOutputs: [][]hfPipelines.ClassificationOutput{
 					{
 						{
 							Label: "POSITIVE",
@@ -242,8 +243,8 @@ func textClassificationPipeline(t *testing.T, session *Session) {
 			pipeline: sentimentPipelineMulti,
 			name:     "Multiclass pipeline test",
 			strings:  []string{"ONNX is seriously fast for small batches. Impressive"},
-			expected: pipelines.TextClassificationOutput{
-				ClassificationOutputs: [][]pipelines.ClassificationOutput{
+			expected: hfPipelines.TextClassificationOutput{
+				ClassificationOutputs: [][]hfPipelines.ClassificationOutput{
 					{
 						{
 							Label: "admiration",
@@ -385,7 +386,7 @@ func textClassificationPipelineValidation(t *testing.T, session *Session) {
 		ModelPath: modelPath,
 		Name:      "testPipelineSimple",
 		Options: []TextClassificationOption{
-			pipelines.WithSingleLabel(),
+			hfPipelines.WithSingleLabel(),
 		},
 	}
 	sentimentPipeline, err := NewPipeline(session, config)
@@ -421,9 +422,9 @@ func zeroShotClassificationPipeline(t *testing.T, session *Session) {
 	config := ZeroShotClassificationConfig{
 		ModelPath: modelPath,
 		Name:      "testPipeline",
-		Options: []pipelines.PipelineOption[*pipelines.ZeroShotClassificationPipeline]{
-			pipelines.WithHypothesisTemplate("This example is {}."),
-			pipelines.WithLabels([]string{"fun", "dangerous"}),
+		Options: []pipelines.PipelineOption[*hfPipelines.ZeroShotClassificationPipeline]{
+			hfPipelines.WithHypothesisTemplate("This example is {}."),
+			hfPipelines.WithLabels([]string{"fun", "dangerous"}),
 		},
 	}
 
@@ -431,12 +432,12 @@ func zeroShotClassificationPipeline(t *testing.T, session *Session) {
 	check(t, err)
 
 	tests := []struct {
-		pipeline   *pipelines.ZeroShotClassificationPipeline
+		pipeline   *hfPipelines.ZeroShotClassificationPipeline
 		name       string
 		sequences  []string
 		labels     []string
 		multilabel bool
-		expected   pipelines.ZeroShotOutput
+		expected   hfPipelines.ZeroShotOutput
 	}{
 		{
 			pipeline:   classificationPipeline,
@@ -444,8 +445,8 @@ func zeroShotClassificationPipeline(t *testing.T, session *Session) {
 			sequences:  []string{"I am going to the park"},
 			labels:     []string{"fun"},
 			multilabel: false,
-			expected: pipelines.ZeroShotOutput{
-				ClassificationOutputs: []pipelines.ZeroShotClassificationOutput{
+			expected: hfPipelines.ZeroShotOutput{
+				ClassificationOutputs: []hfPipelines.ZeroShotClassificationOutput{
 					{
 						Sequence: "I am going to the park",
 						SortedValues: []struct {
@@ -467,8 +468,8 @@ func zeroShotClassificationPipeline(t *testing.T, session *Session) {
 			sequences:  []string{"I am going to the park", "I will watch Interstellar tonight"},
 			labels:     []string{"fun", "movie"},
 			multilabel: false,
-			expected: pipelines.ZeroShotOutput{
-				ClassificationOutputs: []pipelines.ZeroShotClassificationOutput{
+			expected: hfPipelines.ZeroShotOutput{
+				ClassificationOutputs: []hfPipelines.ZeroShotClassificationOutput{
 					{
 						Sequence: "I am going to the park",
 						SortedValues: []struct {
@@ -510,8 +511,8 @@ func zeroShotClassificationPipeline(t *testing.T, session *Session) {
 			sequences:  []string{"I am going to the park", "I will watch Interstellar tonight"},
 			labels:     []string{"fun", "movie"},
 			multilabel: true,
-			expected: pipelines.ZeroShotOutput{
-				ClassificationOutputs: []pipelines.ZeroShotClassificationOutput{
+			expected: hfPipelines.ZeroShotOutput{
+				ClassificationOutputs: []hfPipelines.ZeroShotClassificationOutput{
 					{
 						Sequence: "I am going to the park",
 						SortedValues: []struct {
@@ -553,8 +554,8 @@ func zeroShotClassificationPipeline(t *testing.T, session *Session) {
 			sequences:  []string{"I am going to the park", "I will watch Interstellar tonight"},
 			labels:     []string{"fun"},
 			multilabel: true,
-			expected: pipelines.ZeroShotOutput{
-				ClassificationOutputs: []pipelines.ZeroShotClassificationOutput{
+			expected: hfPipelines.ZeroShotOutput{
+				ClassificationOutputs: []hfPipelines.ZeroShotClassificationOutput{
 					{
 						Sequence: "I am going to the park",
 						SortedValues: []struct {
@@ -588,8 +589,8 @@ func zeroShotClassificationPipeline(t *testing.T, session *Session) {
 			sequences:  []string{"Please don't bother me, I'm in a rush"},
 			labels:     []string{"busy", "relaxed", "stressed"},
 			multilabel: false,
-			expected: pipelines.ZeroShotOutput{
-				ClassificationOutputs: []pipelines.ZeroShotClassificationOutput{
+			expected: hfPipelines.ZeroShotOutput{
+				ClassificationOutputs: []hfPipelines.ZeroShotClassificationOutput{
 					{
 						Sequence: "Please don't bother me, I'm in a rush",
 						SortedValues: []struct {
@@ -676,8 +677,8 @@ func tokenClassificationPipeline(t *testing.T, session *Session) {
 		ModelPath: modelPath,
 		Name:      "testPipelineSimple",
 		Options: []TokenClassificationOption{
-			pipelines.WithSimpleAggregation(),
-			pipelines.WithIgnoreLabels([]string{"O"}),
+			hfPipelines.WithSimpleAggregation(),
+			hfPipelines.WithIgnoreLabels([]string{"O"}),
 		},
 	}
 	pipelineSimple, err2 := NewPipeline(session, configSimple)
@@ -687,21 +688,21 @@ func tokenClassificationPipeline(t *testing.T, session *Session) {
 		ModelPath: modelPath,
 		Name:      "testPipelineNone",
 		Options: []TokenClassificationOption{
-			pipelines.WithoutAggregation(),
+			hfPipelines.WithoutAggregation(),
 		},
 	}
 	pipelineNone, err3 := NewPipeline(session, configNone)
 	check(t, err3)
 
-	var expectedResults map[int]pipelines.TokenClassificationOutput
+	var expectedResults map[int]hfPipelines.TokenClassificationOutput
 	err4 := json.Unmarshal(tokenExpectedByte, &expectedResults)
 	check(t, err4)
 
 	tests := []struct {
-		pipeline *pipelines.TokenClassificationPipeline
+		pipeline *hfPipelines.TokenClassificationPipeline
 		name     string
 		strings  []string
-		expected pipelines.TokenClassificationOutput
+		expected hfPipelines.TokenClassificationOutput
 	}{
 		{
 			pipeline: pipelineSimple,
@@ -747,8 +748,8 @@ func tokenClassificationPipelineValidation(t *testing.T, session *Session) {
 		ModelPath: modelPath,
 		Name:      "testPipelineSimple",
 		Options: []TokenClassificationOption{
-			pipelines.WithSimpleAggregation(),
-			pipelines.WithIgnoreLabels([]string{"O"}),
+			hfPipelines.WithSimpleAggregation(),
+			hfPipelines.WithIgnoreLabels([]string{"O"}),
 		},
 	}
 	pipelineSimple, err2 := NewPipeline(session, configSimple)
@@ -784,8 +785,8 @@ func noSameNamePipeline(t *testing.T, session *Session) {
 		ModelPath: modelPath,
 		Name:      "testPipelineSimple",
 		Options: []TokenClassificationOption{
-			pipelines.WithSimpleAggregation(),
-			pipelines.WithIgnoreLabels([]string{"O"}),
+			hfPipelines.WithSimpleAggregation(),
+			hfPipelines.WithIgnoreLabels([]string{"O"}),
 		},
 	}
 	_, err2 := NewPipeline(session, configSimple)
@@ -798,7 +799,7 @@ func noSameNamePipeline(t *testing.T, session *Session) {
 
 // Utilities
 
-func checkClassificationOutput(t *testing.T, inputResult []pipelines.ClassificationOutput, inputExpected []pipelines.ClassificationOutput) {
+func checkClassificationOutput(t *testing.T, inputResult []hfPipelines.ClassificationOutput, inputExpected []hfPipelines.ClassificationOutput) {
 	t.Helper()
 	assert.Equal(t, len(inputResult), len(inputExpected))
 	for i, output := range inputResult {
@@ -838,7 +839,7 @@ func check(t *testing.T, err error) {
 	}
 }
 
-func printTokenEntities(o *pipelines.TokenClassificationOutput) {
+func printTokenEntities(o *hfPipelines.TokenClassificationOutput) {
 	for i, entities := range o.Entities {
 		fmt.Printf("Input %d\n", i)
 		for _, entity := range entities {

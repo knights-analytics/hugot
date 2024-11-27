@@ -5,7 +5,7 @@ package pipelines
 type RustTokenizer struct {
 }
 
-func loadRustTokenizer(_ []byte, _ *basePipeline) error {
+func loadRustTokenizer(_ []byte, _ *BasePipeline) error {
 	return nil
 }
 
@@ -15,4 +15,4 @@ func decodeRust(_ []uint32, _ *Tokenizer) string {
 	return ""
 }
 
-func allInputTokensRust(_ *basePipeline) {}
+func allInputTokensRust(_ *BasePipeline) {}

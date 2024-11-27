@@ -15,7 +15,7 @@ type GoSession struct {
 	Model *gonnx.Model
 }
 
-func createGoPipeline(pipeline *basePipeline, onnxBytes []byte, _ *options.Options) error {
+func createGoPipeline(pipeline *BasePipeline, onnxBytes []byte, _ *options.Options) error {
 
 	model, err := gonnx.NewModelFromBytes(onnxBytes)
 	if err != nil {
@@ -99,7 +99,7 @@ func createInputTensorsGo(batch *PipelineBatch, inputsMeta []InputOutputInfo) er
 	return nil
 }
 
-func runGoSessionOnBatch(batch *PipelineBatch, p *basePipeline) error {
+func runGoSessionOnBatch(batch *PipelineBatch, p *BasePipeline) error {
 
 	tensors, err := p.GoSession.Model.Run(batch.InputValues.(map[string]tensor.Tensor))
 	if err != nil {

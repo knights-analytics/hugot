@@ -32,7 +32,7 @@ type XLASession struct {
 	Destroy func()
 }
 
-func createXLAPipeline(pipeline *basePipeline, onnxBytes []byte, _ *options.Options) error {
+func createXLAPipeline(pipeline *BasePipeline, onnxBytes []byte, _ *options.Options) error {
 
 	model, err := onnx.Parse(onnxBytes)
 	if err != nil {
@@ -154,7 +154,7 @@ func createInputTensorsXLA(batch *PipelineBatch, inputsMeta []InputOutputInfo) e
 	return nil
 }
 
-func runXLASessionOnBatch(batch *PipelineBatch, p *basePipeline) error {
+func runXLASessionOnBatch(batch *PipelineBatch, p *BasePipeline) error {
 
 	var outputs []*tensors.Tensor
 	defer func() {

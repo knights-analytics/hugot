@@ -17,7 +17,7 @@ type ORTSession struct {
 	Destroy    func() error
 }
 
-func createORTPipeline(pipeline *basePipeline, onnxBytes []byte, options *options.Options) error {
+func createORTPipeline(pipeline *BasePipeline, onnxBytes []byte, options *options.Options) error {
 
 	optionsCast := options.RuntimeOptions.(*ort.SessionOptions)
 
@@ -109,7 +109,7 @@ func createInputTensorsORT(batch *PipelineBatch, inputsMeta []InputOutputInfo) e
 	return nil
 }
 
-func runORTSessionOnBatch(batch *PipelineBatch, p *basePipeline) error {
+func runORTSessionOnBatch(batch *PipelineBatch, p *BasePipeline) error {
 	actualBatchSize := int64(len(batch.Input))
 	maxSequenceLength := int64(batch.MaxSequenceLength)
 	var err error

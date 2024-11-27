@@ -1,4 +1,4 @@
-package pipelines
+package hfPipelines
 
 import (
 	"encoding/json"
@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/knights-analytics/hugot/options"
+	"github.com/knights-analytics/hugot/pipelines"
 	"github.com/knights-analytics/hugot/util"
 
 	jsoniter "github.com/json-iterator/go"
@@ -60,7 +61,7 @@ main()
 **/
 
 type ZeroShotClassificationPipeline struct {
-	*basePipeline
+	*pipelines.BasePipeline
 	IDLabelMap         map[int]string
 	Sequences          []string
 	Labels             []string
@@ -89,21 +90,21 @@ type ZeroShotOutput struct {
 // options
 
 // WithMultilabel can be used to set whether the pipeline is multilabel.
-func WithMultilabel(multilabel bool) PipelineOption[*ZeroShotClassificationPipeline] {
+func WithMultilabel(multilabel bool) pipelines.PipelineOption[*ZeroShotClassificationPipeline] {
 	return func(pipeline *ZeroShotClassificationPipeline) {
 		pipeline.Multilabel = multilabel
 	}
 }
 
 // WithLabels can be used to set the labels to classify the examples.
-func WithLabels(labels []string) PipelineOption[*ZeroShotClassificationPipeline] {
+func WithLabels(labels []string) pipelines.PipelineOption[*ZeroShotClassificationPipeline] {
 	return func(pipeline *ZeroShotClassificationPipeline) {
 		pipeline.Labels = labels
 	}
 }
 
 // WithHypothesisTemplate can be used to set the hypothesis template for classification.
-func WithHypothesisTemplate(hypothesisTemplate string) PipelineOption[*ZeroShotClassificationPipeline] {
+func WithHypothesisTemplate(hypothesisTemplate string) pipelines.PipelineOption[*ZeroShotClassificationPipeline] {
 	return func(pipeline *ZeroShotClassificationPipeline) {
 		pipeline.HypothesisTemplate = hypothesisTemplate
 	}
@@ -155,14 +156,14 @@ func createSequencePairs(sequences interface{}, labels []string, hypothesisTempl
 }
 
 // NewZeroShotClassificationPipeline create new Zero Shot Classification Pipeline.
-func NewZeroShotClassificationPipeline(config PipelineConfig[*ZeroShotClassificationPipeline], s *options.Options) (*ZeroShotClassificationPipeline, error) {
+func NewZeroShotClassificationPipeline(config pipelines.PipelineConfig[*ZeroShotClassificationPipeline], s *options.Options) (*ZeroShotClassificationPipeline, error) {
 
-	defaultPipeline, err := newBasePipeline(config, s)
+	defaultPipeline, err := pipelines.NewBasePipeline(config, s)
 	if err != nil {
 		return nil, err
 	}
 
-	pipeline := &ZeroShotClassificationPipeline{basePipeline: defaultPipeline}
+	pipeline := &ZeroShotClassificationPipeline{BasePipeline: defaultPipeline}
 	for _, o := range config.Options {
 		o(pipeline)
 	}
@@ -237,18 +238,18 @@ func NewZeroShotClassificationPipeline(config PipelineConfig[*ZeroShotClassifica
 	return pipeline, err
 }
 
-func (p *ZeroShotClassificationPipeline) Preprocess(batch *PipelineBatch, inputs []string) error {
+func (p *ZeroShotClassificationPipeline) Preprocess(batch *pipelines.PipelineBatch, inputs []string) error {
 	start := time.Now()
-	tokenizeInputs(batch, p.Tokenizer, inputs)
+	pipelines.TokenizeInputs(batch, p.Tokenizer, inputs)
 	atomic.AddUint64(&p.Tokenizer.TokenizerTimings.NumCalls, 1)
 	atomic.AddUint64(&p.Tokenizer.TokenizerTimings.TotalNS, uint64(time.Since(start)))
-	err := createInputTensors(batch, p.InputsMeta, p.Runtime)
+	err := pipelines.CreateInputTensors(batch, p.InputsMeta, p.Runtime)
 	return err
 }
 
-func (p *ZeroShotClassificationPipeline) Forward(batch *PipelineBatch) error {
+func (p *ZeroShotClassificationPipeline) Forward(batch *pipelines.PipelineBatch) error {
 	start := time.Now()
-	err := runSessionOnBatch(batch, p.basePipeline)
+	err := pipelines.RunSessionOnBatch(batch, p.BasePipeline)
 	if err != nil {
 		return err
 	}
@@ -381,9 +382,9 @@ func (p *ZeroShotClassificationPipeline) Postprocess(outputTensors [][][]float32
 
 func (p *ZeroShotClassificationPipeline) RunPipeline(inputs []string) (*ZeroShotOutput, error) {
 	var outputTensors [][][]float32
-	batch := NewBatch()
+	batch := pipelines.NewBatch()
 	var runErrors []error
-	defer func(*PipelineBatch) {
+	defer func(*pipelines.PipelineBatch) {
 		runErrors = append(runErrors, batch.Destroy())
 	}(batch)
 
@@ -423,9 +424,9 @@ func (p *ZeroShotClassificationPipeline) RunPipeline(inputs []string) (*ZeroShot
 
 // PIPELINE INTERFACE IMPLEMENTATION
 
-func (p *ZeroShotClassificationPipeline) GetMetadata() PipelineMetadata {
-	return PipelineMetadata{
-		OutputsInfo: []OutputInfo{
+func (p *ZeroShotClassificationPipeline) GetMetadata() pipelines.PipelineMetadata {
+	return pipelines.PipelineMetadata{
+		OutputsInfo: []pipelines.OutputInfo{
 			{
 				Name:       p.OutputsMeta[0].Name,
 				Dimensions: p.OutputsMeta[0].Dimensions,
@@ -436,7 +437,7 @@ func (p *ZeroShotClassificationPipeline) GetMetadata() PipelineMetadata {
 
 // Destroy frees the pipeline resources.
 func (p *ZeroShotClassificationPipeline) Destroy() error {
-	return p.basePipeline.Destroy()
+	return p.BasePipeline.Destroy()
 }
 
 func (p *ZeroShotClassificationPipeline) GetStats() []string {
@@ -453,7 +454,7 @@ func (p *ZeroShotClassificationPipeline) GetStats() []string {
 	}
 }
 
-func (p *ZeroShotClassificationPipeline) Run(inputs []string) (PipelineBatchOutput, error) {
+func (p *ZeroShotClassificationPipeline) Run(inputs []string) (pipelines.PipelineBatchOutput, error) {
 	return p.RunPipeline(inputs)
 }
 

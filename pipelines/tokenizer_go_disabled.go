@@ -4,7 +4,7 @@ package pipelines
 
 type GoTokenizer struct{}
 
-func loadGoTokenizer(_ []byte, _ *basePipeline) error {
+func loadGoTokenizer(_ []byte, _ *BasePipeline) error {
 	return nil
 }
 
