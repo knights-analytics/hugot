@@ -7,5 +7,5 @@ import (
 )
 
 func NewXLASession(opts ...options.WithOption) (*Session, error) {
-	return newSession("XLA", opts...)
+	return newSession("XLA", nil, opts...)
 }

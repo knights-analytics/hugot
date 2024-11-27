@@ -1,3 +1,5 @@
+//go:build !NOORT || ALL
+
 package pipelines
 
 import (

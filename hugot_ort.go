@@ -1,3 +1,5 @@
+//go:build !NOORT || ALL
+
 package hugot
 
 import (
@@ -12,7 +14,11 @@ import (
 )
 
 func NewORTSession(opts ...options.WithOption) (*Session, error) {
-	return newSession("ORT", opts...)
+	session, err := newSession("ORT", ortSession, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return session, nil
 }
 
 func ortSession(session *Session) (*Session, error) {

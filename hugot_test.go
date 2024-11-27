@@ -1,7 +1,6 @@
 package hugot
 
 import (
-	"context"
 	_ "embed"
 	"encoding/json"
 	"fmt"
@@ -12,7 +11,6 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/knights-analytics/hugot/pipelines"
-	"github.com/knights-analytics/hugot/util"
 )
 
 //go:embed testData/tokenExpected.json
@@ -35,63 +33,6 @@ func TestDownloadValidation(t *testing.T) {
 	// a model with the required files in a subfolder should not error
 	err = validateDownloadHfModel("distilbert/distilbert-base-uncased-finetuned-sst-2-english", "main", "")
 	assert.NoError(t, err)
-}
-
-// README: test the readme examples
-
-func TestReadmeExample(t *testing.T) {
-	check := func(err error) {
-		if err != nil {
-			panic(err.Error())
-		}
-	}
-
-	// start a new session. This looks for the onnxruntime.so library in its default path, e.g. /usr/lib/onnxruntime.so
-	session, err := NewORTSession()
-	// if your onnxruntime.so is somewhere else, you can explicitly set it by using WithOnnxLibraryPath
-	// session, err := hugot.NewORTSession(WithOnnxLibraryPath("/path/to/onnxruntime.so"))
-	check(err)
-	// A successfully created hugot session needs to be destroyed when you're done
-	defer func(session *Session) {
-		err := session.Destroy()
-		check(err)
-	}(session)
-
-	// Let's download an onnx sentiment test classification model in the current directory
-	// note: if you compile your library with build flag NODOWNLOAD, this will exclude the downloader.
-	// Useful in case you just want the core engine (because you already have the models) and want to
-	// drop the dependency on huggingfaceModelDownloader.
-	modelPath, err := session.DownloadModel("KnightsAnalytics/distilbert-base-uncased-finetuned-sst-2-english", "./", NewDownloadOptions())
-	check(err)
-
-	defer func(modelPath string) {
-		err := util.FileSystem.Delete(context.Background(), modelPath)
-		if err != nil {
-			t.FailNow()
-		}
-	}(modelPath)
-
-	// we now create the configuration for the text classification pipeline we want to create.
-	// Options to the pipeline can be set here using the Options field
-	config := TextClassificationConfig{
-		ModelPath: modelPath,
-		Name:      "testPipeline",
-	}
-	// then we create out pipeline.
-	// Note: the pipeline will also be added to the session object so all pipelines can be destroyed at once
-	sentimentPipeline, err := NewPipeline(session, config)
-	check(err)
-
-	// we can now use the pipeline for prediction on a batch of strings
-	batch := []string{"This movie is disgustingly good !", "The director tried too much"}
-	batchResult, err := sentimentPipeline.RunPipeline(batch)
-	check(err)
-
-	// and do whatever we want with it :)
-	s, err := json.Marshal(batchResult)
-	check(err)
-	fmt.Println(string(s))
-	// {"ClassificationOutputs":[[{"Label":"POSITIVE","Score":0.9998536}],[{"Label":"NEGATIVE","Score":0.99752176}]]}
 }
 
 // FEATURE EXTRACTION
