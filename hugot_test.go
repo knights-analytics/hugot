@@ -638,7 +638,8 @@ func zeroShotClassificationPipeline(t *testing.T, session *Session) {
 		t.Run(tt.name, func(t *testing.T) {
 			classificationPipeline.Labels = tt.labels
 			classificationPipeline.Multilabel = tt.multilabel
-			batchResult, _ := tt.pipeline.RunPipeline(tt.sequences)
+			batchResult, err := tt.pipeline.RunPipeline(tt.sequences)
+			check(t, err)
 			assert.Equal(t, len(batchResult.GetOutput()), len(tt.expected.ClassificationOutputs))
 
 			for ind, expected := range tt.expected.ClassificationOutputs {

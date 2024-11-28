@@ -1,4 +1,4 @@
-//go:build !NOORT || ALL
+//go:build !NOORT || XLA || ALL
 
 package pipelines
 

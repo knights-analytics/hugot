@@ -47,18 +47,18 @@ func createXLAPipeline(pipeline *BasePipeline, onnxBytes []byte, _ *options.Opti
 	}
 
 	ctx := context.New()
+	ctx = ctx.Reuse() // Mark it to reuse variables: it will be an error to create a new variable – for safety.
 	// Read variables from ONNX model.
 	err = model.VariablesToContext(ctx)
 	if err != nil {
 		return err
 	}
-	ctx = ctx.Reuse() // Mark it to reuse variables: it will be an error to create a new variable – for safety.
 
 	backend := backends.New()
 
 	// Create model executor.
 	exec := context.NewExec(
-		backend, ctx.In("model"),
+		backend, ctx,
 		func(ctx *context.Context, inputs []*graph.Node) (choice *graph.Node) {
 			inputsMap := map[string]*graph.Node{
 				"input_ids":      inputs[0],
@@ -92,7 +92,7 @@ func loadInputOutputMetaXLA(model *onnx.Model) ([]InputOutputInfo, []InputOutput
 
 	for i, name := range model.InputsNames {
 		shape := model.InputsShapes[i]
-		dimensions := make([]int64, shape.Size())
+		dimensions := make([]int64, len(shape.Dimensions))
 		for j, y := range shape.Dimensions {
 			dimensions[j] = int64(y)
 		}
@@ -103,11 +103,11 @@ func loadInputOutputMetaXLA(model *onnx.Model) ([]InputOutputInfo, []InputOutput
 	}
 	for i, name := range model.OutputsNames {
 		shape := model.OutputsShapes[i]
-		dimensions := make([]int64, shape.Size())
+		dimensions := make([]int64, len(shape.Dimensions))
 		for j, y := range shape.Dimensions {
 			dimensions[j] = int64(y)
 		}
-		outputs = append(inputs, InputOutputInfo{
+		outputs = append(outputs, InputOutputInfo{
 			Name:       name,
 			Dimensions: dimensions,
 		})
@@ -116,7 +116,9 @@ func loadInputOutputMetaXLA(model *onnx.Model) ([]InputOutputInfo, []InputOutput
 }
 
 func createInputTensorsXLA(batch *PipelineBatch, inputsMeta []InputOutputInfo) error {
-	tensorSize := len(batch.Input) * (batch.MaxSequenceLength)
+	batchSize := len(batch.Input)
+	tensorSize := batchSize * batch.MaxSequenceLength
+
 	inputTensors := make([]*tensors.Tensor, len(inputsMeta))
 	for i, inputMeta := range inputsMeta {
 		backingSlice := make([]int64, tensorSize)
@@ -142,7 +144,7 @@ func createInputTensorsXLA(batch *PipelineBatch, inputsMeta []InputOutputInfo) e
 				counter++
 			}
 		}
-		inputTensors[i] = tensors.FromFlatDataAndDimensions(backingSlice, inputMeta.Dimensions.ValuesInt()...)
+		inputTensors[i] = tensors.FromFlatDataAndDimensions(backingSlice, batchSize, batch.MaxSequenceLength)
 	}
 	batch.InputValues = inputTensors
 	batch.DestroyInputs = func() error {
@@ -172,7 +174,7 @@ func runXLASessionOnBatch(batch *PipelineBatch, p *BasePipeline) error {
 
 	convertedOutput := make([][]float32, len(outputs))
 	for i, t := range outputs {
-		convertedOutput[i] = t.Value().([]float32)
+		convertedOutput[i] = tensors.CopyFlatData[float32](t)
 	}
 
 	// store resulting tensors

@@ -38,7 +38,7 @@ RUN --mount=src=./go.mod,dst=/go.mod \
     tar -C /usr/local -xzf go${GO_VERSION}.linux-amd64.tar.gz && \
     rm go${GO_VERSION}.linux-amd64.tar.gz && \
     # XLA/goMLX
-    curl -sSf https://raw.githubusercontent.com/gomlx/gopjrt/main/cmd/install_linux_amd64.sh | bash && \
+    curl -sSf https://raw.githubusercontent.com/gomlx/gopjrt/refs/heads/build/cmd/install_linux_amd64_amazonlinux.sh | bash && \
     # onnxruntime cpu and gpu \
     sed -i 's/\r//g' /download-onnxruntime.sh && chmod +x /download-onnxruntime.sh && \
     /download-onnxruntime.sh ${ONNXRUNTIME_VERSION}
