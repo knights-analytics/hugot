@@ -41,7 +41,7 @@ func TestDownloadValidation(t *testing.T) {
 func featureExtractionPipeline(t *testing.T, session *Session) {
 	t.Helper()
 
-	modelPath := "./models/KnightsAnalytics_all-MiniLM-L6-v2"
+	modelPath := "./models/sentence-transformers_all-MiniLM-L6-v2"
 
 	config := FeatureExtractionConfig{
 		ModelPath:    modelPath,
@@ -141,7 +141,7 @@ func featureExtractionPipeline(t *testing.T, session *Session) {
 		ModelPath:    modelPath,
 		Name:         "testPipelineSentence",
 		OnnxFilename: "model.onnx",
-		Options:      []FeatureExtractionOption{taskPipelines.WithOutputName("token_embeddings")},
+		Options:      []FeatureExtractionOption{taskPipelines.WithOutputName("last_hidden_state")},
 	}
 	pipelineSentence, err := NewPipeline(session, configSentence)
 	check(t, err)
@@ -166,7 +166,7 @@ func featureExtractionPipeline(t *testing.T, session *Session) {
 func featureExtractionPipelineValidation(t *testing.T, session *Session) {
 	t.Helper()
 
-	modelPath := "./models/KnightsAnalyrics_all-MiniLM-L6-v2"
+	modelPath := "./models/sentence-transformers_all-MiniLM-L6-v2"
 	config := FeatureExtractionConfig{
 		ModelPath:    modelPath,
 		OnnxFilename: "model.onnx",
@@ -402,7 +402,7 @@ func textClassificationPipelineMulti(t *testing.T, session *Session) {
 func textClassificationPipelineValidation(t *testing.T, session *Session) {
 	t.Helper()
 
-	modelPath := "./models/KnightsAnalyrics_distilbert-base-uncased-finetuned-sst-2-english"
+	modelPath := "./models/KnightsAnalytics_distilbert-base-uncased-finetuned-sst-2-english"
 
 	config := TextClassificationConfig{
 		ModelPath: modelPath,

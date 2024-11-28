@@ -13,7 +13,6 @@ mkdir -p "$models_dir"
 # Download test models
 echo "Downloading test models to $models_dir"
 
-optimum-cli export onnx --model sentence-transformers/all-MiniLM-L6-v2 --opset=14 --task=feature-extraction "$models_dir/KnightsAnalytics_all-MiniLM-L6-v2"
 optimum-cli export onnx --model distilbert/distilbert-base-uncased-finetuned-sst-2-english --opset=13 --task=text-classification "$models_dir/KnightsAnalytics_distilbert-base-uncased-finetuned-sst-2-english"
 optimum-cli export onnx --model SamLowe/roberta-base-go_emotions --opset=14 --task=text-classification "$models_dir/KnightsAnalytics_roberta-base-go_emotions"
 optimum-cli export onnx --model MoritzLaurer/deberta-v3-base-zeroshot-v1 --opset=13 --task=zero-shot-classification "$models_dir/KnightsAnalytics_deberta-v3-base-zeroshot-v1"
