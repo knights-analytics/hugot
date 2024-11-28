@@ -27,6 +27,9 @@ func TestFeatureExtractionPipelineORT(t *testing.T) {
 }
 
 func TestFeatureExtractionPipelineORTCuda(t *testing.T) {
+	if os.Getenv("CI") != "" {
+		t.SkipNow()
+	}
 	opts := []options.WithOption{
 		options.WithOnnxLibraryPath("/usr/lib64/onnxruntime-gpu/libonnxruntime.so"),
 		options.WithCuda(map[string]string{
@@ -74,6 +77,9 @@ func TestTextClassificationPipelineORT(t *testing.T) {
 }
 
 func TestTextClassificationPipelineORTCuda(t *testing.T) {
+	if os.Getenv("CI") != "" {
+		t.SkipNow()
+	}
 	opts := []options.WithOption{
 		options.WithOnnxLibraryPath("/usr/lib64/onnxruntime-gpu/libonnxruntime.so"),
 		options.WithCuda(map[string]string{
@@ -109,6 +115,9 @@ func TestTextClassificationPipelineMultiORT(t *testing.T) {
 }
 
 func TestTextClassificationPipelineORTMultiCuda(t *testing.T) {
+	if os.Getenv("CI") != "" {
+		t.SkipNow()
+	}
 	opts := []options.WithOption{
 		options.WithOnnxLibraryPath("/usr/lib64/onnxruntime-gpu/libonnxruntime.so"),
 		options.WithCuda(map[string]string{
@@ -138,7 +147,8 @@ func TestTextClassificationPipelineValidationORT(t *testing.T) {
 // Zero shot
 
 func TestZeroShotClassificationPipelineORT(t *testing.T) {
-	session, err := NewORTSession()
+	opts := []options.WithOption{options.WithOnnxLibraryPath(onnxRuntimeSharedLibrary)}
+	session, err := NewORTSession(opts...)
 	check(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
@@ -148,6 +158,9 @@ func TestZeroShotClassificationPipelineORT(t *testing.T) {
 }
 
 func TestZeroShotClassificationPipelineORTCuda(t *testing.T) {
+	if os.Getenv("CI") != "" {
+		t.SkipNow()
+	}
 	opts := []options.WithOption{
 		options.WithOnnxLibraryPath("/usr/lib64/onnxruntime-gpu/libonnxruntime.so"),
 		options.WithCuda(map[string]string{
@@ -188,6 +201,9 @@ func TestTokenClassificationPipelineORT(t *testing.T) {
 }
 
 func TestTokenClassificationPipelineORTCuda(t *testing.T) {
+	if os.Getenv("CI") != "" {
+		t.SkipNow()
+	}
 	opts := []options.WithOption{
 		options.WithOnnxLibraryPath("/usr/lib64/onnxruntime-gpu/libonnxruntime.so"),
 		options.WithCuda(map[string]string{
@@ -305,10 +321,9 @@ func TestReadmeExample(t *testing.T) {
 		}
 	}
 
-	// start a new session. This looks for the onnxruntime.so library in its default path, e.g. /usr/lib/onnxruntime.so
-	session, err := NewORTSession()
+	// start a new session. By default this looks for the onnxruntime.so library in its default path, e.g. /usr/lib/onnxruntime.so
 	// if your onnxruntime.so is somewhere else, you can explicitly set it by using WithOnnxLibraryPath
-	// session, err := hugot.NewORTSession(WithOnnxLibraryPath("/path/to/onnxruntime.so"))
+	session, err := NewORTSession(options.WithOnnxLibraryPath("/usr/lib64/onnxruntime.so"))
 	check(err)
 	// A successfully created hugot session needs to be destroyed when you're done
 	defer func(session *Session) {

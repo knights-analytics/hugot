@@ -39,8 +39,9 @@ func TestDownloadValidation(t *testing.T) {
 // FEATURE EXTRACTION
 
 func featureExtractionPipeline(t *testing.T, session *Session) {
+	t.Helper()
 
-	modelPath := "./models/sentence-transformers_all-MiniLM-L6-v2"
+	modelPath := "./models/KnightsAnalytics_all-MiniLM-L6-v2"
 
 	config := FeatureExtractionConfig{
 		ModelPath:    modelPath,
@@ -140,7 +141,7 @@ func featureExtractionPipeline(t *testing.T, session *Session) {
 		ModelPath:    modelPath,
 		Name:         "testPipelineSentence",
 		OnnxFilename: "model.onnx",
-		Options:      []FeatureExtractionOption{taskPipelines.WithOutputName("last_hidden_state")},
+		Options:      []FeatureExtractionOption{taskPipelines.WithOutputName("token_embeddings")},
 	}
 	pipelineSentence, err := NewPipeline(session, configSentence)
 	check(t, err)
@@ -163,8 +164,9 @@ func featureExtractionPipeline(t *testing.T, session *Session) {
 }
 
 func featureExtractionPipelineValidation(t *testing.T, session *Session) {
+	t.Helper()
 
-	modelPath := "./models/sentence-transformers_all-MiniLM-L6-v2"
+	modelPath := "./models/KnightsAnalyrics_all-MiniLM-L6-v2"
 	config := FeatureExtractionConfig{
 		ModelPath:    modelPath,
 		OnnxFilename: "model.onnx",
@@ -186,6 +188,7 @@ func featureExtractionPipelineValidation(t *testing.T, session *Session) {
 // Text classification
 
 func textClassificationPipeline(t *testing.T, session *Session) {
+	t.Helper()
 
 	modelPath := "./models/KnightsAnalytics_distilbert-base-uncased-finetuned-sst-2-english"
 
@@ -239,8 +242,9 @@ func textClassificationPipeline(t *testing.T, session *Session) {
 }
 
 func textClassificationPipelineMulti(t *testing.T, session *Session) {
+	t.Helper()
 
-	modelPathMulti := "./models/SamLowe_roberta-base-go_emotions-onnx"
+	modelPathMulti := "./models/KnightsAnalytics_roberta-base-go_emotions"
 
 	configMulti := TextClassificationConfig{
 		ModelPath:    modelPathMulti,
@@ -396,8 +400,9 @@ func textClassificationPipelineMulti(t *testing.T, session *Session) {
 }
 
 func textClassificationPipelineValidation(t *testing.T, session *Session) {
+	t.Helper()
 
-	modelPath := "./models/KnightsAnalytics_distilbert-base-uncased-finetuned-sst-2-english"
+	modelPath := "./models/KnightsAnalyrics_distilbert-base-uncased-finetuned-sst-2-english"
 
 	config := TextClassificationConfig{
 		ModelPath: modelPath,
@@ -433,8 +438,9 @@ func textClassificationPipelineValidation(t *testing.T, session *Session) {
 // Zero shot
 
 func zeroShotClassificationPipeline(t *testing.T, session *Session) {
+	t.Helper()
 
-	modelPath := "./models/protectai_deberta-v3-base-zeroshot-v1-onnx"
+	modelPath := "./models/KnightsAnalytics_deberta-v3-base-zeroshot-v1"
 
 	config := ZeroShotClassificationConfig{
 		ModelPath: modelPath,
@@ -656,8 +662,9 @@ func zeroShotClassificationPipeline(t *testing.T, session *Session) {
 }
 
 func zeroShotClassificationPipelineValidation(t *testing.T, session *Session) {
+	t.Helper()
 
-	modelPath := "./models/protectai_deberta-v3-base-zeroshot-v1-onnx"
+	modelPath := "./models/KnightsAnalytics_deberta-v3-base-zeroshot-v1"
 
 	config := TextClassificationConfig{
 		ModelPath: modelPath,
@@ -690,6 +697,7 @@ func zeroShotClassificationPipelineValidation(t *testing.T, session *Session) {
 // Token classification
 
 func tokenClassificationPipeline(t *testing.T, session *Session) {
+	t.Helper()
 
 	modelPath := "./models/KnightsAnalytics_distilbert-NER"
 	configSimple := TokenClassificationConfig{
@@ -761,6 +769,7 @@ func tokenClassificationPipeline(t *testing.T, session *Session) {
 }
 
 func tokenClassificationPipelineValidation(t *testing.T, session *Session) {
+	t.Helper()
 
 	modelPath := "./models/KnightsAnalytics_distilbert-NER"
 	configSimple := TokenClassificationConfig{
@@ -798,7 +807,7 @@ func tokenClassificationPipelineValidation(t *testing.T, session *Session) {
 // No same name
 
 func noSameNamePipeline(t *testing.T, session *Session) {
-
+	t.Helper()
 	modelPath := "./models/KnightsAnalytics_distilbert-NER"
 	configSimple := TokenClassificationConfig{
 		ModelPath: modelPath,
