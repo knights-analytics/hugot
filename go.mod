@@ -8,7 +8,7 @@ require (
 	github.com/daulet/tokenizers v1.20.2
 	github.com/gomlx/exceptions v0.0.3
 	github.com/gomlx/gomlx v0.15.3
-	github.com/gomlx/onnx-gomlx v0.1.3
+	github.com/gomlx/onnx-gomlx v0.1.4
 	github.com/json-iterator/go v1.1.12
 	github.com/mattn/go-isatty v0.0.20
 	github.com/stretchr/testify v1.10.0
