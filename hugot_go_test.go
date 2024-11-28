@@ -58,28 +58,6 @@ func TestTextClassificationPipelineValidationGo(t *testing.T) {
 	textClassificationPipelineValidation(t, session)
 }
 
-// Zero shot
-
-func TestZeroShotClassificationPipelineGo(t *testing.T) {
-	session, err := NewGoSession()
-	check(t, err)
-	defer func(session *Session) {
-		destroyErr := session.Destroy()
-		check(t, destroyErr)
-	}(session)
-	zeroShotClassificationPipeline(t, session)
-}
-
-func TestZeroShotClassificationPipelineValidationGo(t *testing.T) {
-	session, err := NewGoSession()
-	check(t, err)
-	defer func(session *Session) {
-		destroyErr := session.Destroy()
-		check(t, destroyErr)
-	}(session)
-	zeroShotClassificationPipelineValidation(t, session)
-}
-
 // Token classification
 
 func TestTokenClassificationPipelineGo(t *testing.T) {
@@ -100,6 +78,28 @@ func TestTokenClassificationPipelineValidationGo(t *testing.T) {
 		check(t, destroyErr)
 	}(session)
 	tokenClassificationPipelineValidation(t, session)
+}
+
+// Zero shot
+
+func TestZeroShotClassificationPipelineGo(t *testing.T) {
+	session, err := NewGoSession()
+	check(t, err)
+	defer func(session *Session) {
+		destroyErr := session.Destroy()
+		check(t, destroyErr)
+	}(session)
+	zeroShotClassificationPipeline(t, session)
+}
+
+func TestZeroShotClassificationPipelineValidationGo(t *testing.T) {
+	session, err := NewGoSession()
+	check(t, err)
+	defer func(session *Session) {
+		destroyErr := session.Destroy()
+		check(t, destroyErr)
+	}(session)
+	zeroShotClassificationPipelineValidation(t, session)
 }
 
 // No same name

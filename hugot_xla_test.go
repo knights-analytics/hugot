@@ -60,28 +60,6 @@ func TestTextClassificationPipelineValidationXLA(t *testing.T) {
 	textClassificationPipelineValidation(t, session)
 }
 
-// Zero shot
-
-func TestZeroShotClassificationPipelineXLA(t *testing.T) {
-	session, err := NewXLASession()
-	check(t, err)
-	defer func(session *Session) {
-		destroyErr := session.Destroy()
-		check(t, destroyErr)
-	}(session)
-	zeroShotClassificationPipeline(t, session)
-}
-
-func TestZeroShotClassificationPipelineValidationXLA(t *testing.T) {
-	session, err := NewXLASession()
-	check(t, err)
-	defer func(session *Session) {
-		destroyErr := session.Destroy()
-		check(t, destroyErr)
-	}(session)
-	zeroShotClassificationPipelineValidation(t, session)
-}
-
 // Token classification
 
 func TestTokenClassificationPipelineXLA(t *testing.T) {
@@ -102,6 +80,28 @@ func TestTokenClassificationPipelineValidationXLA(t *testing.T) {
 		check(t, destroyErr)
 	}(session)
 	tokenClassificationPipelineValidation(t, session)
+}
+
+// Zero shot
+
+func TestZeroShotClassificationPipelineXLA(t *testing.T) {
+	session, err := NewXLASession()
+	check(t, err)
+	defer func(session *Session) {
+		destroyErr := session.Destroy()
+		check(t, destroyErr)
+	}(session)
+	zeroShotClassificationPipeline(t, session)
+}
+
+func TestZeroShotClassificationPipelineValidationXLA(t *testing.T) {
+	session, err := NewXLASession()
+	check(t, err)
+	defer func(session *Session) {
+		destroyErr := session.Destroy()
+		check(t, destroyErr)
+	}(session)
+	zeroShotClassificationPipelineValidation(t, session)
 }
 
 // No same name

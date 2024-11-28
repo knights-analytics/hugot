@@ -161,7 +161,7 @@ var runCommand = &cli.Command{
 				if err != nil {
 					return err
 				}
-				modelPath, err = session.DownloadModel(modelPath, modelsDir, hugot.NewDownloadOptions())
+				modelPath, err = hugot.DownloadModel(modelPath, modelsDir, hugot.NewDownloadOptions())
 				if err != nil {
 					return err
 				}

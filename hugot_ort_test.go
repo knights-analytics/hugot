@@ -144,49 +144,6 @@ func TestTextClassificationPipelineValidationORT(t *testing.T) {
 	textClassificationPipelineValidation(t, session)
 }
 
-// Zero shot
-
-func TestZeroShotClassificationPipelineORT(t *testing.T) {
-	opts := []options.WithOption{options.WithOnnxLibraryPath(onnxRuntimeSharedLibrary)}
-	session, err := NewORTSession(opts...)
-	check(t, err)
-	defer func(session *Session) {
-		destroyErr := session.Destroy()
-		check(t, destroyErr)
-	}(session)
-	zeroShotClassificationPipeline(t, session)
-}
-
-func TestZeroShotClassificationPipelineORTCuda(t *testing.T) {
-	if os.Getenv("CI") != "" {
-		t.SkipNow()
-	}
-	opts := []options.WithOption{
-		options.WithOnnxLibraryPath("/usr/lib64/onnxruntime-gpu/libonnxruntime.so"),
-		options.WithCuda(map[string]string{
-			"device_id": "0",
-		}),
-	}
-	session, err := NewORTSession(opts...)
-	check(t, err)
-	defer func(session *Session) {
-		destroyErr := session.Destroy()
-		check(t, destroyErr)
-	}(session)
-	zeroShotClassificationPipeline(t, session)
-}
-
-func TestZeroShotClassificationPipelineValidationORT(t *testing.T) {
-	opts := []options.WithOption{options.WithOnnxLibraryPath(onnxRuntimeSharedLibrary)}
-	session, err := NewORTSession(opts...)
-	check(t, err)
-	defer func(session *Session) {
-		destroyErr := session.Destroy()
-		check(t, destroyErr)
-	}(session)
-	zeroShotClassificationPipelineValidation(t, session)
-}
-
 // Token classification
 
 func TestTokenClassificationPipelineORT(t *testing.T) {
@@ -228,6 +185,49 @@ func TestTokenClassificationPipelineValidationORT(t *testing.T) {
 		check(t, destroyErr)
 	}(session)
 	tokenClassificationPipelineValidation(t, session)
+}
+
+// Zero shot
+
+func TestZeroShotClassificationPipelineORT(t *testing.T) {
+	opts := []options.WithOption{options.WithOnnxLibraryPath(onnxRuntimeSharedLibrary)}
+	session, err := NewORTSession(opts...)
+	check(t, err)
+	defer func(session *Session) {
+		destroyErr := session.Destroy()
+		check(t, destroyErr)
+	}(session)
+	zeroShotClassificationPipeline(t, session)
+}
+
+func TestZeroShotClassificationPipelineORTCuda(t *testing.T) {
+	if os.Getenv("CI") != "" {
+		t.SkipNow()
+	}
+	opts := []options.WithOption{
+		options.WithOnnxLibraryPath("/usr/lib64/onnxruntime-gpu/libonnxruntime.so"),
+		options.WithCuda(map[string]string{
+			"device_id": "0",
+		}),
+	}
+	session, err := NewORTSession(opts...)
+	check(t, err)
+	defer func(session *Session) {
+		destroyErr := session.Destroy()
+		check(t, destroyErr)
+	}(session)
+	zeroShotClassificationPipeline(t, session)
+}
+
+func TestZeroShotClassificationPipelineValidationORT(t *testing.T) {
+	opts := []options.WithOption{options.WithOnnxLibraryPath(onnxRuntimeSharedLibrary)}
+	session, err := NewORTSession(opts...)
+	check(t, err)
+	defer func(session *Session) {
+		destroyErr := session.Destroy()
+		check(t, destroyErr)
+	}(session)
+	zeroShotClassificationPipelineValidation(t, session)
 }
 
 // No Same Name
@@ -321,7 +321,7 @@ func TestReadmeExample(t *testing.T) {
 		}
 	}
 
-	// start a new session. By default this looks for the onnxruntime.so library in its default path, e.g. /usr/lib/onnxruntime.so
+	// start a new session. By default, this looks for the onnxruntime.so library in its default path, e.g. /usr/lib/onnxruntime.so
 	// if your onnxruntime.so is somewhere else, you can explicitly set it by using WithOnnxLibraryPath
 	session, err := NewORTSession(options.WithOnnxLibraryPath("/usr/lib64/onnxruntime.so"))
 	check(err)
@@ -335,7 +335,7 @@ func TestReadmeExample(t *testing.T) {
 	// note: if you compile your library with build flag NODOWNLOAD, this will exclude the downloader.
 	// Useful in case you just want the core engine (because you already have the models) and want to
 	// drop the dependency on huggingfaceModelDownloader.
-	modelPath, err := session.DownloadModel("KnightsAnalytics/distilbert-base-uncased-finetuned-sst-2-english", "./", NewDownloadOptions())
+	modelPath, err := DownloadModel("KnightsAnalytics/distilbert-base-uncased-finetuned-sst-2-english", "./", NewDownloadOptions())
 	check(err)
 
 	defer func(modelPath string) {

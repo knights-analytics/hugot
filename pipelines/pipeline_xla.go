@@ -9,7 +9,6 @@ import (
 
 	"github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/backends"
-	_ "github.com/gomlx/gomlx/backends/xla"
 	_ "github.com/gomlx/gomlx/backends/xla/cpu/static"
 	"github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
