@@ -14,17 +14,19 @@ import (
 )
 
 func NewORTSession(opts ...options.WithOption) (*Session, error) {
-	session, err := newSession("ORT", ortSession, opts...)
+	session, err := newSession("ORT", opts...)
 	if err != nil {
 		return nil, err
 	}
-	return session, nil
+	err = ortSession(session)
+
+	return session, err
 }
 
-func ortSession(session *Session) (*Session, error) {
+func ortSession(session *Session) error {
 
 	if ort.IsInitialized() {
-		return nil, errors.New("another session is currently active, and only one session can be active at one time")
+		return errors.New("another session is currently active, and only one session can be active at one time")
 	}
 
 	// set session options and initialise
@@ -32,15 +34,14 @@ func ortSession(session *Session) (*Session, error) {
 		if initialised {
 			destroyErr := session.Destroy()
 			envErr := ort.DestroyEnvironment()
-			return nil, errors.Join(err, destroyErr, envErr)
+			return errors.Join(err, destroyErr, envErr)
 		}
-		return nil, err
+		return err
 	}
 	session.environmentDestroy = func() error {
 		return ort.DestroyEnvironment()
 	}
-
-	return session, nil
+	return nil
 }
 
 func (s *Session) initialiseORT() (bool, error) {

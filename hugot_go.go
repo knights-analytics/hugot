@@ -7,5 +7,5 @@ import (
 )
 
 func NewGoSession(opts ...options.WithOption) (*Session, error) {
-	return newSession("GO", nil, opts...)
+	return newSession("GO", opts...)
 }

@@ -20,7 +20,7 @@ type Session struct {
 	environmentDestroy              func() error
 }
 
-func newSession(runtime string, additionalSetup func(*Session) (*Session, error), opts ...options.WithOption) (*Session, error) {
+func newSession(runtime string, opts ...options.WithOption) (*Session, error) {
 
 	parsedOptions := options.Defaults()
 	parsedOptions.Runtime = runtime
@@ -43,15 +43,7 @@ func newSession(runtime string, additionalSetup func(*Session) (*Session, error)
 		},
 	}
 
-	switch parsedOptions.Runtime {
-	case "GO", "XLA":
-		// No session specific initialisation for these currently
-		return session, nil
-	case "ORT":
-		return additionalSetup(session)
-	default:
-		return nil, errors.New("unsupported runtime: " + parsedOptions.Runtime)
-	}
+	return session, nil
 }
 
 type pipelineMap[T pipelines.Pipeline] map[string]T
