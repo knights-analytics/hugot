@@ -10,7 +10,7 @@ import (
 
 	"github.com/urfave/cli/v2"
 
-	util "github.com/knights-analytics/hugot/utils"
+	"github.com/knights-analytics/hugot/util"
 )
 
 //go:embed testData/textClassification.jsonl
