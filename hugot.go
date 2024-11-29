@@ -1,36 +1,54 @@
 package hugot
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"slices"
 
-	util "github.com/knights-analytics/hugot/utils"
-
-	ort "github.com/yalue/onnxruntime_go"
-
+	"github.com/knights-analytics/hugot/options"
 	"github.com/knights-analytics/hugot/pipelines"
+	"github.com/knights-analytics/hugot/taskPipelines"
 )
 
 // Session allows for the creation of new pipelines and holds the pipeline already created.
 type Session struct {
-	featureExtractionPipelines      pipelineMap[*pipelines.FeatureExtractionPipeline]
-	tokenClassificationPipelines    pipelineMap[*pipelines.TokenClassificationPipeline]
-	textClassificationPipelines     pipelineMap[*pipelines.TextClassificationPipeline]
-	zeroShotClassificationPipelines pipelineMap[*pipelines.ZeroShotClassificationPipeline]
-	ortOptions                      *ort.SessionOptions
+	featureExtractionPipelines      pipelineMap[*taskPipelines.FeatureExtractionPipeline]
+	tokenClassificationPipelines    pipelineMap[*taskPipelines.TokenClassificationPipeline]
+	textClassificationPipelines     pipelineMap[*taskPipelines.TextClassificationPipeline]
+	zeroShotClassificationPipelines pipelineMap[*taskPipelines.ZeroShotClassificationPipeline]
+	models                          map[string]*pipelines.Model
+	options                         *options.Options
+	environmentDestroy              func() error
+}
+
+func newSession(runtime string, opts ...options.WithOption) (*Session, error) {
+
+	parsedOptions := options.Defaults()
+	parsedOptions.Runtime = runtime
+	// Collect options into a struct, so they can be applied in the correct order later
+	for _, option := range opts {
+		err := option(parsedOptions)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	session := &Session{
+		featureExtractionPipelines:      map[string]*taskPipelines.FeatureExtractionPipeline{},
+		textClassificationPipelines:     map[string]*taskPipelines.TextClassificationPipeline{},
+		tokenClassificationPipelines:    map[string]*taskPipelines.TokenClassificationPipeline{},
+		zeroShotClassificationPipelines: map[string]*taskPipelines.ZeroShotClassificationPipeline{},
+		models:                          map[string]*pipelines.Model{},
+		options:                         parsedOptions,
+		environmentDestroy: func() error {
+			return nil
+		},
+	}
+
+	return session, nil
 }
 
 type pipelineMap[T pipelines.Pipeline] map[string]T
-
-func (m pipelineMap[T]) Destroy() error {
-	var err error
-	for _, p := range m {
-		err = p.Destroy()
-	}
-	return err
-}
 
 func (m pipelineMap[T]) GetStats() []string {
 	var stats []string
@@ -41,183 +59,32 @@ func (m pipelineMap[T]) GetStats() []string {
 }
 
 // FeatureExtractionConfig is the configuration for a feature extraction pipeline
-type FeatureExtractionConfig = pipelines.PipelineConfig[*pipelines.FeatureExtractionPipeline]
+type FeatureExtractionConfig = pipelines.PipelineConfig[*taskPipelines.FeatureExtractionPipeline]
 
 // FeatureExtractionOption is an option for a feature extraction pipeline
-type FeatureExtractionOption = pipelines.PipelineOption[*pipelines.FeatureExtractionPipeline]
+type FeatureExtractionOption = pipelines.PipelineOption[*taskPipelines.FeatureExtractionPipeline]
 
 // TextClassificationConfig is the configuration for a text classification pipeline
-type TextClassificationConfig = pipelines.PipelineConfig[*pipelines.TextClassificationPipeline]
+type TextClassificationConfig = pipelines.PipelineConfig[*taskPipelines.TextClassificationPipeline]
 
 // type ZSCConfig = pipelines.PipelineConfig[*pipelines.ZeroShotClassificationPipeline]
 
-type ZeroShotClassificationConfig = pipelines.PipelineConfig[*pipelines.ZeroShotClassificationPipeline]
+type ZeroShotClassificationConfig = pipelines.PipelineConfig[*taskPipelines.ZeroShotClassificationPipeline]
 
 // TextClassificationOption is an option for a text classification pipeline
-type TextClassificationOption = pipelines.PipelineOption[*pipelines.TextClassificationPipeline]
+type TextClassificationOption = pipelines.PipelineOption[*taskPipelines.TextClassificationPipeline]
 
 // TokenClassificationConfig is the configuration for a token classification pipeline
-type TokenClassificationConfig = pipelines.PipelineConfig[*pipelines.TokenClassificationPipeline]
+type TokenClassificationConfig = pipelines.PipelineConfig[*taskPipelines.TokenClassificationPipeline]
 
 // TokenClassificationOption is an option for a token classification pipeline
-type TokenClassificationOption = pipelines.PipelineOption[*pipelines.TokenClassificationPipeline]
-
-// NewSession is the main entrypoint to hugot and is used to create a new hugot session object.
-// ortLibraryPath should be the path to onnxruntime.so. If it's the empty string, hugot will try
-// to load the library from the default location (/usr/lib/onnxruntime.so).
-// A new session must be destroyed when it's not needed any more to avoid memory leaks. See the Destroy method.
-// Note moreover that there can be at most one hugot session active (i.e., the Session object is a singleton),
-// otherwise NewSession will return an error.
-func NewSession(options ...WithOption) (*Session, error) {
-
-	if ort.IsInitialized() {
-		return nil, errors.New("another session is currently active, and only one session can be active at one time")
-	}
-
-	session := &Session{
-		featureExtractionPipelines:      map[string]*pipelines.FeatureExtractionPipeline{},
-		textClassificationPipelines:     map[string]*pipelines.TextClassificationPipeline{},
-		tokenClassificationPipelines:    map[string]*pipelines.TokenClassificationPipeline{},
-		zeroShotClassificationPipelines: map[string]*pipelines.ZeroShotClassificationPipeline{},
-	}
-
-	// set session options and initialise
-	if initialised, err := session.initialiseORT(options...); err != nil {
-		if initialised {
-			destroyErr := session.Destroy()
-			return nil, errors.Join(err, destroyErr)
-		}
-		return nil, err
-	}
-
-	return session, nil
-}
-
-func (s *Session) initialiseORT(options ...WithOption) (bool, error) {
-
-	// Collect options into a struct, so they can be applied in the correct order later
-	o := &ortOptions{}
-	for _, option := range options {
-		option(o)
-	}
-
-	// Set pre-initialisation options
-	if o.libraryPath != "" {
-		ortPathExists, err := util.FileSystem.Exists(context.Background(), o.libraryPath)
-		if err != nil {
-			return false, err
-		}
-		if !ortPathExists {
-			return false, fmt.Errorf("cannot find the ort library at: %s", o.libraryPath)
-		}
-		ort.SetSharedLibraryPath(o.libraryPath)
-	}
-
-	// Start OnnxRuntime
-	if err := ort.InitializeEnvironment(); err != nil {
-		return false, err
-	}
-
-	if o.telemetry {
-		if err := ort.EnableTelemetry(); err != nil {
-			return true, err
-		}
-	} else {
-		if err := ort.DisableTelemetry(); err != nil {
-			return true, err
-		}
-	}
-
-	// Create session options for use in all pipelines
-	sessionOptions, optionsError := ort.NewSessionOptions()
-	if optionsError != nil {
-		return true, optionsError
-	}
-	s.ortOptions = sessionOptions
-
-	if o.intraOpNumThreads != 0 {
-		if err := sessionOptions.SetIntraOpNumThreads(o.intraOpNumThreads); err != nil {
-			return true, err
-		}
-	}
-	if o.interOpNumThreads != 0 {
-		if err := sessionOptions.SetInterOpNumThreads(o.interOpNumThreads); err != nil {
-			return true, err
-		}
-	}
-	if o.cpuMemArenaSet {
-		if err := sessionOptions.SetCpuMemArena(o.cpuMemArena); err != nil {
-			return true, err
-		}
-	}
-	if o.memPatternSet {
-		if err := sessionOptions.SetMemPattern(o.memPattern); err != nil {
-			return true, err
-		}
-	}
-	if o.cudaOptionsSet {
-		cudaOptions, optErr := ort.NewCUDAProviderOptions()
-		if optErr != nil {
-			return true, optErr
-		}
-		if len(o.cudaOptions) > 0 {
-			optErr = cudaOptions.Update(o.cudaOptions)
-			if optErr != nil {
-				return true, optErr
-			}
-		}
-		if err := sessionOptions.AppendExecutionProviderCUDA(cudaOptions); err != nil {
-			return true, err
-		}
-	}
-	if o.coreMLOptionsSet {
-		if err := sessionOptions.AppendExecutionProviderCoreML(o.coreMLOptions); err != nil {
-			return true, err
-		}
-	}
-	if o.directMLOptionsSet {
-		if err := sessionOptions.AppendExecutionProviderDirectML(o.directMLOptions); err != nil {
-			return true, err
-		}
-	}
-	if o.openVINOOptionsSet {
-		if err := sessionOptions.AppendExecutionProviderOpenVINO(o.openVINOOptions); err != nil {
-			return true, err
-		}
-	}
-	if o.tensorRTOptionsSet {
-		tensorRTOptions, optErr := ort.NewTensorRTProviderOptions()
-		if optErr != nil {
-			return true, optErr
-		}
-		if len(o.cudaOptions) > 0 {
-			optErr = tensorRTOptions.Update(o.tensorRTOptions)
-			if optErr != nil {
-				return true, optErr
-			}
-		}
-		if err := sessionOptions.AppendExecutionProviderTensorRT(tensorRTOptions); err != nil {
-			return true, err
-		}
-	}
-
-	return true, nil
-}
-
-type pipelineNotFoundError struct {
-	pipelineName string
-}
-
-func (e *pipelineNotFoundError) Error() string {
-	return fmt.Sprintf("Pipeline with name %s not found", e.pipelineName)
-}
+type TokenClassificationOption = pipelines.PipelineOption[*taskPipelines.TokenClassificationPipeline]
 
 // NewPipeline can be used to create a new pipeline of type T. The initialised pipeline will be returned and it
 // will also be stored in the session object so that all created pipelines can be destroyed with session.Destroy()
 // at once.
 func NewPipeline[T pipelines.Pipeline](s *Session, pipelineConfig pipelines.PipelineConfig[T]) (T, error) {
 	var pipeline T
-	var err error
 	if pipelineConfig.Name == "" {
 		return pipeline, errors.New("a name for the pipeline is required")
 	}
@@ -230,34 +97,71 @@ func NewPipeline[T pipelines.Pipeline](s *Session, pipelineConfig pipelines.Pipe
 		return pipeline, getError
 	}
 
+	// Load model if it has not been loaded already
+	model, ok := s.models[pipelineConfig.ModelPath]
+	if !ok {
+		model = &pipelines.Model{
+			Path:         pipelineConfig.ModelPath,
+			OnnxFilename: pipelineConfig.OnnxFilename,
+		}
+
+		err := pipelines.LoadOnnxModelBytes(model)
+		if err != nil {
+			return pipeline, err
+		}
+
+		err = pipelines.CreateModelBackend(model, s.options)
+		if err != nil {
+			return pipeline, err
+		}
+
+		tkErr := pipelines.LoadTokenizer(model, s.options)
+		if tkErr != nil {
+			return pipeline, tkErr
+		}
+
+		model.Destroy = func() error {
+			destroyErr := model.Tokenizer.Destroy()
+			switch s.options.Runtime {
+			case "ORT":
+				destroyErr = errors.Join(destroyErr, model.ORTModel.Destroy())
+			case "XLA":
+				model.XLAModel.Destroy()
+			}
+			return destroyErr
+		}
+
+		s.models[pipelineConfig.ModelPath] = model
+	}
+
 	switch any(pipeline).(type) {
-	case *pipelines.TokenClassificationPipeline:
-		config := any(pipelineConfig).(pipelines.PipelineConfig[*pipelines.TokenClassificationPipeline])
-		pipelineInitialised, err := pipelines.NewTokenClassificationPipeline(config, s.ortOptions)
+	case *taskPipelines.TokenClassificationPipeline:
+		config := any(pipelineConfig).(pipelines.PipelineConfig[*taskPipelines.TokenClassificationPipeline])
+		pipelineInitialised, err := taskPipelines.NewTokenClassificationPipeline(config, s.options, model)
 		if err != nil {
 			return pipeline, err
 		}
 		s.tokenClassificationPipelines[config.Name] = pipelineInitialised
 		pipeline = any(pipelineInitialised).(T)
-	case *pipelines.TextClassificationPipeline:
-		config := any(pipelineConfig).(pipelines.PipelineConfig[*pipelines.TextClassificationPipeline])
-		pipelineInitialised, err := pipelines.NewTextClassificationPipeline(config, s.ortOptions)
+	case *taskPipelines.TextClassificationPipeline:
+		config := any(pipelineConfig).(pipelines.PipelineConfig[*taskPipelines.TextClassificationPipeline])
+		pipelineInitialised, err := taskPipelines.NewTextClassificationPipeline(config, s.options, model)
 		if err != nil {
 			return pipeline, err
 		}
 		s.textClassificationPipelines[config.Name] = pipelineInitialised
 		pipeline = any(pipelineInitialised).(T)
-	case *pipelines.FeatureExtractionPipeline:
-		config := any(pipelineConfig).(pipelines.PipelineConfig[*pipelines.FeatureExtractionPipeline])
-		pipelineInitialised, err := pipelines.NewFeatureExtractionPipeline(config, s.ortOptions)
+	case *taskPipelines.FeatureExtractionPipeline:
+		config := any(pipelineConfig).(pipelines.PipelineConfig[*taskPipelines.FeatureExtractionPipeline])
+		pipelineInitialised, err := taskPipelines.NewFeatureExtractionPipeline(config, s.options, model)
 		if err != nil {
 			return pipeline, err
 		}
 		s.featureExtractionPipelines[config.Name] = pipelineInitialised
 		pipeline = any(pipelineInitialised).(T)
-	case *pipelines.ZeroShotClassificationPipeline:
-		config := any(pipelineConfig).(pipelines.PipelineConfig[*pipelines.ZeroShotClassificationPipeline])
-		pipelineInitialised, err := pipelines.NewZeroShotClassificationPipeline(config, s.ortOptions)
+	case *taskPipelines.ZeroShotClassificationPipeline:
+		config := any(pipelineConfig).(pipelines.PipelineConfig[*taskPipelines.ZeroShotClassificationPipeline])
+		pipelineInitialised, err := taskPipelines.NewZeroShotClassificationPipeline(config, s.options, model)
 		if err != nil {
 			return pipeline, err
 		}
@@ -266,32 +170,32 @@ func NewPipeline[T pipelines.Pipeline](s *Session, pipelineConfig pipelines.Pipe
 	default:
 		return pipeline, fmt.Errorf("not implemented")
 	}
-	return pipeline, err
+	return pipeline, nil
 }
 
 // GetPipeline can be used to retrieve a pipeline of type T with the given name from the session
 func GetPipeline[T pipelines.Pipeline](s *Session, name string) (T, error) {
 	var pipeline T
 	switch any(pipeline).(type) {
-	case *pipelines.TokenClassificationPipeline:
+	case *taskPipelines.TokenClassificationPipeline:
 		p, ok := s.tokenClassificationPipelines[name]
 		if !ok {
 			return pipeline, &pipelineNotFoundError{pipelineName: name}
 		}
 		return any(p).(T), nil
-	case *pipelines.TextClassificationPipeline:
+	case *taskPipelines.TextClassificationPipeline:
 		p, ok := s.textClassificationPipelines[name]
 		if !ok {
 			return pipeline, &pipelineNotFoundError{pipelineName: name}
 		}
 		return any(p).(T), nil
-	case *pipelines.FeatureExtractionPipeline:
+	case *taskPipelines.FeatureExtractionPipeline:
 		p, ok := s.featureExtractionPipelines[name]
 		if !ok {
 			return pipeline, &pipelineNotFoundError{pipelineName: name}
 		}
 		return any(p).(T), nil
-	case *pipelines.ZeroShotClassificationPipeline:
+	case *taskPipelines.ZeroShotClassificationPipeline:
 		p, ok := s.zeroShotClassificationPipelines[name]
 		if !ok {
 			return pipeline, &pipelineNotFoundError{pipelineName: name}
@@ -302,17 +206,12 @@ func GetPipeline[T pipelines.Pipeline](s *Session, name string) (T, error) {
 	}
 }
 
-// Destroy deletes the hugot session and onnxruntime environment and all initialized pipelines, freeing memory.
-// A hugot session should be destroyed when not neeeded any more, preferably with a defer() call.
-func (s *Session) Destroy() error {
-	return errors.Join(
-		s.featureExtractionPipelines.Destroy(),
-		s.tokenClassificationPipelines.Destroy(),
-		s.textClassificationPipelines.Destroy(),
-		s.zeroShotClassificationPipelines.Destroy(),
-		s.ortOptions.Destroy(),
-		ort.DestroyEnvironment(),
-	)
+type pipelineNotFoundError struct {
+	pipelineName string
+}
+
+func (e *pipelineNotFoundError) Error() string {
+	return fmt.Sprintf("Pipeline with name %s not found", e.pipelineName)
 }
 
 // GetStats returns runtime statistics for all initialized pipelines for profiling purposes. We currently record for each pipeline:
@@ -330,4 +229,18 @@ func (s *Session) GetStats() []string {
 		s.featureExtractionPipelines.GetStats(),
 		s.zeroShotClassificationPipelines.GetStats(),
 	)
+}
+
+// Destroy deletes the hugot session and onnxruntime environment and all initialized pipelines, freeing memory.
+// A hugot session should be destroyed when not neeeded any more, preferably with a defer() call.
+func (s *Session) Destroy() error {
+	var err error
+	for _, model := range s.models {
+		err = errors.Join(err, model.Destroy())
+	}
+	err = errors.Join(
+		s.options.Destroy(),
+		s.environmentDestroy(),
+	)
+	return err
 }

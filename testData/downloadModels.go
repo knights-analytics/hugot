@@ -5,25 +5,13 @@ import (
 	"os"
 
 	"github.com/knights-analytics/hugot"
-	util "github.com/knights-analytics/hugot/utils"
+	"github.com/knights-analytics/hugot/util"
 )
-
-var onnxruntimeSharedLibrary = "/usr/lib64/onnxruntime.so"
 
 // download the test models.
 func main() {
 	if ok, err := util.FileSystem.Exists(context.Background(), "./models"); err == nil {
 		if !ok {
-			session, err := hugot.NewSession(hugot.WithOnnxLibraryPath(onnxruntimeSharedLibrary))
-			if err != nil {
-				panic(err)
-			}
-			defer func(s hugot.Session) {
-				err := s.Destroy()
-				if err != nil {
-					panic(err)
-				}
-			}(*session)
 
 			err = os.MkdirAll("./models", os.ModePerm)
 			if err != nil {
@@ -32,13 +20,13 @@ func main() {
 			downloadOptions := hugot.NewDownloadOptions()
 			for _, modelName := range []string{
 				"sentence-transformers/all-MiniLM-L6-v2",
-				"protectai/deberta-v3-base-zeroshot-v1-onnx",
+				"KnightsAnalytics/deberta-v3-base-zeroshot-v1",
 				"KnightsAnalytics/distilbert-base-uncased-finetuned-sst-2-english",
 				"KnightsAnalytics/distilbert-NER",
-				"SamLowe/roberta-base-go_emotions-onnx"} {
-				_, err := session.DownloadModel(modelName, "./models", downloadOptions)
-				if err != nil {
-					panic(err)
+				"KnightsAnalytics/roberta-base-go_emotions"} {
+				_, dlErr := hugot.DownloadModel(modelName, "./models", downloadOptions)
+				if dlErr != nil {
+					panic(dlErr)
 				}
 			}
 		}

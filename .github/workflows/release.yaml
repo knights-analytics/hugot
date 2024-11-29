@@ -50,10 +50,6 @@ jobs:
           path: ./artifacts/onnxruntime-linux-x64.so
       - uses: actions/upload-artifact@v4
         with:
-          name: onnxruntime-linux-x64-gpu
-          path: ./artifacts/onnxruntime-linux-x64-gpu
-      - uses: actions/upload-artifact@v4
-        with:
           name: hugot-cli-linux-x64
           path: ./artifacts/hugot-cli-linux-x64
       - name: Publish Test Report
@@ -120,16 +116,10 @@ jobs:
         with:
           name: hugot-cli-linux-x64
           path: .
-      - uses: actions/download-artifact@v4
-        with:
-          name: onnxruntime-linux-x64-gpu
-          path: ./onnxruntime-linux-x64-gpu
       - name: Display structure of downloaded files
         run: ls -R
-      - name: zip onnxruntime gpu
-        run: zip onnxruntime-linux-x64-gpu.zip ./onnxruntime-linux-x64-gpu -r
       - uses: ncipollo/release-action@v1
         with:
-          artifacts: "libtokenizers.a, onnxruntime-linux-x64.so, onnxruntime-linux-x64-gpu.zip, hugot-cli-linux-x64"
+          artifacts: "libtokenizers.a, onnxruntime-linux-x64.so, hugot-cli-linux-x64"
           generateReleaseNotes: true
           skipIfReleaseExists: true

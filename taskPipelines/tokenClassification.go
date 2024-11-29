@@ -1,4 +1,4 @@
-package pipelines
+package taskPipelines
 
 import (
 	"errors"
@@ -9,10 +9,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/daulet/tokenizers"
-	ort "github.com/yalue/onnxruntime_go"
-
-	util "github.com/knights-analytics/hugot/utils"
+	"github.com/knights-analytics/hugot/options"
+	"github.com/knights-analytics/hugot/pipelines"
+	"github.com/knights-analytics/hugot/util"
 
 	jsoniter "github.com/json-iterator/go"
 )
@@ -20,7 +19,7 @@ import (
 // TokenClassificationPipeline is a go version of huggingface tokenClassificationPipeline.
 // https://github.com/huggingface/transformers/blob/main/src/transformers/pipelines/token_classification.py
 type TokenClassificationPipeline struct {
-	basePipeline
+	*pipelines.BasePipeline
 	IDLabelMap          map[int]string
 	AggregationStrategy string
 	IgnoreLabels        []string
@@ -60,49 +59,37 @@ func (t *TokenClassificationOutput) GetOutput() []any {
 
 // WithSimpleAggregation sets the aggregation strategy for the token labels to simple
 // It reproduces simple aggregation from the huggingface implementation.
-func WithSimpleAggregation() PipelineOption[*TokenClassificationPipeline] {
+func WithSimpleAggregation() pipelines.PipelineOption[*TokenClassificationPipeline] {
 	return func(pipeline *TokenClassificationPipeline) {
 		pipeline.AggregationStrategy = "SIMPLE"
 	}
 }
 
 // WithoutAggregation returns the token labels.
-func WithoutAggregation() PipelineOption[*TokenClassificationPipeline] {
+func WithoutAggregation() pipelines.PipelineOption[*TokenClassificationPipeline] {
 	return func(pipeline *TokenClassificationPipeline) {
 		pipeline.AggregationStrategy = "NONE"
 	}
 }
 
-func WithIgnoreLabels(ignoreLabels []string) PipelineOption[*TokenClassificationPipeline] {
+func WithIgnoreLabels(ignoreLabels []string) pipelines.PipelineOption[*TokenClassificationPipeline] {
 	return func(pipeline *TokenClassificationPipeline) {
 		pipeline.IgnoreLabels = ignoreLabels
 	}
 }
 
 // NewTokenClassificationPipeline Initializes a feature extraction pipeline.
-func NewTokenClassificationPipeline(config PipelineConfig[*TokenClassificationPipeline], ortOptions *ort.SessionOptions) (*TokenClassificationPipeline, error) {
-	pipeline := &TokenClassificationPipeline{}
-	pipeline.ModelPath = config.ModelPath
-	pipeline.PipelineName = config.Name
-	pipeline.OrtOptions = ortOptions
-	pipeline.OnnxFilename = config.OnnxFilename
+func NewTokenClassificationPipeline(config pipelines.PipelineConfig[*TokenClassificationPipeline], s *options.Options, model *pipelines.Model) (*TokenClassificationPipeline, error) {
+
+	defaultPipeline, err := pipelines.NewBasePipeline(config, s, model)
+	if err != nil {
+		return nil, err
+	}
+
+	pipeline := &TokenClassificationPipeline{BasePipeline: defaultPipeline}
 	for _, o := range config.Options {
 		o(pipeline)
 	}
-
-	// onnx model init
-	model, err := loadOnnxModelBytes(pipeline.ModelPath, pipeline.OnnxFilename)
-	if err != nil {
-		return nil, err
-	}
-
-	// init of inputs and outputs
-	inputs, outputs, err := loadInputOutputMeta(model)
-	if err != nil {
-		return nil, err
-	}
-	pipeline.InputsMeta = inputs
-	pipeline.OutputsMeta = outputs
 
 	// Id label map
 	configPath := util.PathJoinSafe(config.ModelPath, "config.json")
@@ -126,31 +113,8 @@ func NewTokenClassificationPipeline(config PipelineConfig[*TokenClassificationPi
 		pipeline.IgnoreLabels = []string{"O"}
 	}
 
-	pipeline.PipelineTimings = &timings{}
-	pipeline.TokenizerTimings = &timings{}
-
-	// tokenizer init
-	pipeline.TokenizerOptions, err = getTokenizerOptions(inputs)
-	if err != nil {
-		return nil, err
-	}
 	// Additional options needed for postprocessing
-	pipeline.TokenizerOptions = append(pipeline.TokenizerOptions,
-		tokenizers.WithReturnSpecialTokensMask(),
-		tokenizers.WithReturnOffsets(),
-	)
-	tk, tkErr := loadTokenizer(pipeline.ModelPath)
-	if tkErr != nil {
-		return nil, tkErr
-	}
-	pipeline.Tokenizer = tk
-
-	// creation of the session. Only one output (either token or sentence embedding).
-	session, err := createSession(model, inputs, outputs, ortOptions)
-	if err != nil {
-		return nil, err
-	}
-	pipeline.OrtSession = session
+	pipelines.AllInputTokens(pipeline.BasePipeline)
 
 	err = pipeline.Validate()
 	if err != nil {
@@ -163,20 +127,15 @@ func NewTokenClassificationPipeline(config PipelineConfig[*TokenClassificationPi
 
 // GetMetadata returns metadata information about the pipeline, in particular:
 // OutputInfo: names and dimensions of the output layer used for token classification.
-func (p *TokenClassificationPipeline) GetMetadata() PipelineMetadata {
-	return PipelineMetadata{
-		OutputsInfo: []OutputInfo{
+func (p *TokenClassificationPipeline) GetMetadata() pipelines.PipelineMetadata {
+	return pipelines.PipelineMetadata{
+		OutputsInfo: []pipelines.OutputInfo{
 			{
-				Name:       p.OutputsMeta[0].Name,
-				Dimensions: p.OutputsMeta[0].Dimensions,
+				Name:       p.Model.OutputsMeta[0].Name,
+				Dimensions: p.Model.OutputsMeta[0].Dimensions,
 			},
 		},
 	}
-}
-
-// Destroy frees the feature extraction pipeline resources.
-func (p *TokenClassificationPipeline) Destroy() error {
-	return destroySession(p.Tokenizer, p.OrtSession)
 }
 
 // GetStats returns the runtime statistics for the pipeline.
@@ -184,9 +143,9 @@ func (p *TokenClassificationPipeline) GetStats() []string {
 	return []string{
 		fmt.Sprintf("Statistics for pipeline: %s", p.PipelineName),
 		fmt.Sprintf("Tokenizer: Total time=%s, Execution count=%d, Average query time=%s",
-			time.Duration(p.TokenizerTimings.TotalNS),
-			p.TokenizerTimings.NumCalls,
-			time.Duration(float64(p.TokenizerTimings.TotalNS)/math.Max(1, float64(p.TokenizerTimings.NumCalls)))),
+			time.Duration(p.Model.Tokenizer.TokenizerTimings.TotalNS),
+			p.Model.Tokenizer.TokenizerTimings.NumCalls,
+			time.Duration(float64(p.Model.Tokenizer.TokenizerTimings.TotalNS)/math.Max(1, float64(p.Model.Tokenizer.TokenizerTimings.NumCalls)))),
 		fmt.Sprintf("ONNX: Total time=%s, Execution count=%d, Average query time=%s",
 			time.Duration(p.PipelineTimings.TotalNS),
 			p.PipelineTimings.NumCalls,
@@ -198,7 +157,7 @@ func (p *TokenClassificationPipeline) GetStats() []string {
 func (p *TokenClassificationPipeline) Validate() error {
 	var validationErrors []error
 
-	outputDim := p.OutputsMeta[0].Dimensions
+	outputDim := p.Model.OutputsMeta[0].Dimensions
 	if len(outputDim) != 3 {
 		validationErrors = append(validationErrors,
 			fmt.Errorf("output for token classification must be three dimensional (input, sequence, logits)"))
@@ -215,19 +174,19 @@ func (p *TokenClassificationPipeline) Validate() error {
 }
 
 // Preprocess tokenizes the input strings.
-func (p *TokenClassificationPipeline) Preprocess(batch *PipelineBatch, inputs []string) error {
+func (p *TokenClassificationPipeline) Preprocess(batch *pipelines.PipelineBatch, inputs []string) error {
 	start := time.Now()
-	tokenizeInputs(batch, p.Tokenizer, inputs, p.TokenizerOptions)
-	atomic.AddUint64(&p.TokenizerTimings.NumCalls, 1)
-	atomic.AddUint64(&p.TokenizerTimings.TotalNS, uint64(time.Since(start)))
-	err := createInputTensors(batch, p.InputsMeta)
+	pipelines.TokenizeInputs(batch, p.Model.Tokenizer, inputs)
+	atomic.AddUint64(&p.Model.Tokenizer.TokenizerTimings.NumCalls, 1)
+	atomic.AddUint64(&p.Model.Tokenizer.TokenizerTimings.TotalNS, uint64(time.Since(start)))
+	err := pipelines.CreateInputTensors(batch, p.Model.InputsMeta, p.Runtime)
 	return err
 }
 
 // Forward performs the forward inference of the pipeline.
-func (p *TokenClassificationPipeline) Forward(batch *PipelineBatch) error {
+func (p *TokenClassificationPipeline) Forward(batch *pipelines.PipelineBatch) error {
 	start := time.Now()
-	err := runSessionOnBatch(batch, p.OrtSession, p.OutputsMeta)
+	err := pipelines.RunSessionOnBatch(batch, p.BasePipeline)
 	if err != nil {
 		return err
 	}
@@ -237,12 +196,12 @@ func (p *TokenClassificationPipeline) Forward(batch *PipelineBatch) error {
 }
 
 // Postprocess function for a token classification pipeline.
-func (p *TokenClassificationPipeline) Postprocess(batch *PipelineBatch) (*TokenClassificationOutput, error) {
+func (p *TokenClassificationPipeline) Postprocess(batch *pipelines.PipelineBatch) (*TokenClassificationOutput, error) {
 	if len(batch.Input) == 0 {
 		return &TokenClassificationOutput{}, nil
 	}
 
-	outputDims := p.OutputsMeta[0].Dimensions
+	outputDims := p.Model.OutputsMeta[0].Dimensions
 	tokenLogitsDim := int(outputDims[len(outputDims)-1])
 	outputs := make([][][]float32, len(batch.Input))              // holds the final output
 	inputVectors := make([][]float32, 0, batch.MaxSequenceLength) // holds the embeddings of each original token (no padding) for an input
@@ -256,8 +215,8 @@ func (p *TokenClassificationPipeline) Postprocess(batch *PipelineBatch) (*TokenC
 	// construct the output vectors by gathering the logits,
 	// however discard the embeddings of the padding tokens so that the output vector length
 	// for an input is equal to the number of original tokens
-	outputTensor := batch.OutputValues[0].(*ort.Tensor[float32])
-	for _, result := range outputTensor.GetData() {
+	outputTensor := batch.OutputValues[0]
+	for _, result := range outputTensor {
 		tokenVector[tokenVectorCounter] = result
 		if tokenVectorCounter == tokenLogitsDim-1 {
 			// raw result vector for token is now complete
@@ -308,7 +267,7 @@ func (p *TokenClassificationPipeline) Postprocess(batch *PipelineBatch) (*TokenC
 }
 
 // GatherPreEntities from batch of logits to list of pre-aggregated outputs
-func (p *TokenClassificationPipeline) GatherPreEntities(input tokenizedInput, output [][]float32) []Entity {
+func (p *TokenClassificationPipeline) GatherPreEntities(input pipelines.TokenizedInput, output [][]float32) []Entity {
 	sentence := input.Raw
 	var preEntities []Entity
 
@@ -341,7 +300,7 @@ func (p *TokenClassificationPipeline) GatherPreEntities(input tokenizedInput, ou
 	return preEntities
 }
 
-func (p *TokenClassificationPipeline) Aggregate(input tokenizedInput, preEntities []Entity) ([]Entity, error) {
+func (p *TokenClassificationPipeline) Aggregate(input pipelines.TokenizedInput, preEntities []Entity) ([]Entity, error) {
 	entities := make([]Entity, len(preEntities))
 	if p.AggregationStrategy == "SIMPLE" || p.AggregationStrategy == "NONE" {
 		for i, preEntity := range preEntities {
@@ -406,7 +365,7 @@ func (p *TokenClassificationPipeline) groupSubEntities(entities []Entity) Entity
 	score := util.Mean(scores)
 	// note: here we directly appeal to the tokenizer decoder with the tokenIds
 	// in the python code they pass the words to a token_to_string_method
-	word := p.Tokenizer.Decode(tokens, false)
+	word := pipelines.Decode(tokens, p.Model.Tokenizer)
 
 	return Entity{
 		Entity: entityType,
@@ -447,15 +406,15 @@ func (p *TokenClassificationPipeline) GroupEntities(entities []Entity) ([]Entity
 }
 
 // Run the pipeline on a string batch.
-func (p *TokenClassificationPipeline) Run(inputs []string) (PipelineBatchOutput, error) {
+func (p *TokenClassificationPipeline) Run(inputs []string) (pipelines.PipelineBatchOutput, error) {
 	return p.RunPipeline(inputs)
 }
 
 // RunPipeline is like Run but returns the concrete type rather than the interface.
 func (p *TokenClassificationPipeline) RunPipeline(inputs []string) (*TokenClassificationOutput, error) {
 	var runErrors []error
-	batch := NewBatch()
-	defer func(*PipelineBatch) {
+	batch := pipelines.NewBatch()
+	defer func(*pipelines.PipelineBatch) {
 		runErrors = append(runErrors, batch.Destroy())
 	}(batch)
 

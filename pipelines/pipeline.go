@@ -2,31 +2,48 @@ package pipelines
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"os"
 	"strings"
 
-	"github.com/daulet/tokenizers"
-	ort "github.com/yalue/onnxruntime_go"
-
-	util "github.com/knights-analytics/hugot/utils"
+	"github.com/knights-analytics/hugot/options"
+	"github.com/knights-analytics/hugot/util"
 )
 
 // BasePipeline can be embedded by a pipeline.
-type basePipeline struct {
-	ModelPath        string
-	OnnxFilename     string
-	PipelineName     string
-	OrtSession       *ort.DynamicAdvancedSession
-	OrtOptions       *ort.SessionOptions
-	Tokenizer        *tokenizers.Tokenizer
-	TokenizerOptions []tokenizers.EncodeOption
-	InputsMeta       []ort.InputOutputInfo
-	OutputsMeta      []ort.InputOutputInfo
-	TokenizerTimings *timings
-	PipelineTimings  *timings
+type BasePipeline struct {
+	PipelineName    string
+	Runtime         string
+	Model           *Model
+	PipelineTimings *timings
+}
+
+type InputOutputInfo struct {
+	// The name of the input or output
+	Name string
+	// The input or output's dimensions, if it's a tensor. This should be
+	// ignored for non-tensor types.
+	Dimensions Shape
+}
+
+type Shape []int64
+
+func (s Shape) String() string {
+	return fmt.Sprintf("%v", []int64(s))
+}
+
+func (s Shape) ValuesInt() []int {
+	output := make([]int, len(s))
+	for i, v := range s {
+		output[i] = int(v)
+	}
+	return output
+}
+
+// NewShape Returns a Shape, with the given dimensions.
+func NewShape(dimensions ...int64) Shape {
+	return dimensions
 }
 
 type OutputInfo struct {
@@ -44,7 +61,6 @@ type PipelineBatchOutput interface {
 
 // Pipeline is the interface that any pipeline must implement.
 type Pipeline interface {
-	Destroy() error                            // Destroy the pipeline along with its onnx session
 	GetStats() []string                        // Get the pipeline running stats
 	Validate() error                           // Validate the pipeline for correctness
 	GetMetadata() PipelineMetadata             // Return metadata information for the pipeline
@@ -68,8 +84,8 @@ type timings struct {
 	TotalNS  uint64
 }
 
-// tokenizedInput holds the result of running tokenizer on an input.
-type tokenizedInput struct {
+// TokenizedInput holds the result of running tokenizer on an input.
+type TokenizedInput struct {
 	Raw               string
 	Tokens            []string
 	TokenIDs          []uint32
@@ -77,70 +93,89 @@ type tokenizedInput struct {
 	AttentionMask     []uint32
 	SpecialTokensMask []uint32
 	MaxAttentionIndex int
-	Offsets           []tokenizers.Offset
+	Offsets           [][2]uint
 }
 
 // PipelineBatch represents a batch of inputs that runs through the pipeline.
 type PipelineBatch struct {
-	Input             []tokenizedInput
+	Input             []TokenizedInput
 	MaxSequenceLength int
-	InputValues       []ort.Value
-	OutputValues      []ort.Value
+	InputValues       any
+	DestroyInputs     func() error
+	OutputValues      [][]float32
 }
 
 func (b *PipelineBatch) Destroy() error {
-	destroyErrors := make([]error, 0, len(b.InputValues)+len(b.OutputValues))
-
-	for _, tensor := range b.InputValues {
-		destroyErrors = append(destroyErrors, tensor.Destroy())
-	}
-
-	for _, tensor := range b.OutputValues {
-		destroyErrors = append(destroyErrors, tensor.Destroy())
-	}
-	return errors.Join(destroyErrors...)
+	return b.DestroyInputs()
 }
 
 // NewBatch initializes a new batch for inference.
 func NewBatch() *PipelineBatch {
-	return &PipelineBatch{}
+	return &PipelineBatch{DestroyInputs: func() error {
+		return nil
+	}}
 }
 
-func loadTokenizer(modelPath string) (*tokenizers.Tokenizer, error) {
-	tokenizerBytes, err := util.ReadFileBytes(util.PathJoinSafe(modelPath, "tokenizer.json"))
-	if err != nil {
-		return nil, err
+func GetNames(info []InputOutputInfo) []string {
+	names := make([]string, 0, len(info))
+	for _, v := range info {
+		names = append(names, v.Name)
 	}
-
-	tk, err := tokenizers.FromBytes(tokenizerBytes)
-	if err != nil {
-		return nil, err
-	}
-	return tk, nil
+	return names
 }
 
-func loadOnnxModelBytes(modelPath string, modelFilename string) ([]byte, error) {
+func RunSessionOnBatch(batch *PipelineBatch, p *BasePipeline) error {
+	switch p.Runtime {
+	case "ORT":
+		return runORTSessionOnBatch(batch, p)
+	case "XLA":
+		return runXLASessionOnBatch(batch, p)
+	}
+	return nil
+}
+
+func CreateInputTensors(batch *PipelineBatch, inputsMeta []InputOutputInfo, runtime string) error {
+
+	switch runtime {
+	case "ORT":
+		return createInputTensorsORT(batch, inputsMeta)
+	case "XLA":
+		return createInputTensorsXLA(batch, inputsMeta)
+	}
+	return nil
+}
+
+func NewBasePipeline[T Pipeline](config PipelineConfig[T], s *options.Options, model *Model) (*BasePipeline, error) {
+	pipeline := &BasePipeline{}
+	pipeline.Runtime = s.Runtime
+	pipeline.PipelineName = config.Name
+	pipeline.Model = model
+	pipeline.PipelineTimings = &timings{}
+	return pipeline, nil
+}
+
+func LoadOnnxModelBytes(model *Model) error {
 	var modelOnnxFile string
-	onnxFiles, err := getOnnxFiles(modelPath)
+	onnxFiles, err := getOnnxFiles(model.Path)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	if len(onnxFiles) == 0 {
-		return nil, fmt.Errorf("no .onnx file detected at %s. There should be exactly .onnx file", modelPath)
+		return fmt.Errorf("no .onnx file detected at %s. There should be exactly .onnx file", model.Path)
 	}
 	if len(onnxFiles) > 1 {
-		if modelFilename == "" {
-			return nil, fmt.Errorf("multiple .onnx file detected at %s and no OnnxFilename specified", modelPath)
+		if model.OnnxFilename == "" {
+			return fmt.Errorf("multiple .onnx file detected at %s and no OnnxFilename specified", model.Path)
 		}
 		modelNameFound := false
 		for i := range onnxFiles {
-			if onnxFiles[i][1] == modelFilename {
+			if onnxFiles[i][1] == model.OnnxFilename {
 				modelNameFound = true
 				modelOnnxFile = util.PathJoinSafe(onnxFiles[i]...)
 			}
 		}
 		if !modelNameFound {
-			return nil, fmt.Errorf("file %s not found at %s", modelFilename, modelPath)
+			return fmt.Errorf("file %s not found at %s", model.OnnxFilename, model.Path)
 		}
 	} else {
 		modelOnnxFile = util.PathJoinSafe(onnxFiles[0]...)
@@ -148,35 +183,12 @@ func loadOnnxModelBytes(modelPath string, modelFilename string) ([]byte, error) 
 
 	onnxBytes, err := util.ReadFileBytes(modelOnnxFile)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	return onnxBytes, err
-}
 
-func loadInputOutputMeta(onnxBytes []byte) ([]ort.InputOutputInfo, []ort.InputOutputInfo, error) {
-	inputs, outputs, err := ort.GetInputOutputInfoWithONNXData(onnxBytes)
-	if err != nil {
-		return nil, nil, err
-	}
-	return inputs, outputs, nil
-}
+	model.OnnxBytes = onnxBytes
 
-func createSession(onnxBytes []byte, inputs, outputs []ort.InputOutputInfo, options *ort.SessionOptions) (*ort.DynamicAdvancedSession, error) {
-	var inputNames []string
-	var outputNames []string
-	for _, v := range inputs {
-		inputNames = append(inputNames, v.Name)
-	}
-	for _, v := range outputs {
-		outputNames = append(outputNames, v.Name)
-	}
-	session, err := ort.NewDynamicAdvancedSessionWithONNXData(
-		onnxBytes,
-		inputNames,
-		outputNames,
-		options,
-	)
-	return session, err
+	return err
 }
 
 func getOnnxFiles(path string) ([][]string, error) {
@@ -191,161 +203,14 @@ func getOnnxFiles(path string) ([][]string, error) {
 	return onnxFiles, err
 }
 
-func tokenizeInputs(batch *PipelineBatch, tk *tokenizers.Tokenizer, inputs []string, options []tokenizers.EncodeOption) {
-	outputs := make([]tokenizedInput, len(inputs))
-	maxSequence := 0
-	for i, input := range inputs {
-
-		output := tk.EncodeWithOptions(input,
-			true,
-			options...,
-		)
-
-		maxAttentionIndex := 0
-		for j, attentionMaskValue := range output.AttentionMask {
-			if attentionMaskValue != 0 {
-				maxAttentionIndex = j
-			}
-		}
-
-		outputs[i] = tokenizedInput{
-			Raw:               input,
-			Tokens:            output.Tokens,
-			TokenIDs:          output.IDs,
-			TypeIDs:           output.TypeIDs,
-			AttentionMask:     output.AttentionMask,
-			MaxAttentionIndex: maxAttentionIndex,
-			SpecialTokensMask: output.SpecialTokensMask,
-			Offsets:           output.Offsets, // we need the offsets here for postprocessing later
-		}
-		if maxAttentionIndex > maxSequence {
-			maxSequence = maxAttentionIndex
-		}
+func CreateModelBackend(model *Model, s *options.Options) error {
+	// creation of the session. Only one output (either token or sentence embedding).
+	var err error
+	switch s.Runtime {
+	case "ORT":
+		err = createORTModelBackend(model, s)
+	case "XLA":
+		err = createXLAModelBackend(model, s)
 	}
-	batch.Input = outputs
-	batch.MaxSequenceLength = maxSequence + 1
-}
-
-// createInputTensors creates ort input tensors.
-func createInputTensors(batch *PipelineBatch, inputsMeta []ort.InputOutputInfo) error {
-	tensorSize := len(batch.Input) * (batch.MaxSequenceLength)
-	batchSize := int64(len(batch.Input))
-
-	inputTensors := make([]ort.Value, len(inputsMeta))
-	var tensorCreationErr error
-
-	for i, inputMeta := range inputsMeta {
-		backingSlice := make([]int64, tensorSize)
-		counter := 0
-
-		for _, input := range batch.Input {
-			length := len(input.TokenIDs)
-			for j := 0; j < batch.MaxSequenceLength; j++ {
-				if j+1 <= length {
-					switch inputMeta.Name {
-					case "input_ids":
-						backingSlice[counter] = int64(input.TokenIDs[j])
-					case "token_type_ids":
-						backingSlice[counter] = int64(input.TypeIDs[j])
-					case "attention_mask":
-						backingSlice[counter] = int64(input.AttentionMask[j])
-					default:
-						return fmt.Errorf("input %s not recognized", inputMeta.Name)
-					}
-				} else {
-					backingSlice[counter] = 0 // pad with zero
-				}
-				counter++
-			}
-		}
-		inputTensors[i], tensorCreationErr = ort.NewTensor(ort.NewShape(batchSize, int64(batch.MaxSequenceLength)), backingSlice)
-		if tensorCreationErr != nil {
-			return tensorCreationErr
-		}
-	}
-	batch.InputValues = inputTensors
-	return nil
-}
-
-func getNames(info []ort.InputOutputInfo) []string {
-	names := make([]string, 0, len(info))
-	for _, v := range info {
-		names = append(names, v.Name)
-	}
-	return names
-}
-
-func getTokenizerOptions(inputs []ort.InputOutputInfo) ([]tokenizers.EncodeOption, error) {
-	var encodeOptions []tokenizers.EncodeOption
-	for _, input := range inputs {
-		switch input.Name {
-		case "input_ids":
-			encodeOptions = append(encodeOptions, tokenizers.WithReturnTokens())
-		case "token_type_ids":
-			encodeOptions = append(encodeOptions, tokenizers.WithReturnTypeIDs())
-		case "attention_mask":
-			encodeOptions = append(encodeOptions, tokenizers.WithReturnAttentionMask())
-		default:
-			return nil, fmt.Errorf("input %s not recognized", input.Name)
-		}
-	}
-	return encodeOptions, nil
-}
-
-func runSessionOnBatch(batch *PipelineBatch, session *ort.DynamicAdvancedSession, outputs []ort.InputOutputInfo) error {
-	actualBatchSize := int64(len(batch.Input))
-	maxSequenceLength := int64(batch.MaxSequenceLength)
-
-	// allocate vectors with right dimensions for the output
-	outputTensors := make([]ort.Value, len(outputs))
-	var outputCreationErr error
-
-	for outputIndex, meta := range outputs {
-		var batchDimSet bool
-		var tokenDimSet bool
-		actualDims := make([]int64, 0, len(meta.Dimensions))
-
-		for _, dim := range meta.Dimensions {
-			if dim == -1 {
-				if !batchDimSet {
-					actualDims = append(actualDims, actualBatchSize)
-					batchDimSet = true
-				} else if !tokenDimSet {
-					actualDims = append(actualDims, maxSequenceLength)
-					tokenDimSet = true
-				} else {
-					return fmt.Errorf("only two axis can be dynamic (batch size and number of tokens)")
-				}
-			} else {
-				actualDims = append(actualDims, dim)
-			}
-		}
-		outputShape := ort.NewShape(actualDims...)
-		outputTensors[outputIndex], outputCreationErr = ort.NewEmptyTensor[float32](outputShape)
-		if outputCreationErr != nil {
-			return outputCreationErr
-		}
-	}
-
-	errOnnx := session.Run(batch.InputValues, outputTensors)
-	if errOnnx != nil {
-		return errOnnx
-	}
-
-	// store resulting tensors
-	batch.OutputValues = outputTensors
-	return nil
-}
-
-func destroySession(tk *tokenizers.Tokenizer, session *ort.DynamicAdvancedSession) error {
-	var finalErr error
-	errTokenizer := tk.Close()
-	if errTokenizer != nil {
-		finalErr = errTokenizer
-	}
-	ortError := session.Destroy()
-	if ortError != nil {
-		finalErr = ortError
-	}
-	return finalErr
+	return err
 }

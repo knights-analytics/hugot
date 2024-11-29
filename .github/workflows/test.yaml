@@ -40,10 +40,6 @@ jobs:
           path: ./artifacts/onnxruntime-linux-x64.so
       - uses: actions/upload-artifact@v4
         with:
-          name: onnxruntime-linux-x64-gpu
-          path: ./artifacts/onnxruntime-linux-x64-gpu
-      - uses: actions/upload-artifact@v4
-        with:
           name: hugot-cli-linux-x64
           path: ./artifacts/hugot-cli-linux-x64
       - name: Publish Test Report
