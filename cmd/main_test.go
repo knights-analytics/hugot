@@ -34,9 +34,9 @@ func TestTextClassificationCli(t *testing.T) {
 	recurseDir := path.Join(testDataDir, "cliRecurseTest")
 	err := os.MkdirAll(recurseDir, os.ModePerm)
 	check(t, err)
-	err = os.WriteFile(path.Join(testDataDir, "test-0.jsonl"), textClassificationData, os.ModePerm)
+	err = os.WriteFile(path.Join(testDataDir, "test-0.jsonl"), textClassificationData, 0o600)
 	check(t, err)
-	err = os.WriteFile(path.Join(recurseDir, "test-1.jsonl"), textClassificationData, os.ModePerm)
+	err = os.WriteFile(path.Join(recurseDir, "test-1.jsonl"), textClassificationData, 0o600)
 	check(t, err)
 	defer func() {
 		err := os.RemoveAll(testDataDir)
@@ -62,7 +62,7 @@ func TestTokenClassificationCli(t *testing.T) {
 	testDataDir := path.Join(os.TempDir(), "hugoTestData")
 	err := os.MkdirAll(testDataDir, os.ModePerm)
 	check(t, err)
-	err = os.WriteFile(path.Join(testDataDir, "test-token-classification.jsonl"), tokenClassificationData, os.ModePerm)
+	err = os.WriteFile(path.Join(testDataDir, "test-token-classification.jsonl"), tokenClassificationData, 0o600)
 	check(t, err)
 	defer func() {
 		err := os.RemoveAll(testDataDir)
@@ -92,7 +92,7 @@ func TestFeatureExtractionCli(t *testing.T) {
 	testDataDir := path.Join(os.TempDir(), "hugoTestData")
 	err := os.MkdirAll(testDataDir, os.ModePerm)
 	check(t, err)
-	err = os.WriteFile(path.Join(testDataDir, "test-feature-extraction.jsonl"), tokenClassificationData, os.ModePerm)
+	err = os.WriteFile(path.Join(testDataDir, "test-feature-extraction.jsonl"), tokenClassificationData, 0o600)
 	check(t, err)
 	defer func() {
 		err := os.RemoveAll(testDataDir)
@@ -100,7 +100,8 @@ func TestFeatureExtractionCli(t *testing.T) {
 	}()
 
 	args := append(baseArgs, "run", fmt.Sprintf("--input=%s", path.Join(testDataDir, "test-feature-extraction.jsonl")),
-		fmt.Sprintf("--model=%s", testModel), "--type=featureExtraction", fmt.Sprintf("--output=%s", testDataDir))
+		fmt.Sprintf("--model=%s", testModel), fmt.Sprintf("--onnxFilename=%s", "model.onnx"),
+		"--type=featureExtraction", fmt.Sprintf("--output=%s", testDataDir))
 	if err := app.Run(args); err != nil {
 		check(t, err)
 	}
@@ -122,7 +123,7 @@ func TestModelChain(t *testing.T) {
 	recurseDir := path.Join(testDataDir, "cliRecurseTest")
 	err := os.MkdirAll(recurseDir, os.ModePerm)
 	check(t, err)
-	err = os.WriteFile(path.Join(testDataDir, "test-0.jsonl"), textClassificationData, os.ModePerm)
+	err = os.WriteFile(path.Join(testDataDir, "test-0.jsonl"), textClassificationData, 0o600)
 	check(t, err)
 	defer func() {
 		err := os.RemoveAll(testDataDir)
