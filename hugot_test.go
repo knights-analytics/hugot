@@ -41,7 +41,7 @@ func TestDownloadValidation(t *testing.T) {
 func featureExtractionPipeline(t *testing.T, session *Session) {
 	t.Helper()
 
-	modelPath := "./models/sentence-transformers_all-MiniLM-L6-v2"
+	modelPath := "./models/KnightsAnalytics_all-MiniLM-L6-v2"
 
 	config := FeatureExtractionConfig{
 		ModelPath:    modelPath,
@@ -168,7 +168,7 @@ func featureExtractionPipeline(t *testing.T, session *Session) {
 func featureExtractionPipelineValidation(t *testing.T, session *Session) {
 	t.Helper()
 
-	modelPath := "./models/sentence-transformers_all-MiniLM-L6-v2"
+	modelPath := "./models/KnightsAnalytics_all-MiniLM-L6-v2"
 	config := FeatureExtractionConfig{
 		ModelPath:    modelPath,
 		OnnxFilename: "model.onnx",
@@ -835,7 +835,7 @@ func threadSafety(t *testing.T, session *Session) {
 	const numResults = numWorkers * numEmbeddings
 
 	t.Helper()
-	modelPath := "./models/sentence-transformers_all-MiniLM-L6-v2"
+	modelPath := "./models/KnightsAnalytics_all-MiniLM-L6-v2"
 	config := FeatureExtractionConfig{
 		ModelPath:    modelPath,
 		Name:         "testPipeline",

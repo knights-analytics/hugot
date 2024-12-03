@@ -125,6 +125,10 @@ func NewTokenClassificationPipeline(config pipelineBackends.PipelineConfig[*Toke
 
 // INTERFACE IMPLEMENTATION
 
+func (p *TokenClassificationPipeline) GetModel() *pipelineBackends.Model {
+	return p.BasePipeline.Model
+}
+
 // GetMetadata returns metadata information about the pipeline, in particular:
 // OutputInfo: names and dimensions of the output layer used for token classification.
 func (p *TokenClassificationPipeline) GetMetadata() pipelineBackends.PipelineMetadata {

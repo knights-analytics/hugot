@@ -64,6 +64,7 @@ type Pipeline interface {
 	GetStats() []string                        // Get the pipeline running stats
 	Validate() error                           // Validate the pipeline for correctness
 	GetMetadata() PipelineMetadata             // Return metadata information for the pipeline
+	GetModel() *Model                          // Return the model used by the pipeline
 	Run([]string) (PipelineBatchOutput, error) // Run the pipeline on an input
 }
 
@@ -140,13 +141,25 @@ func RunSessionOnBatch(batch *PipelineBatch, p *BasePipeline) error {
 	return nil
 }
 
+// CreateInputTensorsTraining creates input tensors for training. Same as CreateInputTensors but
+// we never pad the batch size as we expect regular batch sizes from the dataset.
+func CreateInputTensorsTraining(batch *PipelineBatch, inputsMeta []InputOutputInfo, runtime string) error {
+	switch runtime {
+	case "ORT":
+		return createInputTensorsORT(batch, inputsMeta)
+	case "XLA":
+		return createInputTensorsXLA(batch, inputsMeta, false)
+	}
+	return nil
+}
+
 func CreateInputTensors(batch *PipelineBatch, inputsMeta []InputOutputInfo, runtime string) error {
 
 	switch runtime {
 	case "ORT":
 		return createInputTensorsORT(batch, inputsMeta)
 	case "XLA":
-		return createInputTensorsXLA(batch, inputsMeta)
+		return createInputTensorsXLA(batch, inputsMeta, true)
 	}
 	return nil
 }

@@ -118,6 +118,10 @@ func NewTextClassificationPipeline(config pipelineBackends.PipelineConfig[*TextC
 
 // INTERFACE IMPLEMENTATION
 
+func (p *TextClassificationPipeline) GetModel() *pipelineBackends.Model {
+	return p.BasePipeline.Model
+}
+
 // GetMetadata returns metadata information about the pipeline, in particular:
 // OutputInfo: names and dimensions of the output layer used for text classification.
 func (p *TextClassificationPipeline) GetMetadata() pipelineBackends.PipelineMetadata {

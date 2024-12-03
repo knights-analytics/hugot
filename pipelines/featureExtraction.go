@@ -87,7 +87,11 @@ func NewFeatureExtractionPipeline(config pipelineBackends.PipelineConfig[*Featur
 	return pipeline, nil
 }
 
-// INTERFACE IMPLEMENTATION
+// INTERFACE IMPLEMENTATIONS
+
+func (p *FeatureExtractionPipeline) GetModel() *pipelineBackends.Model {
+	return p.BasePipeline.Model
+}
 
 // GetMetadata returns metadata information about the pipeline, in particular:
 // OutputInfo: names and dimensions of the output layer.

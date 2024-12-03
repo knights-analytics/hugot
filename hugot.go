@@ -101,78 +101,79 @@ func NewPipeline[T pipelineBackends.Pipeline](s *Session, pipelineConfig pipelin
 
 	// Load model if it has not been loaded already
 	model, ok := s.models[pipelineConfig.ModelPath]
+
+	var err error
+	var name string
+
 	if !ok {
-		model = &pipelineBackends.Model{
-			Path:         pipelineConfig.ModelPath,
-			OnnxFilename: pipelineConfig.OnnxFilename,
-		}
-
-		err := pipelineBackends.LoadOnnxModelBytes(model)
+		model, err = pipelineBackends.LoadModel(pipelineConfig.ModelPath, pipelineConfig.OnnxFilename, s.options)
 		if err != nil {
 			return pipeline, err
 		}
-
-		err = pipelineBackends.CreateModelBackend(model, s.options)
-		if err != nil {
-			return pipeline, err
-		}
-
-		tkErr := pipelineBackends.LoadTokenizer(model, s.options)
-		if tkErr != nil {
-			return pipeline, tkErr
-		}
-
-		model.Destroy = func() error {
-			destroyErr := model.Tokenizer.Destroy()
-			switch s.options.Runtime {
-			case "ORT":
-				destroyErr = errors.Join(destroyErr, model.ORTModel.Destroy())
-			case "XLA":
-				model.XLAModel.Destroy()
-			}
-			return destroyErr
-		}
-
 		s.models[pipelineConfig.ModelPath] = model
+	}
+
+	pipeline, name, err = InitializePipeline(pipeline, pipelineConfig, s.options, model)
+	if err != nil {
+		return pipeline, err
 	}
 
 	switch any(pipeline).(type) {
 	case *pipelines.TokenClassificationPipeline:
-		config := any(pipelineConfig).(pipelineBackends.PipelineConfig[*pipelines.TokenClassificationPipeline])
-		pipelineInitialised, err := pipelines.NewTokenClassificationPipeline(config, s.options, model)
-		if err != nil {
-			return pipeline, err
-		}
-		s.tokenClassificationPipelines[config.Name] = pipelineInitialised
-		pipeline = any(pipelineInitialised).(T)
+		s.tokenClassificationPipelines[name] = any(pipeline).(*pipelines.TokenClassificationPipeline)
 	case *pipelines.TextClassificationPipeline:
-		config := any(pipelineConfig).(pipelineBackends.PipelineConfig[*pipelines.TextClassificationPipeline])
-		pipelineInitialised, err := pipelines.NewTextClassificationPipeline(config, s.options, model)
-		if err != nil {
-			return pipeline, err
-		}
-		s.textClassificationPipelines[config.Name] = pipelineInitialised
-		pipeline = any(pipelineInitialised).(T)
+		s.textClassificationPipelines[name] = any(pipeline).(*pipelines.TextClassificationPipeline)
 	case *pipelines.FeatureExtractionPipeline:
-		config := any(pipelineConfig).(pipelineBackends.PipelineConfig[*pipelines.FeatureExtractionPipeline])
-		pipelineInitialised, err := pipelines.NewFeatureExtractionPipeline(config, s.options, model)
-		if err != nil {
-			return pipeline, err
-		}
-		s.featureExtractionPipelines[config.Name] = pipelineInitialised
-		pipeline = any(pipelineInitialised).(T)
+		s.featureExtractionPipelines[name] = any(pipeline).(*pipelines.FeatureExtractionPipeline)
 	case *pipelines.ZeroShotClassificationPipeline:
-		config := any(pipelineConfig).(pipelineBackends.PipelineConfig[*pipelines.ZeroShotClassificationPipeline])
-		pipelineInitialised, err := pipelines.NewZeroShotClassificationPipeline(config, s.options, model)
-		if err != nil {
-			return pipeline, err
-		}
-		s.zeroShotClassificationPipelines[config.Name] = pipelineInitialised
-		pipeline = any(pipelineInitialised).(T)
+		s.zeroShotClassificationPipelines[name] = any(pipeline).(*pipelines.ZeroShotClassificationPipeline)
 	default:
 		return pipeline, fmt.Errorf("not implemented")
 	}
 	return pipeline, nil
+}
+
+func InitializePipeline[T pipelineBackends.Pipeline](p T, pipelineConfig pipelineBackends.PipelineConfig[T], options *options.Options, model *pipelineBackends.Model) (T, string, error) {
+	var pipeline T
+	var name string
+
+	switch any(p).(type) {
+	case *pipelines.TokenClassificationPipeline:
+		config := any(pipelineConfig).(pipelineBackends.PipelineConfig[*pipelines.TokenClassificationPipeline])
+		pipelineInitialised, err := pipelines.NewTokenClassificationPipeline(config, options, model)
+		if err != nil {
+			return pipeline, name, err
+		}
+		pipeline = any(pipelineInitialised).(T)
+		name = config.Name
+	case *pipelines.TextClassificationPipeline:
+		config := any(pipelineConfig).(pipelineBackends.PipelineConfig[*pipelines.TextClassificationPipeline])
+		pipelineInitialised, err := pipelines.NewTextClassificationPipeline(config, options, model)
+		if err != nil {
+			return pipeline, name, err
+		}
+		pipeline = any(pipelineInitialised).(T)
+		name = config.Name
+	case *pipelines.FeatureExtractionPipeline:
+		config := any(pipelineConfig).(pipelineBackends.PipelineConfig[*pipelines.FeatureExtractionPipeline])
+		pipelineInitialised, err := pipelines.NewFeatureExtractionPipeline(config, options, model)
+		if err != nil {
+			return pipeline, name, err
+		}
+		pipeline = any(pipelineInitialised).(T)
+		name = config.Name
+	case *pipelines.ZeroShotClassificationPipeline:
+		config := any(pipelineConfig).(pipelineBackends.PipelineConfig[*pipelines.ZeroShotClassificationPipeline])
+		pipelineInitialised, err := pipelines.NewZeroShotClassificationPipeline(config, options, model)
+		if err != nil {
+			return pipeline, name, err
+		}
+		pipeline = any(pipelineInitialised).(T)
+		name = config.Name
+	default:
+		return pipeline, name, fmt.Errorf("not implemented")
+	}
+	return pipeline, name, nil
 }
 
 // GetPipeline can be used to retrieve a pipeline of type T with the given name from the session
