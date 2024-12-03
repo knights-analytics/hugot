@@ -23,6 +23,7 @@ type XLAModel struct {
 	Ctx *context.Context
 	// exec is used to execute the model with a context.
 	Exec    *context.Exec
+	Call    func(ctx *context.Context, inputs []*graph.Node) (choice *graph.Node)
 	Destroy func()
 }
 
@@ -55,18 +56,18 @@ func createXLAModelBackend(model *Model, options *options.Options) error {
 	backend := backends.NewWithConfig(config)
 
 	// Create model executor.
-	exec := context.NewExec(
-		backend, ctx,
-		func(ctx *context.Context, inputs []*graph.Node) (choice *graph.Node) {
-			inputsMap := map[string]*graph.Node{
-				"input_ids":      inputs[0],
-				"attention_mask": inputs[1]}
-			if modelParsed.NumInputs() == 3 {
-				inputsMap["token_type_ids"] = inputs[2]
-			}
-			results := modelParsed.CallGraph(ctx, inputs[0].Graph(), inputsMap, outputNames...)
-			return results[0]
-		})
+	callFun := func(ctx *context.Context, inputs []*graph.Node) (choice *graph.Node) {
+		inputsMap := map[string]*graph.Node{
+			"input_ids":      inputs[0],
+			"attention_mask": inputs[1]}
+		if modelParsed.NumInputs() == 3 {
+			inputsMap["token_type_ids"] = inputs[2]
+		}
+		results := modelParsed.CallGraph(ctx, inputs[0].Graph(), inputsMap, outputNames...)
+		return results[0]
+	}
+
+	exec := context.NewExec(backend, ctx, callFun)
 	exec.SetMaxCache(-1)
 
 	model.XLAModel = &XLAModel{
@@ -74,6 +75,7 @@ func createXLAModelBackend(model *Model, options *options.Options) error {
 		OnnxModel: modelParsed,
 		Ctx:       ctx,
 		Exec:      exec,
+		Call:      callFun,
 		Destroy: func() {
 			exec.Finalize()
 			backend.Finalize()
