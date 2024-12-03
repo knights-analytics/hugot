@@ -6,7 +6,7 @@ require (
 	github.com/bodaay/HuggingFaceModelDownloader v0.0.0-20241026025743-cbf2f5e84f54
 	github.com/daulet/tokenizers v1.20.2
 	github.com/gomlx/exceptions v0.0.3
-	github.com/gomlx/gomlx v0.15.4-0.20241201091902-08b09d3d86d8
+	github.com/gomlx/gomlx v0.15.4-0.20241204132105-94e191665ac1
 	github.com/gomlx/onnx-gomlx v0.1.4
 	github.com/json-iterator/go v1.1.12
 	github.com/mattn/go-isatty v0.0.20
@@ -45,6 +45,7 @@ require (
 	github.com/go-errors/errors v1.5.1 // indirect
 	github.com/go-logr/logr v1.4.2 // indirect
 	github.com/gomlx/gopjrt v0.4.10-0.20241203095034-c8c81d9f11fe // indirect
+	github.com/google/uuid v1.6.0 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
