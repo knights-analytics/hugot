@@ -383,6 +383,10 @@ func (p *ZeroShotClassificationPipeline) RunPipeline(inputs []string) (*ZeroShot
 
 // PIPELINE INTERFACE IMPLEMENTATION
 
+func (p *ZeroShotClassificationPipeline) GetModel() *pipelineBackends.Model {
+	return p.BasePipeline.Model
+}
+
 func (p *ZeroShotClassificationPipeline) GetMetadata() pipelineBackends.PipelineMetadata {
 	return pipelineBackends.PipelineMetadata{
 		OutputsInfo: []pipelineBackends.OutputInfo{

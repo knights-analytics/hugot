@@ -1,0 +1,35 @@
+{"sentence1":"A plane is taking off.","sentence2":"An air plane is taking off.","score":1.0}
+{"sentence1":"A man is playing a large flute.","sentence2":"A man is playing a flute.","score":0.76}
+{"sentence1":"A man is spreading shreded cheese on a pizza.","sentence2":"A man is spreading shredded cheese on an uncooked pizza.","score":0.76}
+{"sentence1":"Three men are playing chess.","sentence2":"Two men are playing chess.","score":0.52}
+{"sentence1":"A man is playing the cello.","sentence2":"A man seated is playing the cello.","score":0.85}
+{"sentence1":"Some men are fighting.","sentence2":"Two men are fighting.","score":0.85}
+{"sentence1":"A man is smoking.","sentence2":"A man is skating.","score":0.1}
+{"sentence1":"The man is playing the piano.","sentence2":"The man is playing the guitar.","score":0.32}
+{"sentence1":"A man is playing on a guitar and singing.","sentence2":"A woman is playing an acoustic guitar and singing.","score":0.44}
+{"sentence1":"A person is throwing a cat on to the ceiling.","sentence2":"A person throws a cat on the ceiling.","score":1.0}
+{"sentence1":"The man hit the other man with a stick.","sentence2":"The man spanked the other man with a stick.","score":0.84}
+{"sentence1":"A woman picks up and holds a baby kangaroo.","sentence2":"A woman picks up and holds a baby kangaroo in her arms.","score":0.92}
+{"sentence1":"A man is playing a flute.","sentence2":"A man is playing a bamboo flute.","score":0.77}
+{"sentence1":"A person is folding a piece of paper.","sentence2":"Someone is folding a piece of paper.","score":0.93}
+{"sentence1":"A man is running on the road.","sentence2":"A panda dog is running on the road.","score":0.33}
+{"sentence1":"A dog is trying to get bacon off his back.","sentence2":"A dog is trying to eat the bacon on its back.","score":0.75}
+{"sentence1":"The polar bear is sliding on the snow.","sentence2":"A polar bear is sliding across the snow.","score":1.0}
+{"sentence1":"A woman is writing.","sentence2":"A woman is swimming.","score":0.1}
+{"sentence1":"A cat is rubbing against baby's face.","sentence2":"A cat is rubbing against a baby.","score":0.76}
+{"sentence1":"The man is riding a horse.","sentence2":"A man is riding on a horse.","score":1.0}
+{"sentence1":"A man pours oil into a pot.","sentence2":"A man pours wine in a pot.","score":0.64}
+{"sentence1":"A man is playing a guitar.","sentence2":"A girl is playing a guitar.","score":0.56}
+{"sentence1":"A panda is sliding down a slide.","sentence2":"A panda slides down a slide.","score":0.92}
+{"sentence1":"A woman is eating something.","sentence2":"A woman is eating meat.","score":0.6}
+{"sentence1":"A woman peels a potato.","sentence2":"A woman is peeling a potato.","score":1.0}
+{"sentence1":"The boy fell off his bike.","sentence2":"A boy falls off his bike.","score":0.96}
+{"sentence1":"The woman is playing the flute.","sentence2":"A woman is playing a flute.","score":1.0}
+{"sentence1":"A rabbit is running from an eagle.","sentence2":"A hare is running from a eagle.","score":0.84}
+{"sentence1":"The woman is frying a breaded pork chop.","sentence2":"A woman is cooking a breaded pork chop.","score":0.84}
+{"sentence1":"A girl is flying a kite.","sentence2":"A girl running is flying a kite.","score":0.8}
+{"sentence1":"A man is riding a mechanical bull.","sentence2":"A man rode a mechanical bull.","score":0.8}
+{"sentence1":"The man is playing the guitar.","sentence2":"A man is playing a guitar.","score":0.98}
+{"sentence1":"A woman is dancing and singing with other women.","sentence2":"A woman is dancing and singing in the rain.","score":0.6}
+{"sentence1":"A man is slicing a bun.","sentence2":"A man is slicing an onion.","score":0.48}
+{"sentence1":"A man is pouring oil into a pan.","sentence2":"A man is pouring oil into a skillet.","score":0.84}

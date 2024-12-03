@@ -1,6 +1,7 @@
 package util
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"io"
@@ -38,6 +39,28 @@ func GetPathType(path string) string {
 		return "S3"
 	}
 	return "os"
+}
+
+func OpenFile(filename string) (io.ReadCloser, error) {
+	return FileSystem.OpenURL(context.Background(), filename)
+}
+
+// ReadLine returns a single line (without the ending \n)
+// from the input buffered reader.
+// An error is returned if there is an error with the
+// buffered reader.
+// This function is needed to avoid the 65K char line limit
+func ReadLine(r *bufio.Reader) ([]byte, error) {
+	var (
+		isPrefix       = true
+		err      error = nil
+		line, ln []byte
+	)
+	for isPrefix && err == nil {
+		line, isPrefix, err = r.ReadLine()
+		ln = append(ln, line...)
+	}
+	return ln, err
 }
 
 // PathJoinSafe wrapper around filepath.Join to ensure that paths are correctly constructed

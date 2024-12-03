@@ -3,6 +3,7 @@
 package pipelineBackends
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/gomlx/exceptions"
@@ -23,40 +24,47 @@ type XLAModel struct {
 	Ctx *context.Context
 	// exec is used to execute the model with a context.
 	Exec    *context.Exec
+	Call    func(ctx *context.Context, inputs []*graph.Node) []*graph.Node
 	Destroy func()
 }
 
 func createXLAModelBackend(model *Model, options *options.Options) error {
+	var insideError error
+	var recoverErr error
 
-	modelParsed, err := onnx.Parse(model.OnnxBytes)
-	if err != nil {
-		return err
-	}
+	// we never want to panic so the calling program has a chance to shut down gracefully on error.
+	// we therefore catch all panics from gomlx as errors.
+	recoverErr = exceptions.TryCatch[error](func() {
+		var modelParsed *onnx.Model
+		modelParsed, insideError = onnx.Parse(model.OnnxBytes)
+		if insideError != nil {
+			return
+		}
 
-	inputs, outputs := loadInputOutputMetaXLA(modelParsed)
-	var outputNames []string
-	for _, v := range outputs {
-		outputNames = append(outputNames, v.Name)
-	}
+		inputs, outputs := loadInputOutputMetaXLA(modelParsed)
+		var outputNames []string
+		for _, v := range outputs {
+			outputNames = append(outputNames, v.Name)
+		}
 
-	ctx := context.New()
-	ctx = ctx.Reuse() // Mark it to reuse variables: it will be an error to create a new variable – for safety.
-	// Read variables from ONNX model.
-	err = modelParsed.VariablesToContext(ctx)
-	if err != nil {
-		return err
-	}
+		ctx := context.New()
+		// Mark it to reuse variables: it will be an error to create a new variable – for safety.
+		ctx = ctx.Reuse()
 
-	config := "xla:cpu"
-	if options.XLAOptions.Cuda {
-		config = "xla:cuda"
-	}
-	backend := backends.NewWithConfig(config)
+		// Read variables from ONNX model.
+		insideError = modelParsed.VariablesToContext(ctx)
+		if insideError != nil {
+			return
+		}
 
-	// Create model executor.
-	exec := context.NewExec(
-		backend, ctx,
-		func(ctx *context.Context, inputs []*graph.Node) []*graph.Node {
+		config := "xla:cpu"
+		if options.XLAOptions.Cuda {
+			config = "xla:cuda"
+		}
+		backend := backends.NewWithConfig(config)
+
+		// Create model executor.
+		callFunc := func(ctx *context.Context, inputs []*graph.Node) []*graph.Node {
 			inputsMap := map[string]*graph.Node{
 				"input_ids":      inputs[0],
 				"attention_mask": inputs[1]}
@@ -64,23 +72,26 @@ func createXLAModelBackend(model *Model, options *options.Options) error {
 				inputsMap["token_type_ids"] = inputs[2]
 			}
 			return modelParsed.CallGraph(ctx, inputs[0].Graph(), inputsMap, outputNames...)
-		})
-	exec.SetMaxCache(-1)
+		}
 
-	model.XLAModel = &XLAModel{
-		Backend:   backend,
-		OnnxModel: modelParsed,
-		Ctx:       ctx,
-		Exec:      exec,
-		Destroy: func() {
-			exec.Finalize()
-			backend.Finalize()
-		},
-	}
-	model.InputsMeta = inputs
-	model.OutputsMeta = outputs
+		exec := context.NewExec(backend, ctx, callFunc)
+		exec.SetMaxCache(-1)
 
-	return err
+		model.XLAModel = &XLAModel{
+			Backend:   backend,
+			OnnxModel: modelParsed,
+			Ctx:       ctx,
+			Exec:      exec,
+			Call:      callFunc,
+			Destroy: func() {
+				exec.Finalize()
+				backend.Finalize()
+			},
+		}
+		model.InputsMeta = inputs
+		model.OutputsMeta = outputs
+	})
+	return errors.Join(insideError, recoverErr)
 }
 
 func loadInputOutputMetaXLA(model *onnx.Model) ([]InputOutputInfo, []InputOutputInfo) {
@@ -112,11 +123,14 @@ func loadInputOutputMetaXLA(model *onnx.Model) ([]InputOutputInfo, []InputOutput
 	return inputs, outputs
 }
 
-func createInputTensorsXLA(batch *PipelineBatch, inputsMeta []InputOutputInfo) error {
+func createInputTensorsXLA(batch *PipelineBatch, inputsMeta []InputOutputInfo, padBatchDimension bool) error {
 	batchSize := len(batch.Input)
-	batchSizePow := nextPowerOf2(batchSize)
-	maxSequenceLengthPow := nextPowerOf2(batch.MaxSequenceLength)
-	tensorSize := batchSizePow * maxSequenceLengthPow
+	batchSizePadded := batchSize
+	if padBatchDimension {
+		batchSizePadded = nextPowerOf2(batchSize)
+	}
+	maxSequenceLengthPadded := nextPowerOf2(batch.MaxSequenceLength)
+	tensorSize := batchSizePadded * maxSequenceLengthPadded
 
 	inputTensors := make([]*tensors.Tensor, len(inputsMeta))
 	paddingMasks := make([][]bool, batchSize)
@@ -124,9 +138,9 @@ func createInputTensorsXLA(batch *PipelineBatch, inputsMeta []InputOutputInfo) e
 		backingSlice := make([]int64, tensorSize)
 		counter := 0
 		for j, input := range batch.Input {
-			paddingMask := make([]bool, maxSequenceLengthPow)
+			paddingMask := make([]bool, maxSequenceLengthPadded)
 			length := len(input.TokenIDs)
-			for k := 0; k < maxSequenceLengthPow; k++ {
+			for k := 0; k < maxSequenceLengthPadded; k++ {
 				if k+1 <= length {
 					switch inputMeta.Name {
 					case "input_ids":
@@ -149,7 +163,7 @@ func createInputTensorsXLA(batch *PipelineBatch, inputsMeta []InputOutputInfo) e
 				paddingMasks[j] = paddingMask
 			}
 		}
-		inputTensors[i] = tensors.FromFlatDataAndDimensions(backingSlice, batchSizePow, maxSequenceLengthPow)
+		inputTensors[i] = tensors.FromFlatDataAndDimensions(backingSlice, batchSizePadded, maxSequenceLengthPadded)
 	}
 	batch.InputValues = inputTensors
 	batch.PaddingMask = paddingMasks
@@ -182,7 +196,7 @@ func runXLASessionOnBatch(batch *PipelineBatch, p *BasePipeline) error {
 
 	for i, t := range outputs {
 		var rawOutput []float32
-		tensors.ConstFlatData[float32](t, func(flat []float32) {
+		tensors.ConstFlatData(t, func(flat []float32) {
 			rawOutput = flat
 		})
 		convertedOutput[i] = ReshapeOutput(&rawOutput, p.Model.OutputsMeta[i], batch.PaddingMask, batch.MaxSequenceLength)
