@@ -1,4 +1,4 @@
-package pipelines
+package pipelineBackends
 
 type Model struct {
 	Path         string

@@ -1,6 +1,6 @@
 //go:build !NOORT || XLA || ALL
 
-package pipelines
+package pipelineBackends
 
 import (
 	"fmt"

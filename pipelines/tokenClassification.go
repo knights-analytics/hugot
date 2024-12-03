@@ -1,4 +1,4 @@
-package taskPipelines
+package pipelines
 
 import (
 	"errors"
@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/knights-analytics/hugot/options"
-	"github.com/knights-analytics/hugot/pipelines"
+	"github.com/knights-analytics/hugot/pipelineBackends"
 	"github.com/knights-analytics/hugot/util"
 
 	jsoniter "github.com/json-iterator/go"
@@ -19,7 +19,7 @@ import (
 // TokenClassificationPipeline is a go version of huggingface tokenClassificationPipeline.
 // https://github.com/huggingface/transformers/blob/main/src/transformers/pipelines/token_classification.py
 type TokenClassificationPipeline struct {
-	*pipelines.BasePipeline
+	*pipelineBackends.BasePipeline
 	IDLabelMap          map[int]string
 	AggregationStrategy string
 	IgnoreLabels        []string
@@ -59,29 +59,29 @@ func (t *TokenClassificationOutput) GetOutput() []any {
 
 // WithSimpleAggregation sets the aggregation strategy for the token labels to simple
 // It reproduces simple aggregation from the huggingface implementation.
-func WithSimpleAggregation() pipelines.PipelineOption[*TokenClassificationPipeline] {
+func WithSimpleAggregation() pipelineBackends.PipelineOption[*TokenClassificationPipeline] {
 	return func(pipeline *TokenClassificationPipeline) {
 		pipeline.AggregationStrategy = "SIMPLE"
 	}
 }
 
 // WithoutAggregation returns the token labels.
-func WithoutAggregation() pipelines.PipelineOption[*TokenClassificationPipeline] {
+func WithoutAggregation() pipelineBackends.PipelineOption[*TokenClassificationPipeline] {
 	return func(pipeline *TokenClassificationPipeline) {
 		pipeline.AggregationStrategy = "NONE"
 	}
 }
 
-func WithIgnoreLabels(ignoreLabels []string) pipelines.PipelineOption[*TokenClassificationPipeline] {
+func WithIgnoreLabels(ignoreLabels []string) pipelineBackends.PipelineOption[*TokenClassificationPipeline] {
 	return func(pipeline *TokenClassificationPipeline) {
 		pipeline.IgnoreLabels = ignoreLabels
 	}
 }
 
 // NewTokenClassificationPipeline Initializes a feature extraction pipeline.
-func NewTokenClassificationPipeline(config pipelines.PipelineConfig[*TokenClassificationPipeline], s *options.Options, model *pipelines.Model) (*TokenClassificationPipeline, error) {
+func NewTokenClassificationPipeline(config pipelineBackends.PipelineConfig[*TokenClassificationPipeline], s *options.Options, model *pipelineBackends.Model) (*TokenClassificationPipeline, error) {
 
-	defaultPipeline, err := pipelines.NewBasePipeline(config, s, model)
+	defaultPipeline, err := pipelineBackends.NewBasePipeline(config, s, model)
 	if err != nil {
 		return nil, err
 	}
@@ -114,7 +114,7 @@ func NewTokenClassificationPipeline(config pipelines.PipelineConfig[*TokenClassi
 	}
 
 	// Additional options needed for postprocessing
-	pipelines.AllInputTokens(pipeline.BasePipeline)
+	pipelineBackends.AllInputTokens(pipeline.BasePipeline)
 
 	err = pipeline.Validate()
 	if err != nil {
@@ -127,9 +127,9 @@ func NewTokenClassificationPipeline(config pipelines.PipelineConfig[*TokenClassi
 
 // GetMetadata returns metadata information about the pipeline, in particular:
 // OutputInfo: names and dimensions of the output layer used for token classification.
-func (p *TokenClassificationPipeline) GetMetadata() pipelines.PipelineMetadata {
-	return pipelines.PipelineMetadata{
-		OutputsInfo: []pipelines.OutputInfo{
+func (p *TokenClassificationPipeline) GetMetadata() pipelineBackends.PipelineMetadata {
+	return pipelineBackends.PipelineMetadata{
+		OutputsInfo: []pipelineBackends.OutputInfo{
 			{
 				Name:       p.Model.OutputsMeta[0].Name,
 				Dimensions: p.Model.OutputsMeta[0].Dimensions,
@@ -174,19 +174,19 @@ func (p *TokenClassificationPipeline) Validate() error {
 }
 
 // Preprocess tokenizes the input strings.
-func (p *TokenClassificationPipeline) Preprocess(batch *pipelines.PipelineBatch, inputs []string) error {
+func (p *TokenClassificationPipeline) Preprocess(batch *pipelineBackends.PipelineBatch, inputs []string) error {
 	start := time.Now()
-	pipelines.TokenizeInputs(batch, p.Model.Tokenizer, inputs)
+	pipelineBackends.TokenizeInputs(batch, p.Model.Tokenizer, inputs)
 	atomic.AddUint64(&p.Model.Tokenizer.TokenizerTimings.NumCalls, 1)
 	atomic.AddUint64(&p.Model.Tokenizer.TokenizerTimings.TotalNS, uint64(time.Since(start)))
-	err := pipelines.CreateInputTensors(batch, p.Model.InputsMeta, p.Runtime)
+	err := pipelineBackends.CreateInputTensors(batch, p.Model.InputsMeta, p.Runtime)
 	return err
 }
 
 // Forward performs the forward inference of the pipeline.
-func (p *TokenClassificationPipeline) Forward(batch *pipelines.PipelineBatch) error {
+func (p *TokenClassificationPipeline) Forward(batch *pipelineBackends.PipelineBatch) error {
 	start := time.Now()
-	err := pipelines.RunSessionOnBatch(batch, p.BasePipeline)
+	err := pipelineBackends.RunSessionOnBatch(batch, p.BasePipeline)
 	if err != nil {
 		return err
 	}
@@ -196,7 +196,7 @@ func (p *TokenClassificationPipeline) Forward(batch *pipelines.PipelineBatch) er
 }
 
 // Postprocess function for a token classification pipeline.
-func (p *TokenClassificationPipeline) Postprocess(batch *pipelines.PipelineBatch) (*TokenClassificationOutput, error) {
+func (p *TokenClassificationPipeline) Postprocess(batch *pipelineBackends.PipelineBatch) (*TokenClassificationOutput, error) {
 	if len(batch.Input) == 0 {
 		return &TokenClassificationOutput{}, nil
 	}
@@ -267,7 +267,7 @@ func (p *TokenClassificationPipeline) Postprocess(batch *pipelines.PipelineBatch
 }
 
 // GatherPreEntities from batch of logits to list of pre-aggregated outputs
-func (p *TokenClassificationPipeline) GatherPreEntities(input pipelines.TokenizedInput, output [][]float32) []Entity {
+func (p *TokenClassificationPipeline) GatherPreEntities(input pipelineBackends.TokenizedInput, output [][]float32) []Entity {
 	sentence := input.Raw
 	var preEntities []Entity
 
@@ -300,7 +300,7 @@ func (p *TokenClassificationPipeline) GatherPreEntities(input pipelines.Tokenize
 	return preEntities
 }
 
-func (p *TokenClassificationPipeline) Aggregate(input pipelines.TokenizedInput, preEntities []Entity) ([]Entity, error) {
+func (p *TokenClassificationPipeline) Aggregate(input pipelineBackends.TokenizedInput, preEntities []Entity) ([]Entity, error) {
 	entities := make([]Entity, len(preEntities))
 	if p.AggregationStrategy == "SIMPLE" || p.AggregationStrategy == "NONE" {
 		for i, preEntity := range preEntities {
@@ -365,7 +365,7 @@ func (p *TokenClassificationPipeline) groupSubEntities(entities []Entity) Entity
 	score := util.Mean(scores)
 	// note: here we directly appeal to the tokenizer decoder with the tokenIds
 	// in the python code they pass the words to a token_to_string_method
-	word := pipelines.Decode(tokens, p.Model.Tokenizer)
+	word := pipelineBackends.Decode(tokens, p.Model.Tokenizer)
 
 	return Entity{
 		Entity: entityType,
@@ -406,15 +406,15 @@ func (p *TokenClassificationPipeline) GroupEntities(entities []Entity) ([]Entity
 }
 
 // Run the pipeline on a string batch.
-func (p *TokenClassificationPipeline) Run(inputs []string) (pipelines.PipelineBatchOutput, error) {
+func (p *TokenClassificationPipeline) Run(inputs []string) (pipelineBackends.PipelineBatchOutput, error) {
 	return p.RunPipeline(inputs)
 }
 
 // RunPipeline is like Run but returns the concrete type rather than the interface.
 func (p *TokenClassificationPipeline) RunPipeline(inputs []string) (*TokenClassificationOutput, error) {
 	var runErrors []error
-	batch := pipelines.NewBatch()
-	defer func(*pipelines.PipelineBatch) {
+	batch := pipelineBackends.NewBatch()
+	defer func(*pipelineBackends.PipelineBatch) {
 		runErrors = append(runErrors, batch.Destroy())
 	}(batch)
 

@@ -1,10 +1,8 @@
 //go:build !XLA && !ALL
 
-package pipelines
+package pipelineBackends
 
 import (
-	_ "github.com/gomlx/gomlx/backends/xla/cpu/static"
-
 	"github.com/knights-analytics/hugot/options"
 )
 

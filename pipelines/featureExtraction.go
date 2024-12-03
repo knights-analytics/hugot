@@ -1,4 +1,4 @@
-package taskPipelines
+package pipelines
 
 import (
 	"errors"
@@ -9,17 +9,17 @@ import (
 	"time"
 
 	"github.com/knights-analytics/hugot/options"
-	"github.com/knights-analytics/hugot/pipelines"
+	"github.com/knights-analytics/hugot/pipelineBackends"
 	"github.com/knights-analytics/hugot/util"
 )
 
 // FeatureExtractionPipeline A feature extraction pipeline is a go version of
 // https://github.com/huggingface/transformers/blob/main/src/transformers/pipelines/feature_extraction.py
 type FeatureExtractionPipeline struct {
-	*pipelines.BasePipeline
+	*pipelineBackends.BasePipeline
 	Normalization bool
 	OutputName    string
-	Output        pipelines.InputOutputInfo
+	Output        pipelineBackends.InputOutputInfo
 }
 
 type FeatureExtractionOutput struct {
@@ -37,7 +37,7 @@ func (t *FeatureExtractionOutput) GetOutput() []any {
 // PIPELINE OPTIONS
 
 // WithNormalization applies normalization to the mean pooled output of the feature pipeline.
-func WithNormalization() pipelines.PipelineOption[*FeatureExtractionPipeline] {
+func WithNormalization() pipelineBackends.PipelineOption[*FeatureExtractionPipeline] {
 	return func(pipeline *FeatureExtractionPipeline) {
 		pipeline.Normalization = true
 	}
@@ -45,16 +45,16 @@ func WithNormalization() pipelines.PipelineOption[*FeatureExtractionPipeline] {
 
 // WithOutputName if there are multiple outputs from the underlying model, which output should
 // be returned. If not passed, the first output from the feature pipeline is returned.
-func WithOutputName(outputName string) pipelines.PipelineOption[*FeatureExtractionPipeline] {
+func WithOutputName(outputName string) pipelineBackends.PipelineOption[*FeatureExtractionPipeline] {
 	return func(pipeline *FeatureExtractionPipeline) {
 		pipeline.OutputName = outputName
 	}
 }
 
 // NewFeatureExtractionPipeline init a feature extraction pipeline.
-func NewFeatureExtractionPipeline(config pipelines.PipelineConfig[*FeatureExtractionPipeline], s *options.Options, model *pipelines.Model) (*FeatureExtractionPipeline, error) {
+func NewFeatureExtractionPipeline(config pipelineBackends.PipelineConfig[*FeatureExtractionPipeline], s *options.Options, model *pipelineBackends.Model) (*FeatureExtractionPipeline, error) {
 
-	defaultPipeline, err := pipelines.NewBasePipeline(config, s, model)
+	defaultPipeline, err := pipelineBackends.NewBasePipeline(config, s, model)
 	if err != nil {
 		return nil, err
 	}
@@ -73,7 +73,7 @@ func NewFeatureExtractionPipeline(config pipelines.PipelineConfig[*FeatureExtrac
 			}
 		}
 		if pipeline.Output.Name == "" {
-			return nil, fmt.Errorf("output %s is not available, outputs are: %s", pipeline.OutputName, strings.Join(pipelines.GetNames(model.OutputsMeta), ", "))
+			return nil, fmt.Errorf("output %s is not available, outputs are: %s", pipeline.OutputName, strings.Join(pipelineBackends.GetNames(model.OutputsMeta), ", "))
 		}
 	} else {
 		pipeline.Output = model.OutputsMeta[0] // we take the first output otherwise, like transformers does
@@ -91,9 +91,9 @@ func NewFeatureExtractionPipeline(config pipelines.PipelineConfig[*FeatureExtrac
 
 // GetMetadata returns metadata information about the pipeline, in particular:
 // OutputInfo: names and dimensions of the output layer.
-func (p *FeatureExtractionPipeline) GetMetadata() pipelines.PipelineMetadata {
-	return pipelines.PipelineMetadata{
-		OutputsInfo: []pipelines.OutputInfo{
+func (p *FeatureExtractionPipeline) GetMetadata() pipelineBackends.PipelineMetadata {
+	return pipelineBackends.PipelineMetadata{
+		OutputsInfo: []pipelineBackends.OutputInfo{
 			{
 				Name:       p.OutputName,
 				Dimensions: p.Output.Dimensions,
@@ -142,19 +142,19 @@ func (p *FeatureExtractionPipeline) Validate() error {
 }
 
 // Preprocess tokenizes the input strings.
-func (p *FeatureExtractionPipeline) Preprocess(batch *pipelines.PipelineBatch, inputs []string) error {
+func (p *FeatureExtractionPipeline) Preprocess(batch *pipelineBackends.PipelineBatch, inputs []string) error {
 	start := time.Now()
-	pipelines.TokenizeInputs(batch, p.Model.Tokenizer, inputs)
+	pipelineBackends.TokenizeInputs(batch, p.Model.Tokenizer, inputs)
 	atomic.AddUint64(&p.Model.Tokenizer.TokenizerTimings.NumCalls, 1)
 	atomic.AddUint64(&p.Model.Tokenizer.TokenizerTimings.TotalNS, uint64(time.Since(start)))
-	err := pipelines.CreateInputTensors(batch, p.Model.InputsMeta, p.Runtime)
+	err := pipelineBackends.CreateInputTensors(batch, p.Model.InputsMeta, p.Runtime)
 	return err
 }
 
 // Forward performs the forward inference of the feature extraction pipeline.
-func (p *FeatureExtractionPipeline) Forward(batch *pipelines.PipelineBatch) error {
+func (p *FeatureExtractionPipeline) Forward(batch *pipelineBackends.PipelineBatch) error {
 	start := time.Now()
-	err := pipelines.RunSessionOnBatch(batch, p.BasePipeline)
+	err := pipelineBackends.RunSessionOnBatch(batch, p.BasePipeline)
 	if err != nil {
 		return err
 	}
@@ -164,7 +164,7 @@ func (p *FeatureExtractionPipeline) Forward(batch *pipelines.PipelineBatch) erro
 }
 
 // Postprocess parses the first output from the network similar to the transformers' implementation.
-func (p *FeatureExtractionPipeline) Postprocess(batch *pipelines.PipelineBatch) (*FeatureExtractionOutput, error) {
+func (p *FeatureExtractionPipeline) Postprocess(batch *pipelineBackends.PipelineBatch) (*FeatureExtractionOutput, error) {
 	// TODO: this works if token embeddings are returned or sentence embeddings are returned.
 	// in the former case embeddings are mean pooled. In the latter they are just returned.
 	// to make this more general for other pipelines and to allow return of raw token embeddings,
@@ -225,7 +225,7 @@ func (p *FeatureExtractionPipeline) Postprocess(batch *pipelines.PipelineBatch) 
 	return &FeatureExtractionOutput{Embeddings: batchEmbeddings}, nil
 }
 
-func meanPooling(tokens [][]float32, input pipelines.TokenizedInput, maxSequence int, dimensions int) []float32 {
+func meanPooling(tokens [][]float32, input pipelineBackends.TokenizedInput, maxSequence int, dimensions int) []float32 {
 	length := len(input.AttentionMask)
 	vector := make([]float32, dimensions)
 	for j := 0; j < maxSequence; j++ {
@@ -245,15 +245,15 @@ func meanPooling(tokens [][]float32, input pipelines.TokenizedInput, maxSequence
 }
 
 // Run the pipeline on a batch of strings.
-func (p *FeatureExtractionPipeline) Run(inputs []string) (pipelines.PipelineBatchOutput, error) {
+func (p *FeatureExtractionPipeline) Run(inputs []string) (pipelineBackends.PipelineBatchOutput, error) {
 	return p.RunPipeline(inputs)
 }
 
 // RunPipeline is like Run, but returns the concrete feature extraction output type rather than the interface.
 func (p *FeatureExtractionPipeline) RunPipeline(inputs []string) (*FeatureExtractionOutput, error) {
 	var runErrors []error
-	batch := pipelines.NewBatch()
-	defer func(*pipelines.PipelineBatch) {
+	batch := pipelineBackends.NewBatch()
+	defer func(*pipelineBackends.PipelineBatch) {
 		runErrors = append(runErrors, batch.Destroy())
 	}(batch)
 

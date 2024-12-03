@@ -1,6 +1,6 @@
 //go:build NOORT && !XLA
 
-package pipelines
+package pipelineBackends
 
 type RustTokenizer struct {
 }

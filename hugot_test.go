@@ -10,8 +10,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	"github.com/knights-analytics/hugot/pipelineBackends"
 	"github.com/knights-analytics/hugot/pipelines"
-	"github.com/knights-analytics/hugot/taskPipelines"
 )
 
 //go:embed testData/tokenExpected.json
@@ -121,7 +121,7 @@ func featureExtractionPipeline(t *testing.T, session *Session) {
 		Name:         "testPipelineNormalise",
 		OnnxFilename: "model.onnx",
 		Options: []FeatureExtractionOption{
-			taskPipelines.WithNormalization(),
+			pipelines.WithNormalization(),
 		},
 	}
 	pipeline, err = NewPipeline(session, config)
@@ -142,7 +142,7 @@ func featureExtractionPipeline(t *testing.T, session *Session) {
 		ModelPath:    modelPath,
 		Name:         "testPipelineSentence",
 		OnnxFilename: "model.onnx",
-		Options:      []FeatureExtractionOption{taskPipelines.WithOutputName("last_hidden_state")},
+		Options:      []FeatureExtractionOption{pipelines.WithOutputName("last_hidden_state")},
 	}
 	pipelineSentence, err := NewPipeline(session, configSentence)
 	check(t, err)
@@ -177,12 +177,12 @@ func featureExtractionPipelineValidation(t *testing.T, session *Session) {
 	pipeline, err := NewPipeline(session, config)
 	check(t, err)
 
-	pipeline.Model.InputsMeta[0].Dimensions = pipelines.NewShape(-1, -1, -1)
+	pipeline.Model.InputsMeta[0].Dimensions = pipelineBackends.NewShape(-1, -1, -1)
 
 	err = pipeline.Validate()
 	assert.Error(t, err)
 
-	pipeline.Model.InputsMeta[0].Dimensions = pipelines.NewShape(1, 1, 1, 1)
+	pipeline.Model.InputsMeta[0].Dimensions = pipelineBackends.NewShape(1, 1, 1, 1)
 	err = pipeline.Validate()
 	assert.Error(t, err)
 }
@@ -198,23 +198,23 @@ func textClassificationPipeline(t *testing.T, session *Session) {
 		ModelPath: modelPath,
 		Name:      "testPipelineSimple",
 		Options: []TextClassificationOption{
-			taskPipelines.WithSoftmax(),
+			pipelines.WithSoftmax(),
 		},
 	}
 	sentimentPipeline, err := NewPipeline(session, config)
 	check(t, err)
 
 	test := struct {
-		pipeline *taskPipelines.TextClassificationPipeline
+		pipeline *pipelines.TextClassificationPipeline
 		name     string
 		strings  []string
-		expected taskPipelines.TextClassificationOutput
+		expected pipelines.TextClassificationOutput
 	}{
 		pipeline: sentimentPipeline,
 		name:     "Basic tests",
 		strings:  []string{"This movie is disgustingly good!", "The director tried too much"},
-		expected: taskPipelines.TextClassificationOutput{
-			ClassificationOutputs: [][]taskPipelines.ClassificationOutput{
+		expected: pipelines.TextClassificationOutput{
+			ClassificationOutputs: [][]pipelines.ClassificationOutput{
 				{
 					{
 						Label: "POSITIVE",
@@ -253,24 +253,24 @@ func textClassificationPipelineMulti(t *testing.T, session *Session) {
 		Name:         "testPipelineSimpleMulti",
 		OnnxFilename: "model.onnx",
 		Options: []TextClassificationOption{
-			taskPipelines.WithMultiLabel(),
-			taskPipelines.WithSigmoid(),
+			pipelines.WithMultiLabel(),
+			pipelines.WithSigmoid(),
 		},
 	}
 	sentimentPipelineMulti, err := NewPipeline(session, configMulti)
 	check(t, err)
 
 	test := struct {
-		pipeline *taskPipelines.TextClassificationPipeline
+		pipeline *pipelines.TextClassificationPipeline
 		name     string
 		strings  []string
-		expected taskPipelines.TextClassificationOutput
+		expected pipelines.TextClassificationOutput
 	}{
 		pipeline: sentimentPipelineMulti,
 		name:     "Multiclass pipeline test",
 		strings:  []string{"ONNX is seriously fast for small batches. Impressive"},
-		expected: taskPipelines.TextClassificationOutput{
-			ClassificationOutputs: [][]taskPipelines.ClassificationOutput{
+		expected: pipelines.TextClassificationOutput{
+			ClassificationOutputs: [][]pipelines.ClassificationOutput{
 				{
 					{
 						Label: "admiration",
@@ -410,7 +410,7 @@ func textClassificationPipelineValidation(t *testing.T, session *Session) {
 		ModelPath: modelPath,
 		Name:      "testPipelineSimple",
 		Options: []TextClassificationOption{
-			taskPipelines.WithSingleLabel(),
+			pipelines.WithSingleLabel(),
 		},
 	}
 	sentimentPipeline, err := NewPipeline(session, config)
@@ -431,7 +431,7 @@ func textClassificationPipelineValidation(t *testing.T, session *Session) {
 		defer func() {
 			sentimentPipeline.Model.OutputsMeta[0].Dimensions = dimensionInitial
 		}()
-		sentimentPipeline.Model.OutputsMeta[0].Dimensions = pipelines.NewShape(-1, -1, -1)
+		sentimentPipeline.Model.OutputsMeta[0].Dimensions = pipelineBackends.NewShape(-1, -1, -1)
 		err = sentimentPipeline.Validate()
 		assert.Error(t, err)
 	})
@@ -447,10 +447,10 @@ func zeroShotClassificationPipeline(t *testing.T, session *Session) {
 	config := ZeroShotClassificationConfig{
 		ModelPath: modelPath,
 		Name:      "testPipeline",
-		Options: []pipelines.PipelineOption[*taskPipelines.ZeroShotClassificationPipeline]{
-			taskPipelines.WithHypothesisTemplate("This example is {}."),
-			taskPipelines.WithLabels([]string{"fun", "dangerous"}),
-			taskPipelines.WithMultilabel(false), // Gets overridden per test, but included for coverage
+		Options: []pipelineBackends.PipelineOption[*pipelines.ZeroShotClassificationPipeline]{
+			pipelines.WithHypothesisTemplate("This example is {}."),
+			pipelines.WithLabels([]string{"fun", "dangerous"}),
+			pipelines.WithMultilabel(false), // Gets overridden per test, but included for coverage
 		},
 	}
 
@@ -458,12 +458,12 @@ func zeroShotClassificationPipeline(t *testing.T, session *Session) {
 	check(t, err)
 
 	tests := []struct {
-		pipeline   *taskPipelines.ZeroShotClassificationPipeline
+		pipeline   *pipelines.ZeroShotClassificationPipeline
 		name       string
 		sequences  []string
 		labels     []string
 		multilabel bool
-		expected   taskPipelines.ZeroShotOutput
+		expected   pipelines.ZeroShotOutput
 	}{
 		{
 			pipeline:   classificationPipeline,
@@ -471,8 +471,8 @@ func zeroShotClassificationPipeline(t *testing.T, session *Session) {
 			sequences:  []string{"I am going to the park"},
 			labels:     []string{"fun"},
 			multilabel: false,
-			expected: taskPipelines.ZeroShotOutput{
-				ClassificationOutputs: []taskPipelines.ZeroShotClassificationOutput{
+			expected: pipelines.ZeroShotOutput{
+				ClassificationOutputs: []pipelines.ZeroShotClassificationOutput{
 					{
 						Sequence: "I am going to the park",
 						SortedValues: []struct {
@@ -494,8 +494,8 @@ func zeroShotClassificationPipeline(t *testing.T, session *Session) {
 			sequences:  []string{"I am going to the park", "I will watch Interstellar tonight"},
 			labels:     []string{"fun", "movie"},
 			multilabel: false,
-			expected: taskPipelines.ZeroShotOutput{
-				ClassificationOutputs: []taskPipelines.ZeroShotClassificationOutput{
+			expected: pipelines.ZeroShotOutput{
+				ClassificationOutputs: []pipelines.ZeroShotClassificationOutput{
 					{
 						Sequence: "I am going to the park",
 						SortedValues: []struct {
@@ -537,8 +537,8 @@ func zeroShotClassificationPipeline(t *testing.T, session *Session) {
 			sequences:  []string{"I am going to the park", "I will watch Interstellar tonight"},
 			labels:     []string{"fun", "movie"},
 			multilabel: true,
-			expected: taskPipelines.ZeroShotOutput{
-				ClassificationOutputs: []taskPipelines.ZeroShotClassificationOutput{
+			expected: pipelines.ZeroShotOutput{
+				ClassificationOutputs: []pipelines.ZeroShotClassificationOutput{
 					{
 						Sequence: "I am going to the park",
 						SortedValues: []struct {
@@ -580,8 +580,8 @@ func zeroShotClassificationPipeline(t *testing.T, session *Session) {
 			sequences:  []string{"I am going to the park", "I will watch Interstellar tonight"},
 			labels:     []string{"fun"},
 			multilabel: true,
-			expected: taskPipelines.ZeroShotOutput{
-				ClassificationOutputs: []taskPipelines.ZeroShotClassificationOutput{
+			expected: pipelines.ZeroShotOutput{
+				ClassificationOutputs: []pipelines.ZeroShotClassificationOutput{
 					{
 						Sequence: "I am going to the park",
 						SortedValues: []struct {
@@ -615,8 +615,8 @@ func zeroShotClassificationPipeline(t *testing.T, session *Session) {
 			sequences:  []string{"Please don't bother me, I'm in a rush"},
 			labels:     []string{"busy", "relaxed", "stressed"},
 			multilabel: false,
-			expected: taskPipelines.ZeroShotOutput{
-				ClassificationOutputs: []taskPipelines.ZeroShotClassificationOutput{
+			expected: pipelines.ZeroShotOutput{
+				ClassificationOutputs: []pipelines.ZeroShotClassificationOutput{
 					{
 						Sequence: "Please don't bother me, I'm in a rush",
 						SortedValues: []struct {
@@ -690,7 +690,7 @@ func zeroShotClassificationPipelineValidation(t *testing.T, session *Session) {
 		defer func() {
 			sentimentPipeline.Model.OutputsMeta[0].Dimensions = dimensionInitial
 		}()
-		sentimentPipeline.Model.OutputsMeta[0].Dimensions = pipelines.NewShape(-1, -1, -1)
+		sentimentPipeline.Model.OutputsMeta[0].Dimensions = pipelineBackends.NewShape(-1, -1, -1)
 		err = sentimentPipeline.Validate()
 		assert.Error(t, err)
 	})
@@ -706,8 +706,8 @@ func tokenClassificationPipeline(t *testing.T, session *Session) {
 		ModelPath: modelPath,
 		Name:      "testPipelineSimple",
 		Options: []TokenClassificationOption{
-			taskPipelines.WithSimpleAggregation(),
-			taskPipelines.WithIgnoreLabels([]string{"O"}),
+			pipelines.WithSimpleAggregation(),
+			pipelines.WithIgnoreLabels([]string{"O"}),
 		},
 	}
 	pipelineSimple, err2 := NewPipeline(session, configSimple)
@@ -717,21 +717,21 @@ func tokenClassificationPipeline(t *testing.T, session *Session) {
 		ModelPath: modelPath,
 		Name:      "testPipelineNone",
 		Options: []TokenClassificationOption{
-			taskPipelines.WithoutAggregation(),
+			pipelines.WithoutAggregation(),
 		},
 	}
 	pipelineNone, err3 := NewPipeline(session, configNone)
 	check(t, err3)
 
-	var expectedResults map[int]taskPipelines.TokenClassificationOutput
+	var expectedResults map[int]pipelines.TokenClassificationOutput
 	err4 := json.Unmarshal(tokenExpectedByte, &expectedResults)
 	check(t, err4)
 
 	tests := []struct {
-		pipeline *taskPipelines.TokenClassificationPipeline
+		pipeline *pipelines.TokenClassificationPipeline
 		name     string
 		strings  []string
-		expected taskPipelines.TokenClassificationOutput
+		expected pipelines.TokenClassificationOutput
 	}{
 		{
 			pipeline: pipelineSimple,
@@ -778,8 +778,8 @@ func tokenClassificationPipelineValidation(t *testing.T, session *Session) {
 		ModelPath: modelPath,
 		Name:      "testPipelineSimple",
 		Options: []TokenClassificationOption{
-			taskPipelines.WithSimpleAggregation(),
-			taskPipelines.WithIgnoreLabels([]string{"O"}),
+			pipelines.WithSimpleAggregation(),
+			pipelines.WithIgnoreLabels([]string{"O"}),
 		},
 	}
 	pipelineSimple, err2 := NewPipeline(session, configSimple)
@@ -800,7 +800,7 @@ func tokenClassificationPipelineValidation(t *testing.T, session *Session) {
 		defer func() {
 			pipelineSimple.Model.OutputsMeta[0].Dimensions = dimensionInitial
 		}()
-		pipelineSimple.Model.OutputsMeta[0].Dimensions = pipelines.NewShape(-1, -1, -1)
+		pipelineSimple.Model.OutputsMeta[0].Dimensions = pipelineBackends.NewShape(-1, -1, -1)
 		err := pipelineSimple.Validate()
 		assert.Error(t, err)
 	})
@@ -815,8 +815,8 @@ func noSameNamePipeline(t *testing.T, session *Session) {
 		ModelPath: modelPath,
 		Name:      "testPipelineSimple",
 		Options: []TokenClassificationOption{
-			taskPipelines.WithSimpleAggregation(),
-			taskPipelines.WithIgnoreLabels([]string{"O"}),
+			pipelines.WithSimpleAggregation(),
+			pipelines.WithIgnoreLabels([]string{"O"}),
 		},
 	}
 	_, err2 := NewPipeline(session, configSimple)
@@ -907,7 +907,7 @@ loop:
 
 // Utilities
 
-func checkClassificationOutput(t *testing.T, inputResult []taskPipelines.ClassificationOutput, inputExpected []taskPipelines.ClassificationOutput) {
+func checkClassificationOutput(t *testing.T, inputResult []pipelines.ClassificationOutput, inputExpected []pipelines.ClassificationOutput) {
 	t.Helper()
 	assert.Equal(t, len(inputResult), len(inputExpected))
 	for i, output := range inputResult {
@@ -947,7 +947,7 @@ func check(t *testing.T, err error) {
 	}
 }
 
-func printTokenEntities(o *taskPipelines.TokenClassificationOutput) {
+func printTokenEntities(o *pipelines.TokenClassificationOutput) {
 	for i, entities := range o.Entities {
 		fmt.Printf("Input %d\n", i)
 		for _, entity := range entities {

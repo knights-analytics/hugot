@@ -14,7 +14,7 @@ import (
 	"sync"
 
 	"github.com/knights-analytics/hugot/options"
-	"github.com/knights-analytics/hugot/pipelines"
+	"github.com/knights-analytics/hugot/pipelineBackends"
 
 	"github.com/mattn/go-isatty"
 	"github.com/urfave/cli/v2"
@@ -166,7 +166,7 @@ var runCommand = &cli.Command{
 			}
 		}
 
-		var pipe pipelines.Pipeline
+		var pipe pipelineBackends.Pipeline
 		switch pipelineType {
 		case "tokenClassification":
 			config := hugot.TokenClassificationConfig{
@@ -344,7 +344,7 @@ func writeOutputs(wg *sync.WaitGroup, processedChannel chan []byte, errorChannel
 	wg.Done()
 }
 
-func processWithPipeline(wg *sync.WaitGroup, inputChannel chan []input, processedChannel chan []byte, errorsChannel chan error, p pipelines.Pipeline) {
+func processWithPipeline(wg *sync.WaitGroup, inputChannel chan []input, processedChannel chan []byte, errorsChannel chan error, p pipelineBackends.Pipeline) {
 	for inputBatch := range inputChannel {
 		inputStrings := make([]string, len(inputBatch))
 		for i := 0; i < len(inputBatch); i++ {
