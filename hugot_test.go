@@ -861,7 +861,7 @@ func threadSafety(t *testing.T, session *Session) {
 				errChannel <- threadErr
 			}
 			outputChannel1 <- batchResult.Embeddings
-			batchResult, err = pipeline.RunPipeline([]string{"robert smith junior", "francis ford coppola"})
+			batchResult, threadErr = pipeline.RunPipeline([]string{"robert smith junior", "francis ford coppola"})
 			if threadErr != nil {
 				errChannel <- threadErr
 			}
