@@ -73,7 +73,7 @@ type TextClassificationOption = pipelineBackends.PipelineOption[*pipelines.TextC
 // ZeroShotClassificationConfig is the configuration for a zero shot classification pipeline
 type ZeroShotClassificationConfig = pipelineBackends.PipelineConfig[*pipelines.ZeroShotClassificationPipeline]
 
-// ZeroShotClassificationOption is an option for a text classification pipeline
+// ZeroShotClassificationOption is an option for a zero shot classification pipeline
 type ZeroShotClassificationOption = pipelineBackends.PipelineOption[*pipelines.ZeroShotClassificationPipeline]
 
 // TokenClassificationConfig is the configuration for a token classification pipeline

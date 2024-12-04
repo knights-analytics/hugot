@@ -1,4 +1,4 @@
-# <span>Hugot: Huggingface 🤗 pipelines for golang
+# <span>Hugot: ONNX Transformer Pipelines for Go
 
 [![Go Reference](https://pkg.go.dev/badge/github.com/knights-analytics/hugot.svg)](https://pkg.go.dev/github.com/knights-analytics/hugot)
 [![Go Report Card](https://goreportcard.com/badge/github.com/knights-analytics/hugot)](https://goreportcard.com/report/github.com/knights-analytics/hugot)
@@ -8,13 +8,13 @@
 
 ## What
 
-The goal of this library is to provide an easy, scalable, and hassle-free way to run Hugging Face transformer pipelines in golang applications. It is built on the following principles:
+The goal of this library is to provide an easy, scalable, and hassle-free way to run Hugging Face 🤗 transformer pipelines in golang applications. It is built on the following principles:
 
 1. Fidelity to the original Hugging Face python implementations: the aim is to accurately replicate Hugging Face inference implementations for the implemented pipelines, so that models trained and tested in python can be seamlessly deployed in a golang application
 2. Hassle-free and performant production use: we exclusively support onnx exports of Hugging Face models. Pytorch transformer models that don't have an onnx version can be easily exported to onnx via [Hugging Face Optimum](https://huggingface.co/docs/optimum/index), and used with the library
 3. Run on your hardware: this library is for those who want to run transformer models tightly coupled with their go applications, without the performance drawbacks of having to hit a rest API, or the hassle of setting up and maintaining e.g. a python RPC service that talks to go.
 
-We support inference on CPU and on all accelerators supported by ONNX Runtime/OpenXLA. Note, however, that currently only CPU and GPU inference on nvidia GPU (with cuda) are tested (see below).
+We support inference on CPU and on all accelerators supported by ONNX Runtime/OpenXLA. Note however that currently only CPU, and GPU inference on Nvidia GPUs via CUDA, are tested (see below).
 
 ## Why
 

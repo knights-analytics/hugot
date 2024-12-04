@@ -127,8 +127,8 @@ func WithMemPattern(enable bool) WithOption {
 }
 
 // WithCuda Use this function to set the options for CUDA provider.
-// It takes a pointer to an instance of CUDAProviderOptions struct as input.
-// The options will be applied to the OrtOptions struct and the cudaOptionsSet flag will be set to true.
+// It takes a map of CUDA parameters as input.
+// The options will be applied to the OrtOptions or XLAOptions struct, depending on your current backend.
 func WithCuda(options map[string]string) WithOption {
 	return func(o *Options) error {
 		switch o.Runtime {
@@ -139,7 +139,7 @@ func WithCuda(options map[string]string) WithOption {
 			o.XLAOptions.Cuda = true
 			return nil
 		default:
-			return fmt.Errorf("WithCuda is only supported for ORT runtime")
+			return fmt.Errorf("WithCuda is only supported for ORT or XLA runtimes")
 		}
 	}
 }
@@ -147,7 +147,6 @@ func WithCuda(options map[string]string) WithOption {
 // WithCoreML (ORT only) Use this function to set the CoreML options flags for the ONNX runtime configuration.
 // The `flags` parameter represents the CoreML options flags.
 // The `o.CoreMLOptions` field in `OrtOptions` struct will be set to the provided flags parameter.
-// The `o.coreMLOptionsSet` field in `OrtOptions` struct will be set to true.
 func WithCoreML(flags uint32) WithOption {
 	return func(o *Options) error {
 		if o.Runtime == "ORT" {
@@ -175,7 +174,6 @@ func WithDirectML(deviceID int) WithOption {
 // WithOpenVINO (ORT only) Use this function to set the OpenVINO options for the OpenVINO execution provider.
 // The options parameter should be a map of string keys and string values, representing the configuration options.
 // For each key-value pair in the map, the specified option will be set in the OpenVINO execution provider.
-// Once the options are set, the openVINOOptionsSet flag in the OrtOptions struct will be set to true.
 // Example usage: WithOpenVINO(map[string]string{"device_type": "CPU", "num_threads": "4"})
 // This will configure the OpenVINO execution provider to use CPU as the device type and set the number of threads to 4.
 func WithOpenVINO(options map[string]string) WithOption {
