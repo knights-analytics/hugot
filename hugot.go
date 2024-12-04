@@ -67,12 +67,14 @@ type FeatureExtractionOption = pipelineBackends.PipelineOption[*pipelines.Featur
 // TextClassificationConfig is the configuration for a text classification pipeline
 type TextClassificationConfig = pipelineBackends.PipelineConfig[*pipelines.TextClassificationPipeline]
 
-// type ZSCConfig = pipelines.PipelineConfig[*pipelines.ZeroShotClassificationPipeline]
-
-type ZeroShotClassificationConfig = pipelineBackends.PipelineConfig[*pipelines.ZeroShotClassificationPipeline]
-
 // TextClassificationOption is an option for a text classification pipeline
 type TextClassificationOption = pipelineBackends.PipelineOption[*pipelines.TextClassificationPipeline]
+
+// ZeroShotClassificationConfig is the configuration for a zero shot classification pipeline
+type ZeroShotClassificationConfig = pipelineBackends.PipelineConfig[*pipelines.ZeroShotClassificationPipeline]
+
+// ZeroShotClassificationOption is an option for a text classification pipeline
+type ZeroShotClassificationOption = pipelineBackends.PipelineOption[*pipelines.ZeroShotClassificationPipeline]
 
 // TokenClassificationConfig is the configuration for a token classification pipeline
 type TokenClassificationConfig = pipelineBackends.PipelineConfig[*pipelines.TokenClassificationPipeline]
@@ -222,7 +224,6 @@ func (e *pipelineNotFoundError) Error() string {
 // the number of batch calls to the onnxruntime inference
 // the average time per onnxruntime inference batch call
 func (s *Session) GetStats() []string {
-	// slices.Concat() is not implemented in experimental x/exp/slices package
 	return slices.Concat(
 		s.tokenClassificationPipelines.GetStats(),
 		s.textClassificationPipelines.GetStats(),

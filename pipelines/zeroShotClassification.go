@@ -19,47 +19,6 @@ import (
 	jsoniter "github.com/json-iterator/go"
 )
 
-/**
-sample usage:
-
-package main
-import (
-	"fmt"
-	"github.com/knights-analytics/hugot"
-	"github.com/knights-analytics/hugot/pipelines"
-)
-
-func main() {
-	session, err := hugot.NewORTSession()
-	check(err)
-	defer func(session *hugot.Session) {
-		err := session.Destroy()
-		check(err)
-	}(session)
-
-	modelPath, err := session.DownloadModel("protectai/deberta-v3-base-zeroshot-v1-onnx", "./models", hugot.NewDownloadOptions())
-	check(err)
-
-	config := hugot.ZeroShotClassificationConfig{
-		ModelPath: modelPath,
-		Name:      "testPipeline",
-		Options: []pipelines.PipelineOption[*pipelines.ZeroShotClassificationPipeline]{
-			pipelines.WithHypothesisTemplate("This example is {}."),
-			pipelines.WithLabels([]string{"fun", "dangerous"}),
-		},
-	}
-
-	sentimentPipeline, err := hugot.NewPipeline(session, config)
-	check(err)
-
-	outputs, _ := sentimentPipeline.RunPipeline([]string{"I am going to war today"})
-	fmt.Println("raw outputs: ", outputs)
-	fmt.Println("outputs.GetOutput(): ", outputs.GetOutput())
-}
-
-main()
-**/
-
 type ZeroShotClassificationPipeline struct {
 	*pipelineBackends.BasePipeline
 	IDLabelMap         map[int]string
