@@ -9,13 +9,13 @@ import (
 )
 
 func TestSemanticSimilarity(t *testing.T) {
-	dataset, err := NewSemanticSimilarityDataset("./python/data/train.jsonl")
+	dataset, err := NewSemanticSimilarityDataset("./data/train.jsonl")
 	if err != nil {
 		t.Fatal(err)
 	}
 	session, err := NewTrainingSession[*pipelines.FeatureExtractionPipeline](
 		TrainingConfig{
-			ModelPath: "./models/distilbert-base-uncased",
+			ModelPath: "./models/KnightsAnalytics_distilbert-base-uncased",
 			Dataset:   dataset,
 		},
 	)

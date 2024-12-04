@@ -6,7 +6,6 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"path/filepath"
 	"slices"
@@ -43,13 +42,24 @@ func CosineSimilarityLoss(labels, predictions []*context.Node) *context.Node {
 	predictionsLeft := predictions[0]
 	predictionsRight := predictions[1]
 	scores := labels[0]
-	s := predictionsLeft.Shape()
-	if len(s.Dimensions) > 2 {
-		predictionsLeft = graph.ReduceMean(predictionsLeft, s.Dimensions[2:]...)
-		predictionsRight = graph.ReduceMean(predictionsRight, s.Dimensions[2:]...)
+
+	if predictionsLeft.Shape().Rank() != 2 {
+		panic(fmt.Errorf("expected rank 2, got %d", predictionsLeft.Shape().Rank()))
 	}
-	cosineSimilarity := graph.Div(graph.Mul(predictionsLeft, predictionsRight), graph.Mul(graph.L2Norm(predictionsLeft), graph.L2Norm(predictionsRight)))
-	loss := graph.L2NormSquare(graph.Sub(scores, cosineSimilarity))
+	if predictionsRight.Shape().Rank() != 2 {
+		panic(fmt.Errorf("expected rank 2, got %d", predictionsLeft.Shape().Rank()))
+	}
+	if scores.Shape().Rank() != 2 {
+		panic(fmt.Errorf("expected rank 2, got %d", predictionsLeft.Shape().Rank()))
+	}
+	m := graph.Mul(predictionsLeft, predictionsRight)
+	dotProduct := graph.ReduceAndKeep(m, graph.ReduceSum, 1)
+	normLeft := graph.L2Norm(predictionsLeft, 1)
+	normRight := graph.L2Norm(predictionsRight, 1)
+	denom := graph.Mul(normLeft, normRight)
+	similarity := graph.Div(dotProduct, denom)
+	residuals := graph.L2NormSquare(graph.Sub(scores, similarity), 1)
+	loss := graph.ReduceAllMean(residuals)
 	return loss
 }
 
@@ -120,6 +130,21 @@ func (s *TrainingSession) Train() error {
 			l := len(inputs) / 2
 			embeddingLeft := XLAModel.Call(ctx, inputs[:l])
 			embeddingRight := XLAModel.Call(ctx.Reuse(), inputs[l:])
+
+			// we mean pool the results if needed e.g. if dimensions are [batch, seq, hidden]
+			if len(embeddingLeft.Shape().Dimensions) > 2 {
+				var axisToReduce []int
+				axisToReduce = append(axisToReduce, 1)
+				for i := range embeddingLeft.Shape().Dimensions {
+					if i >= 3 {
+						axisToReduce = append(axisToReduce, i)
+					}
+				}
+				// TODO: check how to use the mask here
+				embeddingLeft = graph.ReduceMean(embeddingLeft, axisToReduce...)
+				embeddingRight = graph.ReduceMean(embeddingRight, axisToReduce...)
+			}
+
 			return []*context.Node{embeddingLeft, embeddingRight}
 		}
 
@@ -134,7 +159,7 @@ func (s *TrainingSession) Train() error {
 		loop := train.NewLoop(gomlxTrainer)
 
 		// Loop for given number of steps.
-		_, err := loop.RunSteps(s.config.Dataset, 1)
+		_, err := loop.RunSteps(s.config.Dataset, 2)
 		if err != nil {
 			return err
 		}
@@ -168,7 +193,7 @@ func (s *SemanticSimilarityDataset) Validate() error {
 type SemanticSimilarityExample struct {
 	Sentence1 string  `json:"sentence1"`
 	Sentence2 string  `json:"sentence2"`
-	Score     float64 `json:"label"`
+	Score     float32 `json:"label"`
 }
 
 func NewSemanticSimilarityDataset(trainingPath string) (*SemanticSimilarityDataset, error) {
@@ -191,7 +216,7 @@ func (s *SemanticSimilarityDataset) Yield() (spec any, inputs []*tensors.Tensor,
 
 	inputsLeft := []string{}
 	inputsRight := []string{}
-	scores := []float64{}
+	scores := []float32{}
 
 	for scanner.Scan() {
 		var lineData SemanticSimilarityExample
@@ -207,16 +232,26 @@ func (s *SemanticSimilarityDataset) Yield() (spec any, inputs []*tensors.Tensor,
 		return nil, nil, nil, fmt.Errorf("error reading file: %w", err)
 	}
 
-	var runErrors []error
 	batchLeft := pipelineBackends.NewBatch()
 	batchRight := pipelineBackends.NewBatch()
-	defer func() {
-		runErrors = append(runErrors, batchLeft.Destroy(), batchRight.Destroy())
-	}()
-	runErrors = append(runErrors, s.pipeline.Preprocess(batchLeft, inputsLeft))
-	runErrors = append(runErrors, s.pipeline.Preprocess(batchRight, inputsRight))
-	if e := errors.Join(runErrors...); e != nil {
-		return nil, nil, nil, e
+
+	pipelineBackends.TokenizeInputs(batchLeft, s.pipeline.Model.Tokenizer, inputsLeft)
+	pipelineBackends.TokenizeInputs(batchRight, s.pipeline.Model.Tokenizer, inputsRight)
+
+	// we pad the left and right batches to the same length so that they have the same shape
+	// lengthLeft := batchLeft.MaxSequenceLength
+	// lengthRight := batchRight.MaxSequenceLength
+	// if lengthLeft > lengthRight {
+	// 	batchRight.MaxSequenceLength = lengthLeft
+	// } else {
+	// 	batchLeft.MaxSequenceLength = lengthRight
+	// }
+
+	if err := pipelineBackends.CreateInputTensors(batchLeft, s.pipeline.Model.InputsMeta, s.pipeline.Runtime); err != nil {
+		return nil, nil, nil, err
+	}
+	if err := pipelineBackends.CreateInputTensors(batchRight, s.pipeline.Model.InputsMeta, s.pipeline.Runtime); err != nil {
+		return nil, nil, nil, err
 	}
 	inputLeft := batchLeft.InputValues.([]*tensors.Tensor)
 	inputRight := batchRight.InputValues.([]*tensors.Tensor)
