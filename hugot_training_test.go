@@ -5,17 +5,18 @@ package hugot
 import (
 	"testing"
 
+	"github.com/knights-analytics/hugot/datasets"
 	"github.com/knights-analytics/hugot/pipelines"
 )
 
 func TestSemanticSimilarity(t *testing.T) {
-	dataset, err := NewSemanticSimilarityDataset("./data/train.jsonl")
+	dataset, err := datasets.NewSemanticSimilarityDataset("./data/train.jsonl")
 	if err != nil {
 		t.Fatal(err)
 	}
-	session, err := NewTrainingSession[*pipelines.FeatureExtractionPipeline](
+	session, err := NewXLATrainingSession[*pipelines.FeatureExtractionPipeline](
 		TrainingConfig{
-			ModelPath: "./models/KnightsAnalytics_distilbert-base-uncased",
+			ModelPath: "./models/distilbert-base-uncased",
 			Dataset:   dataset,
 		},
 	)

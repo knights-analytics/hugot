@@ -6,7 +6,7 @@ require (
 	github.com/bodaay/HuggingFaceModelDownloader v0.0.0-20241026025743-cbf2f5e84f54
 	github.com/daulet/tokenizers v1.20.2
 	github.com/gomlx/exceptions v0.0.3
-	github.com/gomlx/gomlx v0.15.4-0.20241201091902-08b09d3d86d8
+	github.com/gomlx/gomlx v0.15.4-0.20241204132105-94e191665ac1
 	github.com/gomlx/onnx-gomlx v0.1.4
 	github.com/json-iterator/go v1.1.12
 	github.com/mattn/go-isatty v0.0.20

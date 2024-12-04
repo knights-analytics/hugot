@@ -16,6 +16,7 @@ from sentence_transformers.similarity_functions import SimilarityFunction
 from sentence_transformers.trainer import SentenceTransformerTrainer
 from sentence_transformers.training_args import SentenceTransformerTrainingArguments
 
+
 # Set the log level to INFO to get more information
 logging.basicConfig(format="%(asctime)s - %(message)s", datefmt="%Y-%m-%d %H:%M:%S", level=logging.INFO)
 
@@ -117,3 +118,9 @@ os.mkdir("../data")
 train_dataset.to_json("../data/train.json")
 test_dataset.to_json("../data/test.json")
 eval_dataset.to_json("../data/eval.json")
+
+import onnx
+model = onnx.load("../models/deberta-v3-base-zeroshot-v1/model.onnx")
+opset_version = model.opset_import[0].version if len(model.opset_import) > 0 else None
+opset_version
+ 

@@ -3,6 +3,7 @@
 package pipelineBackends
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/gomlx/exceptions"
@@ -28,63 +29,69 @@ type XLAModel struct {
 }
 
 func createXLAModelBackend(model *Model, options *options.Options) error {
+	var insideError error
+	var recoverErr error
 
-	modelParsed, err := onnx.Parse(model.OnnxBytes)
-	if err != nil {
-		return err
-	}
-
-	inputs, outputs := loadInputOutputMetaXLA(modelParsed)
-
-	var outputNames []string
-	for _, v := range outputs {
-		outputNames = append(outputNames, v.Name)
-	}
-
-	ctx := context.New()
-	ctx = ctx.Reuse() // Mark it to reuse variables: it will be an error to create a new variable – for safety.
-	// Read variables from ONNX model.
-	err = modelParsed.VariablesToContext(ctx)
-	if err != nil {
-		return err
-	}
-
-	config := "xla:cpu"
-	if options.XLAOptions.Cuda {
-		config = "xla:cuda"
-	}
-	backend := backends.NewWithConfig(config)
-
-	// Create model executor.
-	callFun := func(ctx *context.Context, inputs []*graph.Node) (choice *graph.Node) {
-		inputsMap := map[string]*graph.Node{
-			"input_ids":      inputs[0],
-			"attention_mask": inputs[1]}
-		if modelParsed.NumInputs() == 3 {
-			inputsMap["token_type_ids"] = inputs[2]
+	// we never want to panic so the calling program has a chance to shut down gracefully on error.
+	// we therefore catch all panics from gomlx as errors.
+	recoverErr = exceptions.TryCatch[error](func() {
+		var modelParsed *onnx.Model
+		modelParsed, insideError = onnx.Parse(model.OnnxBytes)
+		if insideError != nil {
+			return
 		}
-		results := modelParsed.CallGraph(ctx, inputs[0].Graph(), inputsMap, outputNames...)
-		return results[0]
-	}
 
-	exec := context.NewExec(backend, ctx, callFun)
-	exec.SetMaxCache(-1)
+		inputs, outputs := loadInputOutputMetaXLA(modelParsed)
 
-	model.XLAModel = &XLAModel{
-		Backend:   backend,
-		OnnxModel: modelParsed,
-		Ctx:       ctx,
-		Exec:      exec,
-		Call:      callFun,
-		Destroy: func() {
-			exec.Finalize()
-			backend.Finalize()
-		},
-	}
-	model.InputsMeta = inputs
-	model.OutputsMeta = outputs
+		var outputNames []string
+		for _, v := range outputs {
+			outputNames = append(outputNames, v.Name)
+		}
 
-	return err
+		ctx := context.New()
+		ctx = ctx.Reuse() // Mark it to reuse variables: it will be an error to create a new variable – for safety.
+		// Read variables from ONNX model.
+		insideError = modelParsed.VariablesToContext(ctx)
+		if insideError != nil {
+			return
+		}
+
+		config := "xla:cpu"
+		if options.XLAOptions.Cuda {
+			config = "xla:cuda"
+		}
+		backend := backends.NewWithConfig(config)
+
+		// Create model executor.
+		callFunc := func(ctx *context.Context, inputs []*graph.Node) (choice *graph.Node) {
+			inputsMap := map[string]*graph.Node{
+				"input_ids":      inputs[0],
+				"attention_mask": inputs[1]}
+			if modelParsed.NumInputs() == 3 {
+				inputsMap["token_type_ids"] = inputs[2]
+			}
+			results := modelParsed.CallGraph(ctx, inputs[0].Graph(), inputsMap, outputNames...)
+			return results[0]
+		}
+
+		exec := context.NewExec(backend, ctx, callFunc)
+		exec.SetMaxCache(-1)
+
+		model.XLAModel = &XLAModel{
+			Backend:   backend,
+			OnnxModel: modelParsed,
+			Ctx:       ctx,
+			Exec:      exec,
+			Call:      callFunc,
+			Destroy: func() {
+				exec.Finalize()
+				backend.Finalize()
+			},
+		}
+		model.InputsMeta = inputs
+		model.OutputsMeta = outputs
+	})
+	return errors.Join(insideError, recoverErr)
 }
 
 func loadInputOutputMetaXLA(model *onnx.Model) ([]InputOutputInfo, []InputOutputInfo) {
@@ -145,7 +152,12 @@ func createInputTensorsXLA(batch *PipelineBatch, inputsMeta []InputOutputInfo) e
 				counter++
 			}
 		}
-		inputTensors[i] = tensors.FromFlatDataAndDimensions(backingSlice, batchSize, batch.MaxSequenceLength)
+
+		if err := exceptions.TryCatch[error](func() {
+			inputTensors[i] = tensors.FromFlatDataAndDimensions(backingSlice, batchSize, batch.MaxSequenceLength)
+		}); err != nil {
+			return err
+		}
 	}
 	batch.InputValues = inputTensors
 	batch.DestroyInputs = func() error {
