@@ -11,7 +11,6 @@ import (
 	"github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/types/tensors"
-	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/gomlx/onnx-gomlx/onnx"
 
 	"github.com/knights-analytics/hugot/options"
@@ -57,15 +56,14 @@ func createXLAModelBackend(model *Model, options *options.Options) error {
 	// Create model executor.
 	exec := context.NewExec(
 		backend, ctx,
-		func(ctx *context.Context, inputs []*graph.Node) (choice *graph.Node) {
+		func(ctx *context.Context, inputs []*graph.Node) []*graph.Node {
 			inputsMap := map[string]*graph.Node{
 				"input_ids":      inputs[0],
 				"attention_mask": inputs[1]}
 			if modelParsed.NumInputs() == 3 {
 				inputsMap["token_type_ids"] = inputs[2]
 			}
-			results := modelParsed.CallGraph(ctx, inputs[0].Graph(), inputsMap, outputNames...)
-			return results[0]
+			return modelParsed.CallGraph(ctx, inputs[0].Graph(), inputsMap, outputNames...)
 		})
 	exec.SetMaxCache(-1)
 
@@ -185,7 +183,7 @@ func runXLASessionOnBatch(batch *PipelineBatch, p *BasePipeline) error {
 	for i, t := range outputs {
 		var rawOutput []float32
 		tensors.ConstFlatData[float32](t, func(flat []float32) {
-			rawOutput = xslices.Copy(flat)
+			rawOutput = flat
 		})
 		convertedOutput[i] = ReshapeOutput(&rawOutput, p.Model.OutputsMeta[i], batch.PaddingMask, batch.MaxSequenceLength)
 	}

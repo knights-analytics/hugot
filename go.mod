@@ -6,8 +6,8 @@ require (
 	github.com/bodaay/HuggingFaceModelDownloader v0.0.0-20241026025743-cbf2f5e84f54
 	github.com/daulet/tokenizers v1.20.2
 	github.com/gomlx/exceptions v0.0.3
-	github.com/gomlx/gomlx v0.15.4-0.20241201091902-08b09d3d86d8
-	github.com/gomlx/onnx-gomlx v0.1.4
+	github.com/gomlx/gomlx v0.16.1-0.20241219161120-65ac0802d580
+	github.com/gomlx/onnx-gomlx v0.1.5-0.20241219102904-c280944c2573
 	github.com/json-iterator/go v1.1.12
 	github.com/mattn/go-isatty v0.0.20
 	github.com/stretchr/testify v1.10.0
@@ -15,7 +15,7 @@ require (
 	github.com/viant/afs v1.25.1
 	github.com/viant/afsc v1.9.5-0.20241029213958-b40d6acbe9e3
 	github.com/yalue/onnxruntime_go v1.13.0
-	golang.org/x/exp v0.0.0-20241215155358-4a5509556b9e
+	golang.org/x/exp v0.0.0-20241217172543-b2144cdd0a67
 )
 
 require (
@@ -44,12 +44,13 @@ require (
 	github.com/fatih/color v1.18.0 // indirect
 	github.com/go-errors/errors v1.5.1 // indirect
 	github.com/go-logr/logr v1.4.2 // indirect
-	github.com/gomlx/gopjrt v0.4.10-0.20241203095034-c8c81d9f11fe // indirect
+	github.com/gomlx/gopjrt v0.5.0 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
+	github.com/rogpeppe/go-internal v1.13.1 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	github.com/xrash/smetrics v0.0.0-20240521201337-686a1a2994c1 // indirect
