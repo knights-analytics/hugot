@@ -101,8 +101,14 @@ type PipelineBatch struct {
 	Input             []TokenizedInput
 	MaxSequenceLength int
 	InputValues       any
+	PaddingMask       [][]bool
 	DestroyInputs     func() error
-	OutputValues      [][]float32
+	OutputValues      []OutputArray
+}
+
+type OutputArray struct {
+	Result2D [][]float32
+	Result3D [][][]float32
 }
 
 func (b *PipelineBatch) Destroy() error {

@@ -201,45 +201,16 @@ func (p *TokenClassificationPipeline) Postprocess(batch *pipelineBackends.Pipeli
 		return &TokenClassificationOutput{}, nil
 	}
 
-	outputDims := p.Model.OutputsMeta[0].Dimensions
-	tokenLogitsDim := int(outputDims[len(outputDims)-1])
-	outputs := make([][][]float32, len(batch.Input))              // holds the final output
-	inputVectors := make([][]float32, 0, batch.MaxSequenceLength) // holds the embeddings of each original token (no padding) for an input
-	tokenVector := make([]float32, tokenLogitsDim)                // holds the vector embedding for a token
-	inputTokens := batch.Input[0].TokenIDs                        // original tokens from the input excluding the padded tokens
-	tokenVectorCounter := 0
-	tokenCounter := 0
-	inputCounter := 0
-	nInputs := len(batch.Input)
+	output := batch.OutputValues[0]
 
-	// construct the output vectors by gathering the logits,
-	// however discard the embeddings of the padding tokens so that the output vector length
-	// for an input is equal to the number of original tokens
-	outputTensor := batch.OutputValues[0]
-	for _, result := range outputTensor {
-		tokenVector[tokenVectorCounter] = result
-		if tokenVectorCounter == tokenLogitsDim-1 {
-			// raw result vector for token is now complete
-			if tokenCounter < len(inputTokens) {
-				// it is an original token (not resulting from padding), keep it
-				inputVectors = append(inputVectors, util.SoftMax(tokenVector))
-			}
-			tokenVectorCounter = 0
-			tokenVector = make([]float32, tokenLogitsDim)
-			if tokenCounter == batch.MaxSequenceLength-1 {
-				// we went through all tokens in the sequence for this input
-				outputs[inputCounter] = inputVectors
-				tokenCounter = 0
-				inputVectors = make([][]float32, 0, batch.MaxSequenceLength)
-				inputCounter++
-				if inputCounter < nInputs {
-					inputTokens = batch.Input[inputCounter].TokenIDs
-				}
-			} else {
-				tokenCounter++
-			}
-		} else {
-			tokenVectorCounter++
+	if len(output.Result3D) == 0 {
+		return nil, fmt.Errorf("3D output has empty result")
+	}
+
+	for batchIndex, tokens := range output.Result3D {
+		output.Result3D[batchIndex] = make([][]float32, len(tokens))
+		for tokenIndex, tokenLogits := range tokens {
+			output.Result3D[batchIndex][tokenIndex] = util.SoftMax(tokenLogits)
 		}
 	}
 
@@ -249,7 +220,7 @@ func (p *TokenClassificationPipeline) Postprocess(batch *pipelineBackends.Pipeli
 	}
 
 	for i, input := range batch.Input {
-		preEntities := p.GatherPreEntities(input, outputs[i])
+		preEntities := p.GatherPreEntities(input, output.Result3D[i])
 		entities, errAggregate := p.Aggregate(input, preEntities)
 		if errAggregate != nil {
 			return nil, errAggregate

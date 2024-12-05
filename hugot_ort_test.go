@@ -111,7 +111,6 @@ func TestTextClassificationPipelineMultiORT(t *testing.T) {
 		check(t, destroyErr)
 	}(session)
 	textClassificationPipelineMulti(t, session)
-
 }
 
 func TestTextClassificationPipelineORTMultiCuda(t *testing.T) {

@@ -197,13 +197,6 @@ func (p *TextClassificationPipeline) Forward(batch *pipelineBackends.PipelineBat
 }
 
 func (p *TextClassificationPipeline) Postprocess(batch *pipelineBackends.PipelineBatch) (*TextClassificationOutput, error) {
-	outputValue := batch.OutputValues[0]
-	outputDims := p.Model.OutputsMeta[0].Dimensions
-	nLogit := outputDims[len(outputDims)-1]
-	output := make([][]float32, len(batch.Input))
-	inputCounter := 0
-	vectorCounter := 0
-	inputVector := make([]float32, nLogit)
 	var aggregationFunction func([]float32) []float32
 	switch p.AggregationFunctionName {
 	case "SIGMOID":
@@ -214,16 +207,14 @@ func (p *TextClassificationPipeline) Postprocess(batch *pipelineBackends.Pipelin
 		return nil, fmt.Errorf("aggregation function %s is not supported", p.AggregationFunctionName)
 	}
 
-	for _, result := range outputValue {
-		inputVector[vectorCounter] = result
-		if vectorCounter == int(nLogit)-1 {
-			output[inputCounter] = aggregationFunction(inputVector)
-			vectorCounter = 0
-			inputVector = make([]float32, nLogit)
-			inputCounter++
-		} else {
-			vectorCounter++
-		}
+	output := batch.OutputValues[0]
+
+	if len(output.Result2D) == 0 {
+		return nil, fmt.Errorf("output is not 2D, expected batch size x logits")
+	}
+
+	for i, logits := range output.Result2D {
+		output.Result2D[i] = aggregationFunction(logits)
 	}
 
 	batchClassificationOutputs := TextClassificationOutput{
@@ -236,7 +227,7 @@ func (p *TextClassificationPipeline) Postprocess(batch *pipelineBackends.Pipelin
 		switch p.ProblemType {
 		case "singleLabel":
 			inputClassificationOutputs := make([]ClassificationOutput, 1)
-			index, value, errArgMax := util.ArgMax(output[i])
+			index, value, errArgMax := util.ArgMax(output.Result2D[i])
 			if errArgMax != nil {
 				err = errArgMax
 				continue
@@ -252,14 +243,14 @@ func (p *TextClassificationPipeline) Postprocess(batch *pipelineBackends.Pipelin
 			batchClassificationOutputs.ClassificationOutputs[i] = inputClassificationOutputs
 		case "multiLabel":
 			inputClassificationOutputs := make([]ClassificationOutput, len(p.IDLabelMap))
-			for j := range output[i] {
+			for j := range output.Result2D[i] {
 				class, ok := p.IDLabelMap[j]
 				if !ok {
 					err = fmt.Errorf("class with index number %d not found in id label map", j)
 				}
 				inputClassificationOutputs[j] = ClassificationOutput{
 					Label: class,
-					Score: output[i][j],
+					Score: output.Result2D[i][j],
 				}
 			}
 			batchClassificationOutputs.ClassificationOutputs[i] = inputClassificationOutputs

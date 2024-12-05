@@ -171,48 +171,19 @@ func (p *FeatureExtractionPipeline) Postprocess(batch *pipelineBackends.Pipeline
 	// we need an ndarray type that can be the return type of this pipeline. Need to think
 	// about how to do this in a lightweight manner.
 
+	output := batch.OutputValues[0]
 	batchEmbeddings := make([][]float32, len(batch.Input))
 	outputDimensions := []int64(p.Output.Dimensions)
 	embeddingDimension := outputDimensions[len(outputDimensions)-1]
-	maxSequenceLength := batch.MaxSequenceLength
 
-	// now take the output slice and gather the results as a "matrix"
-	outputEmbedding := make([]float32, embeddingDimension)
-	outputEmbeddingCounter := 0
-	tokenEmbeddings := make([][]float32, maxSequenceLength)
-	tokenEmbeddingsCounter := 0
-	batchInputCounter := 0
-	outputTensor := batch.OutputValues[0]
-
-	for _, result := range outputTensor {
-		outputEmbedding[outputEmbeddingCounter] = result
-		if outputEmbeddingCounter == int(embeddingDimension)-1 {
-			// we gathered one embedding
-			if len(outputDimensions) <= 2 {
-				// it is already a sentence embedding, just add it to batch outputs
-				batchEmbeddings[batchInputCounter] = outputEmbedding
-				outputEmbedding = make([]float32, embeddingDimension)
-				batchInputCounter++
-			} else {
-				// output is embedding for a token, add to token embeddings
-				tokenEmbeddings[tokenEmbeddingsCounter] = outputEmbedding
-				outputEmbedding = make([]float32, embeddingDimension)
-				if tokenEmbeddingsCounter == maxSequenceLength-1 {
-					// computed all embeddings for the tokens, calculate sentence embedding, add to batch outputs, and reset token embeddings and counter
-					batchEmbeddings[batchInputCounter] = meanPooling(tokenEmbeddings, batch.Input[batchInputCounter], maxSequenceLength, int(embeddingDimension))
-					tokenEmbeddings = make([][]float32, maxSequenceLength)
-					tokenEmbeddingsCounter = 0
-					batchInputCounter++
-				} else {
-					// still more tokens to go
-					tokenEmbeddingsCounter++
-				}
-			}
-			outputEmbeddingCounter = 0
-		} else {
-			// still more elements of the embedding to go
-			outputEmbeddingCounter++
+	if len(output.Result2D) > 0 {
+		batchEmbeddings = output.Result2D
+	} else if len(output.Result3D) > 0 {
+		for batchIndex, tokens := range output.Result3D {
+			batchEmbeddings[batchIndex] = meanPooling(tokens, batch.Input[batchIndex], batch.MaxSequenceLength, int(embeddingDimension))
 		}
+	} else {
+		return nil, fmt.Errorf("2D output has empty result")
 	}
 
 	// Normalize embeddings (if asked), like in https://huggingface.co/sentence-transformers/all-mpnet-base-v2

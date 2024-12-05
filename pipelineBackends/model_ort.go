@@ -68,21 +68,25 @@ func createInputTensorsORT(batch *PipelineBatch, inputsMeta []InputOutputInfo) e
 	inputTensors := make([]ort.Value, len(inputsMeta))
 	var tensorCreationErr error
 
+	paddingMasks := make([][]bool, batchSize)
+
 	for i, inputMeta := range inputsMeta {
 		backingSlice := make([]int64, tensorSize)
 		counter := 0
 
-		for _, input := range batch.Input {
+		for j, input := range batch.Input {
+			inputPaddingMask := make([]bool, batch.MaxSequenceLength)
 			length := len(input.TokenIDs)
-			for j := 0; j < batch.MaxSequenceLength; j++ {
-				if j+1 <= length {
+			for k := 0; k < batch.MaxSequenceLength; k++ {
+				if k+1 <= length {
 					switch inputMeta.Name {
 					case "input_ids":
-						backingSlice[counter] = int64(input.TokenIDs[j])
+						backingSlice[counter] = int64(input.TokenIDs[k])
+						inputPaddingMask[k] = true
 					case "token_type_ids":
-						backingSlice[counter] = int64(input.TypeIDs[j])
+						backingSlice[counter] = int64(input.TypeIDs[k])
 					case "attention_mask":
-						backingSlice[counter] = int64(input.AttentionMask[j])
+						backingSlice[counter] = int64(input.AttentionMask[k])
 					default:
 						return fmt.Errorf("input %s not recognized", inputMeta.Name)
 					}
@@ -91,6 +95,10 @@ func createInputTensorsORT(batch *PipelineBatch, inputsMeta []InputOutputInfo) e
 				}
 				counter++
 			}
+
+			if inputMeta.Name == "input_ids" {
+				paddingMasks[j] = inputPaddingMask
+			}
 		}
 		inputTensors[i], tensorCreationErr = ort.NewTensor(ort.NewShape(int64(batchSize), int64(batch.MaxSequenceLength)), backingSlice)
 		if tensorCreationErr != nil {
@@ -98,6 +106,7 @@ func createInputTensorsORT(batch *PipelineBatch, inputsMeta []InputOutputInfo) e
 		}
 	}
 	batch.InputValues = inputTensors
+	batch.PaddingMask = paddingMasks
 	batch.DestroyInputs = func() error {
 		var destroyError error
 		for _, ortTensor := range inputTensors {
@@ -154,9 +163,11 @@ func runORTSessionOnBatch(batch *PipelineBatch, p *BasePipeline) error {
 		return errOnnx
 	}
 
-	convertedOutput := make([][]float32, len(outputTensors))
+	convertedOutput := make([]OutputArray, len(outputTensors))
+
 	for i, t := range outputTensors {
-		convertedOutput[i] = t.(*ort.Tensor[float32]).GetData()
+		rawOutput := t.(*ort.Tensor[float32]).GetData()
+		convertedOutput[i] = ReshapeOutput(&rawOutput, p.Model.OutputsMeta[i], batch.PaddingMask, batch.MaxSequenceLength)
 	}
 
 	// store resulting tensors

@@ -34,7 +34,6 @@ func createXLAModelBackend(model *Model, options *options.Options) error {
 	}
 
 	inputs, outputs := loadInputOutputMetaXLA(modelParsed)
-
 	var outputNames []string
 	for _, v := range outputs {
 		outputNames = append(outputNames, v.Name)
@@ -116,24 +115,28 @@ func loadInputOutputMetaXLA(model *onnx.Model) ([]InputOutputInfo, []InputOutput
 
 func createInputTensorsXLA(batch *PipelineBatch, inputsMeta []InputOutputInfo) error {
 	batchSize := len(batch.Input)
-	tensorSize := batchSize * batch.MaxSequenceLength
+	batchSizePow := nextPowerOf2(batchSize)
+	maxSequenceLengthPow := nextPowerOf2(batch.MaxSequenceLength)
+	tensorSize := batchSizePow * maxSequenceLengthPow
 
 	inputTensors := make([]*tensors.Tensor, len(inputsMeta))
+	paddingMasks := make([][]bool, batchSize)
 	for i, inputMeta := range inputsMeta {
 		backingSlice := make([]int64, tensorSize)
 		counter := 0
-
-		for _, input := range batch.Input {
+		for j, input := range batch.Input {
+			paddingMask := make([]bool, maxSequenceLengthPow)
 			length := len(input.TokenIDs)
-			for j := 0; j < batch.MaxSequenceLength; j++ {
-				if j+1 <= length {
+			for k := 0; k < maxSequenceLengthPow; k++ {
+				if k+1 <= length {
 					switch inputMeta.Name {
 					case "input_ids":
-						backingSlice[counter] = int64(input.TokenIDs[j])
+						backingSlice[counter] = int64(input.TokenIDs[k])
+						paddingMask[k] = true
 					case "token_type_ids":
-						backingSlice[counter] = int64(input.TypeIDs[j])
+						backingSlice[counter] = int64(input.TypeIDs[k])
 					case "attention_mask":
-						backingSlice[counter] = int64(input.AttentionMask[j])
+						backingSlice[counter] = int64(input.AttentionMask[k])
 					default:
 						return fmt.Errorf("input %s not recognized", inputMeta.Name)
 					}
@@ -142,10 +145,15 @@ func createInputTensorsXLA(batch *PipelineBatch, inputsMeta []InputOutputInfo) e
 				}
 				counter++
 			}
+
+			if inputMeta.Name == "input_ids" {
+				paddingMasks[j] = paddingMask
+			}
 		}
-		inputTensors[i] = tensors.FromFlatDataAndDimensions(backingSlice, batchSize, batch.MaxSequenceLength)
+		inputTensors[i] = tensors.FromFlatDataAndDimensions(backingSlice, batchSizePow, maxSequenceLengthPow)
 	}
 	batch.InputValues = inputTensors
+	batch.PaddingMask = paddingMasks
 	batch.DestroyInputs = func() error {
 		for _, input := range inputTensors {
 			input.FinalizeAll()
@@ -171,13 +179,35 @@ func runXLASessionOnBatch(batch *PipelineBatch, p *BasePipeline) error {
 		return err
 	}
 
-	convertedOutput := make([][]float32, len(outputs))
+	convertedOutput := make([]OutputArray, len(outputs))
+
 	for i, t := range outputs {
-		convertedOutput[i] = tensors.CopyFlatData[float32](t)
+		rawOutput := tensors.CopyFlatData[float32](t)
+		convertedOutput[i] = ReshapeOutput(&rawOutput, p.Model.OutputsMeta[i], batch.PaddingMask, batch.MaxSequenceLength)
 	}
 
 	// store resulting tensors
 	batch.OutputValues = convertedOutput
 
 	return nil
+}
+
+func nextPowerOf2(n int) int {
+	if n < 1 {
+		return 1
+	}
+
+	// Check if n is a power of 2.
+	if (n & (n - 1)) == 0 {
+		return n
+	}
+
+	// Find the next power of 2.
+	// This approach initially sets the result to 1 and
+	// keeps shifting the bits until it finds a number greater or equal to n.
+	pow := 1
+	for pow < n {
+		pow <<= 1
+	}
+	return pow
 }

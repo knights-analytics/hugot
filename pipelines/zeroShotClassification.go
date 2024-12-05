@@ -371,7 +371,7 @@ func (p *ZeroShotClassificationPipeline) RunPipeline(inputs []string) (*ZeroShot
 			if e := errors.Join(runErrors...); e != nil {
 				return nil, e
 			}
-			sequenceTensors = append(sequenceTensors, batch.OutputValues[0])
+			sequenceTensors = append(sequenceTensors, batch.OutputValues[0].Result2D[0])
 		}
 		outputTensors = append(outputTensors, sequenceTensors)
 	}
