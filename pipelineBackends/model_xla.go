@@ -11,6 +11,7 @@ import (
 	"github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/types/tensors"
+	"github.com/gomlx/gomlx/types/xslices"
 	"github.com/gomlx/onnx-gomlx/onnx"
 
 	"github.com/knights-analytics/hugot/options"
@@ -182,7 +183,10 @@ func runXLASessionOnBatch(batch *PipelineBatch, p *BasePipeline) error {
 	convertedOutput := make([]OutputArray, len(outputs))
 
 	for i, t := range outputs {
-		rawOutput := tensors.CopyFlatData[float32](t)
+		var rawOutput []float32
+		tensors.ConstFlatData[float32](t, func(flat []float32) {
+			rawOutput = xslices.Copy(flat)
+		})
 		convertedOutput[i] = ReshapeOutput(&rawOutput, p.Model.OutputsMeta[i], batch.PaddingMask, batch.MaxSequenceLength)
 	}
 
