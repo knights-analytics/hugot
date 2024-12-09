@@ -41,20 +41,11 @@ func createXLAModelBackend(model *Model, options *options.Options) error {
 			return
 		}
 
-<<<<<<< HEAD
-	inputs, outputs := loadInputOutputMetaXLA(modelParsed)
-	var outputNames []string
-	for _, v := range outputs {
-		outputNames = append(outputNames, v.Name)
-	}
-=======
 		inputs, outputs := loadInputOutputMetaXLA(modelParsed)
-
 		var outputNames []string
 		for _, v := range outputs {
 			outputNames = append(outputNames, v.Name)
 		}
->>>>>>> ad6feee (wip)
 
 		ctx := context.New()
 		ctx = ctx.Reuse() // Mark it to reuse variables: it will be an error to create a new variable – for safety.
@@ -168,16 +159,7 @@ func createInputTensorsXLA(batch *PipelineBatch, inputsMeta []InputOutputInfo) e
 				paddingMasks[j] = paddingMask
 			}
 		}
-<<<<<<< HEAD
 		inputTensors[i] = tensors.FromFlatDataAndDimensions(backingSlice, batchSizePow, maxSequenceLengthPow)
-=======
-
-		if err := exceptions.TryCatch[error](func() {
-			inputTensors[i] = tensors.FromFlatDataAndDimensions(backingSlice, batchSize, batch.MaxSequenceLength)
-		}); err != nil {
-			return err
-		}
->>>>>>> ad6feee (wip)
 	}
 	batch.InputValues = inputTensors
 	batch.PaddingMask = paddingMasks

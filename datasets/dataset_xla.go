@@ -4,9 +4,9 @@ package datasets
 
 import (
 	"bufio"
-	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"path/filepath"
 	"slices"
 
@@ -21,13 +21,18 @@ type Dataset interface {
 	train.Dataset
 	Validate() error
 	SetTokenizationPipeline(pipeline pipelineBackends.Pipeline) error
+	Close() error
 }
 
 // SemanticSimilarityDataset is a dataset for fine-tuning a feature extraction pipeline for textual semantic similarity.
 type SemanticSimilarityDataset struct {
 	train.Dataset
 	TrainingPath string
+	BatchSize    int
 	pipeline     *pipelines.FeatureExtractionPipeline
+	reader       *bufio.Reader
+	sourceFile   io.ReadCloser
+	batchN       int
 }
 
 func (s *SemanticSimilarityDataset) SetTokenizationPipeline(pipeline pipelineBackends.Pipeline) error {
@@ -61,45 +66,57 @@ type SemanticSimilarityExample struct {
 // The trainingPath must be a .jsonl file where each line has the following format:
 // {"sentence1":"A plane is taking off.","sentence2":"An air plane is taking off.","score":1.0}
 // The score is a float value between 0 and 1.
-func NewSemanticSimilarityDataset(trainingPath string) (*SemanticSimilarityDataset, error) {
+func NewSemanticSimilarityDataset(trainingPath string, batchSize int) (*SemanticSimilarityDataset, error) {
 	d := &SemanticSimilarityDataset{
 		TrainingPath: trainingPath,
+		BatchSize:    batchSize,
 	}
 	if err := d.Validate(); err != nil {
 		return nil, err
 	}
+
+	sourceReadCloser, err := util.OpenFile(trainingPath)
+	if err != nil {
+		return nil, err
+	}
+	d.reader = bufio.NewReader(sourceReadCloser)
+	d.sourceFile = sourceReadCloser
 	return d, nil
 }
 
-func (s *SemanticSimilarityDataset) Yield() (spec any, inputs []*tensors.Tensor, labels []*tensors.Tensor, err error) {
-	jsonBytes, err := util.ReadFileBytes(s.TrainingPath)
-	if err != nil {
-		return nil, nil, nil, err
-	}
+func (s *SemanticSimilarityDataset) Reset() {
+	s.reader = bufio.NewReader(s.sourceFile)
+}
 
-	scanner := bufio.NewScanner(bytes.NewReader(jsonBytes))
+func (s *SemanticSimilarityDataset) Yield() (spec any, inputs []*tensors.Tensor, labels []*tensors.Tensor, err error) {
 
 	inputsLeft := []string{}
 	inputsRight := []string{}
 	scores := []float32{}
 
-	// nLines := 0 // just 20 examples
+	batchCounter := 0
 
-	for scanner.Scan() {
-		// if nLines >= 20 {
-		// 	break
-		// }
-		var lineData SemanticSimilarityExample
-		if err := json.Unmarshal(scanner.Bytes(), &lineData); err != nil {
-			return nil, nil, nil, fmt.Errorf("failed to parse JSON line: %w", err)
-		} else {
-			inputsLeft = append(inputsLeft, lineData.Sentence1)
-			inputsRight = append(inputsRight, lineData.Sentence2)
-			scores = append(scores, lineData.Score)
+	var lineBytes []byte
+	var readErr error
+	var lineData SemanticSimilarityExample
+
+	for batchCounter < s.BatchSize {
+		lineBytes, readErr = util.ReadLine(s.reader)
+		if readErr == io.EOF {
+			if batchCounter == 0 {
+				return nil, nil, nil, io.EOF // return error for reset
+			} else {
+				break // batch was cut short but we still process what is left
+			}
 		}
-	}
-	if err := scanner.Err(); err != nil {
-		return nil, nil, nil, fmt.Errorf("error reading file: %w", err)
+
+		if e := json.Unmarshal(lineBytes, &lineData); e != nil {
+			return nil, nil, nil, fmt.Errorf("failed to parse JSON line: %w", e)
+		}
+		inputsLeft = append(inputsLeft, lineData.Sentence1)
+		inputsRight = append(inputsRight, lineData.Sentence2)
+		scores = append(scores, lineData.Score)
+		batchCounter++
 	}
 
 	batchLeft := pipelineBackends.NewBatch()
@@ -117,5 +134,15 @@ func (s *SemanticSimilarityDataset) Yield() (spec any, inputs []*tensors.Tensor,
 	inputLeft := batchLeft.InputValues.([]*tensors.Tensor)
 	inputRight := batchRight.InputValues.([]*tensors.Tensor)
 	labelTensor := tensors.FromFlatDataAndDimensions(scores, len(scores), 1)
+
+	fmt.Printf("yielding batch, %d\n", s.batchN)
+	s.batchN++
 	return nil, slices.Concat(inputLeft, inputRight), []*tensors.Tensor{labelTensor}, nil
+}
+
+func (s *SemanticSimilarityDataset) Close() error {
+	if s.sourceFile != nil {
+		return s.sourceFile.Close()
+	}
+	return nil
 }

@@ -5,7 +5,9 @@ package hugot
 import (
 	"fmt"
 
+	. "github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/graph"
+	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/ml/train/losses"
@@ -37,31 +39,6 @@ func NewXLATrainingSession[T pipelineBackends.Pipeline](config TrainingConfig) (
 		return nil, fmt.Errorf("loss function is required")
 	}
 	return s, nil
-}
-
-func CosineSimilarityLoss(labels, predictions []*context.Node) *context.Node {
-	predictionsLeft := predictions[0]
-	predictionsRight := predictions[1]
-	scores := labels[0]
-
-	if predictionsLeft.Shape().Rank() != 2 {
-		panic(fmt.Errorf("expected rank 2, got %d", predictionsLeft.Shape().Rank()))
-	}
-	if predictionsRight.Shape().Rank() != 2 {
-		panic(fmt.Errorf("expected rank 2, got %d", predictionsLeft.Shape().Rank()))
-	}
-	if scores.Shape().Rank() != 2 {
-		panic(fmt.Errorf("expected rank 2, got %d", predictionsLeft.Shape().Rank()))
-	}
-	m := graph.Mul(predictionsLeft, predictionsRight)
-	dotProduct := graph.ReduceAndKeep(m, graph.ReduceSum, 1)
-	normLeft := graph.L2Norm(predictionsLeft, 1)
-	normRight := graph.L2Norm(predictionsRight, 1)
-	denom := graph.Mul(normLeft, normRight)
-	similarity := graph.Div(dotProduct, denom)
-	residuals := graph.L2NormSquare(graph.Sub(scores, similarity), 1)
-	loss := graph.ReduceAllMean(residuals)
-	return loss
 }
 
 func TrainXLA(s *TrainingSession) error {
@@ -104,10 +81,39 @@ func TrainXLA(s *TrainingSession) error {
 		loop := train.NewLoop(gomlxTrainer)
 
 		// Loop for given number of steps.
-		_, err := loop.RunSteps(s.config.Dataset, 1)
+		_, err := loop.RunEpochs(s.config.Dataset, 1)
 		if err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// CosineSimilarityLoss computes the cosine similarity loss between two predictions.
+//
+// It assumes two predictions are provided which should be tensors of rank 2 with the same dimensions (N, D).
+// It also assumes there is one label tensor with rank 2 with dimensions (N, 1) that contains the target cosine similarity.
+// The loss will then calculate the residuals between the cosine similarity of the two prediction tensors row-wise
+// and the target cosine similarity, and return the mean of the squared residuals.
+func CosineSimilarityLoss(labels, predictions []*context.Node) *context.Node {
+	predictionsLeft := predictions[0]
+	predictionsRight := predictions[1]
+	scores := labels[0]
+
+	if predictionsLeft.Shape().Rank() != 2 {
+		Panicf("expected rank 2, got %d (shape=%s)", predictionsLeft.Shape().Rank(), predictionsLeft.Shape())
+	}
+	if predictionsRight.Shape().Rank() != 2 {
+		Panicf("expected rank 2, got %d (shape=%s)", predictionsRight.Shape().Rank(), predictionsRight.Shape())
+	}
+	if scores.Shape().Rank() != 2 {
+		Panicf("expected rank 2, got %d (shape=%s)", scores.Shape().Rank(), scores.Shape())
+	}
+	dotProduct := InsertAxes(Einsum("ij,ij->i", predictionsLeft, predictionsRight), -1)
+	normLeft := L2Norm(predictionsLeft, 1)
+	normRight := L2Norm(predictionsRight, 1)
+	similarity := Div(dotProduct, Mul(normLeft, normRight))
+	residuals := L2NormSquare(Sub(scores, similarity), 1)
+	loss := ReduceAllMean(residuals)
+	return loss
 }

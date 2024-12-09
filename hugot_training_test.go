@@ -10,7 +10,7 @@ import (
 )
 
 func TestSemanticSimilarity(t *testing.T) {
-	dataset, err := datasets.NewSemanticSimilarityDataset("./data/train.jsonl")
+	dataset, err := datasets.NewSemanticSimilarityDataset("./data/train.jsonl", 32)
 	if err != nil {
 		t.Fatal(err)
 	}
