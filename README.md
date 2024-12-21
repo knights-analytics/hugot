@@ -8,21 +8,22 @@
 
 ## What
 
-The goal of this library is to provide an easy, scalable, and hassle-free way to run Hugging Face 🤗 transformer pipelines in golang applications. It is built on the following principles:
+The goal of this library is to provide an easy, scalable, and hassle-free way to run transformer pipelines inference and training in golang applications, such as Hugging Face 🤗 transformers pipelines. It is built on the following principles:
 
-1. Fidelity to the original Hugging Face python implementations: the aim is to accurately replicate Hugging Face inference implementations for the implemented pipelines, so that models trained and tested in python can be seamlessly deployed in a golang application
-2. Hassle-free and performant production use: we exclusively support onnx exports of Hugging Face models. Pytorch transformer models that don't have an onnx version can be easily exported to onnx via [Hugging Face Optimum](https://huggingface.co/docs/optimum/index), and used with the library
-3. Run on your hardware: this library is for those who want to run transformer models tightly coupled with their go applications, without the performance drawbacks of having to hit a rest API, or the hassle of setting up and maintaining e.g. a python RPC service that talks to go.
+1. Hugging Face compatibility: models trained and tested using the python huggingface transformer library can be exported to onnx and used with the hugot pipelines to obtain identical predictions as in the python version.
+2. Hassle-free and performant production use: we exclusively support onnx models. Pytorch transformer models that don't have an onnx version can be easily exported to onnx via [Hugging Face Optimum](https://huggingface.co/docs/optimum/index), and used with the library.
+3. Run on your hardware: this library is for those who want to run transformer models tightly coupled with their go applications, without the performance drawbacks of having to hit a rest API or the hassle of setting up and maintaining e.g. a python RPC service that talks to go.
+4. Simplicity: the hugot api allows you to easily deploy pipelines without having to write your own inference or training code.
 
 We support inference on CPU and on all accelerators supported by ONNX Runtime/OpenXLA. Note however that currently only CPU, and GPU inference on Nvidia GPUs via CUDA, are tested (see below).
 
 ## Why
 
-Developing and fine-tuning transformer models with the Hugging Face python library is a great experience, but if your production stack is golang-based being able to reliably deploy and scale the resulting pytorch models can be challenging and require quite some setup. This library aims to allow you to just lift-and-shift your python model and use the same Hugging Face pipelines you use for development for inference in a go application.
+Developing and fine-tuning transformer models with the Hugging Face python library is a great experience, but if your production stack is golang-based being able to reliably deploy and scale the resulting pytorch models can be challenging and can require quite some setup. This library aims to allow you to just lift-and-shift your python model and use the same Hugging Face pipelines you use for development for inference in a go application.
 
 ## For whom
 
-For the golang developer or ML engineer who wants to run transformer pipelines on their own hardware, tightly coupled with their own application.
+For the golang developer or ML engineer who wants to run or fine-tune transformer pipelines on their own hardware and tightly coupled with their own application, without having to deal with writing their own inference or training code.
 
 ## By whom
 
@@ -57,10 +58,10 @@ Once compiled, Hugot can be instantiated with you backend of choice via calling 
 
 ### Use it as a library
 
-To use Hugot as a library in your application, you must download  you will need the following two dependencies on your system:
+To use Hugot as a library in your application, you will need the following two dependencies on your system:
 
 #### Tokenizer
-- the tokenizers.a file obtained from the releases section of this page (if you want to use alternative architecture from `linux/amd64` you will have to build the tokenizers.a yourself, see [here](https://github.com/daulet/tokenizers). This file should be at /usr/lib/tokenizers.a so that Hugot can load it. Alternatively, you can explicitly specify the path to the folder with the `libtokenizers.a` file using the `CGO_LDFLAGS` env variable, see the [dockerfile](./Dockerfile).
+- the tokenizers.a file obtained from the releases section of this page (if you want to use alternative architecture from `linux/amd64` you will have to build the tokenizers.a yourself, see [here](https://github.com/daulet/tokenizers). This file should be at /usr/lib/tokenizers.a so that Hugot can load it. Alternatively, you can explicitly specify the path to the folder with the `libtokenizers.a` file using the `CGO_LDFLAGS` env variable, see the [dockerfile](./Dockerfile). The tokenizer is statically linked at build time.
 
 #### Backend
 - if using Onnx Runtime, the onnxruntime.so file should be obtained from the releases section of this page. If you want to use alternative architectures from `linux/amd64` you will have to download it from [the ONNX Runtime releases page](https://github.com/microsoft/onnxruntime/releases/), see the [dockerfile](./Dockerfile) as an example. Hugot looks for this file at /usr/lib/onnxruntime.so or /usr/lib64/onnxruntime.so by default. A different location can be specified by passing the `WithOnnxLibraryPath()` option to `NewORTSession()`, e.g:
@@ -133,7 +134,7 @@ See also hugot_test.go for further examples.
 
 ### Use it as a cli: Huggingface 🤗 pipelines from the command line
 
-Note: the cli is currently only built and tested on amd64-linux.
+Note: the cli is currently only built and tested on amd64-linux using the ONNX Runtime backend.
 
 With Hugot you don't need python, pytorch, or even go to run Hugging Face transformers. Simply install the Hugot cli (alpha):
 
@@ -221,6 +222,22 @@ For the ONNX Runtime Cuda libraries, you can install CUDA 12.x by installing the
 - cuda-cudart-12-6 cuda-nvrtc-12-6  libcublas-12-6 libcurand-12-6 libcufft-12-6 libcudnn9  (from RHEL repo)
 
 On different distros (e.g. Ubuntu), you should be able to install the equivalent packages and gpu inference should work.
+
+## Training and fine-tuning pipelines
+
+Hugot now also supports the training and fine-tuning of transformer pipelines (alpha). Currently training requires XLA as the onnx model will be loaded, converted to xla and trained using [goMLX](https://github.com/gomlx/gomlx), and serialized back to onnx format.
+
+We initially support training for the **FeatureExtractionPipeline**. This can be used to fine-tune the vector embeddings for semantic textual similarity. Currently we only support sentence pairs training datasets which must be .jsonl files with the following format:
+
+```
+{"sentence1": "The quick brown fox jumps over the lazy dog", "sentence2": "A quick brown fox jumps over a lazy dog", "score": 1}
+{"sentence1": "The quick brown fox jumps over the lazy dog", "sentence2": "A quick brown fox jumps over a lazy dog", "score": 0}
+```
+
+See the [example](./testdata/sts-train.jsonl) for a sample dataset.
+The score is assumed to be a float between 0 and 1 that encodes the semantic similarity between the sentences, and by default a cosine similarity loss is used (see [sentence transformers](https://sbert.net/docs/package_reference/sentence_transformer/losses.html#cosinesimilarityloss)). However, you can also specify a different loss function from `goMLX` using the `XLATrainingOptions` field in the `TrainingConfig` struct. See [the training tests](./hugot_training_test.go) for examples on how to train or fine-tune feature extraction pipelines.
+
+Note that training on GPU is currently much faster and memory efficient than training on CPU, although optimizations are underway. On CPU, we recommend smaller batch sizes.
 
 ## Limitations
 

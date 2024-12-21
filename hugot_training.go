@@ -37,12 +37,12 @@ func newTrainingSession[T pipelineBackends.Pipeline](runtime string, config Trai
 	var model *pipelineBackends.Model
 	var err error
 
-	options := options.Defaults()
-	options.Runtime = runtime
+	opts := options.Defaults()
+	opts.Runtime = runtime
 
 	switch runtime {
 	case "XLA":
-		options.XLAOptions.Cuda = config.Cuda
+		opts.XLAOptions.Cuda = config.Cuda
 	default:
 		return nil, fmt.Errorf("runtime %s is not supported", runtime)
 	}
@@ -51,7 +51,7 @@ func newTrainingSession[T pipelineBackends.Pipeline](runtime string, config Trai
 		config.Epochs = 1
 	}
 
-	model, err = pipelineBackends.LoadModel(config.ModelPath, config.OnnxFilename, options)
+	model, err = pipelineBackends.LoadModel(config.ModelPath, config.OnnxFilename, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -60,7 +60,7 @@ func newTrainingSession[T pipelineBackends.Pipeline](runtime string, config Trai
 	case *pipelines.FeatureExtractionPipeline:
 		pipelineConfig := FeatureExtractionConfig{}
 		pipeline := any(trainingPipeline).(*pipelines.FeatureExtractionPipeline)
-		pipeline, _, err = InitializePipeline(pipeline, pipelineConfig, options, model)
+		pipeline, _, err = InitializePipeline(pipeline, pipelineConfig, opts, model)
 		if err != nil {
 			return nil, err
 		}
