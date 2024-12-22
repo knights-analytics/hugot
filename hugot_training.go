@@ -97,18 +97,17 @@ func (s *TrainingSession) Train() error {
 func (s *TrainingSession) Save(path string) error {
 	model := s.pipeline.GetModel()
 	if model != nil {
-		xlaModel := model.XLAModel
-		if xlaModel != nil {
-			if err := xlaModel.OnnxModel.ContextToONNX(xlaModel.Ctx); err != nil {
-				return err
+		if s.runtime == "XLA" {
+			xlaModel := model.XLAModel
+			if xlaModel != nil {
+				return xlaModel.Save(path)
+			} else {
+				return fmt.Errorf("xla model is nil")
 			}
-			if err := xlaModel.OnnxModel.SaveToFile(path); err != nil {
-				return err
-			}
-			return nil
 		} else {
-			return fmt.Errorf("xla model is nil")
+			return fmt.Errorf("XLA runtime is required for saving a training model")
 		}
+
 	} else {
 		return fmt.Errorf("pipeline model is nil")
 	}

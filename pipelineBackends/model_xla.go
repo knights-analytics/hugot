@@ -227,3 +227,13 @@ func nextPowerOf2(n int) int {
 	}
 	return pow
 }
+
+func (xlaModel *XLAModel) Save(path string) error {
+	if err := xlaModel.OnnxModel.ContextToONNX(xlaModel.Ctx); err != nil {
+		return err
+	}
+	if err := xlaModel.OnnxModel.SaveToFile(path); err != nil {
+		return err
+	}
+	return nil
+}
