@@ -5,7 +5,7 @@ SHELL := bash
 all:
 
 run-tests:
-	scripts/run-unit-tests.sh
+	scripts/run-unit-tests.sh $(BUILD_TAG)
 
 clean:
 	rm -r ./testTarget || true

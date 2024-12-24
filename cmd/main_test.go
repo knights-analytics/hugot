@@ -19,6 +19,8 @@ var textClassificationData []byte
 //go:embed testData/tokenClassification.jsonl
 var tokenClassificationData []byte
 
+const onnxRuntimeSharedLibrary = "/usr/lib64/onnxruntime.so"
+
 func TestTextClassificationCli(t *testing.T) {
 	app := &cli.App{
 		Name:     "hugot",
@@ -43,7 +45,11 @@ func TestTextClassificationCli(t *testing.T) {
 		check(t, err)
 	}()
 
-	args := append(baseArgs, "run", fmt.Sprintf("--input=%s", testDataDir), fmt.Sprintf("--model=%s", testModel), "--type=textClassification")
+	args := append(baseArgs, "run",
+		fmt.Sprintf("--input=%s", testDataDir),
+		fmt.Sprintf("--s=%s", onnxRuntimeSharedLibrary),
+		fmt.Sprintf("--model=%s", testModel),
+		"--type=textClassification")
 	if err := app.Run(args); err != nil {
 		check(t, err)
 	}
@@ -69,8 +75,12 @@ func TestTokenClassificationCli(t *testing.T) {
 		check(t, err)
 	}()
 
-	args := append(baseArgs, "run", fmt.Sprintf("--input=%s", path.Join(testDataDir, "test-token-classification.jsonl")),
-		fmt.Sprintf("--model=%s", testModel), "--type=tokenClassification", fmt.Sprintf("--output=%s", testDataDir))
+	args := append(baseArgs, "run",
+		fmt.Sprintf("--input=%s", path.Join(testDataDir, "test-token-classification.jsonl")),
+		fmt.Sprintf("--s=%s", onnxRuntimeSharedLibrary),
+		fmt.Sprintf("--model=%s", testModel),
+		"--type=tokenClassification",
+		fmt.Sprintf("--output=%s", testDataDir))
 	if err := app.Run(args); err != nil {
 		check(t, err)
 	}
@@ -86,9 +96,7 @@ func TestFeatureExtractionCli(t *testing.T) {
 		Commands: []*cli.Command{runCommand},
 	}
 	baseArgs := os.Args[0:1]
-
-	testModel := path.Join("../models", "sentence-transformers_all-MiniLM-L6-v2")
-
+	testModel := path.Join("../models", "KnightsAnalytics_all-MiniLM-L6-v2")
 	testDataDir := path.Join(os.TempDir(), "hugoTestData")
 	err := os.MkdirAll(testDataDir, os.ModePerm)
 	check(t, err)
@@ -99,9 +107,13 @@ func TestFeatureExtractionCli(t *testing.T) {
 		check(t, err)
 	}()
 
-	args := append(baseArgs, "run", fmt.Sprintf("--input=%s", path.Join(testDataDir, "test-feature-extraction.jsonl")),
-		fmt.Sprintf("--model=%s", testModel), fmt.Sprintf("--onnxFilename=%s", "model.onnx"),
-		"--type=featureExtraction", fmt.Sprintf("--output=%s", testDataDir))
+	args := append(baseArgs, "run",
+		fmt.Sprintf("--input=%s", path.Join(testDataDir, "test-feature-extraction.jsonl")),
+		fmt.Sprintf("--s=%s", onnxRuntimeSharedLibrary),
+		fmt.Sprintf("--model=%s", testModel),
+		fmt.Sprintf("--onnxFilename=%s", "model.onnx"),
+		"--type=featureExtraction",
+		fmt.Sprintf("--output=%s", testDataDir))
 	if err := app.Run(args); err != nil {
 		check(t, err)
 	}
@@ -136,13 +148,20 @@ func TestModelChain(t *testing.T) {
 	check(t, util.FileSystem.Delete(context.Background(), util.PathJoinSafe(userFolder, "hugot")))
 
 	// try to download the model to hugo folder and run it
-	args := append(baseArgs, "run", fmt.Sprintf("--input=%s", testDataDir), fmt.Sprintf("--model=%s", "KnightsAnalytics/distilbert-base-uncased-finetuned-sst-2-english"), "--type=textClassification")
+	args := append(baseArgs, "run",
+		fmt.Sprintf("--input=%s", testDataDir),
+		fmt.Sprintf("--s=%s", onnxRuntimeSharedLibrary),
+		fmt.Sprintf("--model=%s", "KnightsAnalytics/distilbert-base-uncased-finetuned-sst-2-english"),
+		"--type=textClassification")
 	if err := app.Run(args); err != nil {
 		check(t, err)
 	}
 
 	// run it again. This time the model should be read from the hugot folder without re-downloading it.
-	args = append(baseArgs, "run", fmt.Sprintf("--input=%s", testDataDir), fmt.Sprintf("--model=%s", "KnightsAnalytics/distilbert-base-uncased-finetuned-sst-2-english"), "--type=textClassification")
+	args = append(baseArgs, "run", fmt.Sprintf("--input=%s", testDataDir),
+		fmt.Sprintf("--model=%s", "KnightsAnalytics/distilbert-base-uncased-finetuned-sst-2-english"),
+		fmt.Sprintf("--s=%s", onnxRuntimeSharedLibrary),
+		"--type=textClassification")
 	if err := app.Run(args); err != nil {
 		check(t, err)
 	}

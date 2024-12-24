@@ -19,12 +19,14 @@ func TestSemanticSimilarity(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	modelPath := "./models/KnightsAnalytics_all-MiniLM-L6-v2"
+
 	// create a new xla training session. Currently training is only possible by loading an onnx model
 	// into xla, fine-tuning it with gomlx, and then writing it back to onnx. Hugot deals with the details
 	// for you here.
 	session, err := NewXLATrainingSession[*pipelines.FeatureExtractionPipeline](
 		TrainingConfig{
-			ModelPath: "./models/sentence-transformers_all-MiniLM-L6-v2",
+			ModelPath: modelPath,
 			Dataset:   dataset,
 			Epochs:    1,
 			Cuda:      false,
@@ -62,9 +64,11 @@ func TestSemanticSimilarityCuda(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	modelPath := "./models/KnightsAnalytics_all-MiniLM-L6-v2"
+
 	session, err := NewXLATrainingSession[*pipelines.FeatureExtractionPipeline](
 		TrainingConfig{
-			ModelPath: "./models/sentence-transformers_all-MiniLM-L6-v2",
+			ModelPath: modelPath,
 			Dataset:   dataset,
 			Epochs:    1,
 			Cuda:      true, // use cuda
