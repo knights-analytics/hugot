@@ -100,6 +100,39 @@ func (s *Session) initialiseORT() (bool, error) {
 			return true, err
 		}
 	}
+	if o.ParallelExecutionMode != nil {
+		if *o.ParallelExecutionMode {
+			if err := sessionOptions.SetExecutionMode(ort.ExecutionModeParallel); err != nil {
+				return true, err
+			}
+		} else {
+			if err := sessionOptions.SetExecutionMode(ort.ExecutionModeSequential); err != nil {
+				return true, err
+			}
+		}
+	}
+	if o.IntraOpSpinning != nil {
+		if *o.IntraOpSpinning {
+			if err := sessionOptions.AddSessionConfigEntry("session.intra_op.allow_spinning", "1"); err != nil {
+				return true, err
+			}
+		} else {
+			if err := sessionOptions.AddSessionConfigEntry("session.intra_op.allow_spinning", "0"); err != nil {
+				return true, err
+			}
+		}
+	}
+	if o.InterOpSpinning != nil {
+		if *o.InterOpSpinning {
+			if err := sessionOptions.AddSessionConfigEntry("session.inter_op.allow_spinning", "1"); err != nil {
+				return true, err
+			}
+		} else {
+			if err := sessionOptions.AddSessionConfigEntry("session.inter_op.allow_spinning", "0"); err != nil {
+				return true, err
+			}
+		}
+	}
 	if o.CudaOptions != nil {
 		cudaOptions, optErr := ort.NewCUDAProviderOptions()
 		if optErr != nil {

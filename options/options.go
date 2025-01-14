@@ -28,17 +28,20 @@ type GoOptions struct {
 }
 
 type OrtOptions struct {
-	LibraryPath       *string
-	Telemetry         *bool
-	IntraOpNumThreads *int
-	InterOpNumThreads *int
-	CPUMemArena       *bool
-	MemPattern        *bool
-	CudaOptions       map[string]string
-	CoreMLOptions     *uint32
-	DirectMLOptions   *int
-	OpenVINOOptions   map[string]string
-	TensorRTOptions   map[string]string
+	LibraryPath           *string
+	Telemetry             *bool
+	IntraOpNumThreads     *int
+	InterOpNumThreads     *int
+	CPUMemArena           *bool
+	MemPattern            *bool
+	ParallelExecutionMode *bool
+	IntraOpSpinning       *bool
+	InterOpSpinning       *bool
+	CudaOptions           map[string]string
+	CoreMLOptions         *uint32
+	DirectMLOptions       *int
+	OpenVINOOptions       map[string]string
+	TensorRTOptions       map[string]string
 }
 
 type XLAOptions struct {
@@ -122,6 +125,44 @@ func WithMemPattern(enable bool) WithOption {
 			return nil
 		} else {
 			return fmt.Errorf("WithMemPattern is only supported for ORT runtime")
+		}
+	}
+}
+
+// WithExecutionMode sets the parallel execution mode for the ORT runtime. Returns an error if the runtime is not ORT.
+func WithExecutionMode(parallel bool) WithOption {
+	return func(o *Options) error {
+		if o.Runtime == "ORT" {
+			o.ORTOptions.ParallelExecutionMode = &parallel
+			return nil
+		} else {
+			return fmt.Errorf("WithExecutionMode is only supported for ORT runtime")
+		}
+	}
+}
+
+// WithIntraOpSpinning configures whether intra-op spinning is enabled for the ORT runtime.
+// It returns an error if used with a runtime other than ORT.
+func WithIntraOpSpinning(spinning bool) WithOption {
+	return func(o *Options) error {
+		if o.Runtime == "ORT" {
+			o.ORTOptions.IntraOpSpinning = &spinning
+			return nil
+		} else {
+			return fmt.Errorf("WithIntraOpSpinning is only supported for ORT runtime")
+		}
+	}
+}
+
+// WithInterOpSpinning sets the spinning behavior for inter-op threads when the runtime is ORT.
+// It returns an error if used with a runtime other than ORT.
+func WithInterOpSpinning(spinning bool) WithOption {
+	return func(o *Options) error {
+		if o.Runtime == "ORT" {
+			o.ORTOptions.InterOpSpinning = &spinning
+			return nil
+		} else {
+			return fmt.Errorf("WithInterOpSpinning is only supported for ORT runtime")
 		}
 	}
 }
