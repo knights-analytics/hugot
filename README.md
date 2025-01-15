@@ -273,6 +273,12 @@ session, err := hugot.NewORTSession(
 
 InterOpNumThreads and IntraOpNumThreads constricts each goroutine's call to a single core, greatly reducing locking and cache penalties. Disabling CpuMemArena and MemPattern skips pre-allocation of some memory structures, increasing latency, but also throughput efficiency.
 
+## File Systems
+We use an [abstract file system](https://github.com/viant/afs) within Hugot. It works out of the box with various OS filesystems, to use object stores such as S3 please import the appropriate plugin from the afsc library, e.g.
+```go
+import _ "github.com/viant/afsc/s3"
+```
+
 ## Contributing
 
 If you would like to contribute to Hugot, please see the [contribution guidelines](./contrib.md).
