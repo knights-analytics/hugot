@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	_ "embed"
 	"fmt"
 	"os"
@@ -145,7 +144,7 @@ func TestModelChain(t *testing.T) {
 	// wipe the hugo folder
 	userFolder, err := os.UserHomeDir()
 	check(t, err)
-	check(t, util.FileSystem.Delete(context.Background(), util.PathJoinSafe(userFolder, "hugot")))
+	check(t, util.DeleteFile(util.PathJoinSafe(userFolder, "hugot")))
 
 	// try to download the model to hugo folder and run it
 	args := append(baseArgs, "run",

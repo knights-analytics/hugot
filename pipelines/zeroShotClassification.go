@@ -78,7 +78,7 @@ func (t *ZeroShotOutput) GetOutput() []any {
 	return out
 }
 
-// create all pairs between input sequences and labels
+// create all pairs between input sequences and labels.
 func createSequencePairs(sequences interface{}, labels []string, hypothesisTemplate string) ([][][]string, []string, error) {
 	// Check if labels or sequences are empty
 	if len(labels) == 0 || sequences == nil {

@@ -3,7 +3,6 @@
 package hugot
 
 import (
-	"context"
 	"errors"
 	"fmt"
 
@@ -45,7 +44,7 @@ func (s *Session) initialiseORT() (bool, error) {
 	o := s.options.ORTOptions
 	// Set pre-initialisation options
 	if o.LibraryPath != nil {
-		ortPathExists, err := util.FileSystem.Exists(context.Background(), *o.LibraryPath)
+		ortPathExists, err := util.FileExists(*o.LibraryPath)
 		if err != nil {
 			return false, err
 		}

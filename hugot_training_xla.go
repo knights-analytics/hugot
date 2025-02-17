@@ -5,13 +5,14 @@ package hugot
 import (
 	"fmt"
 
-	. "github.com/gomlx/exceptions"
+	"github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/graph"
-	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/ml/train/losses"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
+	"github.com/gomlx/gopjrt/dtypes"
+
 	"github.com/knights-analytics/hugot/pipelineBackends"
 	"github.com/knights-analytics/hugot/pipelines"
 )
@@ -37,7 +38,7 @@ func NewXLATrainingSession[T pipelineBackends.Pipeline](config TrainingConfig) (
 			s.config.XlaTrainingOptions.Optimizer = optimizers.StochasticGradientDescent()
 		}
 		if s.config.XlaTrainingOptions.Loss == nil {
-			s.config.XlaTrainingOptions.Loss = CosineSimilarityLoss
+			s.config.XlaTrainingOptions.Loss = losses.MeanSquaredError
 		}
 	default:
 		return nil, fmt.Errorf("loss function is required")
@@ -53,25 +54,28 @@ func TrainXLA(s *TrainingSession) error {
 		ctx := XLAModel.Ctx
 
 		modelFn := func(ctx *context.Context, spec any, inputs []*context.Node) []*context.Node {
-			l := len(inputs) / 2
-			embeddingLeft := XLAModel.Call(ctx, inputs[:l])[0]
-			embeddingRight := XLAModel.Call(ctx.Reuse(), inputs[l:])[0]
+			inputsLeft := inputs[:3] // inputIDs, attentionMask, tokenTypeIDs if present
+			inputsRight := inputs[3:]
+
+			embeddingLeft := XLAModel.Call(ctx.Reuse(), inputsLeft)[0]
+			embeddingRight := XLAModel.Call(ctx.Reuse(), inputsRight)[0]
 
 			// we mean pool the results if needed e.g. if dimensions are [batch, seq, hidden]
 			if len(embeddingLeft.Shape().Dimensions) > 2 {
-				var axisToReduce []int
-				axisToReduce = append(axisToReduce, 1)
-				for i := range embeddingLeft.Shape().Dimensions {
-					if i >= 3 {
-						axisToReduce = append(axisToReduce, i)
-					}
-				}
-				// TODO: check how to use the mask here to reduce
-				embeddingLeft = graph.ReduceMean(embeddingLeft, axisToReduce...)
-				embeddingRight = graph.ReduceMean(embeddingRight, axisToReduce...)
+				batchSize := embeddingLeft.Shape().Dim(0)
+				embeddingSize := embeddingLeft.Shape().Dim(-1)
+				embeddingLeft = graph.Reshape(embeddingLeft, batchSize, -1, embeddingSize)
+				embeddingRight = graph.Reshape(embeddingRight, batchSize, -1, embeddingSize)
+
+				maskLeft := graph.ConvertDType(graph.BroadcastToShape(graph.Reshape(inputsLeft[1], batchSize, -1, 1), embeddingLeft.Shape()), dtypes.Bool)
+				maskRight := graph.ConvertDType(graph.BroadcastToShape(graph.Reshape(inputsRight[1], batchSize, -1, 1), embeddingRight.Shape()), dtypes.Bool)
+
+				embeddingLeft = graph.MaskedReduceMean(embeddingLeft, maskLeft, 1)
+				embeddingRight = graph.MaskedReduceMean(embeddingRight, maskRight, 1)
 			}
 
-			return []*context.Node{embeddingLeft, embeddingRight}
+			cosineSimilarity := CosineSimilarity(embeddingLeft, embeddingRight)
+			return []*context.Node{cosineSimilarity}
 		}
 
 		gomlxTrainer := train.NewTrainer(backend,
@@ -88,7 +92,14 @@ func TrainXLA(s *TrainingSession) error {
 		if s.config.Verbose {
 			fmt.Printf("Training for %d epochs\n", s.config.Epochs)
 		}
-		_, err := loop.RunEpochs(s.config.Dataset, s.config.Epochs)
+
+		// we rely on try catch because an error is returned if there is an initialization error but
+		// a panic will be thrown if e.g. dataset reset fails.
+		err := exceptions.TryCatch[error](func() {
+			if _, err := loop.RunEpochs(s.config.Dataset, s.config.Epochs); err != nil {
+				panic(err)
+			}
+		})
 		if err != nil {
 			return err
 		}
@@ -99,31 +110,16 @@ func TrainXLA(s *TrainingSession) error {
 	return nil
 }
 
-// CosineSimilarityLoss computes the cosine similarity loss between two predictions.
-//
-// It assumes two predictions are provided which should be tensors of rank 2 with the same dimensions (N, D).
-// It also assumes there is one label tensor with rank 2 with dimensions (N, 1) that contains the target cosine similarity.
-// The loss will then calculate the residuals between the cosine similarity of the two prediction tensors row-wise
-// and the target cosine similarity, and return the mean of the squared residuals.
-func CosineSimilarityLoss(labels, predictions []*context.Node) *context.Node {
-	predictionsLeft := predictions[0]
-	predictionsRight := predictions[1]
-	scores := labels[0]
-
-	if predictionsLeft.Shape().Rank() != 2 {
-		Panicf("expected rank 2, got %d (shape=%s)", predictionsLeft.Shape().Rank(), predictionsLeft.Shape())
+func CosineSimilarity(left *context.Node, right *context.Node) *context.Node {
+	if left.Shape().Rank() != 2 {
+		exceptions.Panicf("expected rank 2, got %d (shape=%s)", left.Shape().Rank(), left.Shape())
 	}
-	if predictionsRight.Shape().Rank() != 2 {
-		Panicf("expected rank 2, got %d (shape=%s)", predictionsRight.Shape().Rank(), predictionsRight.Shape())
+	if right.Shape().Rank() != 2 {
+		exceptions.Panicf("expected rank 2, got %d (shape=%s)", right.Shape().Rank(), right.Shape())
 	}
-	if scores.Shape().Rank() != 2 {
-		Panicf("expected rank 2, got %d (shape=%s)", scores.Shape().Rank(), scores.Shape())
-	}
-	dotProduct := InsertAxes(Einsum("ij,ij->i", predictionsLeft, predictionsRight), -1)
-	normLeft := L2Norm(predictionsLeft, 1)
-	normRight := L2Norm(predictionsRight, 1)
-	similarity := Div(dotProduct, Mul(normLeft, normRight))
-	residuals := L2NormSquare(Sub(scores, similarity), 1)
-	loss := ReduceAllMean(residuals)
-	return loss
+	left = graph.Where(graph.Equal(left, graph.ZerosLike(left)), graph.OnePlus(left), left)
+	right = graph.Where(graph.Equal(right, graph.ZerosLike(right)), graph.OnePlus(right), right)
+	dotProduct := graph.InsertAxes(graph.Einsum("ij,ij->i", left, right), -1)
+	normalisationDenominator := graph.Mul(graph.L2Norm(left, 1), graph.L2Norm(right, 1))
+	return graph.Div(dotProduct, normalisationDenominator)
 }

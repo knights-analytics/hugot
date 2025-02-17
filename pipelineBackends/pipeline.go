@@ -218,7 +218,7 @@ func getOnnxFiles(path string) ([][]string, error) {
 		}
 		return true, nil
 	}
-	err := util.FileSystem.Walk(context.Background(), path, walker)
+	err := util.WalkDir()(context.Background(), path, walker)
 	return onnxFiles, err
 }
 

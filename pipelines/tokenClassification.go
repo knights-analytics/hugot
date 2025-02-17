@@ -241,7 +241,7 @@ func (p *TokenClassificationPipeline) Postprocess(batch *pipelineBackends.Pipeli
 	return &classificationOutput, nil
 }
 
-// GatherPreEntities from batch of logits to list of pre-aggregated outputs
+// GatherPreEntities from batch of logits to list of pre-aggregated outputs.
 func (p *TokenClassificationPipeline) GatherPreEntities(input pipelineBackends.TokenizedInput, output [][]float32) []Entity {
 	sentence := input.Raw
 	var preEntities []Entity

@@ -12,6 +12,7 @@ import (
 
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/types/tensors"
+
 	"github.com/knights-analytics/hugot/pipelineBackends"
 	"github.com/knights-analytics/hugot/pipelines"
 	"github.com/knights-analytics/hugot/util"
@@ -63,9 +64,9 @@ func (s *SemanticSimilarityDataset) Validate() error {
 }
 
 type SemanticSimilarityExample struct {
-	Sentence1 string  `json:"sentence1"`
-	Sentence2 string  `json:"sentence2"`
-	Score     float32 `json:"label"`
+	Sentence1 *string  `json:"sentence1"`
+	Sentence2 *string  `json:"sentence2"`
+	Score     *float32 `json:"score"`
 }
 
 // NewSemanticSimilarityDataset creates a new SemanticSimilarityDataset.
@@ -95,7 +96,18 @@ func (s *SemanticSimilarityDataset) Reset() {
 		fmt.Printf("completed epoch in %d batches of %d examples, resetting dataset\n", s.batchN, s.BatchSize)
 	}
 	s.batchN = 0
-	s.reader = bufio.NewReader(s.sourceFile)
+	if err := s.sourceFile.Close(); err != nil {
+		panic(err)
+	}
+
+	sourceReadCloser, err := util.OpenFile(s.TrainingPath) // TODO how to handle errors here
+	if err != nil {
+		panic(err)
+	}
+	s.sourceFile = sourceReadCloser
+
+	// restart the reader
+	s.reader = bufio.NewReader(sourceReadCloser)
 }
 
 func (s *SemanticSimilarityDataset) Yield() (spec any, inputs []*tensors.Tensor, labels []*tensors.Tensor, err error) {
@@ -123,9 +135,12 @@ func (s *SemanticSimilarityDataset) Yield() (spec any, inputs []*tensors.Tensor,
 		if e := json.Unmarshal(lineBytes, &lineData); e != nil {
 			return nil, nil, nil, fmt.Errorf("failed to parse JSON line: %w", e)
 		}
-		inputsLeft = append(inputsLeft, lineData.Sentence1)
-		inputsRight = append(inputsRight, lineData.Sentence2)
-		scores = append(scores, lineData.Score)
+		if lineData.Sentence1 == nil || lineData.Sentence2 == nil || lineData.Score == nil {
+			return nil, nil, nil, fmt.Errorf("missing required fields in JSON line")
+		}
+		inputsLeft = append(inputsLeft, *lineData.Sentence1)
+		inputsRight = append(inputsRight, *lineData.Sentence2)
+		scores = append(scores, *lineData.Score)
 		batchCounter++
 	}
 

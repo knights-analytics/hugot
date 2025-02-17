@@ -5,16 +5,22 @@ import (
 	"context"
 	"errors"
 	"io"
+	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/viant/afs"
+	"github.com/viant/afs/option"
+	"github.com/viant/afs/option/content"
+	"github.com/viant/afs/storage"
 )
 
-var FileSystem = afs.New()
+var fileSystem = afs.New()
+
+const partSize = 64 * 1024 * 1024
 
 func ReadFileBytes(filename string) ([]byte, error) {
-	file, err := FileSystem.OpenURL(context.Background(), filename)
+	file, err := fileSystem.OpenURL(context.Background(), filename)
 	if err != nil {
 		return nil, err
 	}
@@ -41,7 +47,7 @@ func GetPathType(path string) string {
 }
 
 func OpenFile(filename string) (io.ReadCloser, error) {
-	return FileSystem.OpenURL(context.Background(), filename)
+	return fileSystem.OpenURL(context.Background(), filename)
 }
 
 // ReadLine returns a single line (without the ending \n)
@@ -77,4 +83,45 @@ func PathJoinSafe(elem ...string) string {
 		path = filepath.Join(elem...)
 	}
 	return path
+}
+
+func CopyFile(from string, to string) error {
+	return fileSystem.Copy(context.Background(), from, to, option.NewSource(option.NewStream(partSize, 0)), option.NewDest(option.NewSkipChecksum(true)))
+}
+
+func WalkDir() func(ctx context.Context, URL string, handler storage.OnVisit, options ...storage.Option) error {
+	return fileSystem.Walk
+}
+
+func DeleteFile(filename string) error {
+	return fileSystem.Delete(context.Background(), filename)
+}
+
+func CreateFile(fileName string, isDir bool) error {
+	return fileSystem.Create(context.Background(), fileName, os.ModePerm, isDir)
+}
+
+func FileExists(filename string) (bool, error) {
+	return fileSystem.Exists(context.Background(), filename)
+}
+
+func NewFileWriter(filename string, contentType string) (io.WriteCloser, error) {
+	exists, err := FileExists(filename)
+	if err != nil {
+		return nil, err
+	}
+	if exists {
+		err = fileSystem.Delete(context.Background(), filename)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if contentType != "" {
+		return fileSystem.NewWriter(context.Background(), filename, 0644, content.NewMeta(content.Type, contentType), option.NewSkipChecksum(true))
+	}
+	return fileSystem.NewWriter(context.Background(), filename, 0644, option.NewSkipChecksum(true))
+}
+
+func MoveFile(from string, to string) error {
+	return fileSystem.Move(context.Background(), from, to, option.NewSource(option.NewStream(partSize, 0)), option.NewDest(option.NewSkipChecksum(true)))
 }

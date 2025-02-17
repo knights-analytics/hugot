@@ -118,7 +118,7 @@ var runCommand = &cli.Command{
 		} else {
 			homeDir, err := os.UserHomeDir()
 			if err != nil {
-				if exists, err := util.FileSystem.Exists(ctx.Context, path.Join(homeDir, "lib", "hugot", "onnxruntime.so")); err != nil && exists {
+				if exists, err := util.FileExists(path.Join(homeDir, "lib", "hugot", "onnxruntime.so")); err != nil && exists {
 					opts = append(opts, options.WithOnnxLibraryPath(path.Join(homeDir, "lib", "hugot", "onnxruntime.so")))
 				}
 			}
@@ -137,14 +137,14 @@ var runCommand = &cli.Command{
 		}()
 
 		// is the model a full path to a model
-		ok, err := util.FileSystem.Exists(ctx.Context, modelPath)
+		ok, err := util.FileExists(modelPath)
 		if err != nil {
 			return err
 		}
 		if !ok {
 			// is the model the name of a model previously downloaded
 			downloadedModelName := strings.Replace(modelPath, "/", "_", -1)
-			ok, err = util.FileSystem.Exists(ctx.Context, util.PathJoinSafe(modelsDir, downloadedModelName))
+			ok, err = util.FileExists(util.PathJoinSafe(modelsDir, downloadedModelName))
 			if err != nil {
 				return err
 			}
@@ -155,7 +155,7 @@ var runCommand = &cli.Command{
 				if strings.Contains(modelPath, ":") {
 					return fmt.Errorf("filters with : are currently not supported")
 				}
-				err = util.FileSystem.Create(context.Background(), modelsDir, os.ModePerm, true)
+				err = util.CreateFile(modelsDir, true)
 				if err != nil {
 					return err
 				}
@@ -229,7 +229,7 @@ var runCommand = &cli.Command{
 
 			if outputPath != "" {
 				dest := util.PathJoinSafe(outputPath, fmt.Sprintf("result-%d.jsonl", i))
-				writer, err = util.FileSystem.NewWriter(ctx.Context, dest, os.ModePerm)
+				writer, err = util.NewFileWriter(dest, "application/json")
 				if err != nil {
 					return err
 				}
@@ -258,7 +258,7 @@ var runCommand = &cli.Command{
 
 		// read inputs
 
-		exists, err := util.FileSystem.Exists(ctx.Context, inputPath)
+		exists, err := util.FileExists(inputPath)
 		if err != nil {
 			return err
 		}
@@ -276,7 +276,7 @@ var runCommand = &cli.Command{
 				return true, nil
 			}
 
-			err := util.FileSystem.Walk(ctx.Context, inputPath, fileWalker)
+			err := util.WalkDir()(ctx.Context, inputPath, fileWalker)
 			if err != nil {
 				return err
 			}

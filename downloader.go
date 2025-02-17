@@ -16,7 +16,7 @@ import (
 	hfd "github.com/bodaay/HuggingFaceModelDownloader/hfdownloader"
 )
 
-// DownloadOptions is a struct of options that can be passed to DownloadModel
+// DownloadOptions is a struct of options that can be passed to DownloadModel.
 type DownloadOptions struct {
 	AuthToken             string
 	SkipSha               bool
