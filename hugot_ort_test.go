@@ -3,7 +3,6 @@
 package hugot
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -370,7 +369,7 @@ func TestReadmeExample(t *testing.T) {
 	check(err)
 
 	defer func(modelPath string) {
-		err := util.FileSystem.Delete(context.Background(), modelPath)
+		err := util.DeleteFile(modelPath)
 		if err != nil {
 			t.FailNow()
 		}

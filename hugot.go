@@ -240,9 +240,15 @@ func (s *Session) Destroy() error {
 	for _, model := range s.models {
 		err = errors.Join(err, model.Destroy())
 	}
+	s.models = nil
+	s.featureExtractionPipelines = nil
+	s.tokenClassificationPipelines = nil
+	s.textClassificationPipelines = nil
+	s.zeroShotClassificationPipelines = nil
 	err = errors.Join(
 		s.options.Destroy(),
 		s.environmentDestroy(),
 	)
+	s.options = nil
 	return err
 }

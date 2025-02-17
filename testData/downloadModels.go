@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"os"
 
 	"github.com/knights-analytics/hugot"
@@ -10,7 +9,7 @@ import (
 
 // download the test models.
 func main() {
-	if ok, err := util.FileSystem.Exists(context.Background(), "./models"); err == nil {
+	if ok, err := util.FileExists("./models"); err == nil {
 		if !ok {
 
 			err = os.MkdirAll("./models", os.ModePerm)
