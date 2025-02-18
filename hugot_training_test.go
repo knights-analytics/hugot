@@ -10,10 +10,6 @@ import (
 	"os"
 	"testing"
 
-	"github.com/gomlx/gomlx/backends"
-	"github.com/gomlx/gomlx/graph"
-	"github.com/gomlx/gomlx/ml/train/losses"
-	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/knights-analytics/hugot/datasets"
@@ -21,7 +17,7 @@ import (
 	"github.com/knights-analytics/hugot/pipelines"
 )
 
-func cosineSimilarity(x []float32, y []float32) float64 {
+func cosineSimilarityTester(x []float32, y []float32) float64 {
 	var sum, s1, s2 float64
 	for i := 0; i < len(x); i++ {
 		sum += float64(x[i]) * float64(y[i])
@@ -74,58 +70,16 @@ func runModel(t *testing.T, runtime string, examplesLeft, examplesRight []string
 	var similarities []float64
 
 	for i := 0; i < len(resultsLeft.Embeddings); i++ {
-		similarities = append(similarities, cosineSimilarity(resultsLeft.Embeddings[i], resultsRight.Embeddings[i]))
+		similarities = append(similarities, cosineSimilarityTester(resultsLeft.Embeddings[i], resultsRight.Embeddings[i]))
 	}
 	return similarities
 }
 
-func round2decimals(x float64) float64 {
-	return math.Round(x*100) / 100
+func round3decimals(x float64) float64 {
+	return math.Round(x*1000) / 1000
 }
 
-func TestSemanticSimilarity(t *testing.T) {
-	modelPath := "./models/KnightsAnalytics_all-MiniLM-L6-v2"
-
-	// each line in this dataset is an example. In training we will use the dataset object but for inference
-	// we just load the strings here.
-	data, err := os.ReadFile("./testData/semanticSimilarityTest.jsonl")
-	check(t, err)
-	lines := bytes.Split(data, []byte("\n"))
-
-	var examplesLeft []string
-	var examplesRight []string
-	var scores []float64
-
-	for _, line := range lines {
-		var example map[string]any
-		err = json.Unmarshal(line, &example)
-		if err != nil {
-			t.Fatal(err)
-		}
-		examplesLeft = append(examplesLeft, example["sentence1"].(string))
-		examplesRight = append(examplesRight, example["sentence2"].(string))
-		scores = append(scores, example["score"].(float64))
-	}
-
-	// first we run the untrained onnx model with onnxruntime backend
-	similaritiesOnnxruntime := runModel(t, "ORT", examplesLeft, examplesRight, modelPath)
-
-	// we do the same for XLA and check the forward pass results match
-	similaritiesXLA := runModel(t, "XLA", examplesLeft, examplesRight, modelPath)
-
-	for i := range similaritiesOnnxruntime {
-		assert.Equal(t, round2decimals(similaritiesOnnxruntime[i]), round2decimals(similaritiesXLA[i]))
-	}
-
-	// TRAINING: We now fine-tune the model
-
-	// first we create a dataset object. This allows us to loop over the dataset for potentially multiple epochs.
-	// We need to specify the batch size. For cpu lower batches seem to be faster.
-	dataset, err := datasets.NewSemanticSimilarityDataset("./testData/semanticSimilarityTest.jsonl", 1)
-	if err != nil {
-		t.Fatal(err)
-	}
-
+func trainSimilarity(t *testing.T, modelPath string, dataset *datasets.SemanticSimilarityDataset, examplesLhs, examplesRhs []string) []float64 {
 	// create a new xla training session. Currently training is only possible by loading an onnx model
 	// into xla, fine-tuning it with gomlx, and then writing it back to onnx. Hugot deals with the details
 	// for you here.
@@ -133,7 +87,7 @@ func TestSemanticSimilarity(t *testing.T) {
 		TrainingConfig{
 			ModelPath: modelPath,
 			Dataset:   dataset,
-			Epochs:    1, // we just train for one epoch
+			Epochs:    2, // we just train for two epochs
 			Cuda:      false,
 			Verbose:   true,
 		},
@@ -168,7 +122,54 @@ func TestSemanticSimilarity(t *testing.T) {
 	}()
 
 	// we now load the newly trained onnx model and generate the predictions with onnxruntime backend
-	similaritiesXLATrained := runModel(t, "ORT", examplesLeft, examplesRight, "./models/testTrain")
+	return runModel(t, "ORT", examplesLhs, examplesRhs, "./models/testTrain")
+}
+
+func TestSemanticSimilarity(t *testing.T) {
+	modelPath := "./models/KnightsAnalytics_all-MiniLM-L6-v2"
+
+	// each line in this dataset is an example. In training we will use the dataset object but for inference
+	// we just load the strings here.
+	data, err := os.ReadFile("./testData/semanticSimilarityTest.jsonl")
+	check(t, err)
+	lines := bytes.Split(data, []byte("\n"))
+
+	var examplesLhs []string
+	var examplesRhs []string
+	var scores []float64
+
+	for _, line := range lines {
+		var example map[string]any
+		err = json.Unmarshal(line, &example)
+		if err != nil {
+			t.Fatal(err)
+		}
+		examplesLhs = append(examplesLhs, example["sentence1"].(string))
+		examplesRhs = append(examplesRhs, example["sentence2"].(string))
+		scores = append(scores, example["score"].(float64))
+	}
+
+	// first we run the untrained onnx model with onnxruntime backend
+	similaritiesOnnxruntime := runModel(t, "ORT", examplesLhs, examplesRhs, modelPath)
+
+	// we do the same for XLA and check the forward pass results match
+	similaritiesXLA := runModel(t, "XLA", examplesLhs, examplesRhs, modelPath)
+
+	for i := range similaritiesOnnxruntime {
+		assert.Equal(t, round3decimals(similaritiesOnnxruntime[i]), round3decimals(similaritiesXLA[i]))
+	}
+
+	// TRAINING: We now fine-tune the model
+
+	// first we create a dataset object. This allows us to loop over the dataset for potentially multiple epochs.
+	// We need to specify the batch size. For cpu lower batches seem to be faster.
+	dataset, err := datasets.NewSemanticSimilarityDataset("./testData/semanticSimilarityTest.jsonl", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// we now train the model with the dataset
+	similaritiesXLATrained := trainSimilarity(t, modelPath, dataset, examplesLhs, examplesRhs)
 
 	fmt.Println("XLA trained model predictions:")
 	for i := 0; i < len(similaritiesXLATrained); i++ {
@@ -181,7 +182,23 @@ func TestSemanticSimilarity(t *testing.T) {
 	fmt.Printf("RMSE untrained is: %f\n", rmseUntrained)
 	fmt.Printf("RMSE trained is: %f\n", rmseTrained)
 	assert.Less(t, rmseTrained, rmseUntrained)
-	assert.Equal(t, 0.06, round2decimals(rmseTrained))
+	assert.Equal(t, 0.047, round3decimals(rmseTrained))
+
+	// we can also train a model using an in memory dataset. For this we create the slice of examples manually.
+	var examples []datasets.SemanticSimilarityExample
+	for i := 0; i < len(examplesLhs); i++ {
+		examples = append(examples, datasets.SemanticSimilarityExample{
+			Sentence1: examplesLhs[i],
+			Sentence2: examplesRhs[i],
+			Score:     float32(scores[i]),
+		})
+	}
+	inMemoryDataset, err := datasets.NewInMemorySemanticSimilarityDataset(examples, 1)
+	check(t, err)
+	similaritiesXLATrainedInMemory := trainSimilarity(t, modelPath, inMemoryDataset, examplesLhs, examplesRhs)
+	for i := range similaritiesXLATrainedInMemory {
+		assert.Equal(t, round3decimals(similaritiesXLATrained[i]), round3decimals(similaritiesXLATrainedInMemory[i]))
+	}
 }
 
 func rmse(predictions []float64, labels []float64) float64 {
@@ -218,8 +235,8 @@ func TestSemanticSimilarityCuda(t *testing.T) {
 	}
 
 	// train the model
-	if e := session.Train(); e != nil {
-		t.Fatal(e)
+	if err := session.Train(); err != nil {
+		t.Fatal(err)
 	}
 
 	// we now write the fine-tuned pipeline back to disk as an onnx model
@@ -231,28 +248,5 @@ func TestSemanticSimilarityCuda(t *testing.T) {
 	}
 	if err = os.Remove("./models/testTrain.onnx"); err != nil {
 		t.Fatal(err)
-	}
-}
-
-func TestCosineSimilarity(t *testing.T) {
-	gradTest := func(x, y, label *graph.Node) (output, gradX, gradY *graph.Node) {
-		sim := CosineSimilarity(x, y)
-		output = losses.MeanSquaredError([]*graph.Node{label}, []*graph.Node{sim})
-		grads := graph.Gradient(output, x, y)
-		gradX, gradY = grads[0], grads[1]
-		return output, gradX, gradY
-	}
-
-	exec := graph.NewExec(backends.New(), gradTest)
-	x := tensors.FromFlatDataAndDimensions([]float32{0, 0, 0}, 1, 3)
-	y := tensors.FromFlatDataAndDimensions([]float32{10, 20, 30}, 1, 3)
-	label := tensors.FromFlatDataAndDimensions([]float32{1}, 1, 1)
-
-	results := exec.Call(x, y, label)
-	fmt.Printf("f(x=%v, y=%v)=%v,\n\tdf/dx=%v,\n\tdf/dy=%v\n", x, y, results[0].Value(), results[1].Value(), results[2].Value())
-	d := tensors.CopyFlatData[float32](results[1])
-	expected := []float32{0.022892393, 0, -0.022892393}
-	for i := range d {
-		assert.Equal(t, expected[i], d[i])
 	}
 }
