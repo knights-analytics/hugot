@@ -54,27 +54,27 @@ func TrainXLA(s *TrainingSession) error {
 		ctx := XLAModel.Ctx
 
 		modelFn := func(ctx *context.Context, spec any, inputs []*context.Node) []*context.Node {
-			inputsLeft := inputs[:3] // inputIDs, attentionMask, tokenTypeIDs if present
-			inputsRight := inputs[3:]
+			inputsLhs := inputs[:3] // inputIDs, attentionMask, tokenTypeIDs if present
+			inputsRhs := inputs[3:]
 
-			embeddingLeft := XLAModel.Call(ctx.Reuse(), inputsLeft)[0]
-			embeddingRight := XLAModel.Call(ctx.Reuse(), inputsRight)[0]
+			embeddingLhs := XLAModel.Call(ctx.Reuse(), inputsLhs)[0]
+			embeddingRhs := XLAModel.Call(ctx.Reuse(), inputsRhs)[0]
 
 			// we mean pool the results if needed e.g. if dimensions are [batch, seq, hidden]
-			if len(embeddingLeft.Shape().Dimensions) > 2 {
-				batchSize := embeddingLeft.Shape().Dim(0)
-				embeddingSize := embeddingLeft.Shape().Dim(-1)
-				embeddingLeft = graph.Reshape(embeddingLeft, batchSize, -1, embeddingSize)
-				embeddingRight = graph.Reshape(embeddingRight, batchSize, -1, embeddingSize)
+			if len(embeddingLhs.Shape().Dimensions) > 2 {
+				batchSize := embeddingLhs.Shape().Dim(0)
+				embeddingSize := embeddingLhs.Shape().Dim(-1)
+				embeddingLhs = graph.Reshape(embeddingLhs, batchSize, -1, embeddingSize)
+				embeddingRhs = graph.Reshape(embeddingRhs, batchSize, -1, embeddingSize)
 
-				maskLeft := graph.ConvertDType(graph.BroadcastToShape(graph.Reshape(inputsLeft[1], batchSize, -1, 1), embeddingLeft.Shape()), dtypes.Bool)
-				maskRight := graph.ConvertDType(graph.BroadcastToShape(graph.Reshape(inputsRight[1], batchSize, -1, 1), embeddingRight.Shape()), dtypes.Bool)
+				maskLhs := graph.ConvertDType(graph.BroadcastToShape(graph.Reshape(inputsLhs[1], batchSize, -1, 1), embeddingLhs.Shape()), dtypes.Bool)
+				maskRhs := graph.ConvertDType(graph.BroadcastToShape(graph.Reshape(inputsRhs[1], batchSize, -1, 1), embeddingRhs.Shape()), dtypes.Bool)
 
-				embeddingLeft = graph.MaskedReduceMean(embeddingLeft, maskLeft, 1)
-				embeddingRight = graph.MaskedReduceMean(embeddingRight, maskRight, 1)
+				embeddingLhs = graph.MaskedReduceMean(embeddingLhs, maskLhs, 1)
+				embeddingRhs = graph.MaskedReduceMean(embeddingRhs, maskRhs, 1)
 			}
 
-			cosineSimilarity := CosineSimilarity(embeddingLeft, embeddingRight)
+			cosineSimilarity := graph.CosineSimilarity(embeddingLhs, embeddingRhs, -1)
 			return []*context.Node{cosineSimilarity}
 		}
 
@@ -108,18 +108,4 @@ func TrainXLA(s *TrainingSession) error {
 		}
 	}
 	return nil
-}
-
-func CosineSimilarity(left *context.Node, right *context.Node) *context.Node {
-	if left.Shape().Rank() != 2 {
-		exceptions.Panicf("expected rank 2, got %d (shape=%s)", left.Shape().Rank(), left.Shape())
-	}
-	if right.Shape().Rank() != 2 {
-		exceptions.Panicf("expected rank 2, got %d (shape=%s)", right.Shape().Rank(), right.Shape())
-	}
-	left = graph.Where(graph.Equal(left, graph.ZerosLike(left)), graph.OnePlus(left), left)
-	right = graph.Where(graph.Equal(right, graph.ZerosLike(right)), graph.OnePlus(right), right)
-	dotProduct := graph.InsertAxes(graph.Einsum("ij,ij->i", left, right), -1)
-	normalisationDenominator := graph.Mul(graph.L2Norm(left, 1), graph.L2Norm(right, 1))
-	return graph.Div(dotProduct, normalisationDenominator)
 }

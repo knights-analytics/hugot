@@ -5,16 +5,19 @@ package pipelineBackends
 import (
 	"errors"
 	"fmt"
+	"io"
 
 	"github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/backends"
-	_ "github.com/gomlx/gomlx/backends/xla/cpu/static"
+
 	"github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/gomlx/onnx-gomlx/onnx"
 
 	"github.com/knights-analytics/hugot/options"
+
+	_ "github.com/gomlx/gomlx/backends/xla"
 )
 
 type XLAModel struct {
@@ -228,11 +231,12 @@ func nextPowerOf2(n int) int {
 	return pow
 }
 
-func (xlaModel *XLAModel) Save(path string) error {
+func (xlaModel *XLAModel) Save(w io.Writer) error {
 	if err := xlaModel.OnnxModel.ContextToONNX(xlaModel.Ctx); err != nil {
 		return err
 	}
-	if err := xlaModel.OnnxModel.SaveToFile(path); err != nil {
+	err := xlaModel.OnnxModel.Write(w)
+	if err != nil {
 		return err
 	}
 	return nil
