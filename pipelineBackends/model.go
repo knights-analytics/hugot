@@ -16,6 +16,7 @@ type Model struct {
 	InputsMeta   []InputOutputInfo
 	OutputsMeta  []InputOutputInfo
 	Destroy      func() error
+	Pipelines    map[string]Pipeline
 }
 
 func ReshapeOutput(input *[]float32, meta InputOutputInfo, paddingMask [][]bool, sequenceLength int) OutputArray {
@@ -88,6 +89,7 @@ func LoadModel(path string, onnxFilename string, options *options.Options) (*Mod
 	model := &Model{
 		Path:         path,
 		OnnxFilename: onnxFilename,
+		Pipelines:    make(map[string]Pipeline),
 	}
 
 	err := LoadOnnxModelBytes(model)

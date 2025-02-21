@@ -241,6 +241,17 @@ func TestNoSameNamePipelineORT(t *testing.T) {
 	noSameNamePipeline(t, session)
 }
 
+func TestClosePipelineORT(t *testing.T) {
+	opts := []options.WithOption{options.WithOnnxLibraryPath(onnxRuntimeSharedLibrary)}
+	session, err := NewORTSession(opts...)
+	check(t, err)
+	defer func(session *Session) {
+		destroyErr := session.Destroy()
+		check(t, destroyErr)
+	}(session)
+	destroyPipelines(t, session)
+}
+
 // Thread safety
 
 func TestThreadSafetyORT(t *testing.T) {
