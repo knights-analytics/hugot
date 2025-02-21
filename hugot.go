@@ -22,7 +22,6 @@ type Session struct {
 }
 
 func newSession(runtime string, opts ...options.WithOption) (*Session, error) {
-
 	parsedOptions := options.Defaults()
 	parsedOptions.Runtime = runtime
 	// Collect options into a struct, so they can be applied in the correct order later
@@ -173,6 +172,8 @@ func InitializePipeline[T pipelineBackends.Pipeline](p T, pipelineConfig pipelin
 	default:
 		return pipeline, name, fmt.Errorf("not implemented")
 	}
+
+	model.Pipelines[name] = pipeline
 	return pipeline, name, nil
 }
 
@@ -207,6 +208,59 @@ func GetPipeline[T pipelineBackends.Pipeline](s *Session, name string) (T, error
 	default:
 		return pipeline, errors.New("pipeline type not supported")
 	}
+}
+
+func ClosePipeline[T pipelineBackends.Pipeline](s *Session, name string) error {
+	var pipeline T
+	switch any(pipeline).(type) {
+	case *pipelines.TokenClassificationPipeline:
+		p, ok := s.tokenClassificationPipelines[name]
+		if ok {
+			model := p.Model
+			delete(s.tokenClassificationPipelines, name)
+			delete(model.Pipelines, name)
+			if len(model.Pipelines) == 0 {
+				delete(s.models, model.Path)
+				return model.Destroy()
+			}
+		}
+	case *pipelines.TextClassificationPipeline:
+		p, ok := s.textClassificationPipelines[name]
+		if ok {
+			model := p.Model
+			delete(s.textClassificationPipelines, name)
+			delete(model.Pipelines, name)
+			if len(model.Pipelines) == 0 {
+				delete(s.models, model.Path)
+				return model.Destroy()
+			}
+		}
+	case *pipelines.FeatureExtractionPipeline:
+		p, ok := s.featureExtractionPipelines[name]
+		if ok {
+			model := p.Model
+			delete(s.featureExtractionPipelines, name)
+			delete(model.Pipelines, name)
+			if len(model.Pipelines) == 0 {
+				delete(s.models, model.Path)
+				return model.Destroy()
+			}
+		}
+	case *pipelines.ZeroShotClassificationPipeline:
+		p, ok := s.zeroShotClassificationPipelines[name]
+		if ok {
+			model := p.Model
+			delete(s.zeroShotClassificationPipelines, name)
+			delete(model.Pipelines, name)
+			if len(model.Pipelines) == 0 {
+				delete(s.models, model.Path)
+				return model.Destroy()
+			}
+		}
+	default:
+		return errors.New("pipeline type not supported")
+	}
+	return nil
 }
 
 type pipelineNotFoundError struct {

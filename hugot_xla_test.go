@@ -209,6 +209,16 @@ func TestNoSameNamePipelineXLA(t *testing.T) {
 	noSameNamePipeline(t, session)
 }
 
+func TestDestroyPipelineXLA(t *testing.T) {
+	session, err := NewXLASession()
+	check(t, err)
+	defer func(session *Session) {
+		destroyErr := session.Destroy()
+		check(t, destroyErr)
+	}(session)
+	destroyPipelines(t, session)
+}
+
 // Thread safety
 
 func TestThreadSafetyXLA(t *testing.T) {

@@ -827,6 +827,47 @@ func noSameNamePipeline(t *testing.T, session *Session) {
 	assert.Error(t, err3)
 }
 
+// destroy pipelines
+
+func destroyPipelines(t *testing.T, session *Session) {
+	t.Helper()
+
+	modelPath := "./models/KnightsAnalytics_distilbert-NER"
+	configSimple := TokenClassificationConfig{
+		ModelPath: modelPath,
+		Name:      "testClosePipeline",
+		Options: []TokenClassificationOption{
+			pipelines.WithSimpleAggregation(),
+			pipelines.WithIgnoreLabels([]string{"O"}),
+		},
+	}
+	_, err2 := NewPipeline(session, configSimple)
+	if err2 != nil {
+		t.FailNow()
+	}
+
+	if len(session.models) != 1 {
+		t.Fatal("Session should have 1 model")
+	}
+
+	for _, model := range session.models {
+		if _, ok := model.Pipelines["testClosePipeline"]; !ok {
+			t.Fatal("Pipeline alias was not added to the model")
+		}
+	}
+
+	if err := ClosePipeline[*pipelines.TokenClassificationPipeline](session, "testClosePipeline"); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(session.models) != 0 {
+		t.Fatal("Session should have 0 models")
+	}
+	if len(session.tokenClassificationPipelines) != 0 {
+		t.Fatal("Session should have 0 token classification pipelines")
+	}
+}
+
 // Thread safety
 
 func threadSafety(t *testing.T, session *Session) {
