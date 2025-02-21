@@ -20,6 +20,11 @@ type TrainingSession struct {
 	config   TrainingConfig
 }
 
+// GetPipeline returns the pipeline used in the training session.
+func (s *TrainingSession) GetPipeline() pipelineBackends.Pipeline {
+	return s.pipeline
+}
+
 func (s *TrainingSession) Destroy() error {
 	err := s.pipeline.GetModel().Destroy()
 	if err != nil {
@@ -116,7 +121,7 @@ func (s *TrainingSession) Save(path string) error {
 		return fmt.Errorf("path is required")
 	}
 
-	var deferError error
+	var writeErr error
 
 	model := s.pipeline.GetModel()
 	if model != nil {
@@ -124,31 +129,25 @@ func (s *TrainingSession) Save(path string) error {
 			xlaModel := model.XLAModel
 
 			if xlaModel != nil {
-				// we save the model locally in a temp directory first so we can support s3
-				tempDir, err := os.MkdirTemp("", "hugot")
+				w, err := util.NewFileWriter(util.PathJoinSafe(path, "model.onnx"), "")
 				if err != nil {
 					return err
 				}
 				defer func() {
-					deferError = errors.Join(deferError, os.RemoveAll(tempDir))
+					writeErr = errors.Join(writeErr, w.Close())
 				}()
 
-				if err := xlaModel.Save(util.PathJoinSafe(tempDir, "model.onnx")); err != nil {
-					return err
+				if writeErr = xlaModel.Save(w); writeErr != nil {
+					return writeErr
 				}
-
-				if err := util.MoveFile(util.PathJoinSafe(tempDir, "model.onnx"), path); err != nil {
-					return err
-				}
-
 				if model.Tokenizer != nil {
-					if err := copyTokenizer(model.Path, path); err != nil {
-						return err
+					// copy tokenizer files from original model
+					if writeErr = copyTokenizer(model.Path, path); writeErr != nil {
+						return writeErr
 					}
 				}
-				return nil
+				return writeErr
 			}
-
 			return fmt.Errorf("XLA model is nil")
 		} else {
 			return fmt.Errorf("XLA runtime is required for saving a training model")
@@ -163,6 +162,7 @@ func copyTokenizer(from, to string) error {
 		"special_tokens_map.json": true,
 		"tokenizer_config.json":   true,
 		"tokenizer.json":          true,
+		"vocab.txt":               true,
 	}
 
 	walker := func(_ context.Context, _ string, parent string, info os.FileInfo, _ io.Reader) (toContinue bool, err error) {
