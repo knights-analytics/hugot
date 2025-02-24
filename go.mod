@@ -3,11 +3,11 @@ module github.com/knights-analytics/hugot
 go 1.23.3
 
 require (
-	github.com/bodaay/HuggingFaceModelDownloader v0.0.0-20241026025743-cbf2f5e84f54
 	github.com/daulet/tokenizers v1.20.2
 	github.com/gomlx/exceptions v0.0.3
-	github.com/gomlx/gomlx v0.17.1-0.20250219113350-69ca85de9d85
-	github.com/gomlx/gopjrt v0.6.0
+	github.com/gomlx/go-huggingface v0.1.2-0.20250226101030-5c18da20e2ed
+	github.com/gomlx/gomlx v0.17.1
+	github.com/gomlx/gopjrt v0.6.2
 	github.com/gomlx/onnx-gomlx v0.2.0
 	github.com/json-iterator/go v1.1.12
 	github.com/mattn/go-isatty v0.0.20
@@ -22,20 +22,18 @@ require (
 	github.com/cpuguy83/go-md2man/v2 v2.0.6 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
-	github.com/fatih/color v1.18.0 // indirect
 	github.com/go-errors/errors v1.5.1 // indirect
 	github.com/go-logr/logr v1.4.2 // indirect
 	github.com/google/uuid v1.6.0 // indirect
-	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
-	github.com/rogpeppe/go-internal v1.13.1 // indirect
+	github.com/rogpeppe/go-internal v1.14.1 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	github.com/xrash/smetrics v0.0.0-20240521201337-686a1a2994c1 // indirect
-	golang.org/x/crypto v0.34.0 // indirect
+	golang.org/x/crypto v0.35.0 // indirect
 	golang.org/x/sys v0.30.0 // indirect
 	google.golang.org/protobuf v1.36.5 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
