@@ -3,6 +3,8 @@
 package pipelineBackends
 
 import (
+	"io"
+
 	"github.com/knights-analytics/hugot/options"
 )
 
@@ -22,6 +24,6 @@ func runXLASessionOnBatch(_ *PipelineBatch, _ *BasePipeline) error {
 	return nil
 }
 
-func (xlaModel *XLAModel) Save(_ string) error {
+func (xlaModel *XLAModel) Save(_ io.WriteCloser) error {
 	return nil
 }
