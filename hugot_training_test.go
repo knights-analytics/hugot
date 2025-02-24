@@ -163,7 +163,7 @@ func TestSemanticSimilarity(t *testing.T) {
 
 	// first we create a dataset object. This allows us to loop over the dataset for potentially multiple epochs.
 	// We need to specify the batch size. For cpu lower batches seem to be faster.
-	dataset, err := datasets.NewSemanticSimilarityDataset("./testData/semanticSimilarityTest.jsonl", 1)
+	dataset, err := datasets.NewSemanticSimilarityDataset("./testData/semanticSimilarityTest.jsonl", 1, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -193,7 +193,7 @@ func TestSemanticSimilarity(t *testing.T) {
 			Score:     float32(scores[i]),
 		})
 	}
-	inMemoryDataset, err := datasets.NewInMemorySemanticSimilarityDataset(examples, 1)
+	inMemoryDataset, err := datasets.NewInMemorySemanticSimilarityDataset(examples, 1, nil)
 	check(t, err)
 	similaritiesXLATrainedInMemory := trainSimilarity(t, modelPath, inMemoryDataset, examplesLhs, examplesRhs)
 	for i := range similaritiesXLATrainedInMemory {
@@ -214,7 +214,7 @@ func TestSemanticSimilarityCuda(t *testing.T) {
 		t.SkipNow()
 	}
 
-	dataset, err := datasets.NewSemanticSimilarityDataset("./testData/semanticSimilarityTest.jsonl", 32)
+	dataset, err := datasets.NewSemanticSimilarityDataset("./testData/semanticSimilarityTest.jsonl", 32, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
