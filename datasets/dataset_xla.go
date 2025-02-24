@@ -32,6 +32,7 @@ type SemanticSimilarityDataset struct {
 	train.Dataset
 	trainingPath     string
 	trainingExamples []SemanticSimilarityExample
+	preprocessFunc   ExamplePreprocessFunc
 	batchSize        int
 	pipeline         *pipelines.FeatureExtractionPipeline
 	reader           *bufio.Reader
@@ -73,14 +74,17 @@ type SemanticSimilarityExample struct {
 	Score     float32 `json:"score"`
 }
 
+type ExamplePreprocessFunc func([]SemanticSimilarityExample) ([]SemanticSimilarityExample, error)
+
 // NewSemanticSimilarityDataset creates a new SemanticSimilarityDataset.
 // The trainingPath must be a .jsonl file where each line has the following format:
 // {"sentence1":"A plane is taking off.","sentence2":"An air plane is taking off.","score":1.0}
 // The score is a float value between 0 and 1.
-func NewSemanticSimilarityDataset(trainingPath string, batchSize int) (*SemanticSimilarityDataset, error) {
+func NewSemanticSimilarityDataset(trainingPath string, batchSize int, preprocessFunc ExamplePreprocessFunc) (*SemanticSimilarityDataset, error) {
 	d := &SemanticSimilarityDataset{
-		trainingPath: trainingPath,
-		batchSize:    batchSize,
+		trainingPath:   trainingPath,
+		batchSize:      batchSize,
+		preprocessFunc: preprocessFunc,
 	}
 	if err := d.Validate(); err != nil {
 		return nil, err
@@ -95,10 +99,11 @@ func NewSemanticSimilarityDataset(trainingPath string, batchSize int) (*Semantic
 	return d, nil
 }
 
-func NewInMemorySemanticSimilarityDataset(examples []SemanticSimilarityExample, batchSize int) (*SemanticSimilarityDataset, error) {
+func NewInMemorySemanticSimilarityDataset(examples []SemanticSimilarityExample, batchSize int, preprocessFunc ExamplePreprocessFunc) (*SemanticSimilarityDataset, error) {
 	d := &SemanticSimilarityDataset{
 		trainingExamples: examples,
 		batchSize:        batchSize,
+		preprocessFunc:   preprocessFunc,
 	}
 	if err := d.Validate(); err != nil {
 		return nil, err
@@ -136,6 +141,7 @@ func (s *SemanticSimilarityDataset) YieldRaw() ([]SemanticSimilarityExample, err
 	var lineData SemanticSimilarityExample
 
 	examplesBatch := make([]SemanticSimilarityExample, 0, s.batchSize)
+	var preprocessErr error
 
 	for batchCounter < s.batchSize {
 		if len(s.trainingExamples) > 0 {
@@ -162,6 +168,14 @@ func (s *SemanticSimilarityDataset) YieldRaw() ([]SemanticSimilarityExample, err
 		batchCounter++
 	}
 	s.batchN++
+
+	if s.preprocessFunc != nil {
+		examplesBatch, preprocessErr = s.preprocessFunc(examplesBatch)
+		if preprocessErr != nil {
+			return nil, preprocessErr
+		}
+	}
+
 	return examplesBatch, nil
 }
 
