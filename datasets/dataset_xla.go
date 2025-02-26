@@ -68,6 +68,7 @@ func (s *SemanticSimilarityDataset) Validate() error {
 	return nil
 }
 
+// SemanticSimilarityExample is a single example for the semantic similarity dataset.
 type SemanticSimilarityExample struct {
 	Sentence1 string  `json:"sentence1"`
 	Sentence2 string  `json:"sentence2"`
@@ -80,6 +81,8 @@ type ExamplePreprocessFunc func([]SemanticSimilarityExample) ([]SemanticSimilari
 // The trainingPath must be a .jsonl file where each line has the following format:
 // {"sentence1":"A plane is taking off.","sentence2":"An air plane is taking off.","score":1.0}
 // The score is a float value between 0 and 1.
+// preprocessFunc here must be a function that takes a slice of SemanticSimilarityExample and returns a slice of SemanticSimilarityExample.
+// This function can be used to apply any custom preprocessing to the example batch before they are passed to the model.
 func NewSemanticSimilarityDataset(trainingPath string, batchSize int, preprocessFunc ExamplePreprocessFunc) (*SemanticSimilarityDataset, error) {
 	d := &SemanticSimilarityDataset{
 		trainingPath:   trainingPath,
@@ -99,6 +102,9 @@ func NewSemanticSimilarityDataset(trainingPath string, batchSize int, preprocess
 	return d, nil
 }
 
+// NewInMemorySemanticSimilarityDataset creates a new SemanticSimilarityDataset in memory from a slice of examples.
+// preprocessFunc here must be a function that takes a slice of SemanticSimilarityExample and returns a slice of SemanticSimilarityExample.
+// This function can be used to apply any custom preprocessing to the example batch before they are passed to the model.
 func NewInMemorySemanticSimilarityDataset(examples []SemanticSimilarityExample, batchSize int, preprocessFunc ExamplePreprocessFunc) (*SemanticSimilarityDataset, error) {
 	d := &SemanticSimilarityDataset{
 		trainingExamples: examples,
@@ -111,6 +117,7 @@ func NewInMemorySemanticSimilarityDataset(examples []SemanticSimilarityExample, 
 	return d, nil
 }
 
+// Reset resets the dataset to the beginning of the training data (after the epoch is done).
 func (s *SemanticSimilarityDataset) Reset() {
 	if s.verbose {
 		fmt.Printf("completed epoch in %d batches of %d examples, resetting dataset\n", s.batchN, s.batchSize)
@@ -133,6 +140,8 @@ func (s *SemanticSimilarityDataset) Reset() {
 	}
 }
 
+// YieldRaw returns the next raw batch of examples from the dataset. Note that if a preprocessing function has been
+// provided at creation time, the examples will be preprocessed before being returned.
 func (s *SemanticSimilarityDataset) YieldRaw() ([]SemanticSimilarityExample, error) {
 	batchCounter := 0
 
@@ -179,6 +188,7 @@ func (s *SemanticSimilarityDataset) YieldRaw() ([]SemanticSimilarityExample, err
 	return examplesBatch, nil
 }
 
+// Yield returns the next batch of examples from the dataset. The examples are tokenized and converted to tensors for the training process.
 func (s *SemanticSimilarityDataset) Yield() (spec any, inputs []*tensors.Tensor, labels []*tensors.Tensor, err error) {
 	exampleBatch, rawErr := s.YieldRaw()
 	if rawErr != nil && !errors.Is(rawErr, io.EOF) {

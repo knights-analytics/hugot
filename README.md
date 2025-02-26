@@ -223,21 +223,25 @@ For the ONNX Runtime Cuda libraries, you can install CUDA 12.x by installing the
 
 On different distros (e.g. Ubuntu), you should be able to install the equivalent packages and gpu inference should work.
 
-## Training and fine-tuning pipelines
+## Training and fine-tuning pipelines 
 
-Hugot now also supports the training and fine-tuning of transformer pipelines (alpha). Currently training requires XLA as the onnx model will be loaded, converted to xla and trained using [goMLX](https://github.com/gomlx/gomlx), and serialized back to onnx format.
+Hugot now also supports the training and fine-tuning of transformer pipelines (beta)! This functionality requires that you build with XLA enabled as we use gomlx behind the
+scenes for training/fine-tuning: the onnx model will be loaded, converted to xla and trained using [goMLX](https://github.com/gomlx/gomlx), and serialized back to onnx format.
 
-We initially support training for the **FeatureExtractionPipeline**. This can be used to fine-tune the vector embeddings for semantic textual similarity. Currently we only support sentence pairs training datasets which must be .jsonl files with the following format:
+We is currently supported only for the **FeatureExtractionPipeline**. This can be used to fine-tune the vector embeddings for e.g. semantic textual similarity (for applications like RAG and semantic search). In order to fine-tune the feature extraction pipeline for semantic search you will need to collect a training dataset in the following format:
 
 ```
 {"sentence1": "The quick brown fox jumps over the lazy dog", "sentence2": "A quick brown fox jumps over a lazy dog", "score": 1}
-{"sentence1": "The quick brown fox jumps over the lazy dog", "sentence2": "A quick brown fox jumps over a lazy dog", "score": 0}
+{"sentence1": "The quick brown fox jumps over the lazy dog", "sentence2": "A quick brown cow jumps over a lazy caterpillar", "score": 0.5}
 ```
 
 See the [example](./testdata/sts-train.jsonl) for a sample dataset.
+
 The score is assumed to be a float between 0 and 1 that encodes the semantic similarity between the sentences, and by default a cosine similarity loss is used (see [sentence transformers](https://sbert.net/docs/package_reference/sentence_transformer/losses.html#cosinesimilarityloss)). However, you can also specify a different loss function from `goMLX` using the `XLATrainingOptions` field in the `TrainingConfig` struct. See [the training tests](./hugot_training_test.go) for examples on how to train or fine-tune feature extraction pipelines.
 
 Note that training on GPU is currently much faster and memory efficient than training on CPU, although optimizations are underway. On CPU, we recommend smaller batch sizes.
+
+See [the tests](hugot_training_test.go) for an example on how to fine-tune semantic similarity starting with an open source sentence transformers model and a few examples.
 
 ## Limitations
 

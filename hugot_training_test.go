@@ -163,6 +163,9 @@ func TestSemanticSimilarity(t *testing.T) {
 
 	// first we create a dataset object. This allows us to loop over the dataset for potentially multiple epochs.
 	// We need to specify the batch size. For cpu lower batches seem to be faster.
+	// The datasets.NewSemanticSimilarityDataset function also accepts a custom function that will be applied
+	// to all examples in a batch before they are passed to the model. This can be used to apply whatever preprocessing
+	// you need.
 	dataset, err := datasets.NewSemanticSimilarityDataset("./testData/semanticSimilarityTest.jsonl", 1, nil)
 	if err != nil {
 		t.Fatal(err)
