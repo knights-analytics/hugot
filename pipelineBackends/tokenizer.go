@@ -41,10 +41,10 @@ func AllInputTokens(pipeline *BasePipeline) {
 	}
 }
 
-func Decode(tokens []uint32, tokenizer *Tokenizer) string {
+func Decode(tokens []uint32, tokenizer *Tokenizer, skipSpecialTokens bool) (string, error) {
 	switch tokenizer.Runtime {
 	case "RUST":
-		return decodeRust(tokens, tokenizer)
+		return decodeRust(tokens, tokenizer, skipSpecialTokens), nil
 	}
-	return ""
+	return "", fmt.Errorf("runtime %s not recognized", tokenizer.Runtime)
 }

@@ -35,7 +35,7 @@ type Entity struct {
 	Scores    []float32
 	Index     int
 	Word      string
-	TokenID   uint32
+	TokenID   []uint32
 	Start     uint
 	End       uint
 	IsSubword bool
@@ -62,6 +62,12 @@ func (t *TokenClassificationOutput) GetOutput() []any {
 func WithSimpleAggregation() pipelineBackends.PipelineOption[*TokenClassificationPipeline] {
 	return func(pipeline *TokenClassificationPipeline) {
 		pipeline.AggregationStrategy = "SIMPLE"
+	}
+}
+
+func WithAverageAggregation() pipelineBackends.PipelineOption[*TokenClassificationPipeline] {
+	return func(pipeline *TokenClassificationPipeline) {
+		pipeline.AggregationStrategy = "AVERAGE"
 	}
 }
 
@@ -264,7 +270,7 @@ func (p *TokenClassificationPipeline) GatherPreEntities(input pipelineBackends.T
 		// in that case set the subword as in the python code
 		preEntities = append(preEntities, Entity{
 			Word:      word,
-			TokenID:   tokenID,
+			TokenID:   []uint32{tokenID},
 			Scores:    tokenScores,
 			Start:     startInd,
 			End:       endInd,
@@ -275,8 +281,82 @@ func (p *TokenClassificationPipeline) GatherPreEntities(input pipelineBackends.T
 	return preEntities
 }
 
+func (p *TokenClassificationPipeline) aggregateWord(entities []Entity) (Entity, error) {
+	tokens := make([]uint32, len(entities))
+	for i, e := range entities {
+		tokens[i] = e.TokenID[0]
+	}
+	var newEntity Entity
+
+	word, err := pipelineBackends.Decode(tokens, p.Model.Tokenizer, true)
+	if err != nil {
+		return newEntity, err
+	}
+
+	switch p.AggregationStrategy {
+	case "AVERAGE":
+		scores := make([][]float32, len(p.IDLabelMap))
+		for _, e := range entities {
+			for i, score := range e.Scores {
+				scores[i] = append(scores[i], score)
+			}
+		}
+		averages := make([]float32, len(p.IDLabelMap))
+		for i, s := range scores {
+			averages[i] = util.Mean(s)
+		}
+		entityIdx, score, _ := util.ArgMax(averages)
+		label, ok := p.IDLabelMap[entityIdx]
+		if !ok {
+			return Entity{}, fmt.Errorf("could not determine entity type for input %s, predicted entity index %d", word, entityIdx)
+		}
+		newEntity = Entity{
+			Entity:  label,
+			Score:   score,
+			Word:    word,
+			TokenID: tokens,
+			Start:   entities[0].Start,
+			End:     entities[len(entities)-1].End,
+		}
+	default:
+		return Entity{}, fmt.Errorf("aggregation strategy %s not recognized", p.AggregationStrategy)
+	}
+	return newEntity, nil
+}
+
+func (p *TokenClassificationPipeline) aggregateWords(entities []Entity) ([]Entity, error) {
+	var wordGroup []Entity
+	var wordEntities []Entity
+
+	for _, entity := range entities {
+		if len(wordGroup) == 0 {
+			wordGroup = []Entity{entity}
+		} else if entity.IsSubword {
+			wordGroup = append(wordGroup, entity)
+		} else {
+			aggregated, err := p.aggregateWord(wordGroup)
+			if err != nil {
+				return nil, err
+			}
+			wordEntities = append(wordEntities, aggregated)
+			wordGroup = []Entity{entity}
+		}
+	}
+
+	if len(wordGroup) > 0 {
+		aggregated, err := p.aggregateWord(wordGroup)
+		if err != nil {
+			return nil, err
+		}
+		wordEntities = append(wordEntities, aggregated)
+	}
+	return wordEntities, nil
+}
+
 func (p *TokenClassificationPipeline) Aggregate(input pipelineBackends.TokenizedInput, preEntities []Entity) ([]Entity, error) {
 	entities := make([]Entity, len(preEntities))
+	var aggregationError error
+
 	if p.AggregationStrategy == "SIMPLE" || p.AggregationStrategy == "NONE" {
 		for i, preEntity := range preEntities {
 			entityIdx, score, argMaxErr := util.ArgMax(preEntity.Scores)
@@ -298,8 +378,12 @@ func (p *TokenClassificationPipeline) Aggregate(input pipelineBackends.Tokenized
 			}
 		}
 	} else {
-		return nil, errors.New("aggregation strategies other than SIMPLE and NONE are not implemented")
+		entities, aggregationError = p.aggregateWords(preEntities)
+		if aggregationError != nil {
+			return nil, aggregationError
+		}
 	}
+
 	if p.AggregationStrategy == "NONE" {
 		return entities, nil
 	}
@@ -323,7 +407,7 @@ func (p *TokenClassificationPipeline) getTag(entityName string) (string, string)
 	return bi, tag
 }
 
-func (p *TokenClassificationPipeline) groupSubEntities(entities []Entity) Entity {
+func (p *TokenClassificationPipeline) groupSubEntities(entities []Entity) (Entity, error) {
 	splits := strings.Split(entities[0].Entity, "-")
 	var entityType string
 	if len(splits) == 1 {
@@ -335,12 +419,15 @@ func (p *TokenClassificationPipeline) groupSubEntities(entities []Entity) Entity
 	tokens := make([]uint32, len(entities))
 	for i, s := range entities {
 		scores[i] = s.Score
-		tokens[i] = s.TokenID
+		tokens = slices.Concat(tokens, s.TokenID)
 	}
 	score := util.Mean(scores)
 	// note: here we directly appeal to the tokenizer decoder with the tokenIds
 	// in the python code they pass the words to a token_to_string_method
-	word := pipelineBackends.Decode(tokens, p.Model.Tokenizer)
+	word, err := pipelineBackends.Decode(tokens, p.Model.Tokenizer, true)
+	if err != nil {
+		return Entity{}, err
+	}
 
 	return Entity{
 		Entity: entityType,
@@ -348,7 +435,7 @@ func (p *TokenClassificationPipeline) groupSubEntities(entities []Entity) Entity
 		Word:   word,
 		Start:  entities[0].Start,
 		End:    entities[len(entities)-1].End,
-	}
+	}, nil
 }
 
 // GroupEntities group together adjacent tokens with the same entity predicted.
@@ -368,14 +455,22 @@ func (p *TokenClassificationPipeline) GroupEntities(entities []Entity) ([]Entity
 			currentGroupDisagg = append(currentGroupDisagg, e)
 		} else {
 			// create the grouped entity
-			entityGroups = append(entityGroups, p.groupSubEntities(currentGroupDisagg))
+			groupedEntity, err := p.groupSubEntities(currentGroupDisagg)
+			if err != nil {
+				return nil, err
+			}
+			entityGroups = append(entityGroups, groupedEntity)
 			currentGroupDisagg = []Entity{e}
 		}
 	}
 
 	if len(currentGroupDisagg) > 0 {
 		// last entity remaining
-		entityGroups = append(entityGroups, p.groupSubEntities(currentGroupDisagg))
+		groupedEntity, err := p.groupSubEntities(currentGroupDisagg)
+		if err != nil {
+			return nil, err
+		}
+		entityGroups = append(entityGroups, groupedEntity)
 	}
 	return entityGroups, nil
 }

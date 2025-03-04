@@ -82,8 +82,8 @@ func tokenizeInputsRust(batch *PipelineBatch, tk *Tokenizer, inputs []string) {
 	batch.MaxSequenceLength = maxSequence + 1
 }
 
-func decodeRust(tokens []uint32, tokenizer *Tokenizer) string {
-	return tokenizer.RustTokenizer.Tokenizer.Decode(tokens, false)
+func decodeRust(tokens []uint32, tokenizer *Tokenizer, skipSpecialTokens bool) string {
+	return tokenizer.RustTokenizer.Tokenizer.Decode(tokens, skipSpecialTokens)
 }
 
 func convertRustOffsets(input []tokenizers.Offset) [][2]uint {
