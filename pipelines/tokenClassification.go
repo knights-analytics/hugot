@@ -55,8 +55,6 @@ func (t *TokenClassificationOutput) GetOutput() []any {
 
 // options
 
-// TODO: need to implement the other types of aggregation (max etc)
-
 // WithSimpleAggregation sets the aggregation strategy for the token labels to simple
 // It reproduces simple aggregation from the huggingface implementation.
 func WithSimpleAggregation() pipelineBackends.PipelineOption[*TokenClassificationPipeline] {
@@ -65,9 +63,27 @@ func WithSimpleAggregation() pipelineBackends.PipelineOption[*TokenClassificatio
 	}
 }
 
+// WithAverageAggregation sets the aggregation strategy for the token labels to average
+// It reproduces simple aggregation from the huggingface implementation.
 func WithAverageAggregation() pipelineBackends.PipelineOption[*TokenClassificationPipeline] {
 	return func(pipeline *TokenClassificationPipeline) {
 		pipeline.AggregationStrategy = "AVERAGE"
+	}
+}
+
+// WithMaxAggregation sets the aggregation strategy for the token labels to average
+// It reproduces average aggregation from the huggingface implementation.
+func WithMaxAggregation() pipelineBackends.PipelineOption[*TokenClassificationPipeline] {
+	return func(pipeline *TokenClassificationPipeline) {
+		pipeline.AggregationStrategy = "MAX"
+	}
+}
+
+// WithMaxAggregation sets the aggregation strategy for the token labels to average
+// It reproduces average aggregation from the huggingface implementation.
+func WithFirstAggregation() pipelineBackends.PipelineOption[*TokenClassificationPipeline] {
+	return func(pipeline *TokenClassificationPipeline) {
+		pipeline.AggregationStrategy = "FIRST"
 	}
 }
 
@@ -86,7 +102,6 @@ func WithIgnoreLabels(ignoreLabels []string) pipelineBackends.PipelineOption[*To
 
 // NewTokenClassificationPipeline Initializes a feature extraction pipeline.
 func NewTokenClassificationPipeline(config pipelineBackends.PipelineConfig[*TokenClassificationPipeline], s *options.Options, model *pipelineBackends.Model) (*TokenClassificationPipeline, error) {
-
 	defaultPipeline, err := pipelineBackends.NewBasePipeline(config, s, model)
 	if err != nil {
 		return nil, err
@@ -286,12 +301,16 @@ func (p *TokenClassificationPipeline) aggregateWord(entities []Entity) (Entity, 
 	for i, e := range entities {
 		tokens[i] = e.TokenID[0]
 	}
-	var newEntity Entity
+
+	newEntity := Entity{}
 
 	word, err := pipelineBackends.Decode(tokens, p.Model.Tokenizer, true)
 	if err != nil {
 		return newEntity, err
 	}
+
+	var score float32
+	var label string
 
 	switch p.AggregationStrategy {
 	case "AVERAGE":
@@ -305,23 +324,58 @@ func (p *TokenClassificationPipeline) aggregateWord(entities []Entity) (Entity, 
 		for i, s := range scores {
 			averages[i] = util.Mean(s)
 		}
-		entityIdx, score, _ := util.ArgMax(averages)
-		label, ok := p.IDLabelMap[entityIdx]
+		entityIdx, maxScore, err := util.ArgMax(averages)
+		if err != nil {
+			return newEntity, err
+		}
+		entityLabel, ok := p.IDLabelMap[entityIdx]
+		if !ok {
+			return newEntity, fmt.Errorf("could not determine entity type for input %s, predicted entity index %d", word, entityIdx)
+		}
+		score = maxScore
+		label = entityLabel
+	case "MAX":
+		var maxScore float32
+		var maxIdx int
+		for _, e := range entities {
+			idx, score, err := util.ArgMax(e.Scores)
+			if err != nil {
+				return newEntity, err
+			}
+			if score >= maxScore {
+				maxScore = score
+				maxIdx = idx
+			}
+		}
+		entityLabel, ok := p.IDLabelMap[maxIdx]
+		if !ok {
+			return Entity{}, fmt.Errorf("could not determine entity type for input %s, predicted entity index %d", word, maxIdx)
+		}
+		score = maxScore
+		label = entityLabel
+	case "FIRST":
+		entityIdx, maxScore, err := util.ArgMax(entities[0].Scores)
+		if err != nil {
+			return newEntity, err
+		}
+		entityLabel, ok := p.IDLabelMap[entityIdx]
 		if !ok {
 			return Entity{}, fmt.Errorf("could not determine entity type for input %s, predicted entity index %d", word, entityIdx)
 		}
-		newEntity = Entity{
-			Entity:  label,
-			Score:   score,
-			Word:    word,
-			TokenID: tokens,
-			Start:   entities[0].Start,
-			End:     entities[len(entities)-1].End,
-		}
+		score = maxScore
+		label = entityLabel
 	default:
 		return Entity{}, fmt.Errorf("aggregation strategy %s not recognized", p.AggregationStrategy)
 	}
-	return newEntity, nil
+
+	return Entity{
+		Entity:  label,
+		Score:   score,
+		Word:    word,
+		TokenID: tokens,
+		Start:   entities[0].Start,
+		End:     entities[len(entities)-1].End,
+	}, nil
 }
 
 func (p *TokenClassificationPipeline) aggregateWords(entities []Entity) ([]Entity, error) {
