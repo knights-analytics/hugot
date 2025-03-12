@@ -70,9 +70,10 @@ func (s *SemanticSimilarityDataset) Validate() error {
 
 // SemanticSimilarityExample is a single example for the semantic similarity dataset.
 type SemanticSimilarityExample struct {
-	Sentence1 string  `json:"sentence1"`
-	Sentence2 string  `json:"sentence2"`
-	Score     float32 `json:"score"`
+	Sentence1 string         `json:"sentence1"`
+	Sentence2 string         `json:"sentence2"`
+	Score     float32        `json:"score"`
+	Data      map[string]any // to store any additional data for the example. Not used by the dataset.
 }
 
 type ExamplePreprocessFunc func([]SemanticSimilarityExample) ([]SemanticSimilarityExample, error)
