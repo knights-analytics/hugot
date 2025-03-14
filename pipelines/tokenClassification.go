@@ -71,16 +71,16 @@ func WithAverageAggregation() pipelineBackends.PipelineOption[*TokenClassificati
 	}
 }
 
-// WithMaxAggregation sets the aggregation strategy for the token labels to average
-// It reproduces average aggregation from the huggingface implementation.
+// WithMaxAggregation sets the aggregation strategy for the token labels to Max
+// It reproduces max aggregation from the huggingface implementation.
 func WithMaxAggregation() pipelineBackends.PipelineOption[*TokenClassificationPipeline] {
 	return func(pipeline *TokenClassificationPipeline) {
 		pipeline.AggregationStrategy = "MAX"
 	}
 }
 
-// WithMaxAggregation sets the aggregation strategy for the token labels to average
-// It reproduces average aggregation from the huggingface implementation.
+// WithFirstAggregation sets the aggregation strategy for the token labels to first
+// It reproduces first aggregation from the huggingface implementation.
 func WithFirstAggregation() pipelineBackends.PipelineOption[*TokenClassificationPipeline] {
 	return func(pipeline *TokenClassificationPipeline) {
 		pipeline.AggregationStrategy = "FIRST"
