@@ -15,6 +15,7 @@ import (
 	"github.com/knights-analytics/hugot/datasets"
 	"github.com/knights-analytics/hugot/options"
 	"github.com/knights-analytics/hugot/pipelines"
+	"github.com/knights-analytics/hugot/util"
 )
 
 func cosineSimilarityTester(x []float32, y []float32) float64 {
@@ -243,13 +244,15 @@ func TestSemanticSimilarityCuda(t *testing.T) {
 	}
 
 	// we now write the fine-tuned pipeline back to disk as an onnx model
-	if e := session.Save("./models/testTrain.onnx"); e != nil {
+	if e := session.Save("./models/testTrain"); e != nil {
 		t.Fatal(e)
 	}
-	if _, err := os.Stat("./models/testTrain.onnx"); err != nil {
+	if exists, existsErr := util.FileExists("./models/testTrain"); existsErr != nil {
 		t.Fatal(err)
+	} else if !exists {
+		t.Fatal("model file ./models/testTrain does not exist")
 	}
-	if err = os.Remove("./models/testTrain.onnx"); err != nil {
+	if err = util.DeleteFile("./models/testTrain"); err != nil {
 		t.Fatal(err)
 	}
 }

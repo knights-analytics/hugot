@@ -14,7 +14,7 @@ require (
 	github.com/stretchr/testify v1.10.0
 	github.com/urfave/cli/v2 v2.27.6
 	github.com/viant/afs v1.25.1
-	github.com/yalue/onnxruntime_go v1.17.0
+	github.com/yalue/onnxruntime_go v1.18.0
 	golang.org/x/exp v0.0.0-20250305212735-054e65f0b394
 )
 
