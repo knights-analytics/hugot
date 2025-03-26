@@ -148,7 +148,7 @@ func (s *Session) initialiseORT() (bool, error) {
 		}
 	}
 	if o.CoreMLOptions != nil {
-		if err := sessionOptions.AppendExecutionProviderCoreML(*o.CoreMLOptions); err != nil {
+		if err := sessionOptions.AppendExecutionProviderCoreMLV2(o.CoreMLOptions); err != nil {
 			return true, err
 		}
 	}

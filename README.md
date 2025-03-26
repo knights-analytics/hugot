@@ -4,7 +4,7 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/knights-analytics/hugot)](https://goreportcard.com/report/github.com/knights-analytics/hugot)
 [![Coverage Status](https://coveralls.io/repos/github/knights-analytics/hugot/badge.svg?branch=main)](https://coveralls.io/github/knights-analytics/hugot?branch=main)
 
-<img src="./hug-gopher.webp" width="300">
+<img src="./hug-gopher.webp" width="300" alt="Huggingface and Gopher">
 
 ## What
 
@@ -89,44 +89,47 @@ func check(err error) {
         panic(err.Error())
     }
 }
-// start a new session. This looks for the onnxruntime.so library in its default path, e.g. /usr/lib/onnxruntime.so
-session, err := hugot.NewORTSession()
-// if your onnxruntime.so is somewhere else, you can explicitly set it by using WithOnnxLibraryPath
-// session, err := hugot.NewORTSession(WithOnnxLibraryPath("/path/to/onnxruntime.so"))
-check(err)
-// A successfully created hugot session needs to be destroyed when you're done
-defer func(session *hugot.Session) {
+
+func main() {
+    // start a new session. This looks for the onnxruntime.so library in its default path, e.g. /usr/lib/onnxruntime.so
+    session, err := hugot.NewORTSession()
+    // if your onnxruntime.so is somewhere else, you can explicitly set it by using WithOnnxLibraryPath
+    // session, err := hugot.NewORTSession(WithOnnxLibraryPath("/path/to/onnxruntime.so"))
+    check(err)
+    // A successfully created hugot session needs to be destroyed when you're done
+    defer func (session *hugot.Session) {
     err := session.Destroy()
     check(err)
-}(session)
+    }(session)
 
-// Let's download an onnx sentiment test classification model in the current directory
-// note: if you compile your library with build flag NODOWNLOAD, this will exclude the downloader.
-// Useful in case you just want the core engine (because you already have the models) and want to
-// drop the dependency on huggingfaceModelDownloader.
-modelPath, err := hugot.DownloadModel("KnightsAnalytics/distilbert-base-uncased-finetuned-sst-2-english", "./", hugot.NewDownloadOptions())
-check(err)
+    // Let's download an onnx sentiment test classification model in the current directory
+    // note: if you compile your library with build flag NODOWNLOAD, this will exclude the downloader.
+    // Useful in case you just want the core engine (because you already have the models) and want to
+    // drop the dependency on huggingfaceModelDownloader.
+    modelPath, err := hugot.DownloadModel("KnightsAnalytics/distilbert-base-uncased-finetuned-sst-2-english", "./", hugot.NewDownloadOptions())
+    check(err)
 
-// we now create the configuration for the text classification pipeline we want to create.
-// Options to the pipeline can be set here using the Options field
-config := TextClassificationConfig{
+    // we now create the configuration for the text classification pipeline we want to create.
+    // Options to the pipeline can be set here using the Options field
+    config := TextClassificationConfig{
     ModelPath: modelPath,
     Name:      "testPipeline",
+    }
+    // then we create out pipeline.
+    // Note: the pipeline will also be added to the session object so all pipelines can be destroyed at once
+    sentimentPipeline, err := NewPipeline(session, config)
+    check(err)
+
+    // we can now use the pipeline for prediction on a batch of strings
+    batch := []string{"This movie is disgustingly good !", "The director tried too much"}
+    batchResult, err := sentimentPipeline.RunPipeline(batch)
+    check(err)
+
+    // and do whatever we want with it :)
+    s, err := json.Marshal(batchResult)
+    check(err)
+    fmt.Println(string(s))
 }
-// then we create out pipeline.
-// Note: the pipeline will also be added to the session object so all pipelines can be destroyed at once
-sentimentPipeline, err := NewPipeline(session, config)
-check(err)
-
-// we can now use the pipeline for prediction on a batch of strings
-batch := []string{"This movie is disgustingly good !", "The director tried too much"}
-batchResult, err := sentimentPipeline.RunPipeline(batch)
-check(err)
-
-// and do whatever we want with it :)
-s, err := json.Marshal(batchResult)
-check(err)
-fmt.Println(string(s))
 // {"ClassificationOutputs":[[{"Label":"POSITIVE","Score":0.9998536}],[{"Label":"NEGATIVE","Score":0.99752176}]]}
 ```
 
@@ -235,7 +238,7 @@ We is currently supported only for the **FeatureExtractionPipeline**. This can b
 {"sentence1": "The quick brown fox jumps over the lazy dog", "sentence2": "A quick brown cow jumps over a lazy caterpillar", "score": 0.5}
 ```
 
-See the [example](./testdata/sts-train.jsonl) for a sample dataset.
+See the [example](./testData/sts-train.jsonl) for a sample dataset.
 
 The score is assumed to be a float between 0 and 1 that encodes the semantic similarity between the sentences, and by default a cosine similarity loss is used (see [sentence transformers](https://sbert.net/docs/package_reference/sentence_transformer/losses.html#cosinesimilarityloss)). However, you can also specify a different loss function from `goMLX` using the `XLATrainingOptions` field in the `TrainingConfig` struct. See [the training tests](./hugot_training_test.go) for examples on how to train or fine-tune feature extraction pipelines.
 

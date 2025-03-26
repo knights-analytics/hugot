@@ -38,7 +38,7 @@ type OrtOptions struct {
 	IntraOpSpinning       *bool
 	InterOpSpinning       *bool
 	CudaOptions           map[string]string
-	CoreMLOptions         *uint32
+	CoreMLOptions         map[string]string
 	DirectMLOptions       *int
 	OpenVINOOptions       map[string]string
 	TensorRTOptions       map[string]string
@@ -188,10 +188,10 @@ func WithCuda(options map[string]string) WithOption {
 // WithCoreML (ORT only) Use this function to set the CoreML options flags for the ONNX runtime configuration.
 // The `flags` parameter represents the CoreML options flags.
 // The `o.CoreMLOptions` field in `OrtOptions` struct will be set to the provided flags parameter.
-func WithCoreML(flags uint32) WithOption {
+func WithCoreML(flags map[string]string) WithOption {
 	return func(o *Options) error {
 		if o.Runtime == "ORT" {
-			o.ORTOptions.CoreMLOptions = &flags
+			o.ORTOptions.CoreMLOptions = flags
 			return nil
 		} else {
 			return fmt.Errorf("WithCoreML is only supported for ORT runtime")

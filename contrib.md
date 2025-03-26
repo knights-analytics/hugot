@@ -33,7 +33,7 @@ New pipelines can be implemented in their own file inside the pipelines folder.
 1. create or find an issue for your contribution
 2. fork and develop
 3. add tests and make sure the full test suite passes and test coverage does not dip below 80%
-4. create a MR linking to the relevant issue
+4. create an MR linking to the relevant issue
 
 Thank you for contributing to hugot!
 
