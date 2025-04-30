@@ -341,11 +341,7 @@ func (p *ZeroShotClassificationPipeline) Postprocess(outputTensors [][][]float32
 
 func (p *ZeroShotClassificationPipeline) RunPipeline(inputs []string) (*ZeroShotOutput, error) {
 	var outputTensors [][][]float32
-	batch := pipelineBackends.NewBatch()
 	var runErrors []error
-	defer func(*pipelineBackends.PipelineBatch) {
-		runErrors = append(runErrors, batch.Destroy())
-	}(batch)
 
 	sequencePairs, _, err := createSequencePairs(inputs, p.Labels, p.HypothesisTemplate)
 	if err != nil {
@@ -355,6 +351,9 @@ func (p *ZeroShotClassificationPipeline) RunPipeline(inputs []string) (*ZeroShot
 	for _, sequence := range sequencePairs {
 		var sequenceTensors [][]float32
 		for _, pair := range sequence {
+
+			batch := pipelineBackends.NewBatch()
+
 			// have to do this because python inserts a separator token in between the two clauses when tokenizing
 			// separator token isn't universal and depends on its value in special_tokens_map.json of model
 			// still isn't perfect because some models (protectai/MoritzLaurer-roberta-base-zeroshot-v2.0-c-onnx for example)
@@ -365,13 +364,18 @@ func (p *ZeroShotClassificationPipeline) RunPipeline(inputs []string) (*ZeroShot
 			concatenatedString := pair[0] + p.separatorToken + pair[1]
 			runErrors = append(runErrors, p.Preprocess(batch, []string{concatenatedString}))
 			if e := errors.Join(runErrors...); e != nil {
-				return nil, e
+				return nil, errors.Join(e, batch.Destroy())
 			}
 			runErrors = append(runErrors, p.Forward(batch))
 			if e := errors.Join(runErrors...); e != nil {
-				return nil, e
+				return nil, errors.Join(e, batch.Destroy())
 			}
 			sequenceTensors = append(sequenceTensors, batch.OutputValues[0].Result2D[0])
+
+			runErrors = append(runErrors, batch.Destroy())
+			if e := errors.Join(runErrors...); e != nil {
+				return nil, e
+			}
 		}
 		outputTensors = append(outputTensors, sequenceTensors)
 	}

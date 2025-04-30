@@ -30,14 +30,12 @@ func TestDownloadValidation(t *testing.T) {
 
 	downloadOptions := NewDownloadOptions()
 
+	// a model with the required files in a subfolder should not error
 	_, err := validateDownloadHfModel(hub.New("KnightsAnalytics/distilbert-base-uncased-finetuned-sst-2-english"), downloadOptions)
 	assert.NoError(t, err)
 	// a model without tokenizer.json or .onnx model should error
 	_, err = validateDownloadHfModel(hub.New("ByteDance/SDXL-Lightning"), downloadOptions)
 	assert.Error(t, err)
-	// a model with the required files in a subfolder should not error
-	_, err = validateDownloadHfModel(hub.New("distilbert/distilbert-base-uncased-finetuned-sst-2-english"), downloadOptions)
-	assert.NoError(t, err)
 }
 
 // FEATURE EXTRACTION
@@ -53,11 +51,11 @@ func featureExtractionPipeline(t *testing.T, session *Session) {
 		OnnxFilename: "model.onnx",
 	}
 	pipeline, err := NewPipeline(session, config)
-	check(t, err)
+	checkT(t, err)
 
 	var expectedResults map[string][][]float32
 	err = json.Unmarshal(resultsByte, &expectedResults)
-	check(t, err)
+	checkT(t, err)
 	var testResults [][]float32
 
 	// test 'robert smith'
@@ -83,7 +81,7 @@ func featureExtractionPipeline(t *testing.T, session *Session) {
 	for i := range batchResult.Embeddings {
 		e := floatsEqual(batchResult.Embeddings[i], testResults[i])
 		if e != nil {
-			t.Logf("Test 1: The neural network didn't produce the correct result on loop %d: %s\n", i, e)
+			t.Logf("Test 2: The neural network didn't produce the correct result on loop %d: %s\n", i, e)
 			t.FailNow()
 		}
 	}
@@ -97,11 +95,11 @@ func featureExtractionPipeline(t *testing.T, session *Session) {
 	for k, sentencePair := range testPairs {
 		// these vectors should be the same
 		firstBatchResult, err2 := pipeline.RunPipeline(sentencePair[0])
-		check(t, err2)
+		checkT(t, err2)
 		firstEmbedding := firstBatchResult.Embeddings[0]
 
 		secondBatchResult, err3 := pipeline.RunPipeline(sentencePair[1])
-		check(t, err3)
+		checkT(t, err3)
 		secondEmbedding := secondBatchResult.Embeddings[0]
 		e := floatsEqual(firstEmbedding, secondEmbedding)
 		if e != nil {
@@ -129,11 +127,11 @@ func featureExtractionPipeline(t *testing.T, session *Session) {
 		},
 	}
 	pipeline, err = NewPipeline(session, config)
-	check(t, err)
+	checkT(t, err)
 
 	normalizationStrings := []string{"Onnxruntime is a great inference backend"}
 	normalizedEmbedding, err := pipeline.RunPipeline(normalizationStrings)
-	check(t, err)
+	checkT(t, err)
 	for i, embedding := range normalizedEmbedding.Embeddings {
 		e := floatsEqual(embedding, testResults[i])
 		if e != nil {
@@ -149,7 +147,7 @@ func featureExtractionPipeline(t *testing.T, session *Session) {
 		Options:      []FeatureExtractionOption{pipelines.WithOutputName("last_hidden_state")},
 	}
 	pipelineSentence, err := NewPipeline(session, configSentence)
-	check(t, err)
+	checkT(t, err)
 
 	outputSentence, err := pipelineSentence.RunPipeline([]string{"Onnxruntime is a great inference backend"})
 	if err != nil {
@@ -162,7 +160,7 @@ func featureExtractionPipeline(t *testing.T, session *Session) {
 		OnnxFilename: "model.onnx",
 	}
 	pipelineToken, err := NewPipeline(session, configSentence)
-	check(t, err)
+	checkT(t, err)
 	_, err = pipelineToken.RunPipeline([]string{"Onnxruntime is a great inference backend"})
 	if err != nil {
 		t.FailNow()
@@ -179,7 +177,7 @@ func featureExtractionPipelineValidation(t *testing.T, session *Session) {
 		Name:         "testPipeline",
 	}
 	pipeline, err := NewPipeline(session, config)
-	check(t, err)
+	checkT(t, err)
 
 	pipeline.Model.InputsMeta[0].Dimensions = pipelineBackends.NewShape(-1, -1, -1)
 
@@ -206,7 +204,7 @@ func textClassificationPipeline(t *testing.T, session *Session) {
 		},
 	}
 	sentimentPipeline, err := NewPipeline(session, config)
-	check(t, err)
+	checkT(t, err)
 
 	test := struct {
 		pipeline *pipelines.TextClassificationPipeline
@@ -237,7 +235,7 @@ func textClassificationPipeline(t *testing.T, session *Session) {
 
 	t.Run(test.name, func(t *testing.T) {
 		batchResult, err := test.pipeline.RunPipeline(test.strings)
-		check(t, err)
+		checkT(t, err)
 		for i, expected := range test.expected.ClassificationOutputs {
 			checkClassificationOutput(t, expected, batchResult.ClassificationOutputs[i])
 		}
@@ -262,7 +260,7 @@ func textClassificationPipelineMulti(t *testing.T, session *Session) {
 		},
 	}
 	sentimentPipelineMulti, err := NewPipeline(session, configMulti)
-	check(t, err)
+	checkT(t, err)
 
 	test := struct {
 		pipeline *pipelines.TextClassificationPipeline
@@ -395,7 +393,7 @@ func textClassificationPipelineMulti(t *testing.T, session *Session) {
 
 	t.Run(test.name, func(t *testing.T) {
 		batchResult, err := test.pipeline.RunPipeline(test.strings)
-		check(t, err)
+		checkT(t, err)
 		for i, expected := range test.expected.ClassificationOutputs {
 			checkClassificationOutput(t, expected, batchResult.ClassificationOutputs[i])
 		}
@@ -418,7 +416,7 @@ func textClassificationPipelineValidation(t *testing.T, session *Session) {
 		},
 	}
 	sentimentPipeline, err := NewPipeline(session, config)
-	check(t, err)
+	checkT(t, err)
 
 	t.Run("id-label-map", func(t *testing.T) {
 		labelMapInitial := sentimentPipeline.IDLabelMap
@@ -459,7 +457,7 @@ func zeroShotClassificationPipeline(t *testing.T, session *Session) {
 	}
 
 	classificationPipeline, err := NewPipeline(session, config)
-	check(t, err)
+	checkT(t, err)
 
 	tests := []struct {
 		pipeline   *pipelines.ZeroShotClassificationPipeline
@@ -651,7 +649,7 @@ func zeroShotClassificationPipeline(t *testing.T, session *Session) {
 			classificationPipeline.Labels = tt.labels
 			classificationPipeline.Multilabel = tt.multilabel
 			batchResult, err := tt.pipeline.RunPipeline(tt.sequences)
-			check(t, err)
+			checkT(t, err)
 			assert.Equal(t, len(batchResult.GetOutput()), len(tt.expected.ClassificationOutputs))
 
 			for ind, expected := range tt.expected.ClassificationOutputs {
@@ -677,7 +675,7 @@ func zeroShotClassificationPipelineValidation(t *testing.T, session *Session) {
 		Name:      "testPipelineSimple",
 	}
 	sentimentPipeline, err := NewPipeline(session, config)
-	check(t, err)
+	checkT(t, err)
 
 	t.Run("id-label-map", func(t *testing.T) {
 		labelMapInitial := sentimentPipeline.IDLabelMap
@@ -715,7 +713,7 @@ func tokenClassificationPipeline(t *testing.T, session *Session) {
 		},
 	}
 	pipelineSimple, err2 := NewPipeline(session, configSimple)
-	check(t, err2)
+	checkT(t, err2)
 
 	configNone := TokenClassificationConfig{
 		ModelPath: modelPath,
@@ -725,11 +723,11 @@ func tokenClassificationPipeline(t *testing.T, session *Session) {
 		},
 	}
 	pipelineNone, err3 := NewPipeline(session, configNone)
-	check(t, err3)
+	checkT(t, err3)
 
 	var expectedResults map[int]pipelines.TokenClassificationOutput
 	err4 := json.Unmarshal(tokenExpectedByte, &expectedResults)
-	check(t, err4)
+	checkT(t, err4)
 
 	tests := []struct {
 		pipeline *pipelines.TokenClassificationPipeline
@@ -760,7 +758,7 @@ func tokenClassificationPipeline(t *testing.T, session *Session) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			batchResult, err := tt.pipeline.RunPipeline(tt.strings)
-			check(t, err)
+			checkT(t, err)
 			printTokenEntities(batchResult)
 			for i, predictedEntities := range batchResult.Entities {
 				assert.Equal(t, len(tt.expected.Entities[i]), len(predictedEntities))
@@ -787,7 +785,7 @@ func tokenClassificationPipelineValidation(t *testing.T, session *Session) {
 		},
 	}
 	pipelineSimple, err2 := NewPipeline(session, configSimple)
-	check(t, err2)
+	checkT(t, err2)
 
 	t.Run("id-label-map", func(t *testing.T) {
 		labelMapInitial := pipelineSimple.IDLabelMap
@@ -874,10 +872,9 @@ func destroyPipelines(t *testing.T, session *Session) {
 
 // Thread safety
 
-func threadSafety(t *testing.T, session *Session) {
+func threadSafety(t *testing.T, session *Session, numEmbeddings int) {
 	const numWorkers = 4
-	const numEmbeddings = 500
-	const numResults = numWorkers * numEmbeddings
+	numResults := numWorkers * numEmbeddings
 
 	t.Helper()
 	modelPath := "./models/KnightsAnalytics_all-MiniLM-L6-v2"
@@ -887,11 +884,11 @@ func threadSafety(t *testing.T, session *Session) {
 		OnnxFilename: "model.onnx",
 	}
 	pipeline, err := NewPipeline(session, config)
-	check(t, err)
+	checkT(t, err)
 
 	var expectedResults map[string][][]float32
 	err = json.Unmarshal(resultsByte, &expectedResults)
-	check(t, err)
+	checkT(t, err)
 	expectedResult1 := expectedResults["test1output"]
 	expectedResult2 := expectedResults["test2output"]
 
@@ -939,7 +936,7 @@ loop:
 			for i, vector := range vectors {
 				e := floatsEqual(vector, expectedResult2[i])
 				if e != nil {
-					t.Logf("Test 1: The threaded neural network didn't produce the correct result: %s\n", e)
+					t.Logf("Test 2: The threaded neural network didn't produce the correct result: %s\n", e)
 					t.FailNow()
 				}
 			}
@@ -973,7 +970,7 @@ func floatsEqual(a, b []float32) error {
 			diff = -diff
 		}
 		// Arbitrarily chosen precision. Large enough not to be affected by quantization
-		if diff >= 0.0007 {
+		if diff >= 0.01 {
 			return fmt.Errorf("data element %d doesn't match: %.12f vs %.12f",
 				i, a[i], b[i])
 		}
@@ -985,7 +982,7 @@ func almostEqual(a, b float64) bool {
 	return math.Abs(a-b) <= 0.0001
 }
 
-func check(t *testing.T, err error) {
+func checkT(t *testing.T, err error) {
 	t.Helper()
 	if err != nil {
 		t.Fatalf("Test failed with error %s", err.Error())

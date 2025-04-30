@@ -11,7 +11,7 @@ type Model struct {
 	OnnxFilename string
 	OnnxBytes    []byte
 	ORTModel     *ORTModel
-	XLAModel     *XLAModel
+	GoMLXModel   *GoMLXModel
 	Tokenizer    *Tokenizer
 	InputsMeta   []InputOutputInfo
 	OutputsMeta  []InputOutputInfo
@@ -109,11 +109,11 @@ func LoadModel(path string, onnxFilename string, options *options.Options) (*Mod
 
 	model.Destroy = func() error {
 		destroyErr := model.Tokenizer.Destroy()
-		switch options.Runtime {
+		switch options.Backend {
 		case "ORT":
 			destroyErr = errors.Join(destroyErr, model.ORTModel.Destroy())
-		case "XLA":
-			model.XLAModel.Destroy()
+		case "GO", "XLA":
+			model.GoMLXModel.Destroy()
 		}
 		return destroyErr
 	}

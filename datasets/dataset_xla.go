@@ -1,5 +1,3 @@
-//go:build XLA || ALL
-
 package datasets
 
 import (

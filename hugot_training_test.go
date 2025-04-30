@@ -1,4 +1,4 @@
-//go:build XLA || ALL
+//go:build (ORT && XLA) || ALL
 
 package hugot
 
@@ -38,20 +38,20 @@ func runModel(t *testing.T, runtime string, examplesLeft, examplesRight []string
 
 	switch runtime {
 	case "ORT":
-		opts := []options.WithOption{
-			options.WithOnnxLibraryPath(onnxRuntimeSharedLibrary),
-		}
-		session, err = NewORTSession(opts...)
-		check(t, err)
+		session, err = NewORTSession(options.WithOnnxLibraryPath(onnxRuntimeSharedLibrary))
+		checkT(t, err)
+	case "GO":
+		session, err = NewGoSession()
+		checkT(t, err)
 	case "XLA":
 		session, err = NewXLASession()
-		check(t, err)
+		checkT(t, err)
 	default:
 		t.Fatal("unknown runtime")
 	}
 
 	defer func() {
-		check(t, session.Destroy())
+		checkT(t, session.Destroy())
 	}()
 
 	config := FeatureExtractionConfig{
@@ -60,12 +60,12 @@ func runModel(t *testing.T, runtime string, examplesLeft, examplesRight []string
 		OnnxFilename: "model.onnx",
 	}
 	pipeline, err := NewPipeline(session, config)
-	check(t, err)
+	checkT(t, err)
 
 	resultsLeft, err := pipeline.RunPipeline(examplesLeft)
-	check(t, err)
+	checkT(t, err)
 	resultsRight, err := pipeline.RunPipeline(examplesRight)
-	check(t, err)
+	checkT(t, err)
 
 	// calculate cosine similarity between the embeddings
 	var similarities []float64
@@ -81,8 +81,8 @@ func round3decimals(x float64) float64 {
 }
 
 func trainSimilarity(t *testing.T, modelPath string, dataset *datasets.SemanticSimilarityDataset, examplesLhs, examplesRhs []string) []float64 {
-	// create a new xla training session. Currently training is only possible by loading an onnx model
-	// into xla, fine-tuning it with gomlx, and then writing it back to onnx. Hugot deals with the details
+	// Create a new GoMLX training session. Currently, training is only possible by loading an onnx model
+	// into GoMLX, fine-tuning it, and then writing it back to onnx. Hugot deals with the details
 	// for you here.
 	trainingSession, err := NewXLATrainingSession[*pipelines.FeatureExtractionPipeline](
 		TrainingConfig{
@@ -98,7 +98,7 @@ func trainSimilarity(t *testing.T, modelPath string, dataset *datasets.SemanticS
 	}
 
 	defer func() {
-		check(t, trainingSession.Destroy())
+		checkT(t, trainingSession.Destroy())
 	}()
 
 	// train the model
@@ -126,13 +126,13 @@ func trainSimilarity(t *testing.T, modelPath string, dataset *datasets.SemanticS
 	return runModel(t, "ORT", examplesLhs, examplesRhs, "./models/testTrain")
 }
 
-func TestSemanticSimilarity(t *testing.T) {
+func TestTrainSemanticSimilarity(t *testing.T) {
 	modelPath := "./models/KnightsAnalytics_all-MiniLM-L6-v2"
 
 	// each line in this dataset is an example. In training we will use the dataset object but for inference
 	// we just load the strings here.
 	data, err := os.ReadFile("./testData/semanticSimilarityTest.jsonl")
-	check(t, err)
+	checkT(t, err)
 	lines := bytes.Split(data, []byte("\n"))
 
 	var examplesLhs []string
@@ -153,11 +153,11 @@ func TestSemanticSimilarity(t *testing.T) {
 	// first we run the untrained onnx model with onnxruntime backend
 	similaritiesOnnxruntime := runModel(t, "ORT", examplesLhs, examplesRhs, modelPath)
 
-	// we do the same for XLA and check the forward pass results match
-	similaritiesXLA := runModel(t, "XLA", examplesLhs, examplesRhs, modelPath)
+	// we do the same for GoMLX and check the forward pass results match
+	similaritiesGoMLX := runModel(t, "XLA", examplesLhs, examplesRhs, modelPath)
 
 	for i := range similaritiesOnnxruntime {
-		assert.Equal(t, round3decimals(similaritiesOnnxruntime[i]), round3decimals(similaritiesXLA[i]))
+		assert.Equal(t, round3decimals(similaritiesOnnxruntime[i]), round3decimals(similaritiesGoMLX[i]))
 	}
 
 	// TRAINING: We now fine-tune the model
@@ -173,16 +173,16 @@ func TestSemanticSimilarity(t *testing.T) {
 	}
 
 	// we now train the model with the dataset
-	similaritiesXLATrained := trainSimilarity(t, modelPath, dataset, examplesLhs, examplesRhs)
+	similaritiesGoMLXTrained := trainSimilarity(t, modelPath, dataset, examplesLhs, examplesRhs)
 
-	fmt.Println("XLA trained model predictions:")
-	for i := 0; i < len(similaritiesXLATrained); i++ {
-		fmt.Printf("Example %d: untrained similarity %f, trained similarity %f, label %f\n", i, similaritiesXLA[i], similaritiesXLATrained[i], scores[i])
+	fmt.Println("GoMLX trained model predictions:")
+	for i := 0; i < len(similaritiesGoMLXTrained); i++ {
+		fmt.Printf("Example %d: untrained similarity %f, trained similarity %f, label %f\n", i, similaritiesGoMLX[i], similaritiesGoMLXTrained[i], scores[i])
 	}
 
 	// on the training set, we expect the model to have improved
-	rmseUntrained := rmse(similaritiesXLA, scores)
-	rmseTrained := rmse(similaritiesXLATrained, scores)
+	rmseUntrained := rmse(similaritiesGoMLX, scores)
+	rmseTrained := rmse(similaritiesGoMLXTrained, scores)
 	fmt.Printf("RMSE untrained is: %f\n", rmseUntrained)
 	fmt.Printf("RMSE trained is: %f\n", rmseTrained)
 	assert.Less(t, rmseTrained, rmseUntrained)
@@ -198,10 +198,10 @@ func TestSemanticSimilarity(t *testing.T) {
 		})
 	}
 	inMemoryDataset, err := datasets.NewInMemorySemanticSimilarityDataset(examples, 1, nil)
-	check(t, err)
-	similaritiesXLATrainedInMemory := trainSimilarity(t, modelPath, inMemoryDataset, examplesLhs, examplesRhs)
-	for i := range similaritiesXLATrainedInMemory {
-		assert.Equal(t, round3decimals(similaritiesXLATrained[i]), round3decimals(similaritiesXLATrainedInMemory[i]))
+	checkT(t, err)
+	similaritiesGoMLXTrainedInMemory := trainSimilarity(t, modelPath, inMemoryDataset, examplesLhs, examplesRhs)
+	for i := range similaritiesGoMLXTrainedInMemory {
+		assert.Equal(t, round3decimals(similaritiesGoMLXTrained[i]), round3decimals(similaritiesGoMLXTrainedInMemory[i]))
 	}
 }
 
@@ -213,7 +213,7 @@ func rmse(predictions []float64, labels []float64) float64 {
 	return math.Sqrt(sum / float64(len(predictions)))
 }
 
-func TestSemanticSimilarityCuda(t *testing.T) {
+func TestTrainSemanticSimilarityCuda(t *testing.T) {
 	if os.Getenv("CI") != "" {
 		t.SkipNow()
 	}
@@ -239,7 +239,50 @@ func TestSemanticSimilarityCuda(t *testing.T) {
 	}
 
 	// train the model
-	if err := session.Train(); err != nil {
+	if err = session.Train(); err != nil {
+		t.Fatal(err)
+	}
+
+	// we now write the fine-tuned pipeline back to disk as an onnx model
+	if e := session.Save("./models/testTrain"); e != nil {
+		t.Fatal(e)
+	}
+	if exists, existsErr := util.FileExists("./models/testTrain"); existsErr != nil {
+		t.Fatal(err)
+	} else if !exists {
+		t.Fatal("model file ./models/testTrain does not exist")
+	}
+	if err = util.DeleteFile("./models/testTrain"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestTrainSemanticSimilarityGo(t *testing.T) {
+	if os.Getenv("CI") != "" {
+		t.SkipNow()
+	}
+
+	dataset, err := datasets.NewSemanticSimilarityDataset("./testData/semanticSimilarityTest.jsonl", 1, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	modelPath := "./models/KnightsAnalytics_all-MiniLM-L6-v2"
+
+	session, err := NewGoTrainingSession[*pipelines.FeatureExtractionPipeline](
+		TrainingConfig{
+			ModelPath: modelPath,
+			Dataset:   dataset,
+			Epochs:    1,
+			Verbose:   true,
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// train the model
+	if err = session.Train(); err != nil {
 		t.Fatal(err)
 	}
 

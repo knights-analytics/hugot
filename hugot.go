@@ -21,10 +21,13 @@ type Session struct {
 	environmentDestroy              func() error
 }
 
-func newSession(runtime string, opts ...options.WithOption) (*Session, error) {
+func newSession(backend string, opts ...options.WithOption) (*Session, error) {
 	parsedOptions := options.Defaults()
-	parsedOptions.Runtime = runtime
+	parsedOptions.Backend = backend
 	// Collect options into a struct, so they can be applied in the correct order later
+	if backend == "XLA" {
+		parsedOptions.GoMLXOptions.XLA = true
+	}
 	for _, option := range opts {
 		err := option(parsedOptions)
 		if err != nil {
@@ -117,17 +120,17 @@ func NewPipeline[T pipelineBackends.Pipeline](s *Session, pipelineConfig pipelin
 		return pipeline, err
 	}
 
-	switch any(pipeline).(type) {
+	switch typedPipeline := any(pipeline).(type) {
 	case *pipelines.TokenClassificationPipeline:
-		s.tokenClassificationPipelines[name] = any(pipeline).(*pipelines.TokenClassificationPipeline)
+		s.tokenClassificationPipelines[name] = typedPipeline
 	case *pipelines.TextClassificationPipeline:
-		s.textClassificationPipelines[name] = any(pipeline).(*pipelines.TextClassificationPipeline)
+		s.textClassificationPipelines[name] = typedPipeline
 	case *pipelines.FeatureExtractionPipeline:
-		s.featureExtractionPipelines[name] = any(pipeline).(*pipelines.FeatureExtractionPipeline)
+		s.featureExtractionPipelines[name] = typedPipeline
 	case *pipelines.ZeroShotClassificationPipeline:
-		s.zeroShotClassificationPipelines[name] = any(pipeline).(*pipelines.ZeroShotClassificationPipeline)
+		s.zeroShotClassificationPipelines[name] = typedPipeline
 	default:
-		return pipeline, fmt.Errorf("not implemented")
+		return pipeline, fmt.Errorf("pipeline type not supported: %T", typedPipeline)
 	}
 	return pipeline, nil
 }

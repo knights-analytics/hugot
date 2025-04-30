@@ -135,8 +135,8 @@ func RunSessionOnBatch(batch *PipelineBatch, p *BasePipeline) error {
 	switch p.Runtime {
 	case "ORT":
 		return runORTSessionOnBatch(batch, p)
-	case "XLA":
-		return runXLASessionOnBatch(batch, p)
+	case "GO", "XLA":
+		return runGoMLXSessionOnBatch(batch, p)
 	}
 	return nil
 }
@@ -147,8 +147,8 @@ func CreateInputTensorsTraining(batch *PipelineBatch, inputsMeta []InputOutputIn
 	switch runtime {
 	case "ORT":
 		return createInputTensorsORT(batch, inputsMeta)
-	case "XLA":
-		return createInputTensorsXLA(batch, inputsMeta, false)
+	case "GO", "XLA":
+		return createInputTensorsGoMLX(batch, inputsMeta, false)
 	}
 	return nil
 }
@@ -158,15 +158,15 @@ func CreateInputTensors(batch *PipelineBatch, inputsMeta []InputOutputInfo, runt
 	switch runtime {
 	case "ORT":
 		return createInputTensorsORT(batch, inputsMeta)
-	case "XLA":
-		return createInputTensorsXLA(batch, inputsMeta, true)
+	case "GO", "XLA":
+		return createInputTensorsGoMLX(batch, inputsMeta, true)
 	}
 	return nil
 }
 
 func NewBasePipeline[T Pipeline](config PipelineConfig[T], s *options.Options, model *Model) (*BasePipeline, error) {
 	pipeline := &BasePipeline{}
-	pipeline.Runtime = s.Runtime
+	pipeline.Runtime = s.Backend
 	pipeline.PipelineName = config.Name
 	pipeline.Model = model
 	pipeline.PipelineTimings = &timings{}
@@ -225,11 +225,11 @@ func getOnnxFiles(path string) ([][]string, error) {
 func CreateModelBackend(model *Model, s *options.Options) error {
 	// creation of the session. Only one output (either token or sentence embedding).
 	var err error
-	switch s.Runtime {
+	switch s.Backend {
 	case "ORT":
 		err = createORTModelBackend(model, s)
-	case "XLA":
-		err = createXLAModelBackend(model, s)
+	case "GO", "XLA":
+		err = createGoMLXModelBackend(model, s)
 	}
 	return err
 }

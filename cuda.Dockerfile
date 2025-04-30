@@ -20,7 +20,7 @@ RUN --mount=src=./go.mod,dst=/go.mod \
     dnf install -y 'dnf-command(config-manager)' && \
     # from rhel
     dnf config-manager --add-repo https://developer.download.nvidia.com/compute/cuda/repos/rhel9/x86_64/cuda-rhel9.repo && \
-    dnf install -y cuda-cudart-12-6 cuda-nvrtc-12-6 libcublas-12-6 libcurand-12-6 libcufft-12-6 libcudnn9-cuda-12 && \
+    dnf install -y cuda-cudart-12-9 cuda-nvrtc-12-9 libcublas-12-9 libcurand-12-9 libcufft-12-9 libcudnn9-cuda-12 && \
     dnf clean all && \
     # tokenizers
     tokenizer_version=$(grep 'github.com/daulet/tokenizers' /go.mod | awk '{print $2}') && \

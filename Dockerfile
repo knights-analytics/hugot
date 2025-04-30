@@ -48,7 +48,7 @@ COPY . /build
 RUN cd /build && \
     chown -R testuser:testuser /build && \
     # cli binary
-    cd /build/cmd && CGO_ENABLED=1 CGO_LDFLAGS="-L/usr/lib/" GOOS=linux GOARCH=amd64 go build -a -o /cli main.go && \
+    cd /build/cmd && CGO_ENABLED=1 CGO_LDFLAGS="-L/usr/lib/" GOOS=linux GOARCH=amd64 go build -tags "ALL" -a -o /cli main.go && \
     cd / && \
     curl -LO https://github.com/gotestyourself/gotestsum/releases/download/v1.12.0/gotestsum_1.12.0_linux_amd64.tar.gz && \
     tar -xzf gotestsum_1.12.0_linux_amd64.tar.gz --directory /usr/local/bin && \

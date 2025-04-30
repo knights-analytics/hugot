@@ -4,20 +4,22 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/knights-analytics/hugot)](https://goreportcard.com/report/github.com/knights-analytics/hugot)
 [![Coverage Status](https://coveralls.io/repos/github/knights-analytics/hugot/badge.svg?branch=main)](https://coveralls.io/github/knights-analytics/hugot?branch=main)
 
-<img src="./hug-gopher.webp" width="300" alt="Huggingface and Gopher">
+<img src="./hug-gopher.webp" width="300" alt="Hugging Face and Gopher">
 
 ## What
 
-TL;DR: AI use-cases such as embeddings, text classification, named entity recognition, fine-tuning, and more!
+TL;DR: AI use-cases such as embeddings, text classification, named entity recognition, fine-tuning, and more, natively running in Go!
 
 The goal of this library is to provide an easy, scalable, and hassle-free way to run transformer pipelines inference and training in golang applications, such as Hugging Face 🤗 transformers pipelines. It is built on the following principles:
 
-1. Hugging Face compatibility: models trained and tested using the python huggingface transformer library can be exported to onnx and used with the hugot pipelines to obtain identical predictions as in the python version.
+1. Hugging Face compatibility: models trained and tested using the python Hugging Face transformer library can be exported to onnx and used with the hugot pipelines to obtain identical predictions as in the python version.
 2. Hassle-free and performant production use: we exclusively support onnx models. Pytorch transformer models that don't have an onnx version can be easily exported to onnx via [Hugging Face Optimum](https://huggingface.co/docs/optimum/index), and used with the library.
 3. Run on your hardware: this library is for those who want to run transformer models tightly coupled with their go applications, without the performance drawbacks of having to hit a rest API or the hassle of setting up and maintaining e.g. a python RPC service that talks to go.
-4. Simplicity: the hugot api allows you to easily deploy pipelines without having to write your own inference or training code.
+4. Simplicity: the hugot api allows you to easily deploy pipelines without having to write your own inference or training code. It also now includes a pure Go backend for minimal dependencies!
 
-We support inference on CPU and on all accelerators supported by ONNX Runtime/OpenXLA. Note however that currently only CPU, and GPU inference on Nvidia GPUs via CUDA, are tested (see below).
+We support inference on CPU and on all accelerators supported by ONNX Runtime/OpenXLA. Note, however, that currently only CPU, and GPU inference on Nvidia GPUs via CUDA, are tested (see below).
+
+IMPORTANT: The Go backend is designed for simpler workloads, environments that disallow cgo, and for smaller models such as [all-MiniLM-L6-v2](https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2). It works best with small batches of roughly 32 inputs per call. If you have performance requirements, please move to a C backend such as XLA or ORT (detailed below).
 
 Hugot loads and saves models in the ONNX format.
 
@@ -52,35 +54,43 @@ Hugot can be used in two ways: as a library in your go application, or as a comm
 
 ### Choosing a backend
 
-Hugot now supports pluggable backends to perform the tokenization and run the ONNX models.  Currently, we support [Onnx Runtime](https://onnxruntime.ai/) and [OpenXLA](https://openxla.org/). We intend to add a pure Go backend in the near future once compatibility with Hugging Face models is improved.
+Hugot supports pluggable backends to perform the tokenization and run the ONNX models. Currently, we support the following backends:
 
-Unless specified, Onnx Runtime will be used by default. It can be disabled at compile time via the build tag "-tags NOORT".
+- (default) native go (provided by [GoMLX](https://github.com/gomlx/gomlx))
+- [OpenXLA](https://openxla.org/)
+- [Onnx Runtime](https://onnxruntime.ai/)
 
-OpenXLA can also be included at compile time via the build tag "-tags XLA". To use just XLA, specify "-tags NOORT,XLA"
+OpenXLA can be included at compile time via the build tag "-tags XLA". This typically provides up to a 5-20x speedup to heavy operations, and is more compatible with a wider range of models and tokenizers.
 
-Once compiled, Hugot can be instantiated with you backend of choice via calling `NewORTSession()` or `NewXLASession()` respectively.
+Onnx Runtime can also be selected as an alternative backend via the build tag "-tags ORT". It does not support training, but it is currently the fastest backend for CPU inference.
+
+CUDA requires a C backend, either OpenXLA or Onnx Runtime.
+
+Once compiled, Hugot can be instantiated with you backend of choice via calling `NewGoSession()`, `NewXLASession()` or `NewORTSession()` respectively.
+
+You may combine build tags "-tags XLA,ORT" or use "-tags ALL" to be able to use all available backends interchangeably.
 
 ### Use it as a library
 
-To use Hugot as a library in your application, you will need the following two dependencies on your system:
+To use Hugot as a library in your application, you can directly import it and follow the example below.
 
-#### Tokenizer
-- the tokenizers.a file obtained from the releases section of this page (if you want to use alternative architecture from `linux/amd64` you will have to build the tokenizers.a yourself, see [here](https://github.com/daulet/tokenizers). This file should be at /usr/lib/tokenizers.a so that Hugot can load it. Alternatively, you can explicitly specify the path to the folder with the `libtokenizers.a` file using the `CGO_LDFLAGS` env variable, see the [dockerfile](./Dockerfile). The tokenizer is statically linked at build time.
+#### Backends
 
-#### Backend
+- if using XLA, the easiest way is to run "curl -sSf https://raw.githubusercontent.com/gomlx/gopjrt/main/cmd/install_linux_amd64.sh | bash", which will install the XLA backend provided by the [goMLX](https://github.com/gomlx/gomlx) project.
+
 - if using Onnx Runtime, the onnxruntime.so file should be obtained from the releases section of this page. If you want to use alternative architectures from `linux/amd64` you will have to download it from [the ONNX Runtime releases page](https://github.com/microsoft/onnxruntime/releases/), see the [dockerfile](./Dockerfile) as an example. Hugot looks for this file at /usr/lib/onnxruntime.so or /usr/lib64/onnxruntime.so by default. A different location can be specified by passing the `WithOnnxLibraryPath()` option to `NewORTSession()`, e.g:
 
 ```
 session, err := NewORTSession(
-    WithOnnxLibraryPath("/path/to/onnxruntime.so"),
+    options.WithOnnxLibraryPath("/path/to/onnxruntime.so"),
 )
 ```
 
-- if using XLA, the easiest way is to run "curl -sSf https://raw.githubusercontent.com/gomlx/gopjrt/main/cmd/install_linux_amd64.sh | bash", which will install the XLA backend provided by the [goMLX](https://github.com/gomlx/gomlx) project
+- if using XLA or ORT, you will also need to use the rust-based tokenizer. The tokenizers.a file can be obtained from the releases section of this page (if you want to use alternative architecture from `linux/amd64` you will have to build the tokenizers.a yourself, see [here](https://github.com/daulet/tokenizers). This file should be at /usr/lib/tokenizers.a so that Hugot can load it. Alternatively, you can explicitly specify the path to the folder with the `libtokenizers.a` file using the `CGO_LDFLAGS` env variable, see the [dockerfile](./Dockerfile). The tokenizer is statically linked at build time.
 
-Alternatively, you can also use the [docker image](https://github.com/knights-analytics/hugot/pkgs/container/hugot) which has the dependencies already baked in.
+Alternatively, you can also use the [docker image](https://github.com/knights-analytics/hugot/pkgs/container/hugot) which has all the above dependencies already baked in.
 
-Once these pieces are in place, the library can be used as follows:
+The library can be used as follows:
 
 ```go
 import (
@@ -95,10 +105,15 @@ func check(err error) {
 }
 
 func main() {
-    // start a new session. This looks for the onnxruntime.so library in its default path, e.g. /usr/lib/onnxruntime.so
-    session, err := hugot.NewORTSession()
+    // start a new session
+    session, err := hugot.NewGoSession()
+	// For XLA:
+	// session, err := NewXLASession()
+	// For ORT: This looks for the onnxruntime.so library in its default path, e.g. /usr/lib/onnxruntime.so
+	// session, err := NewORTSession()
     // if your onnxruntime.so is somewhere else, you can explicitly set it by using WithOnnxLibraryPath
     // session, err := hugot.NewORTSession(WithOnnxLibraryPath("/path/to/onnxruntime.so"))
+	
     check(err)
     // A successfully created hugot session needs to be destroyed when you're done
     defer func (session *hugot.Session) {
@@ -139,7 +154,7 @@ func main() {
 
 See also hugot_test.go for further examples.
 
-### Use it as a cli: Huggingface 🤗 pipelines from the command line
+### Use it as a cli: Hugging Face 🤗 pipelines from the command line
 
 Note: the cli is currently only built and tested on amd64-linux using the ONNX Runtime backend.
 

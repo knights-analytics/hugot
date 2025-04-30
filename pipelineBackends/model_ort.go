@@ -1,4 +1,4 @@
-//go:build !NOORT || ALL
+//go:build ORT || ALL
 
 package pipelineBackends
 
@@ -12,14 +12,14 @@ import (
 )
 
 type ORTModel struct {
-	Session    *ort.DynamicAdvancedSession
-	ORTOptions *ort.SessionOptions
-	Destroy    func() error
+	Session        *ort.DynamicAdvancedSession
+	SessionOptions *ort.SessionOptions
+	Destroy        func() error
 }
 
 func createORTModelBackend(model *Model, options *options.Options) error {
 
-	optionsCast := options.RuntimeOptions.(*ort.SessionOptions)
+	sessionOptions := options.BackendOptions.(*ort.SessionOptions)
 
 	inputs, outputs, err := loadInputOutputMetaORT(model.OnnxBytes)
 	if err != nil {
@@ -38,13 +38,13 @@ func createORTModelBackend(model *Model, options *options.Options) error {
 		model.OnnxBytes,
 		inputNames,
 		outputNames,
-		optionsCast,
+		sessionOptions,
 	)
 	if errSession != nil {
 		return errSession
 	}
 
-	model.ORTModel = &ORTModel{Session: session, ORTOptions: optionsCast, Destroy: func() error {
+	model.ORTModel = &ORTModel{Session: session, SessionOptions: sessionOptions, Destroy: func() error {
 		return session.Destroy()
 	}}
 	model.InputsMeta = inputs

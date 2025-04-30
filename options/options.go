@@ -5,26 +5,21 @@ import (
 )
 
 type Options struct {
-	Runtime        string
-	GoOptions      *GoOptions
+	Backend        string
 	ORTOptions     *OrtOptions
-	XLAOptions     *XLAOptions
+	GoMLXOptions   *GoMLXOptions
 	Destroy        func() error
-	RuntimeOptions any
+	BackendOptions any
 }
 
 func Defaults() *Options {
 	return &Options{
-		GoOptions:  &GoOptions{},
-		ORTOptions: &OrtOptions{},
-		XLAOptions: &XLAOptions{},
+		ORTOptions:   &OrtOptions{},
+		GoMLXOptions: &GoMLXOptions{},
 		Destroy: func() error {
 			return nil
 		},
 	}
-}
-
-type GoOptions struct {
 }
 
 type OrtOptions struct {
@@ -44,61 +39,62 @@ type OrtOptions struct {
 	TensorRTOptions       map[string]string
 }
 
-type XLAOptions struct {
+type GoMLXOptions struct {
 	Cuda bool
+	XLA  bool
 }
 
 // WithOption is the interface for all option functions
 type WithOption func(o *Options) error
 
-// WithOnnxLibraryPath (ORT only) Use this function to set the path to the "onnxruntime.so" or "onnxruntime.dll" function.
-// By default, it will be set to "onnxruntime.so" on non-Windows systems, and "onnxruntime.dll" on Windows.
+// WithOnnxLibraryPath (ORT only) Use this function to set the path to the "onnxbackend.so" or "onnxbackend.dll" function.
+// By default, it will be set to "onnxbackend.so" on non-Windows systems, and "onnxbackend.dll" on Windows.
 func WithOnnxLibraryPath(ortLibraryPath string) WithOption {
 	return func(o *Options) error {
-		if o.Runtime == "ORT" {
+		if o.Backend == "ORT" {
 			o.ORTOptions.LibraryPath = &ortLibraryPath
 			return nil
 		} else {
-			return fmt.Errorf("WithOnnxLibraryPath is only supported for ORT runtime")
+			return fmt.Errorf("WithOnnxLibraryPath is only supported for ORT backend")
 		}
 	}
 }
 
-// WithTelemetry (ORT only) Enables telemetry events for the onnxruntime environment. Default is off.
+// WithTelemetry (ORT only) Enables telemetry events for the onnxbackend environment. Default is off.
 func WithTelemetry() WithOption {
 	return func(o *Options) error {
-		if o.Runtime == "ORT" {
+		if o.Backend == "ORT" {
 			enabled := true
 			o.ORTOptions.Telemetry = &enabled
 			return nil
 		} else {
-			return fmt.Errorf("WithTelemetry is only supported for ORT runtime")
+			return fmt.Errorf("WithTelemetry is only supported for ORT backend")
 		}
 	}
 }
 
-// WithIntraOpNumThreads (ORT only) Sets the number of threads used to parallelize execution within onnxruntime
-// graph nodes. If unspecified, onnxruntime uses the number of physical CPU cores.
+// WithIntraOpNumThreads (ORT only) Sets the number of threads used to parallelize execution within onnxbackend
+// graph nodes. If unspecified, onnxbackend uses the number of physical CPU cores.
 func WithIntraOpNumThreads(numThreads int) WithOption {
 	return func(o *Options) error {
-		if o.Runtime == "ORT" {
+		if o.Backend == "ORT" {
 			o.ORTOptions.IntraOpNumThreads = &numThreads
 			return nil
 		} else {
-			return fmt.Errorf("WithIntraOpNumThreads is only supported for ORT runtime")
+			return fmt.Errorf("WithIntraOpNumThreads is only supported for ORT backend")
 		}
 	}
 }
 
 // WithInterOpNumThreads (ORT only) Sets the number of threads used to parallelize execution across separate
-// onnxruntime graph nodes. If unspecified, onnxruntime uses the number of physical CPU cores.
+// onnxbackend graph nodes. If unspecified, onnxbackend uses the number of physical CPU cores.
 func WithInterOpNumThreads(numThreads int) WithOption {
 	return func(o *Options) error {
-		if o.Runtime == "ORT" {
+		if o.Backend == "ORT" {
 			o.ORTOptions.InterOpNumThreads = &numThreads
 			return nil
 		} else {
-			return fmt.Errorf("WithInterOpNumThreads is only supported for ORT runtime")
+			return fmt.Errorf("WithInterOpNumThreads is only supported for ORT backend")
 		}
 	}
 }
@@ -107,11 +103,11 @@ func WithInterOpNumThreads(numThreads int) WithOption {
 // Arena may pre-allocate memory for future usage. Default is true.
 func WithCpuMemArena(enable bool) WithOption {
 	return func(o *Options) error {
-		if o.Runtime == "ORT" {
+		if o.Backend == "ORT" {
 			o.ORTOptions.CPUMemArena = &enable
 			return nil
 		} else {
-			return fmt.Errorf("WithCpuMemArena is only supported for ORT runtime")
+			return fmt.Errorf("WithCpuMemArena is only supported for ORT backend")
 		}
 	}
 }
@@ -120,94 +116,94 @@ func WithCpuMemArena(enable bool) WithOption {
 // If this is enabled memory is preallocated if all shapes are known. Default is true.
 func WithMemPattern(enable bool) WithOption {
 	return func(o *Options) error {
-		if o.Runtime == "ORT" {
+		if o.Backend == "ORT" {
 			o.ORTOptions.MemPattern = &enable
 			return nil
 		} else {
-			return fmt.Errorf("WithMemPattern is only supported for ORT runtime")
+			return fmt.Errorf("WithMemPattern is only supported for ORT backend")
 		}
 	}
 }
 
-// WithExecutionMode sets the parallel execution mode for the ORT runtime. Returns an error if the runtime is not ORT.
+// WithExecutionMode sets the parallel execution mode for the ORT backend. Returns an error if the backend is not ORT.
 func WithExecutionMode(parallel bool) WithOption {
 	return func(o *Options) error {
-		if o.Runtime == "ORT" {
+		if o.Backend == "ORT" {
 			o.ORTOptions.ParallelExecutionMode = &parallel
 			return nil
 		} else {
-			return fmt.Errorf("WithExecutionMode is only supported for ORT runtime")
+			return fmt.Errorf("WithExecutionMode is only supported for ORT backend")
 		}
 	}
 }
 
-// WithIntraOpSpinning configures whether intra-op spinning is enabled for the ORT runtime.
-// It returns an error if used with a runtime other than ORT.
+// WithIntraOpSpinning configures whether intra-op spinning is enabled for the ORT backend.
+// It returns an error if used with a backend other than ORT.
 func WithIntraOpSpinning(spinning bool) WithOption {
 	return func(o *Options) error {
-		if o.Runtime == "ORT" {
+		if o.Backend == "ORT" {
 			o.ORTOptions.IntraOpSpinning = &spinning
 			return nil
 		} else {
-			return fmt.Errorf("WithIntraOpSpinning is only supported for ORT runtime")
+			return fmt.Errorf("WithIntraOpSpinning is only supported for ORT backend")
 		}
 	}
 }
 
-// WithInterOpSpinning sets the spinning behavior for inter-op threads when the runtime is ORT.
-// It returns an error if used with a runtime other than ORT.
+// WithInterOpSpinning sets the spinning behavior for inter-op threads when the backend is ORT.
+// It returns an error if used with a backend other than ORT.
 func WithInterOpSpinning(spinning bool) WithOption {
 	return func(o *Options) error {
-		if o.Runtime == "ORT" {
+		if o.Backend == "ORT" {
 			o.ORTOptions.InterOpSpinning = &spinning
 			return nil
 		} else {
-			return fmt.Errorf("WithInterOpSpinning is only supported for ORT runtime")
+			return fmt.Errorf("WithInterOpSpinning is only supported for ORT backend")
 		}
 	}
 }
 
 // WithCuda Use this function to set the options for CUDA provider.
 // It takes a map of CUDA parameters as input.
-// The options will be applied to the OrtOptions or XLAOptions struct, depending on your current backend.
+// The options will be applied to the OrtOptions or GoMLXOptions struct, depending on your current backend.
 func WithCuda(options map[string]string) WithOption {
 	return func(o *Options) error {
-		switch o.Runtime {
+		switch o.Backend {
 		case "ORT":
 			o.ORTOptions.CudaOptions = options
 			return nil
 		case "XLA":
-			o.XLAOptions.Cuda = true
+			o.GoMLXOptions.Cuda = true
 			return nil
 		default:
-			return fmt.Errorf("WithCuda is only supported for ORT or XLA runtimes")
+			return fmt.Errorf("WithCuda is only supported for ORT or XLA backends")
 		}
 	}
 }
 
-// WithCoreML (ORT only) Use this function to set the CoreML options flags for the ONNX runtime configuration.
+// WithCoreML (ORT only) Use this function to set the CoreML options flags for the ONNX backend configuration.
 // The `flags` parameter represents the CoreML options flags.
 // The `o.CoreMLOptions` field in `OrtOptions` struct will be set to the provided flags parameter.
 func WithCoreML(flags map[string]string) WithOption {
 	return func(o *Options) error {
-		if o.Runtime == "ORT" {
+		if o.Backend == "ORT" {
 			o.ORTOptions.CoreMLOptions = flags
 			return nil
 		} else {
-			return fmt.Errorf("WithCoreML is only supported for ORT runtime")
+			return fmt.Errorf("WithCoreML is only supported for ORT backend")
 		}
 	}
 }
 
 // WithDirectML (ORT only) Use this function to set the DirectML device ID for the
-// onnxruntime. By default, this option is not set.
+// onnxbackend. By default, this option is not set.
 func WithDirectML(deviceID int) WithOption {
 	return func(o *Options) error {
-		if o.Runtime == "ORT" {
+		if o.Backend == "ORT" {
 			o.ORTOptions.DirectMLOptions = &deviceID
 			return nil
 		} else {
-			return fmt.Errorf("WithDirectML is only supported for ORT runtime")
+			return fmt.Errorf("WithDirectML is only supported for ORT backend")
 		}
 	}
 }
@@ -219,11 +215,11 @@ func WithDirectML(deviceID int) WithOption {
 // This will configure the OpenVINO execution provider to use CPU as the device type and set the number of threads to 4.
 func WithOpenVINO(options map[string]string) WithOption {
 	return func(o *Options) error {
-		if o.Runtime == "ORT" {
+		if o.Backend == "ORT" {
 			o.ORTOptions.OpenVINOOptions = options
 			return nil
 		} else {
-			return fmt.Errorf("WithOpenVINO is only supported for ORT runtime")
+			return fmt.Errorf("WithOpenVINO is only supported for ORT backend")
 		}
 	}
 }
@@ -233,19 +229,19 @@ func WithOpenVINO(options map[string]string) WithOption {
 // By default, the options will be nil and the TensorRT provider will not be used.
 // Example usage:
 //
-//	options := &onnxruntime_go.TensorRTProviderOptions{
+//	options := &onnxbackend_go.TensorRTProviderOptions{
 //	    DeviceID: 0,
 //	}
 //	WithTensorRT(options)
 //
-// Note: For the TensorRT provider to work, the onnxruntime library must be built with TensorRT support.
+// Note: For the TensorRT provider to work, the onnxbackend library must be built with TensorRT support.
 func WithTensorRT(options map[string]string) WithOption {
 	return func(o *Options) error {
-		if o.Runtime == "ORT" {
+		if o.Backend == "ORT" {
 			o.ORTOptions.TensorRTOptions = options
 			return nil
 		} else {
-			return fmt.Errorf("WithTensorRT is only supported for ORT runtime")
+			return fmt.Errorf("WithTensorRT is only supported for ORT backend")
 		}
 	}
 }

@@ -10,6 +10,7 @@ import (
 type Tokenizer struct {
 	Runtime          string
 	RustTokenizer    *RustTokenizer
+	GoTokenizer      *GoTokenizer
 	TokenizerTimings *timings
 	Destroy          func() error
 }
@@ -20,11 +21,13 @@ func LoadTokenizer(model *Model, s *options.Options) error {
 		return err
 	}
 
-	switch s.Runtime {
+	switch s.Backend {
 	case "ORT", "XLA":
 		return loadRustTokenizer(tokenizerBytes, model)
+	case "GO":
+		return loadGoTokenizer(tokenizerBytes, model)
 	default:
-		return fmt.Errorf("runtime %s not recognized", s.Runtime)
+		return fmt.Errorf("runtime %s not recognized", s.Backend)
 	}
 }
 
@@ -32,6 +35,8 @@ func TokenizeInputs(batch *PipelineBatch, tk *Tokenizer, inputs []string) {
 	switch tk.Runtime {
 	case "RUST":
 		tokenizeInputsRust(batch, tk, inputs)
+	case "GO":
+		tokenizeInputsGo(batch, tk, inputs)
 	}
 }
 
@@ -45,6 +50,8 @@ func Decode(tokens []uint32, tokenizer *Tokenizer, skipSpecialTokens bool) (stri
 	switch tokenizer.Runtime {
 	case "RUST":
 		return decodeRust(tokens, tokenizer, skipSpecialTokens), nil
+	case "GO":
+		return decodeGo(tokens, tokenizer, skipSpecialTokens), nil
 	}
 	return "", fmt.Errorf("runtime %s not recognized", tokenizer.Runtime)
 }

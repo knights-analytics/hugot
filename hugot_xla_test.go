@@ -13,10 +13,10 @@ import (
 
 func TestFeatureExtractionPipelineXLA(t *testing.T) {
 	session, err := NewXLASession()
-	check(t, err)
+	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
-		check(t, destroyErr)
+		checkT(t, destroyErr)
 	}(session)
 	featureExtractionPipeline(t, session)
 }
@@ -25,26 +25,23 @@ func TestFeatureExtractionPipelineXLACuda(t *testing.T) {
 	if os.Getenv("CI") != "" {
 		t.SkipNow()
 	}
-	opts := []options.WithOption{
-		options.WithCuda(map[string]string{
-			"device_id": "0",
-		}),
-	}
-	session, err := NewXLASession(opts...)
-	check(t, err)
+	session, err := NewXLASession(options.WithCuda(map[string]string{
+		"device_id": "0",
+	}))
+	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
-		check(t, destroyErr)
+		checkT(t, destroyErr)
 	}(session)
 	featureExtractionPipeline(t, session)
 }
 
 func TestFeatureExtractionPipelineValidationXLA(t *testing.T) {
 	session, err := NewXLASession()
-	check(t, err)
+	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
-		check(t, destroyErr)
+		checkT(t, destroyErr)
 	}(session)
 	featureExtractionPipelineValidation(t, session)
 }
@@ -53,10 +50,10 @@ func TestFeatureExtractionPipelineValidationXLA(t *testing.T) {
 
 func TestTextClassificationPipelineXLA(t *testing.T) {
 	session, err := NewXLASession()
-	check(t, err)
+	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
-		check(t, destroyErr)
+		checkT(t, destroyErr)
 	}(session)
 	textClassificationPipeline(t, session)
 }
@@ -65,26 +62,23 @@ func TestTextClassificationPipelineXLACuda(t *testing.T) {
 	if os.Getenv("CI") != "" {
 		t.SkipNow()
 	}
-	opts := []options.WithOption{
-		options.WithCuda(map[string]string{
-			"device_id": "0",
-		}),
-	}
-	session, err := NewXLASession(opts...)
-	check(t, err)
+	session, err := NewXLASession(options.WithCuda(map[string]string{
+		"device_id": "0",
+	}))
+	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
-		check(t, destroyErr)
+		checkT(t, destroyErr)
 	}(session)
 	textClassificationPipeline(t, session)
 }
 
 func TestTextClassificationPipelineMultiXLA(t *testing.T) {
 	session, err := NewXLASession()
-	check(t, err)
+	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
-		check(t, destroyErr)
+		checkT(t, destroyErr)
 	}(session)
 	textClassificationPipelineMulti(t, session)
 }
@@ -93,26 +87,23 @@ func TestTextClassificationPipelineMultiXLACuda(t *testing.T) {
 	if os.Getenv("CI") != "" {
 		t.SkipNow()
 	}
-	opts := []options.WithOption{
-		options.WithCuda(map[string]string{
-			"device_id": "0",
-		}),
-	}
-	session, err := NewXLASession(opts...)
-	check(t, err)
+	session, err := NewXLASession(options.WithCuda(map[string]string{
+		"device_id": "0",
+	}))
+	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
-		check(t, destroyErr)
+		checkT(t, destroyErr)
 	}(session)
 	textClassificationPipelineMulti(t, session)
 }
 
 func TestTextClassificationPipelineValidationXLA(t *testing.T) {
 	session, err := NewXLASession()
-	check(t, err)
+	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
-		check(t, destroyErr)
+		checkT(t, destroyErr)
 	}(session)
 	textClassificationPipelineValidation(t, session)
 }
@@ -121,10 +112,10 @@ func TestTextClassificationPipelineValidationXLA(t *testing.T) {
 
 func TestTokenClassificationPipelineXLA(t *testing.T) {
 	session, err := NewXLASession()
-	check(t, err)
+	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
-		check(t, destroyErr)
+		checkT(t, destroyErr)
 	}(session)
 	tokenClassificationPipeline(t, session)
 }
@@ -133,26 +124,23 @@ func TestTokenClassificationPipelineXLACuda(t *testing.T) {
 	if os.Getenv("CI") != "" {
 		t.SkipNow()
 	}
-	opts := []options.WithOption{
-		options.WithCuda(map[string]string{
-			"device_id": "0",
-		}),
-	}
-	session, err := NewXLASession(opts...)
-	check(t, err)
+	session, err := NewXLASession(options.WithCuda(map[string]string{
+		"device_id": "0",
+	}))
+	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
-		check(t, destroyErr)
+		checkT(t, destroyErr)
 	}(session)
 	tokenClassificationPipeline(t, session)
 }
 
 func TestTokenClassificationPipelineValidationXLA(t *testing.T) {
 	session, err := NewXLASession()
-	check(t, err)
+	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
-		check(t, destroyErr)
+		checkT(t, destroyErr)
 	}(session)
 	tokenClassificationPipelineValidation(t, session)
 }
@@ -161,10 +149,10 @@ func TestTokenClassificationPipelineValidationXLA(t *testing.T) {
 
 func TestZeroShotClassificationPipelineXLA(t *testing.T) {
 	session, err := NewXLASession()
-	check(t, err)
+	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
-		check(t, destroyErr)
+		checkT(t, destroyErr)
 	}(session)
 	zeroShotClassificationPipeline(t, session)
 }
@@ -173,26 +161,23 @@ func TestZeroShotClassificationPipelineXLACuda(t *testing.T) {
 	if os.Getenv("CI") != "" {
 		t.SkipNow()
 	}
-	opts := []options.WithOption{
-		options.WithCuda(map[string]string{
-			"device_id": "0",
-		}),
-	}
-	session, err := NewXLASession(opts...)
-	check(t, err)
+	session, err := NewXLASession(options.WithCuda(map[string]string{
+		"device_id": "0",
+	}))
+	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
-		check(t, destroyErr)
+		checkT(t, destroyErr)
 	}(session)
 	zeroShotClassificationPipeline(t, session)
 }
 
 func TestZeroShotClassificationPipelineValidationXLA(t *testing.T) {
 	session, err := NewXLASession()
-	check(t, err)
+	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
-		check(t, destroyErr)
+		checkT(t, destroyErr)
 	}(session)
 	zeroShotClassificationPipelineValidation(t, session)
 }
@@ -201,20 +186,20 @@ func TestZeroShotClassificationPipelineValidationXLA(t *testing.T) {
 
 func TestNoSameNamePipelineXLA(t *testing.T) {
 	session, err := NewXLASession()
-	check(t, err)
+	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
-		check(t, destroyErr)
+		checkT(t, destroyErr)
 	}(session)
 	noSameNamePipeline(t, session)
 }
 
 func TestDestroyPipelineXLA(t *testing.T) {
 	session, err := NewXLASession()
-	check(t, err)
+	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
-		check(t, destroyErr)
+		checkT(t, destroyErr)
 	}(session)
 	destroyPipelines(t, session)
 }
@@ -223,28 +208,25 @@ func TestDestroyPipelineXLA(t *testing.T) {
 
 func TestThreadSafetyXLA(t *testing.T) {
 	session, err := NewXLASession()
-	check(t, err)
+	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
-		check(t, destroyErr)
+		checkT(t, destroyErr)
 	}(session)
-	threadSafety(t, session)
+	threadSafety(t, session, 500)
 }
 
 func TestThreadSafetyXLACuda(t *testing.T) {
 	if os.Getenv("CI") != "" {
 		t.SkipNow()
 	}
-	opts := []options.WithOption{
-		options.WithCuda(map[string]string{
-			"device_id": "0",
-		}),
-	}
-	session, err := NewXLASession(opts...)
-	check(t, err)
+	session, err := NewXLASession(options.WithCuda(map[string]string{
+		"device_id": "0",
+	}))
+	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
-		check(t, destroyErr)
+		checkT(t, destroyErr)
 	}(session)
-	threadSafety(t, session)
+	threadSafety(t, session, 1000)
 }

@@ -15,7 +15,7 @@ import (
 )
 
 type TrainingSession struct {
-	runtime  string
+	backend  string
 	pipeline pipelineBackends.Pipeline
 	config   TrainingConfig
 }
@@ -37,19 +37,19 @@ func (s *TrainingSession) Destroy() error {
 type TrainingOption func(eo *TrainingSession) error
 
 type TrainingConfig struct {
-	ModelPath          string
-	OnnxFilename       string
-	Cuda               bool
-	Epochs             int
-	XlaTrainingOptions *XLATrainingOptions
-	Dataset            datasets.Dataset
-	Verbose            bool
+	ModelPath            string
+	OnnxFilename         string
+	Cuda                 bool
+	Epochs               int
+	GOMLXTrainingOptions *GOMLXTrainingOptions
+	Dataset              datasets.Dataset
+	Verbose              bool
 }
 
-func newTrainingSession[T pipelineBackends.Pipeline](runtime string, config TrainingConfig) (*TrainingSession, error) {
+func newTrainingSession[T pipelineBackends.Pipeline](backend string, config TrainingConfig) (*TrainingSession, error) {
 	session := &TrainingSession{
 		config:  config,
-		runtime: runtime,
+		backend: backend,
 	}
 
 	var trainingPipeline T
@@ -57,13 +57,15 @@ func newTrainingSession[T pipelineBackends.Pipeline](runtime string, config Trai
 	var err error
 
 	opts := options.Defaults()
-	opts.Runtime = runtime
+	opts.Backend = backend
 
-	switch runtime {
+	switch backend {
 	case "XLA":
-		opts.XLAOptions.Cuda = config.Cuda
+		opts.GoMLXOptions.XLA = true
+		opts.GoMLXOptions.Cuda = config.Cuda
+	case "GO":
 	default:
-		return nil, fmt.Errorf("runtime %s is not supported", runtime)
+		return nil, fmt.Errorf("runtime %s is not supported", backend)
 	}
 
 	if config.Epochs <= 0 {
@@ -105,11 +107,11 @@ func newTrainingSession[T pipelineBackends.Pipeline](runtime string, config Trai
 }
 
 func (s *TrainingSession) Train() error {
-	switch s.runtime {
-	case "XLA":
-		return TrainXLA(s)
+	switch s.backend {
+	case "GO", "XLA":
+		return TrainGoMLX(s)
 	default:
-		return fmt.Errorf("training runtime %s is not supported", s.runtime)
+		return fmt.Errorf("training runtime %s is not supported", s.backend)
 	}
 }
 
@@ -125,10 +127,10 @@ func (s *TrainingSession) Save(path string) error {
 
 	model := s.pipeline.GetModel()
 	if model != nil {
-		if s.runtime == "XLA" {
-			xlaModel := model.XLAModel
+		if s.backend == "GO" || s.backend == "XLA" {
+			goMLXModel := model.GoMLXModel
 
-			if xlaModel != nil {
+			if goMLXModel != nil {
 				w, err := util.NewFileWriter(util.PathJoinSafe(path, "model.onnx"), "")
 				if err != nil {
 					return err
@@ -137,7 +139,7 @@ func (s *TrainingSession) Save(path string) error {
 					writeErr = errors.Join(writeErr, w.Close())
 				}()
 
-				if writeErr = xlaModel.Save(w); writeErr != nil {
+				if writeErr = goMLXModel.Save(w); writeErr != nil {
 					return writeErr
 				}
 				if model.Tokenizer != nil {
@@ -148,9 +150,9 @@ func (s *TrainingSession) Save(path string) error {
 				}
 				return writeErr
 			}
-			return fmt.Errorf("XLA model is nil")
+			return fmt.Errorf("model is nil")
 		} else {
-			return fmt.Errorf("XLA runtime is required for saving a training model")
+			return fmt.Errorf("go or XLA backends are required for saving a training model")
 		}
 	} else {
 		return fmt.Errorf("pipeline model is nil")
@@ -167,7 +169,7 @@ func copyTokenizer(from, to string) error {
 
 	walker := func(_ context.Context, _ string, parent string, info os.FileInfo, _ io.Reader) (toContinue bool, err error) {
 		if toCopy[info.Name()] {
-			if err := util.CopyFile(util.PathJoinSafe(from, parent, info.Name()), to); err != nil {
+			if err = util.CopyFile(util.PathJoinSafe(from, parent, info.Name()), to); err != nil {
 				return false, err
 			}
 		}

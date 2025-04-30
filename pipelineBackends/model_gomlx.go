@@ -1,5 +1,3 @@
-//go:build XLA || ALL
-
 package pipelineBackends
 
 import (
@@ -17,26 +15,24 @@ import (
 
 	"github.com/knights-analytics/hugot/options"
 
-	_ "github.com/gomlx/gomlx/backends/xla"
+	_ "github.com/gomlx/gomlx/backends/simplego"
 )
 
-type XLAModel struct {
+type GoMLXModel struct {
 	Backend   backends.Backend
 	OnnxModel *onnx.Model
-	// ctx with the model's weights.
-	Ctx *context.Context
-	// exec is used to execute the model with a context.
-	Exec    *context.Exec
-	Call    func(ctx *context.Context, inputs []*graph.Node) []*graph.Node
-	Destroy func()
+	Ctx       *context.Context // ctx with the model's weights.
+	Exec      *context.Exec    // exec is used to execute the model with a context.
+	Call      func(ctx *context.Context, inputs []*graph.Node) []*graph.Node
+	Destroy   func()
 }
 
-func createXLAModelBackend(model *Model, options *options.Options) error {
+func createGoMLXModelBackend(model *Model, options *options.Options) error {
 	var insideError error
 	var recoverErr error
 
 	// we never want to panic so the calling program has a chance to shut down gracefully on error.
-	// we therefore catch all panics from gomlx as errors.
+	// we therefore catch all panics from goMLX as errors.
 	recoverErr = exceptions.TryCatch[error](func() {
 		var modelParsed *onnx.Model
 		modelParsed, insideError = onnx.Parse(model.OnnxBytes)
@@ -44,7 +40,7 @@ func createXLAModelBackend(model *Model, options *options.Options) error {
 			return
 		}
 
-		inputs, outputs := loadInputOutputMetaXLA(modelParsed)
+		inputs, outputs := loadInputOutputMetaGoMLX(modelParsed)
 		var outputNames []string
 		for _, v := range outputs {
 			outputNames = append(outputNames, v.Name)
@@ -60,11 +56,18 @@ func createXLAModelBackend(model *Model, options *options.Options) error {
 			return
 		}
 
-		config := "xla:cpu"
-		if options.XLAOptions.Cuda {
+		config := "go"
+		if options.GoMLXOptions.Cuda {
 			config = "xla:cuda"
+		} else if options.GoMLXOptions.XLA {
+			config = "xla:cpu"
 		}
-		backend := backends.NewWithConfig(config)
+
+		var backend backends.Backend
+		backend, insideError = backends.NewWithConfig(config)
+		if insideError != nil {
+			return
+		}
 
 		// Create model executor.
 		callFunc := func(ctx *context.Context, inputs []*graph.Node) []*graph.Node {
@@ -80,7 +83,7 @@ func createXLAModelBackend(model *Model, options *options.Options) error {
 		exec := context.NewExec(backend, ctx, callFunc)
 		exec.SetMaxCache(-1)
 
-		model.XLAModel = &XLAModel{
+		model.GoMLXModel = &GoMLXModel{
 			Backend:   backend,
 			OnnxModel: modelParsed,
 			Ctx:       ctx,
@@ -88,6 +91,7 @@ func createXLAModelBackend(model *Model, options *options.Options) error {
 			Call:      callFunc,
 			Destroy: func() {
 				exec.Finalize()
+				ctx.Finalize()
 				backend.Finalize()
 			},
 		}
@@ -97,7 +101,7 @@ func createXLAModelBackend(model *Model, options *options.Options) error {
 	return errors.Join(insideError, recoverErr)
 }
 
-func loadInputOutputMetaXLA(model *onnx.Model) ([]InputOutputInfo, []InputOutputInfo) {
+func loadInputOutputMetaGoMLX(model *onnx.Model) ([]InputOutputInfo, []InputOutputInfo) {
 
 	var inputs, outputs []InputOutputInfo
 
@@ -126,7 +130,7 @@ func loadInputOutputMetaXLA(model *onnx.Model) ([]InputOutputInfo, []InputOutput
 	return inputs, outputs
 }
 
-func createInputTensorsXLA(batch *PipelineBatch, inputsMeta []InputOutputInfo, padBatchDimension bool) error {
+func createInputTensorsGoMLX(batch *PipelineBatch, inputsMeta []InputOutputInfo, padBatchDimension bool) error {
 	batchSize := len(batch.Input)
 	batchSizePadded := batchSize
 	if padBatchDimension {
@@ -179,7 +183,7 @@ func createInputTensorsXLA(batch *PipelineBatch, inputsMeta []InputOutputInfo, p
 	return nil
 }
 
-func runXLASessionOnBatch(batch *PipelineBatch, p *BasePipeline) error {
+func runGoMLXSessionOnBatch(batch *PipelineBatch, p *BasePipeline) error {
 
 	var outputs []*tensors.Tensor
 	defer func() {
@@ -189,7 +193,7 @@ func runXLASessionOnBatch(batch *PipelineBatch, p *BasePipeline) error {
 	}()
 
 	err := exceptions.TryCatch[error](func() {
-		outputs = p.Model.XLAModel.Exec.Call(batch.InputValues.([]*tensors.Tensor))
+		outputs = p.Model.GoMLXModel.Exec.Call(batch.InputValues.([]*tensors.Tensor))
 	})
 	if err != nil {
 		return err
@@ -231,11 +235,11 @@ func nextPowerOf2(n int) int {
 	return pow
 }
 
-func (xlaModel *XLAModel) Save(w io.Writer) error {
-	if err := xlaModel.OnnxModel.ContextToONNX(xlaModel.Ctx); err != nil {
+func (goMLXModel *GoMLXModel) Save(w io.Writer) error {
+	if err := goMLXModel.OnnxModel.ContextToONNX(goMLXModel.Ctx); err != nil {
 		return err
 	}
-	err := xlaModel.OnnxModel.Write(w)
+	err := goMLXModel.OnnxModel.Write(w)
 	if err != nil {
 		return err
 	}
