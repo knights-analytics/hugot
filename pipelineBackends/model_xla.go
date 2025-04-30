@@ -17,7 +17,7 @@ import (
 
 	"github.com/knights-analytics/hugot/options"
 
-	_ "github.com/gomlx/gomlx/backends/xla"
+	_ "github.com/gomlx/gomlx/backends/default"
 )
 
 type XLAModel struct {
@@ -61,6 +61,9 @@ func createXLAModelBackend(model *Model, options *options.Options) error {
 		}
 
 		config := "xla:cpu"
+		if options.XLAOptions.SimpleGo {
+			config = "go"
+		}
 		if options.XLAOptions.Cuda {
 			config = "xla:cuda"
 		}

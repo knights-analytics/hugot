@@ -21,6 +21,19 @@ func TestFeatureExtractionPipelineXLA(t *testing.T) {
 	featureExtractionPipeline(t, session)
 }
 
+func TestFeatureExtractionPipelineXLAGo(t *testing.T) {
+	opts := []options.WithOption{
+		options.WithSimpleGo(),
+	}
+	session, err := NewXLASession(opts...)
+	check(t, err)
+	defer func(session *Session) {
+		destroyErr := session.Destroy()
+		check(t, destroyErr)
+	}(session)
+	featureExtractionPipeline(t, session)
+}
+
 func TestFeatureExtractionPipelineXLACuda(t *testing.T) {
 	if os.Getenv("CI") != "" {
 		t.SkipNow()
@@ -61,6 +74,19 @@ func TestTextClassificationPipelineXLA(t *testing.T) {
 	textClassificationPipeline(t, session)
 }
 
+func TestTextClassificationPipelineXLAGo(t *testing.T) {
+	opts := []options.WithOption{
+		options.WithSimpleGo(),
+	}
+	session, err := NewXLASession(opts...)
+	check(t, err)
+	defer func(session *Session) {
+		destroyErr := session.Destroy()
+		check(t, destroyErr)
+	}(session)
+	textClassificationPipeline(t, session)
+}
+
 func TestTextClassificationPipelineXLACuda(t *testing.T) {
 	if os.Getenv("CI") != "" {
 		t.SkipNow()
@@ -81,6 +107,19 @@ func TestTextClassificationPipelineXLACuda(t *testing.T) {
 
 func TestTextClassificationPipelineMultiXLA(t *testing.T) {
 	session, err := NewXLASession()
+	check(t, err)
+	defer func(session *Session) {
+		destroyErr := session.Destroy()
+		check(t, destroyErr)
+	}(session)
+	textClassificationPipelineMulti(t, session)
+}
+
+func TestTextClassificationPipelineMultiXLAGo(t *testing.T) {
+	opts := []options.WithOption{
+		options.WithSimpleGo(),
+	}
+	session, err := NewXLASession(opts...)
 	check(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
@@ -129,6 +168,19 @@ func TestTokenClassificationPipelineXLA(t *testing.T) {
 	tokenClassificationPipeline(t, session)
 }
 
+func TestTokenClassificationPipelineXLAGo(t *testing.T) {
+	opts := []options.WithOption{
+		options.WithSimpleGo(),
+	}
+	session, err := NewXLASession(opts...)
+	check(t, err)
+	defer func(session *Session) {
+		destroyErr := session.Destroy()
+		check(t, destroyErr)
+	}(session)
+	tokenClassificationPipeline(t, session)
+}
+
 func TestTokenClassificationPipelineXLACuda(t *testing.T) {
 	if os.Getenv("CI") != "" {
 		t.SkipNow()
@@ -161,6 +213,19 @@ func TestTokenClassificationPipelineValidationXLA(t *testing.T) {
 
 func TestZeroShotClassificationPipelineXLA(t *testing.T) {
 	session, err := NewXLASession()
+	check(t, err)
+	defer func(session *Session) {
+		destroyErr := session.Destroy()
+		check(t, destroyErr)
+	}(session)
+	zeroShotClassificationPipeline(t, session)
+}
+
+func TestZeroShotClassificationPipelineXLAGo(t *testing.T) {
+	opts := []options.WithOption{
+		options.WithSimpleGo(),
+	}
+	session, err := NewXLASession(opts...)
 	check(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
@@ -223,6 +288,19 @@ func TestDestroyPipelineXLA(t *testing.T) {
 
 func TestThreadSafetyXLA(t *testing.T) {
 	session, err := NewXLASession()
+	check(t, err)
+	defer func(session *Session) {
+		destroyErr := session.Destroy()
+		check(t, destroyErr)
+	}(session)
+	threadSafety(t, session)
+}
+
+func TestThreadSafetyXLAGo(t *testing.T) {
+	opts := []options.WithOption{
+		options.WithSimpleGo(),
+	}
+	session, err := NewXLASession(opts...)
 	check(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()

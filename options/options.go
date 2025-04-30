@@ -45,7 +45,8 @@ type OrtOptions struct {
 }
 
 type XLAOptions struct {
-	Cuda bool
+	Cuda     bool
+	SimpleGo bool
 }
 
 // WithOption is the interface for all option functions
@@ -181,6 +182,19 @@ func WithCuda(options map[string]string) WithOption {
 			return nil
 		default:
 			return fmt.Errorf("WithCuda is only supported for ORT or XLA runtimes")
+		}
+	}
+}
+
+// WithSimpleGo Use this function instruct XLA to use the simpleGo backend.
+func WithSimpleGo() WithOption {
+	return func(o *Options) error {
+		switch o.Runtime {
+		case "XLA":
+			o.XLAOptions.SimpleGo = true
+			return nil
+		default:
+			return fmt.Errorf("WithSimpleGo is only supported for XLA runtime")
 		}
 	}
 }
