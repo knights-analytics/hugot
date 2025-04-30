@@ -21,10 +21,13 @@ type Session struct {
 	environmentDestroy              func() error
 }
 
-func newSession(runtime string, opts ...options.WithOption) (*Session, error) {
+func newSession(backend string, opts ...options.WithOption) (*Session, error) {
 	parsedOptions := options.Defaults()
-	parsedOptions.Runtime = runtime
+	parsedOptions.Backend = backend
 	// Collect options into a struct, so they can be applied in the correct order later
+	if backend == "XLA" {
+		parsedOptions.GoMLXOptions.XLA = true
+	}
 	for _, option := range opts {
 		err := option(parsedOptions)
 		if err != nil {

@@ -1,4 +1,4 @@
-//go:build !NOORT || XLA || ALL
+//go:build ORT || XLA || ALL
 
 package pipelineBackends
 

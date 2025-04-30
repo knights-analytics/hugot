@@ -1,5 +1,3 @@
-//go:build XLA || ALL
-
 package hugot
 
 import (
@@ -17,9 +15,18 @@ import (
 	"github.com/knights-analytics/hugot/pipelines"
 )
 
-type XLATrainingOptions struct {
+type GOMLXTrainingOptions struct {
 	Optimizer optimizers.Interface
 	Loss      losses.LossFn
+}
+
+func NewGoTrainingSession[T pipelineBackends.Pipeline](config TrainingConfig) (*TrainingSession, error) {
+	s, err := newTrainingSession[T]("GO", config)
+	if err != nil {
+		return nil, err
+	}
+
+	return newGoMLXTrainingSession(s)
 }
 
 func NewXLATrainingSession[T pipelineBackends.Pipeline](config TrainingConfig) (*TrainingSession, error) {
@@ -28,17 +35,22 @@ func NewXLATrainingSession[T pipelineBackends.Pipeline](config TrainingConfig) (
 		return nil, err
 	}
 
+	return newGoMLXTrainingSession(s)
+}
+
+func newGoMLXTrainingSession(s *TrainingSession) (*TrainingSession, error) {
+
 	// set defaults
 	switch any(s.pipeline).(type) {
 	case *pipelines.FeatureExtractionPipeline:
-		if s.config.XlaTrainingOptions == nil {
-			s.config.XlaTrainingOptions = &XLATrainingOptions{}
+		if s.config.GOMLXTrainingOptions == nil {
+			s.config.GOMLXTrainingOptions = &GOMLXTrainingOptions{}
 		}
-		if s.config.XlaTrainingOptions.Optimizer == nil {
-			s.config.XlaTrainingOptions.Optimizer = optimizers.StochasticGradientDescent()
+		if s.config.GOMLXTrainingOptions.Optimizer == nil {
+			s.config.GOMLXTrainingOptions.Optimizer = optimizers.StochasticGradientDescent()
 		}
-		if s.config.XlaTrainingOptions.Loss == nil {
-			s.config.XlaTrainingOptions.Loss = losses.MeanSquaredError
+		if s.config.GOMLXTrainingOptions.Loss == nil {
+			s.config.GOMLXTrainingOptions.Loss = losses.MeanSquaredError
 		}
 	default:
 		return nil, fmt.Errorf("loss function is required")
@@ -46,19 +58,19 @@ func NewXLATrainingSession[T pipelineBackends.Pipeline](config TrainingConfig) (
 	return s, nil
 }
 
-func TrainXLA(s *TrainingSession) error {
+func TrainGoMLX(s *TrainingSession) error {
 	switch p := s.pipeline.(type) {
 	case *pipelines.FeatureExtractionPipeline:
-		XLAModel := p.Model.XLAModel
-		backend := XLAModel.Backend
-		ctx := XLAModel.Ctx
+		GoMLXModel := p.Model.GoMLXModel
+		backend := GoMLXModel.Backend
+		ctx := GoMLXModel.Ctx
 
 		modelFn := func(ctx *context.Context, spec any, inputs []*context.Node) []*context.Node {
 			inputsLhs := inputs[:3] // inputIDs, attentionMask, tokenTypeIDs if present
 			inputsRhs := inputs[3:]
 
-			embeddingLhs := XLAModel.Call(ctx.Reuse(), inputsLhs)[0]
-			embeddingRhs := XLAModel.Call(ctx.Reuse(), inputsRhs)[0]
+			embeddingLhs := GoMLXModel.Call(ctx.Reuse(), inputsLhs)[0]
+			embeddingRhs := GoMLXModel.Call(ctx.Reuse(), inputsRhs)[0]
 
 			// we mean pool the results if needed e.g. if dimensions are [batch, seq, hidden]
 			if len(embeddingLhs.Shape().Dimensions) > 2 {
@@ -81,8 +93,8 @@ func TrainXLA(s *TrainingSession) error {
 		gomlxTrainer := train.NewTrainer(backend,
 			ctx,
 			modelFn,
-			s.config.XlaTrainingOptions.Loss,
-			s.config.XlaTrainingOptions.Optimizer,
+			s.config.GOMLXTrainingOptions.Loss,
+			s.config.GOMLXTrainingOptions.Optimizer,
 			nil,
 			nil)
 

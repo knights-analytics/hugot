@@ -1,6 +1,6 @@
 linters:
   enable:
-   # Check for pass []any as any in variadic func(...any).
+    # Check for pass []any as any in variadic func(...any).
     # Rare case but saved me from debugging a few times.
     - asasalint
 
@@ -22,7 +22,7 @@ linters:
     - durationcheck
 
     # Forces to not skip error check.
-    - errcheck 
+    - errcheck
 
     # Checks `Err-` prefix for var and `-Error` suffix for error type.
     - errname
@@ -129,4 +129,5 @@ linters:
 
     # Finds wasted assignment statements.
     - wastedassign
+
 version: "2"
