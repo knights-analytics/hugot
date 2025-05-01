@@ -5,7 +5,6 @@ package hugot
 import (
 	"errors"
 	"math/rand"
-	"os"
 	"runtime"
 	"sync"
 	"testing"
@@ -146,6 +145,23 @@ func BenchmarkXLAThreadBenchmarkSingle(b *testing.B) {
 	threadBenchmark(b, session, false, false)
 }
 
+func BenchmarkXLAThreadBenchmarkSingleGo(b *testing.B) {
+	b.StopTimer()
+	opts := []options.WithOption{
+		options.WithSimpleGo(),
+	}
+	session, err := NewXLASession(opts...)
+	checkBench(b, err)
+	defer func(session *Session) {
+		destroyErr := session.Destroy()
+		checkBench(b, destroyErr)
+	}(session)
+	if b.N < 128 {
+		b.N = 128
+	}
+	threadBenchmark(b, session, false, false)
+}
+
 func BenchmarkORTThreadBenchmarkMulti(b *testing.B) {
 	b.StopTimer()
 	session, err := NewORTSession(
@@ -168,6 +184,23 @@ func BenchmarkORTThreadBenchmarkMulti(b *testing.B) {
 func BenchmarkXLAThreadBenchmarkMulti(b *testing.B) {
 	b.StopTimer()
 	session, err := NewXLASession()
+	checkBench(b, err)
+	defer func(session *Session) {
+		destroyErr := session.Destroy()
+		checkBench(b, destroyErr)
+	}(session)
+	if b.N < 256 {
+		b.N = 256
+	}
+	threadBenchmark(b, session, true, false)
+}
+
+func BenchmarkXLAThreadBenchmarkMultiGo(b *testing.B) {
+	b.StopTimer()
+	opts := []options.WithOption{
+		options.WithSimpleGo(),
+	}
+	session, err := NewXLASession(opts...)
 	checkBench(b, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
@@ -212,45 +245,63 @@ func BenchmarkXLAThreadBenchmarkRandomBatchSize(b *testing.B) {
 	threadBenchmark(b, session, true, true)
 }
 
-func BenchmarkORTThreadBenchmarkCuda(b *testing.B) {
-	if os.Getenv("CI") != "" {
-		b.SkipNow()
-	}
+func BenchmarkXLAThreadBenchmarkRandomBatchSizeGo(b *testing.B) {
 	b.StopTimer()
-	session, err := NewORTSession(
-		options.WithOnnxLibraryPath("/usr/lib64/onnxruntime-gpu/libonnxruntime.so"),
-		options.WithCuda(map[string]string{
-			"device_id": "0",
-		}),
-	)
+	opts := []options.WithOption{
+		options.WithSimpleGo(),
+	}
+	session, err := NewXLASession(opts...)
 	checkBench(b, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
 		checkBench(b, destroyErr)
 	}(session)
-	if b.N < 512 {
-		b.N = 512
+	if b.N < 256 {
+		b.N = 256
 	}
-	threadBenchmark(b, session, true, false)
+	threadBenchmark(b, session, true, true)
 }
 
-func BenchmarkXLAThreadBenchmarkCuda(b *testing.B) {
-	if os.Getenv("CI") != "" {
-		b.SkipNow()
-	}
-	b.StopTimer()
-	session, err := NewXLASession(
-		options.WithCuda(map[string]string{
-			"device_id": "0",
-		}),
-	)
-	checkBench(b, err)
-	defer func(session *Session) {
-		destroyErr := session.Destroy()
-		checkBench(b, destroyErr)
-	}(session)
-	if b.N < 512 {
-		b.N = 512
-	}
-	threadBenchmark(b, session, true, false)
-}
+//
+//func BenchmarkORTThreadBenchmarkCuda(b *testing.B) {
+//	if os.Getenv("CI") != "" {
+//		b.SkipNow()
+//	}
+//	b.StopTimer()
+//	session, err := NewORTSession(
+//		options.WithOnnxLibraryPath("/usr/lib64/onnxruntime-gpu/libonnxruntime.so"),
+//		options.WithCuda(map[string]string{
+//			"device_id": "0",
+//		}),
+//	)
+//	checkBench(b, err)
+//	defer func(session *Session) {
+//		destroyErr := session.Destroy()
+//		checkBench(b, destroyErr)
+//	}(session)
+//	if b.N < 512 {
+//		b.N = 512
+//	}
+//	threadBenchmark(b, session, true, false)
+//}
+//
+//func BenchmarkXLAThreadBenchmarkCuda(b *testing.B) {
+//	if os.Getenv("CI") != "" {
+//		b.SkipNow()
+//	}
+//	b.StopTimer()
+//	session, err := NewXLASession(
+//		options.WithCuda(map[string]string{
+//			"device_id": "0",
+//		}),
+//	)
+//	checkBench(b, err)
+//	defer func(session *Session) {
+//		destroyErr := session.Destroy()
+//		checkBench(b, destroyErr)
+//	}(session)
+//	if b.N < 512 {
+//		b.N = 512
+//	}
+//	threadBenchmark(b, session, true, false)
+//}

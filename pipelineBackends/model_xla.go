@@ -191,11 +191,22 @@ func runXLASessionOnBatch(batch *PipelineBatch, p *BasePipeline) error {
 		}
 	}()
 
-	err := exceptions.TryCatch[error](func() {
-		outputs = p.Model.XLAModel.Exec.Call(batch.InputValues.([]*tensors.Tensor))
-	})
-	if err != nil {
-		return err
+	if p.Model.XLAModel.Backend.Name() == "go" {
+		for _, input := range batch.InputValues.([]*tensors.Tensor) {
+			err := exceptions.TryCatch[error](func() {
+				outputs = append(outputs, p.Model.XLAModel.Exec.Call(input)...)
+			})
+			if err != nil {
+				return err
+			}
+		}
+	} else {
+		err := exceptions.TryCatch[error](func() {
+			outputs = p.Model.XLAModel.Exec.Call(batch.InputValues.([]*tensors.Tensor))
+		})
+		if err != nil {
+			return err
+		}
 	}
 
 	convertedOutput := make([]OutputArray, len(outputs))
