@@ -33,7 +33,10 @@ func NewORTSession(opts ...options.WithOption) (*Session, error) {
 	}
 
 	session.environmentDestroy = func() error {
-		return ort.DestroyEnvironment()
+		if ort.IsInitialized() {
+			return ort.DestroyEnvironment()
+		}
+		return nil
 	}
 
 	return session, err

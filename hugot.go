@@ -299,10 +299,12 @@ func (s *Session) Destroy() error {
 	s.tokenClassificationPipelines = nil
 	s.textClassificationPipelines = nil
 	s.zeroShotClassificationPipelines = nil
-	err = errors.Join(
-		s.options.Destroy(),
-		s.environmentDestroy(),
-	)
-	s.options = nil
+
+	if s.options != nil {
+		err = errors.Join(err, s.options.Destroy())
+		s.options = nil
+	}
+
+	err = errors.Join(err, s.environmentDestroy())
 	return err
 }
