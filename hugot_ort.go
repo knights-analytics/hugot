@@ -1,4 +1,4 @@
-//go:build !NOORT || ALL
+//go:build ORT || ALL
 
 package hugot
 
@@ -77,7 +77,7 @@ func (s *Session) initialiseORT() (bool, error) {
 	if optionsError != nil {
 		return true, optionsError
 	}
-	s.options.RuntimeOptions = sessionOptions
+	s.options.BackendOptions = sessionOptions
 	s.options.Destroy = func() error {
 		return sessionOptions.Destroy()
 	}

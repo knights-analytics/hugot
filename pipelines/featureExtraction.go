@@ -76,6 +76,9 @@ func NewFeatureExtractionPipeline(config pipelineBackends.PipelineConfig[*Featur
 			return nil, fmt.Errorf("output %s is not available, outputs are: %s", pipeline.OutputName, strings.Join(pipelineBackends.GetNames(model.OutputsMeta), ", "))
 		}
 	} else {
+		if len(model.OutputsMeta) == 0 {
+			return nil, fmt.Errorf("no model outputs metadata available for %s", model.Path)
+		}
 		pipeline.Output = model.OutputsMeta[0] // we take the first output otherwise, like transformers does
 	}
 

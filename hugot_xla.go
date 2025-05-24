@@ -3,6 +3,8 @@
 package hugot
 
 import (
+	_ "github.com/gomlx/gomlx/backends/xla"
+
 	"github.com/knights-analytics/hugot/options"
 )
 
