@@ -121,7 +121,3 @@ func NewFileWriter(filename string, contentType string) (io.WriteCloser, error) 
 	}
 	return fileSystem.NewWriter(context.Background(), filename, 0644, option.NewSkipChecksum(true))
 }
-
-func MoveFile(from string, to string) error {
-	return fileSystem.Move(context.Background(), from, to, option.NewSource(option.NewStream(partSize, 0)), option.NewDest(option.NewSkipChecksum(true)))
-}

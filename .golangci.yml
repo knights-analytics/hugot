@@ -1,5 +1,4 @@
 linters:
-  disable-all: true
   enable:
    # Check for pass []any as any in variadic func(...any).
     # Rare case but saved me from debugging a few times.
@@ -130,3 +129,4 @@ linters:
 
     # Finds wasted assignment statements.
     - wastedassign
+version: "2"

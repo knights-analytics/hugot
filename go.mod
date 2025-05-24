@@ -1,25 +1,25 @@
 module github.com/knights-analytics/hugot
 
-go 1.23.3
+go 1.24
 
 require (
 	github.com/daulet/tokenizers v1.20.2
 	github.com/gomlx/exceptions v0.0.3
 	github.com/gomlx/go-huggingface v0.2.0
-	github.com/gomlx/gomlx v0.19.2
-	github.com/gomlx/gopjrt v0.7.0
-	github.com/gomlx/onnx-gomlx v0.2.1
+	github.com/gomlx/gomlx v0.19.4
+	github.com/gomlx/gopjrt v0.7.1
+	github.com/gomlx/onnx-gomlx v0.2.2
 	github.com/json-iterator/go v1.1.12
 	github.com/mattn/go-isatty v0.0.20
 	github.com/stretchr/testify v1.10.0
 	github.com/urfave/cli/v2 v2.27.6
 	github.com/viant/afs v1.26.2
-	github.com/yalue/onnxruntime_go v1.19.0
+	github.com/yalue/onnxruntime_go v1.19.1-0.20250521134902-f70a71e4f522
 	golang.org/x/exp v0.0.0-20250506013437-ce4c2cf36ca6
 )
 
 require (
-	github.com/cpuguy83/go-md2man/v2 v2.0.6 // indirect
+	github.com/cpuguy83/go-md2man/v2 v2.0.7 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/go-errors/errors v1.5.1 // indirect

@@ -8,6 +8,8 @@
 
 ## What
 
+TL;DR: AI use-cases such as embeddings, text classification, named entity recognition, fine-tuning, and more!
+
 The goal of this library is to provide an easy, scalable, and hassle-free way to run transformer pipelines inference and training in golang applications, such as Hugging Face 🤗 transformers pipelines. It is built on the following principles:
 
 1. Hugging Face compatibility: models trained and tested using the python huggingface transformer library can be exported to onnx and used with the hugot pipelines to obtain identical predictions as in the python version.
@@ -17,9 +19,11 @@ The goal of this library is to provide an easy, scalable, and hassle-free way to
 
 We support inference on CPU and on all accelerators supported by ONNX Runtime/OpenXLA. Note however that currently only CPU, and GPU inference on Nvidia GPUs via CUDA, are tested (see below).
 
+Hugot loads and saves models in the ONNX format.
+
 ## Why
 
-Developing and fine-tuning transformer models with the Hugging Face python library is a great experience, but if your production stack is golang-based being able to reliably deploy and scale the resulting pytorch models can be challenging and can require quite some setup. This library aims to allow you to just lift-and-shift your python model and use the same Hugging Face pipelines you use for development for inference in a go application.
+Developing and fine-tuning transformer models with the Hugging Face python library is great, but if your production stack is golang-based being able to reliably deploy and scale the resulting pytorch models can be challenging. This library aims to allow you to just lift-and-shift your python model and use the same Hugging Face pipelines you use for development for inference in a go application.
 
 ## For whom
 
@@ -27,7 +31,7 @@ For the golang developer or ML engineer who wants to run or fine-tune transforme
 
 ## By whom
 
-Hugot is brought to you by the friendly folks at [Knights Analytics](https://knightsanalytics.com), who use Hugot in production to automate ai-powered decision intelligence.
+Hugot is brought to you by the friendly folks at [Knights Analytics](https://knightsanalytics.com), who use Hugot in production to automate ai-powered data curation.
 
 ## Implemented pipelines
 
@@ -238,7 +242,7 @@ We is currently supported only for the **FeatureExtractionPipeline**. This can b
 {"sentence1": "The quick brown fox jumps over the lazy dog", "sentence2": "A quick brown cow jumps over a lazy caterpillar", "score": 0.5}
 ```
 
-See the [example](./testData/sts-train.jsonl) for a sample dataset.
+See the [example](./testData/semanticSimilarityTest.jsonl) for a sample dataset.
 
 The score is assumed to be a float between 0 and 1 that encodes the semantic similarity between the sentences, and by default a cosine similarity loss is used (see [sentence transformers](https://sbert.net/docs/package_reference/sentence_transformer/losses.html#cosinesimilarityloss)). However, you can also specify a different loss function from `goMLX` using the `XLATrainingOptions` field in the `TrainingConfig` struct. See [the training tests](./hugot_training_test.go) for examples on how to train or fine-tune feature extraction pipelines.
 
