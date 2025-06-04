@@ -5,6 +5,7 @@ package hugot
 import (
 	"errors"
 	"fmt"
+	"runtime"
 
 	ort "github.com/yalue/onnxruntime_go"
 
@@ -55,6 +56,9 @@ func (s *Session) initialiseORT() (bool, error) {
 			return false, fmt.Errorf("cannot find the ort library at: %s", *o.LibraryPath)
 		}
 		ort.SetSharedLibraryPath(*o.LibraryPath)
+	} else if runtime.GOOS == "darwin" {
+		// Onnx runtime does not provide a default for Mac, so do that here instead.
+		ort.SetSharedLibraryPath("libonnxruntime.dylib")
 	}
 
 	// Start OnnxRuntime
