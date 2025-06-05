@@ -107,14 +107,15 @@ func check(err error) {
 func main() {
     // start a new session
     session, err := hugot.NewGoSession()
-	// For XLA:
+	// For XLA (requires go build tags "XLA" or "ALL"):
 	// session, err := NewXLASession()
-	// For ORT: This looks for the onnxruntime.so library in its default path, e.g. /usr/lib/onnxruntime.so
+	// For ORT (requires go build tags "ORT" or "ALL"):
 	// session, err := NewORTSession()
-    // if your onnxruntime.so is somewhere else, you can explicitly set it by using WithOnnxLibraryPath
+	// This looks for the onnxruntime.so library in its default path, e.g. /usr/lib/onnxruntime.so
+    // If your onnxruntime.so is somewhere else, you can explicitly set it by using WithOnnxLibraryPath
     // session, err := hugot.NewORTSession(WithOnnxLibraryPath("/path/to/onnxruntime.so"))
+	check(err)
 	
-    check(err)
     // A successfully created hugot session needs to be destroyed when you're done
     defer func (session *hugot.Session) {
     err := session.Destroy()
@@ -125,7 +126,7 @@ func main() {
     // note: if you compile your library with build flag NODOWNLOAD, this will exclude the downloader.
     // Useful in case you just want the core engine (because you already have the models) and want to
     // drop the dependency on huggingfaceModelDownloader.
-    modelPath, err := hugot.DownloadModel("KnightsAnalytics/distilbert-base-uncased-finetuned-sst-2-english", "./", hugot.NewDownloadOptions())
+    modelPath, err := hugot.DownloadModel("KnightsAnalytics/distilbert-base-uncased-finetuned-sst-2-english", "./models/", hugot.NewDownloadOptions())
     check(err)
 
     // we now create the configuration for the text classification pipeline we want to create.
@@ -149,7 +150,7 @@ func main() {
     check(err)
     fmt.Println(string(s))
 }
-// {"ClassificationOutputs":[[{"Label":"POSITIVE","Score":0.9998536}],[{"Label":"NEGATIVE","Score":0.99752176}]]}
+// OUTPUT: {"ClassificationOutputs":[[{"Label":"POSITIVE","Score":0.9998536}],[{"Label":"NEGATIVE","Score":0.99752176}]]}
 ```
 
 See also hugot_test.go for further examples.

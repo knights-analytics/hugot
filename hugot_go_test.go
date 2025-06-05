@@ -149,14 +149,15 @@ func TestReadmeExample(t *testing.T) {
 
 	// start a new session
 	session, err := NewGoSession()
-	// For XLA:
+	// For XLA (requires go build tags "XLA" or "ALL"):
 	// session, err := NewXLASession()
-	// For ORT: This looks for the onnxruntime.so library in its default path, e.g. /usr/lib/onnxruntime.so
+	// For ORT (requires go build tags "ORT" or "ALL"):
 	// session, err := NewORTSession()
-	// if your onnxruntime.so is somewhere else, you can explicitly set it by using WithOnnxLibraryPath
+	// This looks for the onnxruntime.so library in its default path, e.g. /usr/lib/onnxruntime.so
+	// If your onnxruntime.so is somewhere else, you can explicitly set it by using WithOnnxLibraryPath
 	// session, err := hugot.NewORTSession(WithOnnxLibraryPath("/path/to/onnxruntime.so"))
-
 	check(err)
+
 	// A successfully created hugot session needs to be destroyed when you're done
 	defer func(session *Session) {
 		err := session.Destroy()
@@ -167,7 +168,7 @@ func TestReadmeExample(t *testing.T) {
 	// note: if you compile your library with build flag NODOWNLOAD, this will exclude the downloader.
 	// Useful in case you just want the core engine (because you already have the models) and want to
 	// drop the dependency on huggingfaceModelDownloader.
-	// modelPath, err := DownloadModel("KnightsAnalytics/distilbert-base-uncased-finetuned-sst-2-english", "./", NewDownloadOptions())
+	// modelPath, err := DownloadModel("KnightsAnalytics/distilbert-base-uncased-finetuned-sst-2-english", "./models/", NewDownloadOptions())
 	// check(err)
 	modelPath := "./models/KnightsAnalytics_distilbert-base-uncased-finetuned-sst-2-english"
 
@@ -191,5 +192,5 @@ func TestReadmeExample(t *testing.T) {
 	s, err := json.Marshal(batchResult)
 	check(err)
 	fmt.Println(string(s))
-	// {"ClassificationOutputs":[[{"Label":"POSITIVE","Score":0.9998536}],[{"Label":"NEGATIVE","Score":0.99752176}]]}
+	// OUTPUT: {"ClassificationOutputs":[[{"Label":"POSITIVE","Score":0.9998536}],[{"Label":"NEGATIVE","Score":0.99752176}]]}
 }
