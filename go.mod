@@ -6,9 +6,9 @@ require (
 	github.com/daulet/tokenizers v1.20.2
 	github.com/gomlx/exceptions v0.0.3
 	github.com/gomlx/go-huggingface v0.2.1
-	github.com/gomlx/gomlx v0.20.0
+	github.com/gomlx/gomlx v0.20.1
 	github.com/gomlx/gopjrt v0.7.3
-	github.com/gomlx/onnx-gomlx v0.2.4-0.20250603072118-d222391b57d4
+	github.com/gomlx/onnx-gomlx v0.2.4
 	github.com/json-iterator/go v1.1.12
 	github.com/mattn/go-isatty v0.0.20
 	github.com/stretchr/testify v1.10.0
@@ -16,7 +16,7 @@ require (
 	github.com/urfave/cli/v2 v2.27.6
 	github.com/viant/afs v1.26.2
 	github.com/yalue/onnxruntime_go v1.20.0
-	golang.org/x/exp v0.0.0-20250531010427-b6e5de432a8b
+	golang.org/x/exp v0.0.0-20250606033433-dcc06ee1d476
 )
 
 require (

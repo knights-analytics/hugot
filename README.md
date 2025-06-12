@@ -66,7 +66,7 @@ Onnx Runtime can also be selected as an alternative backend via the build tag "-
 
 CUDA requires a C backend, either OpenXLA or Onnx Runtime.
 
-Once compiled, Hugot can be instantiated with you backend of choice via calling `NewGoSession()`, `NewXLASession()` or `NewORTSession()` respectively.
+Once compiled, Hugot can be instantiated with your backend of choice via calling `NewGoSession()`, `NewXLASession()` or `NewORTSession()` respectively.
 
 You may combine build tags "-tags XLA,ORT" or use "-tags ALL" to be able to use all available backends interchangeably.
 
@@ -124,8 +124,7 @@ func main() {
 
     // Let's download an onnx sentiment test classification model in the current directory
     // note: if you compile your library with build flag NODOWNLOAD, this will exclude the downloader.
-    // Useful in case you just want the core engine (because you already have the models) and want to
-    // drop the dependency on huggingfaceModelDownloader.
+    // Useful in case you just want the core engine (because you already have the models)
     modelPath, err := hugot.DownloadModel("KnightsAnalytics/distilbert-base-uncased-finetuned-sst-2-english", "./models/", hugot.NewDownloadOptions())
     check(err)
 
