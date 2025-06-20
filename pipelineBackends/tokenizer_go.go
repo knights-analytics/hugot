@@ -21,7 +21,7 @@ func loadGoTokenizer(tokenizerBytes []byte, model *Model) error {
 	if tkErr != nil {
 		return tkErr
 	}
-	model.Tokenizer = &Tokenizer{Runtime: "GO", GoTokenizer: &GoTokenizer{Tokenizer: tk}, TokenizerTimings: &timings{}, Destroy: func() error {
+	model.Tokenizer = &Tokenizer{Runtime: "GO", GoTokenizer: &GoTokenizer{Tokenizer: tk}, TokenizerTimings: &timings{}, MaxAllowedTokens: model.MaxPositionEmbeddings, Destroy: func() error {
 		return nil
 	}}
 	return nil
@@ -36,6 +36,15 @@ func tokenizeInputsGo(batch *PipelineBatch, tk *Tokenizer, inputs []string) {
 		output, err := goTK.EncodeSingle(input, true)
 		if err != nil {
 			log.Fatal(err)
+		}
+
+		if tk.MaxAllowedTokens > 0 && len(output.Tokens) > tk.MaxAllowedTokens {
+			output.Tokens = output.Tokens[:tk.MaxAllowedTokens]
+			output.Ids = output.Ids[:min(len(output.Ids), tk.MaxAllowedTokens)]
+			output.TypeIds = output.TypeIds[:min(len(output.TypeIds), tk.MaxAllowedTokens)]
+			output.AttentionMask = output.AttentionMask[:min(len(output.AttentionMask), tk.MaxAllowedTokens)]
+			output.SpecialTokenMask = output.SpecialTokenMask[:min(len(output.SpecialTokenMask), tk.MaxAllowedTokens)]
+			output.Offsets = output.Offsets[:min(len(output.Offsets), tk.MaxAllowedTokens)]
 		}
 
 		maxAttentionIndex := 0

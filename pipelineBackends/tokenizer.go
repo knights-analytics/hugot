@@ -12,6 +12,7 @@ type Tokenizer struct {
 	RustTokenizer    *RustTokenizer
 	GoTokenizer      *GoTokenizer
 	TokenizerTimings *timings
+	MaxAllowedTokens int
 	Destroy          func() error
 }
 

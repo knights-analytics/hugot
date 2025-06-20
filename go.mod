@@ -13,10 +13,10 @@ require (
 	github.com/mattn/go-isatty v0.0.20
 	github.com/stretchr/testify v1.10.0
 	github.com/sugarme/tokenizer v0.2.3-0.20250602044353-04fa4887ad64
-	github.com/urfave/cli/v2 v2.27.6
+	github.com/urfave/cli/v2 v2.27.7
 	github.com/viant/afs v1.26.2
 	github.com/yalue/onnxruntime_go v1.20.0
-	golang.org/x/exp v0.0.0-20250606033433-dcc06ee1d476
+	golang.org/x/exp v0.0.0-20250620022241-b7579e27df2b
 )
 
 require (

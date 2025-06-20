@@ -24,7 +24,7 @@ func loadRustTokenizer(tokenizerBytes []byte, model *Model) error {
 	if optErr != nil {
 		return optErr
 	}
-	model.Tokenizer = &Tokenizer{Runtime: "RUST", RustTokenizer: &RustTokenizer{Tokenizer: tk, Options: rustOptions}, TokenizerTimings: &timings{}, Destroy: func() error {
+	model.Tokenizer = &Tokenizer{Runtime: "RUST", RustTokenizer: &RustTokenizer{Tokenizer: tk, Options: rustOptions}, TokenizerTimings: &timings{}, MaxAllowedTokens: model.MaxPositionEmbeddings, Destroy: func() error {
 		return tk.Close()
 	}}
 	return nil
@@ -56,6 +56,15 @@ func tokenizeInputsRust(batch *PipelineBatch, tk *Tokenizer, inputs []string) {
 			true,
 			rustTK.Options...,
 		)
+
+		if tk.MaxAllowedTokens > 0 && len(output.Tokens) > tk.MaxAllowedTokens {
+			output.Tokens = output.Tokens[:tk.MaxAllowedTokens]
+			output.IDs = output.IDs[:min(len(output.IDs), tk.MaxAllowedTokens)]
+			output.TypeIDs = output.TypeIDs[:min(len(output.TypeIDs), tk.MaxAllowedTokens)]
+			output.AttentionMask = output.AttentionMask[:min(len(output.AttentionMask), tk.MaxAllowedTokens)]
+			output.SpecialTokensMask = output.SpecialTokensMask[:min(len(output.SpecialTokensMask), tk.MaxAllowedTokens)]
+			output.Offsets = output.Offsets[:min(len(output.Offsets), tk.MaxAllowedTokens)]
+		}
 
 		maxAttentionIndex := 0
 		for j, attentionMaskValue := range output.AttentionMask {

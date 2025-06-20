@@ -1,14 +1,9 @@
 package pipelineBackends
 
 import (
-	"context"
 	"fmt"
-	"io"
-	"os"
-	"strings"
 
 	"github.com/knights-analytics/hugot/options"
-	"github.com/knights-analytics/hugot/util"
 )
 
 // BasePipeline can be embedded by a pipeline.
@@ -171,55 +166,6 @@ func NewBasePipeline[T Pipeline](config PipelineConfig[T], s *options.Options, m
 	pipeline.Model = model
 	pipeline.PipelineTimings = &timings{}
 	return pipeline, nil
-}
-
-func LoadOnnxModelBytes(model *Model) error {
-	var modelOnnxFile string
-	onnxFiles, err := getOnnxFiles(model.Path)
-	if err != nil {
-		return err
-	}
-	if len(onnxFiles) == 0 {
-		return fmt.Errorf("no .onnx file detected at %s. There should be exactly .onnx file", model.Path)
-	}
-	if len(onnxFiles) > 1 {
-		if model.OnnxFilename == "" {
-			return fmt.Errorf("multiple .onnx file detected at %s and no OnnxFilename specified", model.Path)
-		}
-		modelNameFound := false
-		for i := range onnxFiles {
-			if onnxFiles[i][1] == model.OnnxFilename {
-				modelNameFound = true
-				modelOnnxFile = util.PathJoinSafe(onnxFiles[i]...)
-			}
-		}
-		if !modelNameFound {
-			return fmt.Errorf("file %s not found at %s", model.OnnxFilename, model.Path)
-		}
-	} else {
-		modelOnnxFile = util.PathJoinSafe(onnxFiles[0]...)
-	}
-
-	onnxBytes, err := util.ReadFileBytes(modelOnnxFile)
-	if err != nil {
-		return err
-	}
-
-	model.OnnxBytes = onnxBytes
-
-	return err
-}
-
-func getOnnxFiles(path string) ([][]string, error) {
-	var onnxFiles [][]string
-	walker := func(_ context.Context, _ string, parent string, info os.FileInfo, _ io.Reader) (toContinue bool, err error) {
-		if strings.HasSuffix(info.Name(), ".onnx") {
-			onnxFiles = append(onnxFiles, []string{util.PathJoinSafe(path, parent), info.Name()})
-		}
-		return true, nil
-	}
-	err := util.WalkDir()(context.Background(), path, walker)
-	return onnxFiles, err
 }
 
 func CreateModelBackend(model *Model, s *options.Options) error {
