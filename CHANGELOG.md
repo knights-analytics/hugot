@@ -4,15 +4,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
-## [Unreleased]
-
-### Added
+## [0.4.2] - 2025-06-26
 
 ### Changed
 
-### Fixed
+- Tokenizers obey max_position_embeddings, closing [issue #73](https://github.com/knights-analytics/hugot/issues/73)
+- Provided default ORT path in darwin/mac
+- Dependency updates and go 1.24.4
 
-## [0.4.0] - 2025-06-03
+## [0.4.1] - 2025-06-03
 
 ### 🚀 New Features
 
