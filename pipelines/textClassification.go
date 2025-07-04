@@ -212,13 +212,15 @@ func (p *TextClassificationPipeline) Postprocess(batch *pipelineBackends.Pipelin
 	}
 
 	output := batch.OutputValues[0]
-
-	if len(output.Result2D) == 0 {
-		return nil, fmt.Errorf("output is not 2D, expected batch size x logits")
-	}
-
-	for i, logits := range output.Result2D {
-		output.Result2D[i] = aggregationFunction(logits)
+	var outputCast [][]float32
+	switch v := output.(type) {
+	case [][]float32:
+		for i, logits := range v {
+			v[i] = aggregationFunction(logits)
+		}
+		outputCast = v
+	default:
+		return nil, fmt.Errorf("output is not 2D, expected batch size x logits, got %T", output)
 	}
 
 	batchClassificationOutputs := TextClassificationOutput{
@@ -231,7 +233,7 @@ func (p *TextClassificationPipeline) Postprocess(batch *pipelineBackends.Pipelin
 		switch p.ProblemType {
 		case "singleLabel":
 			inputClassificationOutputs := make([]ClassificationOutput, 1)
-			index, value, errArgMax := util.ArgMax(output.Result2D[i])
+			index, value, errArgMax := util.ArgMax(outputCast[i])
 			if errArgMax != nil {
 				err = errArgMax
 				continue
@@ -247,14 +249,14 @@ func (p *TextClassificationPipeline) Postprocess(batch *pipelineBackends.Pipelin
 			batchClassificationOutputs.ClassificationOutputs[i] = inputClassificationOutputs
 		case "multiLabel":
 			inputClassificationOutputs := make([]ClassificationOutput, len(p.IDLabelMap))
-			for j := range output.Result2D[i] {
+			for j := range outputCast[i] {
 				class, ok := p.IDLabelMap[j]
 				if !ok {
 					err = fmt.Errorf("class with index number %d not found in id label map", j)
 				}
 				inputClassificationOutputs[j] = ClassificationOutput{
 					Label: class,
-					Score: output.Result2D[i][j],
+					Score: outputCast[i][j],
 				}
 			}
 			batchClassificationOutputs.ClassificationOutputs[i] = inputClassificationOutputs

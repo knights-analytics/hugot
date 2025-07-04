@@ -5,8 +5,8 @@ go 1.24
 require (
 	github.com/daulet/tokenizers v1.20.2
 	github.com/gomlx/exceptions v0.0.3
-	github.com/gomlx/go-huggingface v0.2.2-0.20250626134208-e515b14550f3
-	github.com/gomlx/gomlx v0.20.1
+	github.com/gomlx/go-huggingface v0.2.2
+	github.com/gomlx/gomlx v0.21.0
 	github.com/gomlx/gopjrt v0.7.3
 	github.com/gomlx/onnx-gomlx v0.2.4
 	github.com/json-iterator/go v1.1.12
