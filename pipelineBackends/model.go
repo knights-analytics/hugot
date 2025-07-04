@@ -147,30 +147,32 @@ func loadModelConfig(model *Model) error {
 	return nil
 }
 
-func ReshapeOutput(input *[]float32, meta InputOutputInfo, paddingMask [][]bool, sequenceLength int) OutputArray {
-	outArray := OutputArray{}
+func ReshapeOutput[T float32 | int64](input []T, meta InputOutputInfo, paddingMask [][]bool, sequenceLength int) any {
 
+	var outArray any
 	dimensions := meta.Dimensions.ValuesInt()
 	lenDimensions := len(dimensions)
 	switch lenDimensions {
 	case 2:
-		outArray.Result2D = flatDataTo2D(input, paddingMask, dimensions[lenDimensions-1])
+		outArray = flatDataTo2D(input, paddingMask, dimensions[lenDimensions-1])
 	case 3:
-		outArray.Result3D = flatDataTo3D(input, paddingMask, sequenceLength, dimensions[lenDimensions-1])
+		outArray = flatDataTo3D(input, paddingMask, sequenceLength, dimensions[lenDimensions-1])
+	case 4:
+		outArray = flatDataTo4D(input, paddingMask, sequenceLength, sequenceLength, dimensions[lenDimensions-1])
 	}
 	return outArray
 }
 
-func flatDataTo2D(input *[]float32, paddingMask [][]bool, dimension int) [][]float32 {
+func flatDataTo2D[T float32 | int64](input []T, paddingMask [][]bool, dimension int) [][]T {
 	// Input string, token, dimension
-	output := make([][]float32, len(paddingMask))
+	output := make([][]T, len(paddingMask))
 
 	counter := 0
 	for batchIndex := range paddingMask {
-		inputEmbedding := make([]float32, dimension)
+		inputEmbedding := make([]T, dimension)
 
 		for i := 0; i < dimension; i++ {
-			inputEmbedding[i] = (*input)[counter]
+			inputEmbedding[i] = input[counter]
 			counter++
 		}
 
@@ -180,14 +182,14 @@ func flatDataTo2D(input *[]float32, paddingMask [][]bool, dimension int) [][]flo
 	return output
 }
 
-func flatDataTo3D(input *[]float32, paddingMask [][]bool, sequenceLength int, dimension int) [][][]float32 {
+func flatDataTo3D[T float32 | int64](input []T, paddingMask [][]bool, sequenceLength int, dimension int) [][][]T {
 	// Input string, token, dimension
-	output := make([][][]float32, len(paddingMask))
+	output := make([][][]T, len(paddingMask))
 
 	counter := 0
 
 	for batchIndex, mask := range paddingMask {
-		tokenEmbeddings := make([][]float32, 0, sequenceLength)
+		tokenEmbeddings := make([][]T, 0, sequenceLength)
 
 		for _, isValid := range mask {
 			if !isValid {
@@ -197,11 +199,44 @@ func flatDataTo3D(input *[]float32, paddingMask [][]bool, sequenceLength int, di
 			}
 
 			// valid token, create embedding
-			embedding := make([]float32, dimension)
+			embedding := make([]T, dimension)
 
 			for i := 0; i < dimension; i++ {
-				embedding[i] = (*input)[counter]
+				embedding[i] = input[counter]
 				counter++
+			}
+
+			tokenEmbeddings = append(tokenEmbeddings, embedding)
+		}
+
+		output[batchIndex] = tokenEmbeddings
+	}
+
+	return output
+}
+
+func flatDataTo4D[T float32 | int64](input []T, paddingMask [][]bool, sequenceLength int, secondDim int, lastDim int) [][][][]T {
+	output := make([][][][]T, len(paddingMask))
+
+	counter := 0
+
+	for batchIndex, mask := range paddingMask {
+		tokenEmbeddings := make([][][]T, 0, sequenceLength)
+
+		for _, isValid := range mask {
+			if !isValid {
+				counter = counter + (secondDim * lastDim)
+				continue
+			}
+
+			embedding := make([][]T, secondDim)
+
+			for i := 0; i < secondDim; i++ {
+				embedding[i] = make([]T, lastDim)
+				for j := 0; j < lastDim; j++ {
+					embedding[i][j] = input[counter]
+					counter++
+				}
 			}
 
 			tokenEmbeddings = append(tokenEmbeddings, embedding)

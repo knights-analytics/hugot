@@ -227,16 +227,18 @@ func (p *TokenClassificationPipeline) Postprocess(batch *pipelineBackends.Pipeli
 	}
 
 	output := batch.OutputValues[0]
-
-	if len(output.Result3D) == 0 {
-		return nil, fmt.Errorf("3D output has empty result")
-	}
-
-	for batchIndex, tokens := range output.Result3D {
-		output.Result3D[batchIndex] = make([][]float32, len(tokens))
-		for tokenIndex, tokenLogits := range tokens {
-			output.Result3D[batchIndex][tokenIndex] = util.SoftMax(tokenLogits)
+	var outputCast [][][]float32
+	switch v := output.(type) {
+	case [][][]float32:
+		for batchIndex, tokens := range v {
+			v[batchIndex] = make([][]float32, len(tokens))
+			for tokenIndex, tokenLogits := range tokens {
+				v[batchIndex][tokenIndex] = util.SoftMax(tokenLogits)
+			}
 		}
+		outputCast = v
+	default:
+		return nil, fmt.Errorf("expected 3D output, got type %T", output)
 	}
 
 	// now convert the logits to the predictions of actual entities
@@ -245,7 +247,7 @@ func (p *TokenClassificationPipeline) Postprocess(batch *pipelineBackends.Pipeli
 	}
 
 	for i, input := range batch.Input {
-		preEntities := p.GatherPreEntities(input, output.Result3D[i])
+		preEntities := p.GatherPreEntities(input, outputCast[i])
 		entities, errAggregate := p.Aggregate(input, preEntities)
 		if errAggregate != nil {
 			return nil, errAggregate

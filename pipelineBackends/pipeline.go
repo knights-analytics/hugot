@@ -99,12 +99,7 @@ type PipelineBatch struct {
 	InputValues       any
 	PaddingMask       [][]bool
 	DestroyInputs     func() error
-	OutputValues      []OutputArray
-}
-
-type OutputArray struct {
-	Result2D [][]float32
-	Result3D [][][]float32
+	OutputValues      []any
 }
 
 func (b *PipelineBatch) Destroy() error {

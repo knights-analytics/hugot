@@ -7,10 +7,10 @@ import (
 
 	"github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/backends"
-
 	"github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/types/tensors"
+	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/gomlx/onnx-gomlx/onnx"
 
 	"github.com/knights-analytics/hugot/options"
@@ -185,28 +185,32 @@ func createInputTensorsGoMLX(batch *PipelineBatch, inputsMeta []InputOutputInfo,
 
 func runGoMLXSessionOnBatch(batch *PipelineBatch, p *BasePipeline) error {
 
-	var outputs []*tensors.Tensor
+	var outputTensors []*tensors.Tensor
 	defer func() {
-		for _, output := range outputs {
+		for _, output := range outputTensors {
 			output.FinalizeAll()
 		}
 	}()
 
 	err := exceptions.TryCatch[error](func() {
-		outputs = p.Model.GoMLXModel.Exec.Call(batch.InputValues.([]*tensors.Tensor))
+		outputTensors = p.Model.GoMLXModel.Exec.Call(batch.InputValues.([]*tensors.Tensor))
 	})
 	if err != nil {
 		return err
 	}
 
-	convertedOutput := make([]OutputArray, len(outputs))
-
-	for i, t := range outputs {
-		var rawOutput []float32
-		tensors.ConstFlatData(t, func(flat []float32) {
-			rawOutput = flat
-		})
-		convertedOutput[i] = ReshapeOutput(&rawOutput, p.Model.OutputsMeta[i], batch.PaddingMask, batch.MaxSequenceLength)
+	convertedOutput := make([]any, len(outputTensors))
+	for i, t := range outputTensors {
+		switch t.DType() {
+		case dtypes.Float32:
+			tensors.ConstFlatData(t, func(flat []float32) {
+				convertedOutput[i] = ReshapeOutput(flat, p.Model.OutputsMeta[i], batch.PaddingMask, batch.MaxSequenceLength)
+			})
+		case dtypes.Int64:
+			tensors.ConstFlatData(t, func(flat []int64) {
+				convertedOutput[i] = ReshapeOutput(flat, p.Model.OutputsMeta[i], batch.PaddingMask, batch.MaxSequenceLength)
+			})
+		}
 	}
 
 	// store resulting tensors
