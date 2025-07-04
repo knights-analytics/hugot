@@ -163,11 +163,14 @@ func runORTSessionOnBatch(batch *PipelineBatch, p *BasePipeline) error {
 		return errOnnx
 	}
 
-	convertedOutput := make([]OutputArray, len(outputTensors))
-
+	convertedOutput := make([]any, len(outputTensors))
 	for i, t := range outputTensors {
-		rawOutput := t.(*ort.Tensor[float32]).GetData()
-		convertedOutput[i] = ReshapeOutput(&rawOutput, p.Model.OutputsMeta[i], batch.PaddingMask, batch.MaxSequenceLength)
+		switch v := t.(type) {
+		case *ort.Tensor[float32]:
+			convertedOutput[i] = ReshapeOutput(v.GetData(), p.Model.OutputsMeta[i], batch.PaddingMask, batch.MaxSequenceLength)
+		case *ort.Tensor[int64]:
+			convertedOutput[i] = ReshapeOutput(v.GetData(), p.Model.OutputsMeta[i], batch.PaddingMask, batch.MaxSequenceLength)
+		}
 	}
 
 	// store resulting tensors

@@ -183,20 +183,21 @@ func (p *FeatureExtractionPipeline) Postprocess(batch *pipelineBackends.Pipeline
 	outputDimensions := []int64(p.Output.Dimensions)
 	embeddingDimension := outputDimensions[len(outputDimensions)-1]
 
-	if len(output.Result2D) > 0 {
-		batchEmbeddings = output.Result2D
-	} else if len(output.Result3D) > 0 {
-		for batchIndex, tokens := range output.Result3D {
+	switch v := output.(type) {
+	case [][]float32:
+		batchEmbeddings = v
+	case [][][]float32:
+		for batchIndex, tokens := range v {
 			batchEmbeddings[batchIndex] = meanPooling(tokens, batch.Input[batchIndex], batch.MaxSequenceLength, int(embeddingDimension))
 		}
-	} else {
-		return nil, fmt.Errorf("2D output has empty result")
+	default:
+		return nil, fmt.Errorf("output type %T is not supported", output)
 	}
 
 	// Normalize embeddings (if asked), like in https://huggingface.co/sentence-transformers/all-mpnet-base-v2
 	if p.Normalization {
-		for i, output := range batchEmbeddings {
-			batchEmbeddings[i] = util.Normalize(output, 2)
+		for i, embedding := range batchEmbeddings {
+			batchEmbeddings[i] = util.Normalize(embedding, 2)
 		}
 	}
 
