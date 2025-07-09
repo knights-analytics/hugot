@@ -15,8 +15,8 @@ require (
 	github.com/sugarme/tokenizer v0.2.3-0.20250602044353-04fa4887ad64
 	github.com/urfave/cli/v2 v2.27.7
 	github.com/viant/afs v1.26.2
-	github.com/yalue/onnxruntime_go v1.20.0
-	golang.org/x/exp v0.0.0-20250620022241-b7579e27df2b
+	github.com/yalue/onnxruntime_go v1.21.0
+	golang.org/x/exp v0.0.0-20250711185948-6ae5c78190dc
 )
 
 require (
@@ -38,10 +38,10 @@ require (
 	github.com/schollz/progressbar/v2 v2.15.0 // indirect
 	github.com/sugarme/regexpset v0.0.0-20200920021344-4d4ec8eaf93c // indirect
 	github.com/x448/float16 v0.8.4 // indirect
-	github.com/xrash/smetrics v0.0.0-20240521201337-686a1a2994c1 // indirect
-	golang.org/x/crypto v0.39.0 // indirect
-	golang.org/x/sys v0.33.0 // indirect
-	golang.org/x/text v0.26.0 // indirect
+	github.com/xrash/smetrics v0.0.0-20250705151800-55b8f293f342 // indirect
+	golang.org/x/crypto v0.40.0 // indirect
+	golang.org/x/sys v0.34.0 // indirect
+	golang.org/x/text v0.27.0 // indirect
 	google.golang.org/protobuf v1.36.6 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	k8s.io/klog/v2 v2.130.1 // indirect

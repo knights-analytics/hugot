@@ -1,6 +1,6 @@
 #--- dockerfile to test hugot  ---
 
-ARG GO_VERSION=1.24.4
+ARG GO_VERSION=1.24.5
 ARG ONNXRUNTIME_VERSION=1.22.0
 ARG BUILD_PLATFORM=linux/amd64
 
