@@ -1,7 +1,7 @@
 #--- dockerfile to test hugot  ---
 
-ARG GO_VERSION=1.24.4
-ARG ONNXRUNTIME_VERSION=1.22.0
+ARG GO_VERSION=1.24.5
+ARG ONNXRUNTIME_VERSION=1.22.1
 ARG BUILD_PLATFORM=linux/amd64
 
 #--- runtime layer with all hugot dependencies for cpu and gpu ---
