@@ -4,16 +4,20 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strconv"
+	"strings"
 
 	"github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/graph"
+	. "github.com/gomlx/gomlx/graph"
 	"github.com/gomlx/gomlx/ml/context"
 	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/gomlx/onnx-gomlx/onnx"
 
 	"github.com/knights-analytics/hugot/options"
+	"github.com/knights-analytics/hugot/util"
 
 	_ "github.com/gomlx/gomlx/backends/simplego"
 )
@@ -25,6 +29,106 @@ type GoMLXModel struct {
 	Exec      *context.Exec    // exec is used to execute the model with a context.
 	Call      func(ctx *context.Context, inputs []*graph.Node) []*graph.Node
 	Destroy   func()
+}
+
+func loadExternalData(baseDirectory string, model *onnx.Model) error {
+	externalMap := map[string][]byte{}
+
+	for _, proto := range model.Proto.Graph.Initializer {
+		if proto.DataLocation == 1 {
+			var externalPath string
+			var offset int64 = 0
+			var length int64 = -1
+
+			for _, entry := range proto.ExternalData {
+				switch entry.Key {
+				case "location":
+					externalPath = entry.Value
+				case "offset":
+					parsedOffset, err := strconv.ParseInt(entry.Value, 10, 64)
+					if err == nil {
+						offset = parsedOffset
+					}
+				case "length":
+					parsedLength, err := strconv.ParseInt(entry.Value, 10, 64)
+					if err == nil {
+						length = parsedLength
+					}
+				}
+			}
+
+			weightsPath := util.PathJoinSafe(baseDirectory, externalPath)
+
+			if _, ok := externalMap[externalPath]; !ok {
+				bytes, err := util.ReadFileBytes(weightsPath)
+				if err != nil {
+					return err
+				}
+				externalMap[externalPath] = bytes
+			}
+
+			fullBytes := externalMap[externalPath]
+			end := int64(len(fullBytes))
+			if length >= 0 && offset+length <= int64(len(fullBytes)) {
+				end = offset + length
+			}
+			subsetBytes := fullBytes[offset:end]
+			proto.RawData = subsetBytes
+		}
+	}
+	return nil
+}
+
+func createGenerativeCallFunc(model *Model, modelParsed *onnx.Model, outputNames []string) func(ctx *context.Context, inputs []*graph.Node) []*graph.Node {
+	return func(ctx *context.Context, inputs []*graph.Node) []*graph.Node {
+		inputsMap := map[string]*graph.Node{
+			"input_ids":    inputs[0],
+			"position_ids": inputs[1]}
+
+		for i := range model.NumHiddenLayers {
+			key := fmt.Sprintf("past_key_values.%d.key", i)
+			value := fmt.Sprintf("past_key_values.%d.value", i)
+
+			inputsMap[key] = inputs[2*i+2]
+			inputsMap[value] = inputs[2*i+3]
+		}
+
+		g := inputs[0].Graph()
+		modelOutputs := modelParsed.CallGraph(ctx, g, inputsMap, outputNames...)
+		logits := modelOutputs[0]
+		kvCache := modelOutputs[1:]
+		shape := logits.Shape().Dimensions
+		vocabSize := shape[2]
+		seqLen := shape[1]
+		lastIdx := Scalar(g, dtypes.Int32, seqLen-1)
+		logitsLast := DynamicSlice(
+			logits,
+			[]*Node{ScalarZero(g, dtypes.Int32), lastIdx, ScalarZero(g, dtypes.Int32)},
+			[]int{int(shape[0]), 1, int(vocabSize)},
+		)
+
+		batchSize := shape[0]
+		logitsLast = Reshape(logitsLast, batchSize, vocabSize)
+		nextPredictedToken := ArgMax(logitsLast, 1, dtypes.Int64)
+		nextPredictedToken = Reshape(nextPredictedToken, batchSize, 1)
+		terminateEOSToken1 := Squeeze(Equal(nextPredictedToken, Scalar(g, dtypes.Int64, model.EosTokenID[0])))
+		terminateEOSToken2 := Squeeze(Equal(nextPredictedToken, Scalar(g, dtypes.Int64, model.EosTokenID[1]))) // TODO needs to be changed so not hardcoded
+		terminate := Or(terminateEOSToken1, terminateEOSToken2)
+		inputIDs := nextPredictedToken
+		posShape := inputs[1].Shape().Dimensions
+		posLen := int(posShape[1])
+		lastIdxNode := Scalar(g, dtypes.Int32, posLen-1)
+		prevPosLast := DynamicSlice(
+			inputs[1],
+			[]*Node{ScalarZero(g, dtypes.Int32), lastIdxNode},
+			[]int{batchSize, 1},
+		)
+		positionIDs := OnePlus(prevPosLast)
+		outputs := []*Node{inputIDs, positionIDs}
+		outputs = append(outputs, kvCache...)
+		outputs = append(outputs, terminate)
+		return outputs
+	}
 }
 
 func createGoMLXModelBackend(model *Model, options *options.Options) error {
@@ -44,6 +148,10 @@ func createGoMLXModelBackend(model *Model, options *options.Options) error {
 		var outputNames []string
 		for _, v := range outputs {
 			outputNames = append(outputNames, v.Name)
+		}
+
+		if insideError = loadExternalData(model.Path, modelParsed); insideError != nil {
+			return
 		}
 
 		ctx := context.New()
@@ -78,6 +186,10 @@ func createGoMLXModelBackend(model *Model, options *options.Options) error {
 				inputsMap["token_type_ids"] = inputs[2]
 			}
 			return modelParsed.CallGraph(ctx, inputs[0].Graph(), inputsMap, outputNames...)
+		}
+
+		if len(model.EosTokenID) > 0 {
+			callFunc = createGenerativeCallFunc(model, modelParsed, outputNames)
 		}
 
 		exec := context.NewExec(backend, ctx, callFunc)
@@ -147,7 +259,7 @@ func createInputTensorsGoMLX(batch *PipelineBatch, inputsMeta []InputOutputInfo,
 		for j, input := range batch.Input {
 			paddingMask := make([]bool, maxSequenceLengthPadded)
 			length := len(input.TokenIDs)
-			for k := 0; k < maxSequenceLengthPadded; k++ {
+			for k := range maxSequenceLengthPadded {
 				if k+1 <= length {
 					switch inputMeta.Name {
 					case "input_ids":
@@ -157,10 +269,19 @@ func createInputTensorsGoMLX(batch *PipelineBatch, inputsMeta []InputOutputInfo,
 						backingSlice[counter] = int64(input.TypeIDs[k])
 					case "attention_mask":
 						backingSlice[counter] = int64(input.AttentionMask[k])
+					case "position_ids":
+						backingSlice[counter] = int64(k + 1)
 					default:
-						return fmt.Errorf("input %s not recognized", inputMeta.Name)
+						if strings.Contains(inputMeta.Name, "past_key_values") {
+							continue
+						} else {
+							return fmt.Errorf("unknown input meta name %s", inputMeta.Name)
+						}
 					}
 				} else {
+					if inputMeta.Name == "position_ids" {
+						backingSlice[counter] = int64(k + 1)
+					}
 					backingSlice[counter] = 0 // pad with zero
 				}
 				counter++
@@ -183,12 +304,72 @@ func createInputTensorsGoMLX(batch *PipelineBatch, inputsMeta []InputOutputInfo,
 	return nil
 }
 
-func runGoMLXSessionOnBatch(batch *PipelineBatch, p *BasePipeline) error {
+func RunGenerativeGoMLXSessionOnBatch(batch *PipelineBatch, p *BasePipeline) error {
+	// Generative models
+	batchSize := len(batch.Input)
+	finished := make([]bool, batchSize)
+	generatedTokens := make([][]int64, batchSize)
 
 	var outputTensors []*tensors.Tensor
+
+	for step := 0; step < batch.MaxNewTokens; step++ {
+		outputTensors = p.Model.GoMLXModel.Exec.Call(batch.InputValues.([]*tensors.Tensor))
+
+		genTensor := outputTensors[0]
+		var flatTokens []int64
+		tensors.ConstFlatData(genTensor, func(flat []int64) {
+			flatTokens = flat
+		})
+		for i := range batchSize {
+			if !finished[i] {
+				generatedTokens[i] = append(generatedTokens[i], flatTokens[i])
+			}
+		}
+
+		termTensor := outputTensors[len(outputTensors)-1]
+		var doneFlags []bool
+		tensors.ConstFlatData(termTensor, func(flat []bool) {
+			doneFlags = flat
+		})
+		for i, flag := range doneFlags {
+			if flag {
+				finished[i] = true
+			}
+		}
+
+		allDone := true
+		for _, isDone := range finished {
+			if !isDone {
+				allDone = false
+				break
+			}
+		}
+		if allDone {
+			break
+		}
+		batch.InputValues = outputTensors
+	}
+
 	defer func() {
-		for _, output := range outputTensors {
-			output.FinalizeAll()
+		for _, t := range outputTensors {
+			t.FinalizeAll()
+		}
+	}()
+
+	batch.OutputValues = make([]any, batchSize)
+	for i := range generatedTokens {
+		batch.OutputValues[i] = generatedTokens[i]
+	}
+
+	return nil
+}
+
+func runGoMLXSessionOnBatch(batch *PipelineBatch, p *BasePipeline) error {
+	// Non-generative models
+	var outputTensors []*tensors.Tensor
+	defer func() {
+		for _, t := range outputTensors {
+			t.FinalizeAll()
 		}
 	}()
 
@@ -201,21 +382,14 @@ func runGoMLXSessionOnBatch(batch *PipelineBatch, p *BasePipeline) error {
 
 	convertedOutput := make([]any, len(outputTensors))
 	for i, t := range outputTensors {
-		switch t.DType() {
-		case dtypes.Float32:
-			tensors.ConstFlatData(t, func(flat []float32) {
-				convertedOutput[i] = ReshapeOutput(flat, p.Model.OutputsMeta[i], batch.PaddingMask, batch.MaxSequenceLength)
-			})
-		case dtypes.Int64:
-			tensors.ConstFlatData(t, func(flat []int64) {
-				convertedOutput[i] = ReshapeOutput(flat, p.Model.OutputsMeta[i], batch.PaddingMask, batch.MaxSequenceLength)
-			})
-		}
+		var rawOutput []float32
+		tensors.ConstFlatData(t, func(flat []float32) {
+			rawOutput = flat
+		})
+		convertedOutput[i] = ReshapeOutput(rawOutput, p.Model.OutputsMeta[i], batch.PaddingMask, batch.MaxSequenceLength)
 	}
 
-	// store resulting tensors
 	batch.OutputValues = convertedOutput
-
 	return nil
 }
 

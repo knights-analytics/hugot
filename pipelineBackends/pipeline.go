@@ -100,6 +100,7 @@ type PipelineBatch struct {
 	PaddingMask       [][]bool
 	DestroyInputs     func() error
 	OutputValues      []any
+	MaxNewTokens      int
 }
 
 func (b *PipelineBatch) Destroy() error {

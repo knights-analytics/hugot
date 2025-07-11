@@ -88,7 +88,7 @@ func createInputTensorsORT(batch *PipelineBatch, inputsMeta []InputOutputInfo) e
 					case "attention_mask":
 						backingSlice[counter] = int64(input.AttentionMask[k])
 					default:
-						return fmt.Errorf("input %s not recognized", inputMeta.Name)
+						return fmt.Errorf("input %s not recognized?????? b", inputMeta.Name)
 					}
 				} else {
 					backingSlice[counter] = 0 // pad with zero
