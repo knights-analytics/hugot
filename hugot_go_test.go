@@ -104,6 +104,27 @@ func TestTokenClassificationPipelineValidationGo(t *testing.T) {
 //	zeroShotClassificationPipelineValidation(t, session)
 // }
 
+// text generation
+func TestTextGenerationPipelineGo(t *testing.T) {
+	session, err := NewGoSession()
+	checkT(t, err)
+	defer func(session *Session) {
+		destroyErr := session.Destroy()
+		checkT(t, destroyErr)
+	}(session)
+	textGenerationPipeline(t, session)
+}
+
+func TestTextGenerationPipelineValidationGo(t *testing.T) {
+	session, err := NewGoSession()
+	checkT(t, err)
+	defer func(session *Session) {
+		destroyErr := session.Destroy()
+		checkT(t, destroyErr)
+	}(session)
+	textGenPipelineValidation(t, session)
+}
+
 // No same name
 
 func TestNoSameNamePipelineGo(t *testing.T) {

@@ -870,6 +870,142 @@ func destroyPipelines(t *testing.T, session *Session) {
 	}
 }
 
+// Text Generation
+func textGenerationPipeline(t *testing.T, session *Session) {
+	t.Helper()
+
+	defer func(session *Session) {
+		err := session.Destroy()
+		checkT(t, err)
+	}(session)
+
+	// Configure the text generation pipeline
+	config := TextGenerationConfig{
+		ModelPath:    "./models/KnightsAnalytics_gemma-3-1b-it-ONNX",
+		Name:         "testPipeline",
+		OnnxFilename: "model.onnx",
+		Options: []pipelineBackends.PipelineOption[*pipelines.TextGenerationPipeline]{
+			pipelines.WithMaxTokens(15),
+		},
+	}
+
+	// Create the pipeline
+	textGenPipeline, err := NewPipeline(session, config)
+	checkT(t, err)
+
+	tests := []struct {
+		name           string
+		input          []string
+		expectedTokens [][]uint32
+	}{
+		{
+			name:  "small test",
+			input: []string{"what is the capital of the Netherlands?"},
+			expectedTokens: [][]uint32{{
+				108, 818, 5279, 529, 506, 23933,
+				563, 28007, 236761, 108, 106,
+			}},
+		},
+		{
+			name: "batched input, short sequence first, long sequence second",
+			input: []string{"what is the capital of the Netherlands?",
+				"who was the first president of the United States?"},
+			expectedTokens: [][]uint32{
+				{
+					108, 818, 5279, 529, 506, 23933,
+					563, 28007, 236761, 107, 106,
+				},
+				{
+					108, 818, 1171, 6207, 529, 506, 3640, 4184,
+					691, 9142, 7693, 236761, 108, 7243, 108,
+				},
+			},
+		},
+		{
+			name: "batched input, long sequence first, short sequence second",
+			input: []string{"who was the fourty third president of the United States?",
+				"who is the president of the Netherlands?"},
+			expectedTokens: [][]uint32{
+				{
+					108, 818, 28959, 236772, 23362, 6207, 529, 506,
+					3640, 4184, 691, 7502, 562, 236761, 140743,
+				},
+				{
+					108, 818, 1873, 6207, 529, 506, 23933, 563,
+					4534, 46211, 654, 236761, 107, 106,
+				},
+			},
+		},
+	}
+
+	// Execute tests
+	for _, tt := range tests {
+		fmt.Println(tt.name)
+		t.Run(tt.name, func(t *testing.T) {
+			batch := pipelineBackends.NewBatch()
+			batch.MaxNewTokens = 15
+			inputStrs := make([]string, len(tt.input))
+			copy(inputStrs, tt.input)
+			err := textGenPipeline.Preprocess(batch, inputStrs)
+			checkT(t, err)
+
+			err = textGenPipeline.Forward(batch)
+			checkT(t, err)
+
+			_, postErr := textGenPipeline.Postprocess(batch)
+			checkT(t, postErr)
+			for i := range len(batch.OutputValues) {
+				actualTokens := make([]uint32, len(batch.OutputValues[i].([]int64)))
+				for j, v := range batch.OutputValues[i].([]int64) {
+					num := uint32(v)
+					actualTokens[j] = num
+				}
+
+				assert.Equal(t, tt.expectedTokens[i], actualTokens)
+			}
+
+		})
+	}
+}
+
+func textGenPipelineValidation(t *testing.T, session *Session) {
+	t.Helper()
+
+	defer func(session *Session) {
+		err := session.Destroy()
+		checkT(t, err)
+	}(session)
+
+	// Configure the text generation pipeline
+	config := TextGenerationConfig{
+		ModelPath:    "./models/KnightsAnalytics_gemma-3-1b-it-ONNX",
+		Name:         "testPipeline",
+		OnnxFilename: "model.onnx",
+		Options: []pipelineBackends.PipelineOption[*pipelines.TextGenerationPipeline]{
+			pipelines.WithMaxTokens(15),
+		},
+	}
+
+	// Create the pipeline
+	pipeline, err := NewPipeline(session, config)
+	checkT(t, err)
+
+	pipeline.NumHiddenLayers = 0
+	err = pipeline.Validate()
+	assert.Error(t, err)
+	pipeline.NumHiddenLayers = 1
+
+	pipeline.NumKeyValueHeads = 0
+	err = pipeline.Validate()
+	assert.Error(t, err)
+	pipeline.NumKeyValueHeads = 1
+
+	pipeline.HeadDim = 0
+	err = pipeline.Validate()
+	assert.Error(t, err)
+	pipeline.HeadDim = 1
+}
+
 // Thread safety
 
 func threadSafety(t *testing.T, session *Session, numEmbeddings int) {
