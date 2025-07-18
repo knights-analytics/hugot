@@ -3,7 +3,7 @@ module github.com/knights-analytics/hugot
 go 1.24
 
 require (
-	github.com/daulet/tokenizers v1.20.2
+	github.com/daulet/tokenizers v1.22.1
 	github.com/gomlx/exceptions v0.0.3
 	github.com/gomlx/go-huggingface v0.2.2
 	github.com/gomlx/gomlx v0.21.0
@@ -12,11 +12,11 @@ require (
 	github.com/json-iterator/go v1.1.12
 	github.com/mattn/go-isatty v0.0.20
 	github.com/stretchr/testify v1.10.0
-	github.com/sugarme/tokenizer v0.2.3-0.20250602044353-04fa4887ad64
+	github.com/sugarme/tokenizer v0.2.3-0.20250716014333-b9b58278e3cc
 	github.com/urfave/cli/v2 v2.27.7
-	github.com/viant/afs v1.26.2
+	github.com/viant/afs v1.26.3
 	github.com/yalue/onnxruntime_go v1.21.0
-	golang.org/x/exp v0.0.0-20250711185948-6ae5c78190dc
+	golang.org/x/exp v0.0.0-20250717185816-542afb5b7346
 )
 
 require (
