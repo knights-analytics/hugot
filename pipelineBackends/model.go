@@ -17,6 +17,7 @@ import (
 type Model struct {
 	Path                  string
 	OnnxFilename          string
+	OnnxFilePath          string
 	OnnxBytes             []byte
 	ORTModel              *ORTModel
 	GoMLXModel            *GoMLXModel
@@ -26,6 +27,10 @@ type Model struct {
 	Destroy               func() error
 	Pipelines             map[string]Pipeline
 	MaxPositionEmbeddings int
+	NumHiddenLayers       int // Number of key value heads, used for text generation
+	EosTokenIDs           []int
+	NumKeyValueHeads      int
+	HeadDim               int
 }
 
 func LoadModel(path string, onnxFilename string, options *options.Options) (*Model, error) {
@@ -101,7 +106,7 @@ func LoadOnnxModelBytes(model *Model) error {
 	}
 
 	model.OnnxBytes = onnxBytes
-
+	model.OnnxFilePath = modelOnnxFile
 	return err
 }
 
@@ -143,6 +148,46 @@ func loadModelConfig(model *Model) error {
 				model.MaxPositionEmbeddings = int(maxPositionEmbeddings)
 			}
 		}
+
+		if eosRaw, exists := configMap["eos_token_id"]; exists {
+			if eosList, ok := eosRaw.([]any); ok {
+				model.EosTokenIDs = make([]int, len(eosList))
+				for i, v := range eosList {
+					if num, ok := v.(float64); ok {
+						model.EosTokenIDs[i] = int(num)
+					} else {
+						return fmt.Errorf("eos_token_id contains non-numeric value at index %d", i)
+					}
+				}
+			} else {
+				return errors.New("eos_token_id is not an array")
+			}
+		}
+
+		if numHiddenLayersRaw, exists := configMap["num_hidden_layers"]; exists {
+			if numHiddenLayersFloat, ok := numHiddenLayersRaw.(float64); ok {
+				model.NumHiddenLayers = int(numHiddenLayersFloat)
+			} else {
+				return errors.New("num_hidden_layers is not a number")
+			}
+		}
+
+		if numKeyValueHeads, exists := configMap["num_key_value_heads"]; exists {
+			if numKeyValueHeadsValue, ok := numKeyValueHeads.(float64); ok {
+				model.NumKeyValueHeads = int(numKeyValueHeadsValue)
+			} else {
+				return errors.New("num_key_value_heads is not a number")
+			}
+		}
+
+		if headDim, exists := configMap["head_dim"]; exists {
+			if headDimValue, ok := headDim.(float64); ok {
+				model.HeadDim = int(headDimValue)
+			} else {
+				return errors.New("num_key_value_heads is not a number")
+			}
+		}
+
 	}
 	return nil
 }
@@ -153,6 +198,7 @@ func ReshapeOutput[T float32 | int64](input []T, meta InputOutputInfo, paddingMa
 	dimensions := meta.Dimensions.ValuesInt()
 	lenDimensions := len(dimensions)
 	switch lenDimensions {
+
 	case 2:
 		outArray = flatDataTo2D(input, paddingMask, dimensions[lenDimensions-1])
 	case 3:

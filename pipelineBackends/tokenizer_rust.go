@@ -4,6 +4,7 @@ package pipelineBackends
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/daulet/tokenizers"
 )
@@ -40,7 +41,13 @@ func getRustTokenizerOptions(inputs []InputOutputInfo) ([]tokenizers.EncodeOptio
 			encodeOptions = append(encodeOptions, tokenizers.WithReturnTypeIDs())
 		case "attention_mask":
 			encodeOptions = append(encodeOptions, tokenizers.WithReturnAttentionMask())
+		case "position_ids":
+			continue
 		default:
+			if strings.HasPrefix(input.Name, "past_key_values") {
+				// handled at model level
+				continue
+			}
 			return nil, fmt.Errorf("input %s not recognized", input.Name)
 		}
 	}

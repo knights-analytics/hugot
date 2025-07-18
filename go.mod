@@ -2,6 +2,12 @@ module github.com/knights-analytics/hugot
 
 go 1.24
 
+replace github.com/gomlx/gopjrt => github.com/riley-oh6/gopjrt v0.0.0-20250702082329-64ff87dba253
+
+replace github.com/gomlx/gomlx => github.com/riley-oh6/gomlx v0.0.0-20250702083101-528aa4b46397
+
+replace github.com/gomlx/onnx-gomlx => github.com/riley-oh6/onnx-gomlx v0.0.0-20250716090613-b8ac9b22c589
+
 require (
 	github.com/daulet/tokenizers v1.22.1
 	github.com/gomlx/exceptions v0.0.3
