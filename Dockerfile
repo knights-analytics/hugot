@@ -4,7 +4,8 @@ ARG GO_VERSION=1.24.5
 ARG ONNXRUNTIME_VERSION=1.22.0
 ARG BUILD_PLATFORM=linux/amd64
 
-#--- runtime layer with all hugot dependencies for cpu ---
+#--- runtime layer with all hugot dependencies for cpu 
+#--- the image generated does not contain the hugot code, only the dependencies needed by hugot and the compiled cli binary
 
 FROM --platform=$BUILD_PLATFORM public.ecr.aws/amazonlinux/amazonlinux:2023 AS hugot-runtime
 ARG GO_VERSION
@@ -39,27 +40,9 @@ RUN --mount=src=./go.mod,dst=/go.mod \
     useradd -u 1000 -m testuser && usermod -a -G wheel testuser && \
     echo "testuser ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers.d/testuser
 
-#--- test layer ---
-
-FROM --platform=$BUILD_PLATFORM hugot-runtime AS hugot-build
-
 COPY . /build
-
 RUN cd /build && \
     chown -R testuser:testuser /build && \
     # cli binary
     cd /build/cmd && CGO_ENABLED=1 CGO_LDFLAGS="-L/usr/lib/" GOOS=linux GOARCH=amd64 go build -tags "ALL" -a -o /cli main.go && \
-    cd / && \
-    curl -LO https://github.com/gotestyourself/gotestsum/releases/download/v1.12.0/gotestsum_1.12.0_linux_amd64.tar.gz && \
-    tar -xzf gotestsum_1.12.0_linux_amd64.tar.gz --directory /usr/local/bin && \
-    # entrypoint
-    cp /build/scripts/entrypoint.sh /entrypoint.sh && sed -i 's/\r//g' /entrypoint.sh && chmod +x /entrypoint.sh
-
-ENTRYPOINT ["/entrypoint.sh"]
-
-#--- artifacts layer ---
-FROM --platform=$BUILD_PLATFORM scratch AS artifacts
-
-COPY --from=hugot-build /usr/lib64/onnxruntime.so onnxruntime-linux-x64.so
-COPY --from=hugot-build /usr/lib/libtokenizers.a libtokenizers.a
-COPY --from=hugot-build /cli /hugot-cli-linux-x64
+    cd / && rm -rf /build

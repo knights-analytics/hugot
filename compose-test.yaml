@@ -1,12 +1,22 @@
 services:
   hugot:
-    image: hugot:$commit_hash
+    image: hugot:latest
     platform: linux/amd64
-    container_name: hugot
     build:
       context: .
       dockerfile: ./Dockerfile
-      target: hugot-build
+    # This service is build-only and not started
+    entrypoint: ["/bin/true"]
+
+  hugot-test:
+    platform: linux/amd64
+    container_name: hugot-test
+    build:
+      context: .
+      dockerfile: ./test.Dockerfile
+      target: hugot-test
+    depends_on:
+      - hugot
     volumes:
       - $test_folder:/test
       - $test_folder/../scripts/run-unit-tests-container.sh:/run-unit-tests-container.sh
