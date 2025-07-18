@@ -80,19 +80,16 @@ func round3decimals(x float64) float64 {
 	return math.Round(x*1000) / 1000
 }
 
-func trainSimilarity(t *testing.T, modelPath string, dataset *datasets.SemanticSimilarityDataset, examplesLhs, examplesRhs []string) []float64 {
+func trainSimilarity(t *testing.T,
+	modelPath string,
+	dataset *datasets.SemanticSimilarityDataset,
+	config TrainingConfig,
+	examplesLhs,
+	examplesRhs []string) []float64 {
 	// Create a new GoMLX training session. Currently, training is only possible by loading an onnx model
 	// into GoMLX, fine-tuning it, and then writing it back to onnx. Hugot deals with the details
 	// for you here.
-	trainingSession, err := NewXLATrainingSession[*pipelines.FeatureExtractionPipeline](
-		TrainingConfig{
-			ModelPath: modelPath,
-			Dataset:   dataset,
-			Epochs:    2, // we just train for two epochs
-			Cuda:      false,
-			Verbose:   true,
-		},
-	)
+	trainingSession, err := NewXLATrainingSession[*pipelines.FeatureExtractionPipeline](config)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -173,10 +170,17 @@ func TestTrainSemanticSimilarity(t *testing.T) {
 	}
 
 	// we now train the model with the dataset
-	similaritiesGoMLXTrained := trainSimilarity(t, modelPath, dataset, examplesLhs, examplesRhs)
+	trainingConfig := TrainingConfig{
+		ModelPath: modelPath,
+		Dataset:   dataset,
+		Epochs:    2, // we just train for two epochs
+		Cuda:      false,
+		Verbose:   true,
+	}
+	similaritiesGoMLXTrained := trainSimilarity(t, modelPath, dataset, trainingConfig, examplesLhs, examplesRhs)
 
 	fmt.Println("GoMLX trained model predictions:")
-	for i := 0; i < len(similaritiesGoMLXTrained); i++ {
+	for i := range similaritiesGoMLXTrained {
 		fmt.Printf("Example %d: untrained similarity %f, trained similarity %f, label %f\n", i, similaritiesGoMLX[i], similaritiesGoMLXTrained[i], scores[i])
 	}
 
@@ -199,9 +203,18 @@ func TestTrainSemanticSimilarity(t *testing.T) {
 	}
 	inMemoryDataset, err := datasets.NewInMemorySemanticSimilarityDataset(examples, 1, nil)
 	checkT(t, err)
-	similaritiesGoMLXTrainedInMemory := trainSimilarity(t, modelPath, inMemoryDataset, examplesLhs, examplesRhs)
+	similaritiesGoMLXTrainedInMemory := trainSimilarity(t, modelPath, inMemoryDataset, trainingConfig, examplesLhs, examplesRhs)
 	for i := range similaritiesGoMLXTrainedInMemory {
 		assert.Equal(t, round3decimals(similaritiesGoMLXTrained[i]), round3decimals(similaritiesGoMLXTrainedInMemory[i]))
+	}
+
+	// we can also train but freeze the embeddings and/or layers.
+	trainingConfig.FreezeLayers = []int{-1} // freeze all layers but the last one
+	similaritiesGoMLXTrainedFrozen := trainSimilarity(t, modelPath, dataset, trainingConfig, examplesLhs, examplesRhs)
+
+	fmt.Println("GoMLX trained model predictions freezing all layers but the last one:")
+	for i := range similaritiesGoMLXTrainedFrozen {
+		fmt.Printf("Example %d: untrained similarity %f, trained similarity %f, label %f\n", i, similaritiesGoMLX[i], similaritiesGoMLXTrainedFrozen[i], scores[i])
 	}
 }
 

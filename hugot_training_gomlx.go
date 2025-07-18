@@ -2,6 +2,10 @@ package hugot
 
 import (
 	"fmt"
+	"regexp"
+	"slices"
+	"strconv"
+	"strings"
 
 	"github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/graph"
@@ -39,7 +43,6 @@ func NewXLATrainingSession[T pipelineBackends.Pipeline](config TrainingConfig) (
 }
 
 func newGoMLXTrainingSession(s *TrainingSession) (*TrainingSession, error) {
-
 	// set defaults
 	switch any(s.pipeline).(type) {
 	case *pipelines.FeatureExtractionPipeline:
@@ -64,6 +67,30 @@ func TrainGoMLX(s *TrainingSession) error {
 		GoMLXModel := p.Model.GoMLXModel
 		backend := GoMLXModel.Backend
 		ctx := GoMLXModel.Ctx
+
+		// freeze the layers if requested
+		freezeAllButLast := slices.Contains(s.config.FreezeLayers, -1)
+		re := regexp.MustCompile(`layer\.(\d+)`) // identify the layer number in the variable name
+
+		for v := range ctx.IterVariables() {
+			name := v.Name()
+			if (s.config.FreezeEmbeddings || freezeAllButLast) && strings.HasPrefix(name, "embeddings") {
+				v.SetTrainable(false)
+				continue
+			}
+
+			if matches := re.FindStringSubmatch(name); matches != nil {
+				layerNumStr := matches[1]
+				layerNum, err := strconv.Atoi(layerNumStr)
+				if err != nil {
+					return fmt.Errorf("failed to parse layer number from variable name %s: %w", name, err)
+				}
+				if freezeAllButLast || slices.Contains(s.config.FreezeLayers, layerNum) {
+					v.SetTrainable(false)
+					continue
+				}
+			}
+		}
 
 		modelFn := func(ctx *context.Context, spec any, inputs []*context.Node) []*context.Node {
 			inputsLhs := inputs[:3] // inputIDs, attentionMask, tokenTypeIDs if present

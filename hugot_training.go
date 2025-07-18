@@ -41,6 +41,8 @@ type TrainingConfig struct {
 	OnnxFilename         string
 	Cuda                 bool
 	Epochs               int
+	FreezeEmbeddings     bool  // freeze the embedding layers of the transfomer model
+	FreezeLayers         []int // freeze the layers of the transformer model, 0 is the first layer etc. Set [-1] to freeze all layers apart from the last one
 	GOMLXTrainingOptions *GOMLXTrainingOptions
 	Dataset              datasets.Dataset
 	Verbose              bool
