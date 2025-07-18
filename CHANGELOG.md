@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
+## [0.4.3] - 2025-07-18
+
+### Changed
+
+- Upgraded to latest Rust and Go tokenizers
+- Generalised output tensor types, added int64 support (preparation for text generation pipeline) 
+- Dependency updates and go 1.24.5
+
 ## [0.4.2] - 2025-06-26
 
 ### Changed
