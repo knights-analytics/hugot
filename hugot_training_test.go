@@ -81,8 +81,6 @@ func round3decimals(x float64) float64 {
 }
 
 func trainSimilarity(t *testing.T,
-	modelPath string,
-	dataset *datasets.SemanticSimilarityDataset,
 	config TrainingConfig,
 	examplesLhs,
 	examplesRhs []string) []float64 {
@@ -173,11 +171,13 @@ func TestTrainSemanticSimilarity(t *testing.T) {
 	trainingConfig := TrainingConfig{
 		ModelPath: modelPath,
 		Dataset:   dataset,
-		Epochs:    2, // we just train for two epochs
-		Cuda:      false,
-		Verbose:   true,
+		Options: []TrainingOption{
+			WithEpochs(2),
+		},
+		Cuda:    false,
+		Verbose: true,
 	}
-	similaritiesGoMLXTrained := trainSimilarity(t, modelPath, dataset, trainingConfig, examplesLhs, examplesRhs)
+	similaritiesGoMLXTrained := trainSimilarity(t, trainingConfig, examplesLhs, examplesRhs)
 
 	fmt.Println("GoMLX trained model predictions:")
 	for i := range similaritiesGoMLXTrained {
@@ -203,18 +203,19 @@ func TestTrainSemanticSimilarity(t *testing.T) {
 	}
 	inMemoryDataset, err := datasets.NewInMemorySemanticSimilarityDataset(examples, 1, nil)
 	checkT(t, err)
-	similaritiesGoMLXTrainedInMemory := trainSimilarity(t, modelPath, inMemoryDataset, trainingConfig, examplesLhs, examplesRhs)
+	trainingConfig.Dataset = inMemoryDataset
+	similaritiesGoMLXTrainedInMemory := trainSimilarity(t, trainingConfig, examplesLhs, examplesRhs)
 	for i := range similaritiesGoMLXTrainedInMemory {
 		assert.Equal(t, round3decimals(similaritiesGoMLXTrained[i]), round3decimals(similaritiesGoMLXTrainedInMemory[i]))
 	}
 
 	// we can also train but freeze the embeddings and/or layers.
-	trainingConfig.FreezeLayers = []int{-1} // freeze all layers but the last one
-	similaritiesGoMLXTrainedFrozen := trainSimilarity(t, modelPath, dataset, trainingConfig, examplesLhs, examplesRhs)
+	trainingConfig.Options = append(trainingConfig.Options, WithFreezeLayers([]int{-1})) // freeze all layers but the last one
+	similaritiesGoMLXTrainedFrozen := trainSimilarity(t, trainingConfig, examplesLhs, examplesRhs)
 
 	fmt.Println("GoMLX trained model predictions freezing all layers but the last one:")
 	for i := range similaritiesGoMLXTrainedFrozen {
-		fmt.Printf("Example %d: untrained similarity %f, trained similarity %f, label %f\n", i, similaritiesGoMLX[i], similaritiesGoMLXTrainedFrozen[i], scores[i])
+		fmt.Printf("Example %d: untrained similarity %f, trained similarity with frozen weights %f, label %f\n", i, similaritiesGoMLX[i], similaritiesGoMLXTrainedFrozen[i], scores[i])
 	}
 }
 
@@ -242,9 +243,11 @@ func TestTrainSemanticSimilarityCuda(t *testing.T) {
 		TrainingConfig{
 			ModelPath: modelPath,
 			Dataset:   dataset,
-			Epochs:    1,
-			Cuda:      true, // use cuda acceleration
-			Verbose:   true,
+			Options: []TrainingOption{
+				WithEpochs(1),
+			},
+			Cuda:    true, // use cuda acceleration
+			Verbose: true,
 		},
 	)
 	if err != nil {
@@ -286,8 +289,10 @@ func TestTrainSemanticSimilarityGo(t *testing.T) {
 		TrainingConfig{
 			ModelPath: modelPath,
 			Dataset:   dataset,
-			Epochs:    1,
-			Verbose:   true,
+			Options: []TrainingOption{
+				WithEpochs(1),
+			},
+			Verbose: true,
 		},
 	)
 	if err != nil {

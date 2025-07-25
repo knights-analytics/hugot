@@ -15,9 +15,12 @@ import (
 )
 
 type TrainingSession struct {
-	backend  string
-	pipeline pipelineBackends.Pipeline
-	config   TrainingConfig
+	backend          string
+	pipeline         pipelineBackends.Pipeline
+	config           TrainingConfig
+	maxEpochs        int
+	freezeEmbeddings bool  // freeze the embedding layers of the transfomer model
+	freezeLayers     []int // freeze the layers of the transformer model, 0 is the first layer etc. Set [-1] to freeze all layers apart from the last one
 }
 
 // GetPipeline returns the pipeline used in the training session.
@@ -36,16 +39,38 @@ func (s *TrainingSession) Destroy() error {
 
 type TrainingOption func(eo *TrainingSession) error
 
+func WithEpochs(epochs int) TrainingOption {
+	return func(eo *TrainingSession) error {
+		if epochs <= 0 {
+			return fmt.Errorf("epochs must be greater than 0")
+		}
+		eo.maxEpochs = epochs
+		return nil
+	}
+}
+
+func WithFreezeEmbeddings() TrainingOption {
+	return func(eo *TrainingSession) error {
+		eo.freezeEmbeddings = true
+		return nil
+	}
+}
+
+func WithFreezeLayers(layers []int) TrainingOption {
+	return func(eo *TrainingSession) error {
+		eo.freezeLayers = layers
+		return nil
+	}
+}
+
 type TrainingConfig struct {
 	ModelPath            string
 	OnnxFilename         string
 	Cuda                 bool
-	Epochs               int
-	FreezeEmbeddings     bool  // freeze the embedding layers of the transfomer model
-	FreezeLayers         []int // freeze the layers of the transformer model, 0 is the first layer etc. Set [-1] to freeze all layers apart from the last one
-	GOMLXTrainingOptions *GOMLXTrainingOptions
 	Dataset              datasets.Dataset
+	Options              []TrainingOption
 	Verbose              bool
+	GOMLXTrainingOptions *GOMLXTrainingOptions
 }
 
 func newTrainingSession[T pipelineBackends.Pipeline](backend string, config TrainingConfig) (*TrainingSession, error) {
@@ -70,8 +95,14 @@ func newTrainingSession[T pipelineBackends.Pipeline](backend string, config Trai
 		return nil, fmt.Errorf("runtime %s is not supported", backend)
 	}
 
-	if config.Epochs <= 0 {
-		config.Epochs = 1
+	for _, opt := range config.Options {
+		if err = opt(session); err != nil {
+			return nil, err
+		}
+	}
+
+	if session.maxEpochs <= 0 {
+		session.maxEpochs = 100
 	}
 
 	model, err = pipelineBackends.LoadModel(config.ModelPath, config.OnnxFilename, opts)

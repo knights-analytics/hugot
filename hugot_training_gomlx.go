@@ -69,12 +69,12 @@ func TrainGoMLX(s *TrainingSession) error {
 		ctx := GoMLXModel.Ctx
 
 		// freeze the layers if requested
-		freezeAllButLast := slices.Contains(s.config.FreezeLayers, -1)
+		freezeAllButLast := slices.Contains(s.freezeLayers, -1)
 		re := regexp.MustCompile(`layer\.(\d+)`) // identify the layer number in the variable name
 
 		for v := range ctx.IterVariables() {
 			name := v.Name()
-			if (s.config.FreezeEmbeddings || freezeAllButLast) && strings.HasPrefix(name, "embeddings") {
+			if (s.freezeEmbeddings || freezeAllButLast) && strings.HasPrefix(name, "embeddings") {
 				v.SetTrainable(false)
 				continue
 			}
@@ -85,7 +85,7 @@ func TrainGoMLX(s *TrainingSession) error {
 				if err != nil {
 					return fmt.Errorf("failed to parse layer number from variable name %s: %w", name, err)
 				}
-				if freezeAllButLast || slices.Contains(s.config.FreezeLayers, layerNum) {
+				if freezeAllButLast || slices.Contains(s.freezeLayers, layerNum) {
 					v.SetTrainable(false)
 					continue
 				}
@@ -112,7 +112,6 @@ func TrainGoMLX(s *TrainingSession) error {
 				embeddingLhs = graph.MaskedReduceMean(embeddingLhs, maskLhs, 1)
 				embeddingRhs = graph.MaskedReduceMean(embeddingRhs, maskRhs, 1)
 			}
-
 			cosineSimilarity := graph.CosineSimilarity(embeddingLhs, embeddingRhs, -1)
 			return []*context.Node{cosineSimilarity}
 		}
@@ -127,15 +126,15 @@ func TrainGoMLX(s *TrainingSession) error {
 
 		loop := train.NewLoop(gomlxTrainer)
 
-		// Loop for given number of steps.
+		// Loop for given number of epochs.
 		if s.config.Verbose {
-			fmt.Printf("Training for %d epochs\n", s.config.Epochs)
+			fmt.Printf("Training for %d epochs\n", s.maxEpochs)
 		}
 
 		// we rely on try catch because an error is returned if there is an initialization error but
 		// a panic will be thrown if e.g. dataset reset fails.
 		err := exceptions.TryCatch[error](func() {
-			if _, err := loop.RunEpochs(s.config.Dataset, s.config.Epochs); err != nil {
+			if _, err := loop.RunEpochs(s.config.Dataset, s.maxEpochs); err != nil {
 				panic(err)
 			}
 		})
