@@ -12,8 +12,6 @@ import (
 	"github.com/knights-analytics/hugot/options"
 	"github.com/knights-analytics/hugot/pipelineBackends"
 	"github.com/knights-analytics/hugot/util"
-
-	jsoniter "github.com/json-iterator/go"
 )
 
 // TokenClassificationPipeline is a go version of huggingface tokenClassificationPipeline.
@@ -23,10 +21,6 @@ type TokenClassificationPipeline struct {
 	IDLabelMap          map[int]string
 	AggregationStrategy string
 	IgnoreLabels        []string
-}
-
-type TokenClassificationPipelineConfig struct {
-	IDLabelMap map[int]string `json:"id2label"`
 }
 
 type Entity struct {
@@ -113,18 +107,7 @@ func NewTokenClassificationPipeline(config pipelineBackends.PipelineConfig[*Toke
 	}
 
 	// Id label map
-	configPath := util.PathJoinSafe(config.ModelPath, "config.json")
-	pipelineInputConfig := TokenClassificationPipelineConfig{}
-	mapBytes, err := util.ReadFileBytes(configPath)
-	if err != nil {
-		return nil, err
-	}
-
-	err = jsoniter.Unmarshal(mapBytes, &pipelineInputConfig)
-	if err != nil {
-		return nil, err
-	}
-	pipeline.IDLabelMap = pipelineInputConfig.IDLabelMap
+	pipeline.IDLabelMap = model.IDLabelMap
 
 	// default strategies if not set
 	if pipeline.AggregationStrategy == "" {

@@ -18,8 +18,7 @@ import (
 	"github.com/knights-analytics/hugot/options"
 	"github.com/knights-analytics/hugot/pipelineBackends"
 
-	"github.com/mattn/go-isatty"
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 
 	"github.com/knights-analytics/hugot"
 	"github.com/knights-analytics/hugot/util"
@@ -105,7 +104,7 @@ var runCommand = &cli.Command{
 			Value:       "",
 		},
 	},
-	Action: func(ctx *cli.Context) error {
+	Action: func(ctx context.Context, cmd *cli.Command) error {
 		var opts []options.WithOption
 		if modelsDir == "" {
 			userDir, err := os.UserHomeDir()
@@ -278,7 +277,7 @@ var runCommand = &cli.Command{
 				return true, nil
 			}
 
-			err := util.WalkDir()(ctx.Context, inputPath, fileWalker)
+			err := util.WalkDir()(ctx, inputPath, fileWalker)
 			if err != nil {
 				return err
 			}
@@ -287,8 +286,8 @@ var runCommand = &cli.Command{
 				return fmt.Errorf("file %s does not exist", inputPath)
 			}
 
-			if !isatty.IsTerminal(os.Stdin.Fd()) && !isatty.IsCygwinTerminal(os.Stdin.Fd()) {
-				// there is something to process on stdin
+			if info, err := os.Stdin.Stat(); err == nil && (info.Mode()&os.ModeCharDevice) == 0 {
+				// there is something to process on stdin (not a terminal)
 				err := readInputs(os.Stdin, inputChannel)
 				if err != nil {
 					return err
@@ -306,12 +305,12 @@ var runCommand = &cli.Command{
 }
 
 func main() {
-	app := &cli.App{
+	app := &cli.Command{
 		Name:     "hugot",
 		Usage:    "Huggingface transformers from the command line - alpha",
 		Commands: []*cli.Command{runCommand},
 	}
-	if err := app.Run(os.Args); err != nil {
+	if err := app.Run(context.Background(), os.Args); err != nil {
 		panic(err)
 	}
 }
