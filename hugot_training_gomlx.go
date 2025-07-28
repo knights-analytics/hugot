@@ -1,7 +1,9 @@
 package hugot
 
 import (
+	"errors"
 	"fmt"
+	"math"
 	"regexp"
 	"slices"
 	"strconv"
@@ -13,6 +15,7 @@ import (
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/ml/train/losses"
 	"github.com/gomlx/gomlx/ml/train/optimizers"
+	"github.com/gomlx/gomlx/types/tensors"
 	"github.com/gomlx/gopjrt/dtypes"
 
 	"github.com/knights-analytics/hugot/pipelineBackends"
@@ -22,6 +25,12 @@ import (
 type GOMLXTrainingOptions struct {
 	Optimizer optimizers.Interface
 	Loss      losses.LossFn
+}
+
+type stoppingError struct{}
+
+func (e stoppingError) Error() string {
+	return "stopping error"
 }
 
 func NewGoTrainingSession[T pipelineBackends.Pipeline](config TrainingConfig) (*TrainingSession, error) {
@@ -131,11 +140,56 @@ func TrainGoMLX(s *TrainingSession) error {
 			fmt.Printf("Training for %d epochs\n", s.maxEpochs)
 		}
 
+		var currentEpoch int
+
+		if s.earlyStopping != nil {
+			var bestLoss float32 = math.MaxFloat32
+			var epochsWithoutImprovement int = 0
+
+			var evaluateEpoch train.OnStepFn = func(loop *train.Loop, metrics []*tensors.Tensor) error {
+				if loop.Epoch != currentEpoch {
+					if s.config.Verbose {
+						fmt.Printf("Running evaluation for epoch %d\n", loop.Epoch)
+					}
+					lossAndMetrics := gomlxTrainer.Eval(s.config.EvalDataset)
+					meanLoss := lossAndMetrics[1].Value().(float32)
+
+					if bestLoss-meanLoss > s.earlyStopping.tolerance {
+						bestLoss = meanLoss
+						epochsWithoutImprovement = 0
+						if s.config.Verbose {
+							fmt.Printf("New best loss: %.4f at epoch %d\n", bestLoss, loop.Epoch)
+						}
+					} else {
+						epochsWithoutImprovement++
+						if s.config.Verbose {
+							fmt.Printf("No improvement in loss, epochs without improvement: %d\n", epochsWithoutImprovement)
+						}
+						if epochsWithoutImprovement >= s.earlyStopping.patience {
+							if s.config.Verbose {
+								fmt.Printf("Early stopping triggered after %d epochs without improvement\n", s.earlyStopping.patience)
+							}
+							return stoppingError{} // trigger stopping
+						}
+					}
+				}
+				currentEpoch = loop.Epoch
+				return nil
+			}
+			loop.OnStep("evaluateAfterEpoch", train.Priority(1), evaluateEpoch)
+		}
+
 		// we rely on try catch because an error is returned if there is an initialization error but
 		// a panic will be thrown if e.g. dataset reset fails.
 		err := exceptions.TryCatch[error](func() {
 			if _, err := loop.RunEpochs(s.config.Dataset, s.maxEpochs); err != nil {
-				panic(err)
+				if errors.Is(err, stoppingError{}) {
+					if s.config.Verbose {
+						fmt.Printf("Training stopped after epoch %d\n", currentEpoch)
+					}
+				} else {
+					panic(err)
+				}
 			}
 		})
 		if err != nil {

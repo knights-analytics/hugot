@@ -174,7 +174,6 @@ func TestTrainSemanticSimilarity(t *testing.T) {
 		Options: []TrainingOption{
 			WithEpochs(2),
 		},
-		Cuda:    false,
 		Verbose: true,
 	}
 	similaritiesGoMLXTrained := trainSimilarity(t, trainingConfig, examplesLhs, examplesRhs)
@@ -245,8 +244,8 @@ func TestTrainSemanticSimilarityCuda(t *testing.T) {
 			Dataset:   dataset,
 			Options: []TrainingOption{
 				WithEpochs(1),
+				WithCuda(), // enable cuda
 			},
-			Cuda:    true, // use cuda acceleration
 			Verbose: true,
 		},
 	)
@@ -315,5 +314,41 @@ func TestTrainSemanticSimilarityGo(t *testing.T) {
 	}
 	if err = util.DeleteFile("./models/testTrain"); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestTrainEval(t *testing.T) {
+	modelPath := "./models/KnightsAnalytics_all-MiniLM-L6-v2"
+
+	trainDataset, err := datasets.NewSemanticSimilarityDataset("./testData/semanticSimilarityTest.jsonl", 1, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	evalDataset, err := datasets.NewSemanticSimilarityDataset("./testData/semanticSimilarityTestEval.jsonl", 1, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	trainingConfig := TrainingConfig{
+		ModelPath:   modelPath,
+		Dataset:     trainDataset,
+		EvalDataset: evalDataset,
+		Options: []TrainingOption{
+			WithEarlyStoppingParams(2, 1e-4),
+		},
+		Verbose: true,
+	}
+
+	trainingSession, err := NewXLATrainingSession[*pipelines.FeatureExtractionPipeline](trainingConfig)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		checkT(t, trainingSession.Destroy())
+	}()
+
+	// train the model
+	if trainErr := trainingSession.Train(); trainErr != nil {
+		t.Fatal(trainErr)
 	}
 }

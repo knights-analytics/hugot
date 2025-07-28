@@ -14,11 +14,18 @@ import (
 	"github.com/knights-analytics/hugot/util"
 )
 
+type earlyStopping struct {
+	patience  int     // number of epochs to wait for improvement before stopping
+	tolerance float32 // tolerance for loss comparison
+}
+
 type TrainingSession struct {
 	backend          string
 	pipeline         pipelineBackends.Pipeline
 	config           TrainingConfig
+	cuda             bool
 	maxEpochs        int
+	earlyStopping    *earlyStopping
 	freezeEmbeddings bool  // freeze the embedding layers of the transfomer model
 	freezeLayers     []int // freeze the layers of the transformer model, 0 is the first layer etc. Set [-1] to freeze all layers apart from the last one
 }
@@ -63,11 +70,41 @@ func WithFreezeLayers(layers []int) TrainingOption {
 	}
 }
 
+func WithCuda() TrainingOption {
+	return func(eo *TrainingSession) error {
+		eo.cuda = true
+		return nil
+	}
+}
+
+func WithEarlyStopping() TrainingOption {
+	return WithEarlyStoppingParams(3, 1e-4) // default patience and tolerance
+}
+
+func WithEarlyStoppingParams(patience int, tolerance float32) TrainingOption {
+	return func(eo *TrainingSession) error {
+		if eo.config.EvalDataset == nil {
+			return fmt.Errorf("early stopping requires an evaluation dataset")
+		}
+		if patience <= 0 {
+			return fmt.Errorf("patience must be greater than 0")
+		}
+		if tolerance <= 0 {
+			return fmt.Errorf("tolerance must be greater than 0")
+		}
+		eo.earlyStopping = &earlyStopping{
+			patience:  patience,
+			tolerance: tolerance,
+		}
+		return nil
+	}
+}
+
 type TrainingConfig struct {
 	ModelPath            string
 	OnnxFilename         string
-	Cuda                 bool
 	Dataset              datasets.Dataset
+	EvalDataset          datasets.Dataset // optional, used for early stopping and eval metrics
 	Options              []TrainingOption
 	Verbose              bool
 	GOMLXTrainingOptions *GOMLXTrainingOptions
@@ -86,23 +123,23 @@ func newTrainingSession[T pipelineBackends.Pipeline](backend string, config Trai
 	opts := options.Defaults()
 	opts.Backend = backend
 
-	switch backend {
-	case "XLA":
-		opts.GoMLXOptions.XLA = true
-		opts.GoMLXOptions.Cuda = config.Cuda
-	case "GO":
-	default:
-		return nil, fmt.Errorf("runtime %s is not supported", backend)
-	}
-
 	for _, opt := range config.Options {
 		if err = opt(session); err != nil {
 			return nil, err
 		}
 	}
 
+	switch backend {
+	case "XLA":
+		opts.GoMLXOptions.XLA = true
+		opts.GoMLXOptions.Cuda = session.cuda
+	case "GO":
+	default:
+		return nil, fmt.Errorf("runtime %s is not supported", backend)
+	}
+
 	if session.maxEpochs <= 0 {
-		session.maxEpochs = 100
+		session.maxEpochs = 100 // default to 100 epochs if not set
 	}
 
 	model, err = pipelineBackends.LoadModel(config.ModelPath, config.OnnxFilename, opts)
@@ -120,12 +157,27 @@ func newTrainingSession[T pipelineBackends.Pipeline](backend string, config Trai
 		}
 		session.pipeline = pipeline
 
-		// hook the dataset up with the pipeline for tokenization
-		if d, ok := session.config.Dataset.(*datasets.SemanticSimilarityDataset); !ok {
-			return nil, fmt.Errorf("expected SemanticSimilarityDataset, got %T", d)
-		} else {
-			if e := d.SetTokenizationPipeline(pipeline); e != nil {
-				return nil, e
+		// hook the datasets up with the pipeline for tokenization
+		var trainDS *datasets.SemanticSimilarityDataset
+		var evalDS *datasets.SemanticSimilarityDataset
+		var ok bool
+
+		trainDS, ok = session.config.Dataset.(*datasets.SemanticSimilarityDataset)
+		if !ok {
+			return nil, fmt.Errorf("expected SemanticSimilarityDataset for train dataset, got %T", trainDS)
+		}
+		if session.config.EvalDataset != nil {
+			evalDS, ok = session.config.EvalDataset.(*datasets.SemanticSimilarityDataset)
+			if !ok {
+				return nil, fmt.Errorf("expected SemanticSimilarityDataset for eval dataset, got %T", session.config.EvalDataset)
+			}
+		}
+		if setErr := trainDS.SetTokenizationPipeline(pipeline); setErr != nil {
+			return nil, fmt.Errorf("failed to set tokenization pipeline for training dataset: %w", setErr)
+		}
+		if evalDS != nil {
+			if setErr := evalDS.SetTokenizationPipeline(pipeline); setErr != nil {
+				return nil, fmt.Errorf("failed to set tokenization pipeline for evaluation dataset: %w", setErr)
 			}
 		}
 	default:
