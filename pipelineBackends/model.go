@@ -2,13 +2,13 @@ package pipelineBackends
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"strings"
-
-	jsoniter "github.com/json-iterator/go"
 
 	"github.com/knights-analytics/hugot/options"
 	"github.com/knights-analytics/hugot/util"
@@ -26,6 +26,8 @@ type Model struct {
 	Destroy               func() error
 	Pipelines             map[string]Pipeline
 	MaxPositionEmbeddings int
+	IDLabelMap            map[int]string
+	SeparatorToken        string
 }
 
 func LoadModel(path string, onnxFilename string, options *options.Options) (*Model, error) {
@@ -133,7 +135,7 @@ func loadModelConfig(model *Model) error {
 		}
 
 		configMap := map[string]any{}
-		readErr = jsoniter.Unmarshal(configBytes, &configMap)
+		readErr = json.Unmarshal(configBytes, &configMap)
 		if readErr != nil {
 			return readErr
 		}
@@ -143,7 +145,65 @@ func loadModelConfig(model *Model) error {
 				model.MaxPositionEmbeddings = int(maxPositionEmbeddings)
 			}
 		}
+
+		if id2LabelRaw, existsOk := configMap["id2label"]; existsOk {
+			if id2Label, castOk := id2LabelRaw.(map[string]any); castOk {
+				id2labelCast := map[int]string{}
+				for k, v := range id2Label {
+					kInt, kErr := strconv.Atoi(k)
+					if kErr != nil {
+						return kErr
+					}
+					id2labelCast[kInt] = v.(string)
+				}
+				model.IDLabelMap = id2labelCast
+			} else {
+				return fmt.Errorf("id2label is not a map")
+			}
+		}
 	}
+
+	specialTokensPath := util.PathJoinSafe(model.Path, "special_tokens_map.json")
+
+	exists, err = util.FileExists(specialTokensPath)
+	if err != nil {
+		return err
+	}
+	if exists {
+		configBytes, readErr := util.ReadFileBytes(specialTokensPath)
+		if readErr != nil {
+			return readErr
+		}
+
+		var configMap map[string]interface{}
+		readErr = json.Unmarshal(configBytes, &configMap)
+		if readErr != nil {
+			return readErr
+		}
+
+		sepToken, ok := configMap["sep_token"]
+		if !ok {
+			return fmt.Errorf("no sep token detected in special_tokens_map.json at %s", model.Path)
+		}
+
+		switch v := sepToken.(type) {
+		case map[string]interface{}:
+			t, contentOk := v["content"]
+			if !contentOk {
+				return fmt.Errorf("sep_token is map but no content field is available")
+			}
+			tString, stringOk := t.(string)
+			if !stringOk {
+				return fmt.Errorf("sep_token cannot be converted to string: %v", t)
+			}
+			model.SeparatorToken = tString
+		case string:
+			model.SeparatorToken = v
+		default:
+			return fmt.Errorf("sep_token has unexpected type: %v", v)
+		}
+	}
+
 	return nil
 }
 

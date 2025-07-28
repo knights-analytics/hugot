@@ -1,12 +1,9 @@
 package pipelines
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"math"
-	"os"
 	"sort"
 	"strings"
 	"sync/atomic"
@@ -14,9 +11,6 @@ import (
 
 	"github.com/knights-analytics/hugot/options"
 	"github.com/knights-analytics/hugot/pipelineBackends"
-	"github.com/knights-analytics/hugot/util"
-
-	jsoniter "github.com/json-iterator/go"
 )
 
 type ZeroShotClassificationPipeline struct {
@@ -26,12 +20,8 @@ type ZeroShotClassificationPipeline struct {
 	Labels             []string
 	HypothesisTemplate string
 	Multilabel         bool
-	entailmentID       int
-	separatorToken     string
-}
-
-type ZeroShotClassificationPipelineConfig struct {
-	IDLabelMap map[int]string `json:"id2label"`
+	EntailmentID       int
+	SeparatorToken     string
 }
 
 type ZeroShotClassificationOutput struct {
@@ -126,73 +116,25 @@ func NewZeroShotClassificationPipeline(config pipelineBackends.PipelineConfig[*Z
 	for _, o := range config.Options {
 		o(pipeline)
 	}
-	pipeline.entailmentID = -1 // Default value
+	pipeline.EntailmentID = -1 // Default value
 	pipeline.HypothesisTemplate = "This example is {}."
 
 	if len(pipeline.Labels) == 0 {
 		return nil, fmt.Errorf("no labels provided, please provide labels using the WithLabels() option")
 	}
 
-	// read id to label map
-	configPath := util.PathJoinSafe(model.Path, "config.json")
-	pipelineInputConfig := ZeroShotClassificationPipelineConfig{}
-	mapBytes, err := util.ReadFileBytes(configPath)
-	if err != nil {
-		return nil, err
-	}
-	err = jsoniter.Unmarshal(mapBytes, &pipelineInputConfig)
-	if err != nil {
-		return nil, err
-	}
-
 	// Set IDLabelMap
-	pipeline.IDLabelMap = pipelineInputConfig.IDLabelMap
+	pipeline.IDLabelMap = model.IDLabelMap
 
 	// Find entailment ID
 	for id, label := range pipeline.IDLabelMap {
 		if strings.HasPrefix(strings.ToLower(label), "entail") {
-			pipeline.entailmentID = id
+			pipeline.EntailmentID = id
 			break
 		}
 	}
 
-	configPath1 := util.PathJoinSafe(model.Path, "special_tokens_map.json")
-	file, err := os.Open(configPath1)
-	if err != nil {
-		return nil, fmt.Errorf("cannot read special_tokens_map.json at %s", model.Path)
-	}
-	defer func() {
-		err = file.Close()
-	}()
-
-	byteValue, _ := io.ReadAll(file)
-	var result map[string]interface{}
-	err = json.Unmarshal(byteValue, &result)
-	if err != nil {
-		return nil, fmt.Errorf("cannot unmarshal special_tokens_map.json at %s", model.Path)
-	}
-
-	sepToken, ok := result["sep_token"]
-	if !ok {
-		return nil, fmt.Errorf("no sep token detected in special_tokens_map.json at %s", model.Path)
-	}
-
-	switch v := sepToken.(type) {
-	case map[string]interface{}:
-		t, ok := v["content"]
-		if !ok {
-			return nil, fmt.Errorf("sep_token is map but no content field is available")
-		}
-		tString, ok := t.(string)
-		if !ok {
-			return nil, fmt.Errorf("sep_token cannot be converted to string: %v", t)
-		}
-		pipeline.separatorToken = tString
-	case string:
-		pipeline.separatorToken = v
-	default:
-		return nil, fmt.Errorf("sep_token has unexpected type: %v", v)
-	}
+	pipeline.SeparatorToken = model.SeparatorToken
 
 	return pipeline, err
 }
@@ -232,12 +174,12 @@ func (p *ZeroShotClassificationPipeline) Postprocess(outputTensors [][][]float32
 
 			var entailmentID int
 			var contradictionID int
-			switch p.entailmentID {
+			switch p.EntailmentID {
 			case -1:
 				entailmentID = len(sequence[0]) - 1
 				contradictionID = 0
 			default:
-				entailmentID = p.entailmentID
+				entailmentID = p.EntailmentID
 				contradictionID = 0
 				if entailmentID == 0 {
 					contradictionID = len(sequence[0]) - 1
@@ -287,11 +229,11 @@ func (p *ZeroShotClassificationPipeline) Postprocess(outputTensors [][][]float32
 
 		var entailmentLogits []float32
 		var entailmentID int
-		switch p.entailmentID {
+		switch p.EntailmentID {
 		case -1:
 			entailmentID = len(sequence[0]) - 1
 		default:
-			entailmentID = p.entailmentID
+			entailmentID = p.EntailmentID
 		}
 		for _, tensor := range sequence {
 			entailmentLogits = append(entailmentLogits, tensor[entailmentID])
@@ -361,7 +303,7 @@ func (p *ZeroShotClassificationPipeline) RunPipeline(inputs []string) (*ZeroShot
 			// need to find a way to determine how many to insert or find a better way to tokenize inputs
 			// The difference in outputs for one separator vs two is very small (differences in the thousandths place), but they
 			// definitely are different
-			concatenatedString := pair[0] + p.separatorToken + pair[1]
+			concatenatedString := pair[0] + p.SeparatorToken + pair[1]
 			runErrors = append(runErrors, p.Preprocess(batch, []string{concatenatedString}))
 			if e := errors.Join(runErrors...); e != nil {
 				return nil, errors.Join(e, batch.Destroy())
@@ -424,7 +366,7 @@ func (p *ZeroShotClassificationPipeline) Validate() error {
 	var validationErrors []error
 
 	if len(p.IDLabelMap) <= 0 {
-		validationErrors = append(validationErrors, fmt.Errorf("pipeline configuration invalid: length of id2label map for token classification pipeline must be greater than zero"))
+		validationErrors = append(validationErrors, fmt.Errorf("pipeline configuration invalid: length of id2label map for zero shot classification pipeline must be greater than zero"))
 	}
 
 	outDims := p.Model.OutputsMeta[0].Dimensions

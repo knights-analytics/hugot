@@ -10,8 +10,6 @@ import (
 	"github.com/knights-analytics/hugot/options"
 	"github.com/knights-analytics/hugot/pipelineBackends"
 	"github.com/knights-analytics/hugot/util"
-
-	jsoniter "github.com/json-iterator/go"
 )
 
 // types
@@ -21,10 +19,6 @@ type TextClassificationPipeline struct {
 	IDLabelMap              map[int]string
 	AggregationFunctionName string
 	ProblemType             string
-}
-
-type TextClassificationPipelineConfig struct {
-	IDLabelMap map[int]string `json:"id2label"`
 }
 
 type ClassificationOutput struct {
@@ -95,18 +89,7 @@ func NewTextClassificationPipeline(config pipelineBackends.PipelineConfig[*TextC
 	}
 
 	// read id to label map
-	configPath := util.PathJoinSafe(model.Path, "config.json")
-	pipelineInputConfig := TextClassificationPipelineConfig{}
-	mapBytes, err := util.ReadFileBytes(configPath)
-	if err != nil {
-		return nil, err
-	}
-	err = jsoniter.Unmarshal(mapBytes, &pipelineInputConfig)
-	if err != nil {
-		return nil, err
-	}
-
-	pipeline.IDLabelMap = pipelineInputConfig.IDLabelMap
+	pipeline.IDLabelMap = model.IDLabelMap
 
 	// validate
 	err = pipeline.Validate()
@@ -155,7 +138,7 @@ func (p *TextClassificationPipeline) Validate() error {
 	var validationErrors []error
 
 	if len(p.IDLabelMap) <= 0 {
-		validationErrors = append(validationErrors, fmt.Errorf("pipeline configuration invalid: length of id2label map for token classification pipeline must be greater than zero"))
+		validationErrors = append(validationErrors, fmt.Errorf("pipeline configuration invalid: length of id2label map for text classification pipeline must be greater than zero"))
 	}
 
 	outDims := p.Model.OutputsMeta[0].Dimensions

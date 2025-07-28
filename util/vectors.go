@@ -3,8 +3,7 @@ package util
 import (
 	"fmt"
 	"math"
-
-	"golang.org/x/exp/slices" // like in tokenClassification.go
+	"slices"
 )
 
 // Mean of a float32 vector.
