@@ -85,8 +85,8 @@ github.com/sugarme/regexpset v0.0.0-20200920021344-4d4ec8eaf93c h1:pwb4kNSHb4K89
 github.com/sugarme/regexpset v0.0.0-20200920021344-4d4ec8eaf93c/go.mod h1:2gwkXLWbDGUQWeL3RtpCmcY4mzCtU13kb9UsAg9xMaw=
 github.com/sugarme/tokenizer v0.2.3-0.20250806005049-d78f65a68e82 h1:Z/oKuGlWMabO1BBypNDgm4k5AuEmIBqj9IWwSGjqkDk=
 github.com/sugarme/tokenizer v0.2.3-0.20250806005049-d78f65a68e82/go.mod h1:xjlC2EeLcHnXMO+/H2Dh7n2XXPpGfqLWPiN2OhnbQ4A=
-github.com/urfave/cli/v3 v3.3.8 h1:BzolUExliMdet9NlJ/u4m5vHSotJ3PzEqSAZ1oPMa/E=
-github.com/urfave/cli/v3 v3.3.8/go.mod h1:FJSKtM/9AiiTOJL4fJ6TbMUkxBXn7GO9guZqoZtpYpo=
+github.com/urfave/cli/v3 v3.4.1 h1:1M9UOCy5bLmGnuu1yn3t3CB4rG79Rtoxuv1sPhnm6qM=
+github.com/urfave/cli/v3 v3.4.1/go.mod h1:FJSKtM/9AiiTOJL4fJ6TbMUkxBXn7GO9guZqoZtpYpo=
 github.com/viant/afs v1.26.3 h1:BEQxLrsOs/XvoOFIioIdXijuk2IC9JphrVmw/JuagZk=
 github.com/viant/afs v1.26.3/go.mod h1:rScbFd9LJPGTM8HOI8Kjwee0AZ+MZMupAvFpPg+Qdj4=
 github.com/x448/float16 v0.8.4 h1:qLwI1I70+NjRFUR3zs1JPUCgaCXSh3SW62uAKT1mSBM=

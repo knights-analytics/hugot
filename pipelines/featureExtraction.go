@@ -188,7 +188,7 @@ func (p *FeatureExtractionPipeline) Postprocess(batch *pipelineBackends.Pipeline
 	// about how to do this in a lightweight manner.
 
 	output := batch.OutputValues[0]
-	batchEmbeddings := make([][]float32, len(batch.Input))
+	batchEmbeddings := make([][]float32, batch.Size)
 	outputDimensions := []int64(p.Output.Dimensions)
 	embeddingDimension := outputDimensions[len(outputDimensions)-1]
 

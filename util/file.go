@@ -2,6 +2,7 @@ package util
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -28,11 +29,12 @@ func ReadFileBytes(filename string) ([]byte, error) {
 		err = errors.Join(err, CloseFile(file))
 	}(file)
 
-	outBytes, readErr := io.ReadAll(file)
+	buf := &bytes.Buffer{}
+	_, readErr := io.Copy(buf, file)
 	if readErr != nil {
 		return nil, readErr
 	}
-	return outBytes, err
+	return buf.Bytes(), err
 }
 
 func CloseFile(file io.Closer) error {

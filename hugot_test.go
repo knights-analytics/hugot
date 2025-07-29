@@ -149,11 +149,10 @@ func featureExtractionPipeline(t *testing.T, session *Session) {
 	pipelineSentence, err := NewPipeline(session, configSentence)
 	checkT(t, err)
 
-	outputSentence, err := pipelineSentence.RunPipeline([]string{"Onnxruntime is a great inference backend"})
+	_, err = pipelineSentence.RunPipeline([]string{"Onnxruntime is a great inference backend"})
 	if err != nil {
 		t.FailNow()
 	}
-	fmt.Println(outputSentence.Embeddings[0])
 	configSentence = FeatureExtractionConfig{
 		ModelPath:    modelPath,
 		Name:         "testPipelineToken",
@@ -986,6 +985,137 @@ func destroyPipelines(t *testing.T, session *Session) {
 	if len(session.tokenClassificationPipelines) != 0 {
 		t.Fatal("Session should have 0 token classification pipelines")
 	}
+}
+
+// Text Generation
+func textGenerationPipeline(t *testing.T, session *Session) {
+	t.Helper()
+
+	defer func(session *Session) {
+		err := session.Destroy()
+		checkT(t, err)
+	}(session)
+
+	// Configure the text generation pipeline
+	config := TextGenerationConfig{
+		ModelPath:    "./models/KnightsAnalytics_Phi-3-mini-4k-instruct-onnx",
+		Name:         "testPipeline",
+		OnnxFilename: "model.onnx",
+		Options: []pipelineBackends.PipelineOption[*pipelines.TextGenerationPipeline]{
+			pipelines.WithMaxTokens(125),
+			pipelines.WithPhiTemplate(),
+			pipelines.WithCustomStopTokens([]int64{32007}), // Phi appears to use a stop token that's different than the one defined in config.json
+		},
+	}
+
+	// Create the pipeline
+	textGenPipeline, err := NewPipeline(session, config)
+	checkT(t, err)
+
+	tests := []struct {
+		name           string
+		input          [][]pipelines.Message
+		expectedString []string
+	}{
+		{
+			name: "small test",
+			input: [][]pipelines.Message{
+				{
+					{Role: "system", Content: "you are a helpful assistant."},
+					{Role: "user", Content: "what is the capital of the Netherlands?"},
+				},
+			},
+			expectedString: []string{
+				"The capital of the Netherlands is Amsterdam. However, it's worth noting that the official capital is The Hague (Den Haag), where the Dutch government and parliament are located. Amsterdam is the country's largest city and is well-known for its cultural heritage, architecture, and vibrant atmosphere.",
+			},
+		},
+		{
+			name: "batched input, short sequence first, long sequence second",
+			input: [][]pipelines.Message{
+				{
+					{Role: "system", Content: "you are a helpful assistant."},
+					{Role: "user", Content: "what is the capital of the Netherlands?"},
+				},
+				{
+					{Role: "system", Content: "you are a helpful assistant."},
+					{Role: "user", Content: "who was the first president of the United States?"},
+				},
+			},
+			expectedString: []string{
+				"The capital of the Netherlands is Amsterdam. However, it's worth noting that while Amsterdam is the country's largest city and often thought of as the de facto capital, the official capital is The Hague, where the Dutch government and parliament are located.",
+				"The first President of the United States was George Washington. He served two terms in office from 1789 to 1797. Washington is widely regarded as one of the Founding Fathers of the United States and played a crucial role in the American Revolutionary War. His leadership and guidance were instrumental in shaping the early years of the United States.",
+			},
+		},
+		{
+			name: "batched input, long sequence first, short sequence second",
+			input: [][]pipelines.Message{
+				{
+					{Role: "system", Content: "you are a helpful assistant."},
+					{Role: "user", Content: "Solve this equation: 2 + 2 = ? Be very brief in your explanation."},
+				},
+				{
+					{Role: "system", Content: "you are a helpful assistant."},
+					{Role: "user", Content: "Write me a haiku about the beauties of machine learning"},
+				},
+			},
+			expectedString: []string{
+				"2 + 2 equals 4. This is a basic arithmetic addition problem.",
+				"Neural paths intertwine,\n\nPatterns emerge, insights shine,\n\nMind of silicon thrives.\n\n\nThis haiku captures the essence of machine learning, with the first line referring to the complex connections within neural networks, the second line highlighting the discovery and understanding that comes from analyzing data, and the third line celebrating the growth and capabilities of artificial intelligence.",
+			},
+		},
+	}
+
+	// Execute tests
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			batchResult, err := textGenPipeline.RunWithTemplate(tt.input)
+			checkT(t, err)
+			outputString := batchResult.GetOutput()
+			for i := range len(outputString) {
+				actualString := tt.expectedString[i]
+				generatedString := outputString[i].(string)
+				assert.Equal(t, actualString, generatedString)
+			}
+		})
+	}
+}
+
+func textGenerationPipelineValidation(t *testing.T, session *Session) {
+	t.Helper()
+
+	defer func(session *Session) {
+		err := session.Destroy()
+		checkT(t, err)
+	}(session)
+
+	// Configure the text generation pipeline
+	config := TextGenerationConfig{
+		ModelPath:    "./models/KnightsAnalytics_Phi-3-mini-4k-instruct-onnx",
+		Name:         "testPipeline",
+		OnnxFilename: "model.onnx",
+		Options: []pipelineBackends.PipelineOption[*pipelines.TextGenerationPipeline]{
+			pipelines.WithMaxTokens(1),
+		},
+	}
+
+	// Create the pipeline
+	pipeline, err := NewPipeline(session, config)
+	checkT(t, err)
+
+	pipeline.Model.NumHiddenLayers = 0
+	err = pipeline.Validate()
+	assert.Error(t, err)
+	pipeline.Model.NumHiddenLayers = 1
+
+	pipeline.Model.NumKeyValueHeads = 0
+	err = pipeline.Validate()
+	assert.Error(t, err)
+	pipeline.Model.NumKeyValueHeads = 1
+
+	pipeline.Model.HeadDim = 0
+	err = pipeline.Validate()
+	assert.Error(t, err)
+	pipeline.Model.HeadDim = 1
 }
 
 // Thread safety

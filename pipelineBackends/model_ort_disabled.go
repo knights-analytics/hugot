@@ -27,3 +27,7 @@ func runORTSessionOnBatch(_ *PipelineBatch, _ *BasePipeline) error {
 func createImageTensorsORT(_ *PipelineBatch, _ [][][][]float32) error {
 	return errors.New("ORT is not enabled")
 }
+
+func runGenerativeORTSessionOnBatch(_ *PipelineBatch, _ *BasePipeline) error {
+	return errors.New("ORT is not enabled")
+}

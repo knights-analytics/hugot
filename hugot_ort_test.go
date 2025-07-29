@@ -226,10 +226,28 @@ func TestZeroShotClassificationPipelineValidationORT(t *testing.T) {
 	zeroShotClassificationPipelineValidation(t, session)
 }
 
-// Cross encoder
-
+// Cross Encoder
 func TestCrossEncoderPipelineORT(t *testing.T) {
 	opts := []options.WithOption{options.WithOnnxLibraryPath(onnxRuntimeSharedLibrary)}
+	session, err := NewORTSession(opts...)
+	checkT(t, err)
+	defer func(session *Session) {
+		destroyErr := session.Destroy()
+		checkT(t, destroyErr)
+	}(session)
+	crossEncoderPipeline(t, session)
+}
+
+func TestCrossEncoderPipelineORTCuda(t *testing.T) {
+	if os.Getenv("CI") != "" {
+		t.SkipNow()
+	}
+	opts := []options.WithOption{
+		options.WithOnnxLibraryPath("/usr/lib64/onnxruntime-gpu/libonnxruntime.so"),
+		options.WithCuda(map[string]string{
+			"device_id": "0",
+		}),
+	}
 	session, err := NewORTSession(opts...)
 	checkT(t, err)
 	defer func(session *Session) {
@@ -271,6 +289,49 @@ func TestImageClassificationPipelineValidationORT(t *testing.T) {
 		checkT(t, destroyErr)
 	}(session)
 	imageClassificationPipelineValidation(t, session)
+}
+
+// Text generation
+
+func TestTextGenerationPipelineORT(t *testing.T) {
+	opts := []options.WithOption{options.WithOnnxLibraryPath(onnxRuntimeSharedLibrary)}
+	session, err := NewORTSession(opts...)
+	checkT(t, err)
+	defer func(session *Session) {
+		destroyErr := session.Destroy()
+		checkT(t, destroyErr)
+	}(session)
+	textGenerationPipeline(t, session)
+}
+
+func TestTextGenerationPipelineORTCuda(t *testing.T) {
+	if os.Getenv("CI") != "" {
+		t.SkipNow()
+	}
+	opts := []options.WithOption{
+		options.WithOnnxLibraryPath("/usr/lib64/onnxruntime-gpu/libonnxruntime.so"),
+		options.WithCuda(map[string]string{
+			"device_id": "0",
+		}),
+	}
+	session, err := NewORTSession(opts...)
+	checkT(t, err)
+	defer func(session *Session) {
+		destroyErr := session.Destroy()
+		checkT(t, destroyErr)
+	}(session)
+	textGenerationPipeline(t, session)
+}
+
+func TestTextGenerationPipelineValidationORT(t *testing.T) {
+	opts := []options.WithOption{options.WithOnnxLibraryPath(onnxRuntimeSharedLibrary)}
+	session, err := NewORTSession(opts...)
+	checkT(t, err)
+	defer func(session *Session) {
+		destroyErr := session.Destroy()
+		checkT(t, destroyErr)
+	}(session)
+	textGenerationPipelineValidation(t, session)
 }
 
 // No Same Name

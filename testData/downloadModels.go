@@ -25,6 +25,7 @@ var models = []downloadModel{
 	{"KnightsAnalytics/roberta-base-go_emotions", ""},
 	{"KnightsAnalytics/jina-reranker-v1-tiny-en", "model.onnx"},
 	{"KnightsAnalytics/resnet50", ""},
+	{"KnightsAnalytics/Phi-3-mini-4k-instruct-onnx", "model.onnx"},
 }
 
 // Additional files to download (direct URLs)
@@ -75,6 +76,7 @@ func main() {
 	} else {
 		panic(err)
 	}
+
 }
 
 // downloadFile downloads a file from a URL to a destination path.
