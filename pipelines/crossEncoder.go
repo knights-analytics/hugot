@@ -82,7 +82,10 @@ func NewCrossEncoderPipeline(config pipelineBackends.PipelineConfig[*CrossEncode
 	}
 
 	for _, o := range config.Options {
-		o(pipeline)
+		err = o(pipeline)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	err = pipeline.Validate()

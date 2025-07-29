@@ -214,12 +214,12 @@ func (p *TextClassificationPipeline) Postprocess(batch *pipelineBackends.Pipelin
 	}
 
 	batchClassificationOutputs := TextClassificationOutput{
-		ClassificationOutputs: make([][]ClassificationOutput, len(batch.Input)),
+		ClassificationOutputs: make([][]ClassificationOutput, batch.Size),
 	}
 
 	var err error
 
-	for i := 0; i < len(batch.Input); i++ {
+	for i := 0; i < batch.Size; i++ {
 		switch p.ProblemType {
 		case "singleLabel":
 			inputClassificationOutputs := make([]ClassificationOutput, 1)

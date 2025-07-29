@@ -1,6 +1,7 @@
 package pipelineBackends
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/knights-analytics/hugot/options"
@@ -133,6 +134,17 @@ func RunSessionOnBatch(batch *PipelineBatch, p *BasePipeline) error {
 		return runGoMLXSessionOnBatch(batch, p)
 	}
 	return nil
+}
+
+func RunGenerativeSessionOnBatch(batch *PipelineBatch, p *BasePipeline) error {
+	switch p.Runtime {
+	case "ORT":
+		return runGenerativeORTSessionOnBatch(batch, p)
+	case "GO", "XLA":
+		return errors.New("GO/XLA backend is not yet implemented for generative models")
+	default:
+		return errors.New("invalid backend")
+	}
 }
 
 // CreateInputTensorsTraining creates input tensors for training. Same as CreateInputTensors but

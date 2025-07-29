@@ -226,6 +226,27 @@ func TestImageClassificationPipelineValidationXLA(t *testing.T) {
 	imageClassificationPipelineValidation(t, session)
 }
 
+// text generation
+// func TestTextGenerationPipelineXLA(t *testing.T) {
+// 	session, err := NewXLASession()
+// 	checkT(t, err)
+// 	defer func(session *Session) {
+// 		destroyErr := session.Destroy()
+// 		checkT(t, destroyErr)
+// 	}(session)
+// 	textGenerationPipeline(t, session)
+// }
+//
+// func TestTextGenerationPipelineValidationXLA(t *testing.T) {
+// 	session, err := NewXLASession()
+// 	checkT(t, err)
+// 	defer func(session *Session) {
+// 		destroyErr := session.Destroy()
+// 		checkT(t, destroyErr)
+// 	}(session)
+// 	textGenerationPipelineValidation(t, session)
+// }
+
 // No same name
 
 func TestNoSameNamePipelineXLA(t *testing.T) {

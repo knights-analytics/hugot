@@ -218,7 +218,7 @@ func (p *TokenClassificationPipeline) Forward(batch *pipelineBackends.PipelineBa
 
 // Postprocess function for a token classification pipeline.
 func (p *TokenClassificationPipeline) Postprocess(batch *pipelineBackends.PipelineBatch) (*TokenClassificationOutput, error) {
-	if len(batch.Input) == 0 {
+	if batch.Size == 0 {
 		return &TokenClassificationOutput{}, nil
 	}
 
@@ -239,7 +239,7 @@ func (p *TokenClassificationPipeline) Postprocess(batch *pipelineBackends.Pipeli
 
 	// now convert the logits to the predictions of actual entities
 	classificationOutput := TokenClassificationOutput{
-		Entities: make([][]Entity, len(batch.Input)),
+		Entities: make([][]Entity, batch.Size),
 	}
 
 	for i, input := range batch.Input {
