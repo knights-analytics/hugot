@@ -3,10 +3,13 @@
 package hugot
 
 import (
+	"fmt"
 	"os"
 	"testing"
 
 	"github.com/knights-analytics/hugot/options"
+	"github.com/knights-analytics/hugot/pipelineBackends"
+	"github.com/knights-analytics/hugot/pipelines"
 )
 
 // FEATURE EXTRACTION
@@ -250,4 +253,40 @@ func TestThreadSafetyXLACuda(t *testing.T) {
 		checkT(t, destroyErr)
 	}(session)
 	threadSafety(t, session, 1000)
+}
+
+func check(err error) {
+	if err != nil {
+		panic(err.Error())
+	}
+}
+
+func TestHugoPipeline(t *testing.T) {
+	session, err := NewXLASession()
+	check(err)
+
+	defer func(session *Session) {
+		err := session.Destroy()
+		check(err)
+	}(session)
+
+	config := TextGenerationConfig{
+		ModelPath:    "./models/KnightsAnalytics_gemma-3-1b-it-ONNX",
+		Name:         "testPipeline",
+		OnnxFilename: "model.onnx",
+		Options: []pipelineBackends.PipelineOption[*pipelines.TextGenerationPipeline]{
+			pipelines.WithMaxTokens(15),
+		},
+	}
+
+	gemmaPipeline, err := NewPipeline(session, config)
+	gemmaPipeline.MaxNewTokens = 15
+	gemmaPipeline.Model.FixedCacheSize = 50
+	check(err)
+
+	batch := []string{"Who was the second president of the United States of America? I can't seem to remember."}
+	batchResult, err := gemmaPipeline.Run(batch)
+	check(err)
+	fmt.Println(batchResult.GetOutput())
+
 }

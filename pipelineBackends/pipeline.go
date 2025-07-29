@@ -1,6 +1,7 @@
 package pipelineBackends
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/knights-analytics/hugot/options"
@@ -132,6 +133,18 @@ func RunSessionOnBatch(batch *PipelineBatch, p *BasePipeline) error {
 	return nil
 }
 
+func RunGenerativeSessionOnBatch(batch *PipelineBatch, p *BasePipeline) error {
+	switch p.Runtime {
+	case "ORT":
+		return runGenerativeORTSessionOnBatch(batch, p)
+	case "GO", "XLA":
+		return errors.New("GO/XLA backend is not yet implemented")
+	default:
+		return errors.New("invalid backend")
+	}
+
+}
+
 // CreateInputTensorsTraining creates input tensors for training. Same as CreateInputTensors but
 // we never pad the batch size as we expect regular batch sizes from the dataset.
 func CreateInputTensorsTraining(batch *PipelineBatch, inputsMeta []InputOutputInfo, runtime string) error {
@@ -151,6 +164,16 @@ func CreateInputTensors(batch *PipelineBatch, inputsMeta []InputOutputInfo, runt
 		return createInputTensorsORT(batch, inputsMeta)
 	case "GO", "XLA":
 		return createInputTensorsGoMLX(batch, inputsMeta, true)
+	}
+	return nil
+}
+
+func CreateGenerativeInputTensors(batch *PipelineBatch, inputsMeta []InputOutputInfo, runtime string) error {
+	switch runtime {
+	case "ORT":
+		return CreateGenerativeInputTensorsORT(batch)
+	case "GO", "XLA":
+		return CreateGenerativeInputTensorsGoMLX(batch)
 	}
 	return nil
 }

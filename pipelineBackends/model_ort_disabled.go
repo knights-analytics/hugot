@@ -23,3 +23,7 @@ func createInputTensorsORT(_ *PipelineBatch, _ []InputOutputInfo) error {
 func runORTSessionOnBatch(_ *PipelineBatch, _ *BasePipeline) error {
 	return errors.New("ORT is not enabled")
 }
+
+func runGenerativeORTSessionOnBatch(_ *PipelineBatch, _ *BasePipeline) error {
+	return errors.New("ORT is not enabled")
+}

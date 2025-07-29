@@ -4,8 +4,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"regexp"
+	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/backends"
@@ -88,63 +91,6 @@ func loadExternalData(path string, model *onnx.Model) error {
 		}
 	}
 	return nil
-}
-
-func createGenerativeCallFunc(model *Model, modelParsed *onnx.Model, outputNames []string) func(ctx *context.Context, inputs []*graph.Node) []*graph.Node {
-	return func(ctx *context.Context, inputs []*graph.Node) []*graph.Node {
-		inputsMap := map[string]*graph.Node{
-			"input_ids":    inputs[0],
-			"position_ids": inputs[1]}
-
-		for i := range model.NumHiddenLayers {
-			key := fmt.Sprintf("past_key_values.%d.key", i)
-			value := fmt.Sprintf("past_key_values.%d.value", i)
-
-			inputsMap[key] = inputs[2*i+2]
-			inputsMap[value] = inputs[2*i+3]
-		}
-
-		g := inputs[0].Graph()
-		modelOutputs := modelParsed.CallGraph(ctx, g, inputsMap, outputNames...)
-		logits := modelOutputs[0]
-		kvCache := modelOutputs[1:]
-		shape := logits.Shape().Dimensions
-		vocabSize := shape[2]
-		seqLen := shape[1]
-		lastIdx := Scalar(g, dtypes.Int32, seqLen-1)
-		logitsLast := DynamicSlice(
-			logits,
-			[]*Node{ScalarZero(g, dtypes.Int32), lastIdx, ScalarZero(g, dtypes.Int32)},
-			[]int{shape[0], 1, vocabSize},
-		)
-
-		batchSize := shape[0]
-		logitsLast = Reshape(logitsLast, batchSize, vocabSize)
-		nextPredictedToken := ArgMax(logitsLast, 1, dtypes.Int64)
-		nextPredictedToken = Reshape(nextPredictedToken, batchSize, 1)
-
-		var terminate *graph.Node
-		for i, eosID := range model.EosTokenIDs {
-			eosNode := Squeeze(Equal(nextPredictedToken, Scalar(g, dtypes.Int64, eosID)))
-			if i == 0 {
-				terminate = eosNode
-			} else {
-				terminate = Or(terminate, eosNode)
-			}
-		}
-		inputIDs := nextPredictedToken
-		posShape := inputs[1].Shape().Dimensions
-		posLen := posShape[1]
-		lastIdxNode := Scalar(g, dtypes.Int32, posLen-1)
-		prevPosLast := DynamicSlice(
-			inputs[1],
-			[]*Node{ScalarZero(g, dtypes.Int32), lastIdxNode},
-			[]int{batchSize, 1},
-		)
-		positionIDs := OnePlus(prevPosLast)
-		outputs := append(append([]*Node{inputIDs, positionIDs}, kvCache...), terminate)
-		return outputs
-	}
 }
 
 func createGoMLXModelBackend(model *Model, options *options.Options) error {
@@ -348,11 +294,239 @@ func CreateGenerativeInputTensorsGoMLX(batch *PipelineBatch) error {
 		positionIDs[i] = posIDs
 		currentPositions[i] = int64(maxSeqLength)
 	}
+	fmt.Println(inputIDs)
+	fmt.Println(positionIDs)
 	inputIDsTensor := tensors.FromAnyValue(inputIDs)
 	positionIDsTensor := tensors.FromAnyValue(positionIDs)
 	modelInputs := []*tensors.Tensor{inputIDsTensor, positionIDsTensor}
 	batch.InputValues = modelInputs
 	return nil
+}
+
+// func CreateGenerativeInputTensorsGoMLX(batch *PipelineBatch) error {
+// 	for _, i := range batch.Input {
+// 		batch.MaxSequenceLength = max(batch.MaxSequenceLength, len(i.TokenIDs))
+// 	}
+// 	paddedLength := nextPowerOf2(batch.MaxSequenceLength)
+// 	batchSize := len(batch.Input)
+// 	inputIDs := make([][]int64, batchSize)
+// 	positionIDs := make([][]int64, batchSize)
+// 	// attentionMask := make([][]int64, batchSize)
+// 	currentPositions := make([]int64, batchSize)
+
+// 	for i := range batchSize {
+// 		seq := batch.Input[i].TokenIDs
+// 		seqLen := len(seq)
+// 		padLen := paddedLength - seqLen
+
+// 		// Create padded input
+// 		paddedInput := make([]int64, paddedLength)
+// 		for j := range paddedInput {
+// 			paddedInput[j] = 0 // <pad> token
+// 		}
+// 		for j := range seqLen {
+// 			paddedInput[padLen+j] = int64(seq[j])
+// 		}
+// 		inputIDs[i] = paddedInput
+
+// 		// Create position IDs
+// 		posIDs := make([]int64, paddedLength)
+// 		for j := range paddedLength {
+// 			posIDs[j] = int64(j + 1)
+// 		}
+// 		positionIDs[i] = posIDs
+
+// 		// Create attention mask: 0 for padding tokens, 1 for actual tokens
+// 		attMask := make([]int64, paddedLength)
+// 		for j := range paddedLength {
+// 			if j < padLen {
+// 				attMask[j] = 0 // Padding tokens
+// 			} else {
+// 				attMask[j] = 1 // Actual tokens
+// 			}
+// 		}
+// 		// attentionMask[i] = attMask
+
+// 		currentPositions[i] = int64(paddedLength)
+// 	}
+
+// 	fmt.Println(inputIDs)
+// 	fmt.Println(positionIDs)
+
+// 	inputIDsTensor := tensors.FromAnyValue(inputIDs)
+// 	positionIDsTensor := tensors.FromAnyValue(positionIDs)
+
+// 	modelInputs := []*tensors.Tensor{inputIDsTensor, positionIDsTensor}
+// 	batch.InputValues = modelInputs
+
+// 	return nil
+// }
+
+func sortedKeys(m map[string]*graph.Node) []string {
+	type kv struct {
+		key   string
+		index int
+	}
+
+	re := regexp.MustCompile(`past_key_values\.(\d+)\.`)
+
+	kvs := make([]kv, 0, len(m))
+	for k := range m {
+		match := re.FindStringSubmatch(k)
+		if len(match) != 2 {
+			continue
+		}
+		num, err := strconv.Atoi(match[1])
+		if err != nil {
+			continue
+		}
+		kvs = append(kvs, kv{key: k, index: num})
+	}
+
+	sort.Slice(kvs, func(i, j int) bool {
+		if kvs[i].index == kvs[j].index {
+			return kvs[i].key < kvs[j].key
+		}
+		return kvs[i].index < kvs[j].index
+	})
+
+	sorted := make([]string, len(kvs))
+	for i, kv := range kvs {
+		sorted[i] = kv.key
+	}
+	return sorted
+}
+
+func createGenerativeCallFunc(model *Model, modelParsed *onnx.Model, outputNames []string) func(ctx *context.Context, inputs []*graph.Node) []*graph.Node {
+	return func(ctx *context.Context, inputs []*graph.Node) []*graph.Node {
+		inputsMap := map[string]*graph.Node{
+			"input_ids":    inputs[0],
+			"position_ids": inputs[1],
+			// "attention_mask": inputs[2],
+		}
+		pastKeyValues := make(map[string]*graph.Node)
+		for i := range model.NumHiddenLayers {
+			key := fmt.Sprintf("past_key_values.%d.key", i)
+			value := fmt.Sprintf("past_key_values.%d.value", i)
+			inputsMap[key] = inputs[2*i+2]
+			inputsMap[value] = inputs[2*i+3]
+			pastKeyValues[key] = inputs[2*i+2]
+			pastKeyValues[value] = inputs[2*i+3]
+		}
+		g := inputs[0].Graph()
+		modelOutputs := modelParsed.CallGraph(ctx, g, inputsMap, outputNames...)
+		logits := modelOutputs[0]
+		presentKeyValues := modelOutputs[1:]
+
+		shape := logits.Shape().Dimensions
+		vocabSize := shape[2]
+		seqLen := shape[1]
+		lastIdx := Scalar(g, dtypes.Int32, seqLen-1)
+
+		// greedily select next token
+		logitsLast := DynamicSlice(
+			logits,
+			[]*Node{ScalarZero(g, dtypes.Int32), lastIdx, ScalarZero(g, dtypes.Int32)},
+			[]int{shape[0], 1, vocabSize},
+		)
+		batchSize := shape[0]
+		logitsLast = Reshape(logitsLast, batchSize, vocabSize)
+		nextPredictedToken := ArgMax(logitsLast, 1, dtypes.Int64)
+		nextPredictedToken = Reshape(nextPredictedToken, batchSize, 1)
+
+		// early stopping flags
+		var terminate *graph.Node
+		for i, eosID := range model.EosTokenIDs {
+			eosNode := Squeeze(Equal(nextPredictedToken, Scalar(g, dtypes.Int64, eosID)))
+			if i == 0 {
+				terminate = eosNode
+			} else {
+				terminate = Or(terminate, eosNode)
+			}
+		}
+
+		// prepare new input and position IDs
+		inputIDs := nextPredictedToken
+		posShape := inputs[1].Shape().Dimensions
+		posLen := posShape[1]
+		lastIdxNode := Scalar(g, dtypes.Int32, posLen-1)
+		prevPosLast := DynamicSlice(
+			inputs[1],
+			[]*Node{ScalarZero(g, dtypes.Int32), lastIdxNode},
+			[]int{batchSize, 1},
+		)
+		positionIDs := OnePlus(prevPosLast)
+		offset := posLen
+
+		currentPosValue := Squeeze(prevPosLast)
+		var currentIteration *graph.Node
+
+		if currentPosValue.Rank() == 0 {
+			currentIteration = Sub(currentPosValue, Scalar(g, dtypes.Int64, offset))
+		} else {
+			first := Slice(currentPosValue, AxisElem(0))
+			scalar := Squeeze(first)
+			currentIteration = Sub(scalar, Scalar(g, dtypes.Int64, offset))
+		}
+
+		// deal with new cache
+		updatedKvCache := make([]*Node, len(presentKeyValues))
+		keys := sortedKeys(pastKeyValues)
+		if model.FirstIteration {
+			// past_key_values[key][:, :, :offset, :] = present_key_values[j][:, :, fixed_cache_value:, :]
+			j := 0
+			for _, key := range keys {
+				fixedCacheValue := model.FixedCacheSize
+				update := Slice(
+					presentKeyValues[j],
+					AxisRange(),
+					AxisRange(),
+					AxisRange(fixedCacheValue),
+					AxisRange(),
+				)
+
+				updatedKvCache[j] = DynamicUpdateSlice(
+					pastKeyValues[key],
+					update,
+					[]*Node{
+						ScalarZero(g, dtypes.Int32),
+						ScalarZero(g, dtypes.Int32),
+						ScalarZero(g, dtypes.Int32),
+						ScalarZero(g, dtypes.Int32),
+					},
+				)
+				j++
+			}
+		} else {
+			// past_key_values[key][:, :, offset+i:offset+i+1, :] = present_key_values[j][:, :, -1:, :]
+			j := 0
+			updatePos := ConvertType(Add(Scalar(g, dtypes.Int64, offset), currentIteration), dtypes.Int32)
+			for _, key := range keys {
+				update := Slice(
+					presentKeyValues[j],
+					AxisRange(),
+					AxisRange(),
+					AxisElem(-1),
+					AxisRange(),
+				)
+
+				updatedKvCache[j] = DynamicUpdateSlice(
+					pastKeyValues[key],
+					update,
+					[]*Node{
+						ScalarZero(g, dtypes.Int32),
+						ScalarZero(g, dtypes.Int32),
+						updatePos,
+						ScalarZero(g, dtypes.Int32),
+					},
+				)
+				j++
+			}
+		}
+
+		outputs := append(append([]*Node{inputIDs, positionIDs}, updatedKvCache...), terminate)
+		return outputs
+	}
 }
 
 func RunGenerativeGoMLXSessionOnBatch(batch *PipelineBatch, p *BasePipeline) error {
@@ -362,9 +536,16 @@ func RunGenerativeGoMLXSessionOnBatch(batch *PipelineBatch, p *BasePipeline) err
 	generatedTokens := make([][]int64, batchSize)
 
 	var outputTensors []*tensors.Tensor
-
+	start := time.Now()
 	for step := 0; step < batch.MaxNewTokens; step++ {
-		outputTensors = p.Model.GoMLXModel.Exec.Call(batch.InputValues.([]*tensors.Tensor))
+		if step == 0 {
+			p.Model.FirstIteration = true
+		} else {
+			p.Model.FirstIteration = false
+		}
+		modelInputs := batch.InputValues.([]*tensors.Tensor)
+
+		outputTensors = p.Model.GoMLXModel.Exec.Call(modelInputs)
 
 		genTensor := outputTensors[0]
 		var flatTokens []int64
@@ -400,6 +581,7 @@ func RunGenerativeGoMLXSessionOnBatch(batch *PipelineBatch, p *BasePipeline) err
 		}
 		batch.InputValues = outputTensors
 	}
+	fmt.Println(time.Since(start))
 
 	defer func() {
 		for _, t := range outputTensors {

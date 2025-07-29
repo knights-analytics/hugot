@@ -11,6 +11,7 @@ import (
 
 	"github.com/knights-analytics/hugot/options"
 	"github.com/knights-analytics/hugot/pipelineBackends"
+	ort "github.com/yalue/onnxruntime_go"
 )
 
 type TextGenerationPipeline struct {
@@ -111,14 +112,15 @@ func (p *TextGenerationPipeline) Validate() error {
 	return errors.Join(validationErrors...)
 }
 
-func CreateCache(batchSize, numLayers, numKeyValueHeads, seqLen, headDim int) []*tensors.Tensor {
+func CreateCache(batchSize, numLayers, numKeyValueHeads, maxSeqLen, headDim int) []*tensors.Tensor {
 	cache := make([]*tensors.Tensor, numLayers*2)
-
 	for layer := range numLayers {
-		keyTensor := tensors.FromScalarAndDimensions(float32(0), batchSize, numKeyValueHeads, seqLen, headDim)
+		keyTensor := tensors.FromScalarAndDimensions(
+			float32(0), batchSize, numKeyValueHeads, maxSeqLen, headDim)
 		cache[layer*2] = keyTensor
 
-		valueTensor := tensors.FromScalarAndDimensions(float32(0), batchSize, numKeyValueHeads, seqLen, headDim)
+		valueTensor := tensors.FromScalarAndDimensions(
+			float32(0), batchSize, numKeyValueHeads, maxSeqLen, headDim)
 		cache[layer*2+1] = valueTensor
 	}
 	return cache
@@ -127,13 +129,14 @@ func CreateCache(batchSize, numLayers, numKeyValueHeads, seqLen, headDim int) []
 // Preprocess tokenizes the input strings.
 func (p *TextGenerationPipeline) Preprocess(batch *pipelineBackends.PipelineBatch, inputs []string) error {
 	start := time.Now()
+	p.Model.FixedCacheSize = 0
 	pipelineBackends.TokenizeInputs(batch, p.Model.Tokenizer, inputs)
 	atomic.AddUint64(&p.Model.Tokenizer.TokenizerTimings.NumCalls, 1)
 	atomic.AddUint64(&p.Model.Tokenizer.TokenizerTimings.TotalNS, uint64(time.Since(start)))
+	err := pipelineBackends.CreateGenerativeInputTensors(batch, p.Model.InputsMeta, p.Runtime)
 
-	err := pipelineBackends.CreateGenerativeInputTensorsGoMLX(batch)
-	cache := CreateCache(len(batch.Input), p.NumHiddenLayers, p.NumKeyValueHeads, 0, p.HeadDim)
-	batch.InputValues = append(batch.InputValues.([]*tensors.Tensor), cache...) // TODO this only works for gomlx
+	cache, err := pipelineBackends.CreateCacheORT(len(batch.Input), p.NumHiddenLayers, p.NumKeyValueHeads, p.Model.FixedCacheSize, p.HeadDim)
+	batch.InputValues = append(batch.InputValues.([]ort.Value), cache...)
 	return err
 }
 
@@ -141,7 +144,7 @@ func (p *TextGenerationPipeline) Forward(batch *pipelineBackends.PipelineBatch) 
 	start := time.Now()
 
 	// generation loop
-	err := pipelineBackends.RunGenerativeGoMLXSessionOnBatch(batch, p.BasePipeline)
+	err := pipelineBackends.RunGenerativeSessionOnBatch(batch, p.BasePipeline)
 	if err != nil {
 		return err
 	}
@@ -155,7 +158,6 @@ func (p *TextGenerationPipeline) Postprocess(batch *pipelineBackends.PipelineBat
 	output := TextGenerationOutput{
 		TextGenerationOutputs: make([]string, len(batch.Input)),
 	}
-
 	for i, val := range outputValues {
 		tokenIDs := val.([]int64)
 		convertedTokens := make([]uint32, len(tokenIDs))

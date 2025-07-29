@@ -17,7 +17,8 @@ type Tokenizer struct {
 }
 
 func LoadTokenizer(model *Model, s *options.Options) error {
-	tokenizerBytes, err := util.ReadFileBytes(util.PathJoinSafe(model.Path, "tokenizer.json"))
+	newPath := util.PathJoinSafe(model.Path, "tokenizer.json")
+	tokenizerBytes, err := util.ReadFileBytes(newPath)
 	if err != nil {
 		return err
 	}

@@ -8,6 +8,8 @@ import (
 	"testing"
 
 	"github.com/knights-analytics/hugot/options"
+	"github.com/knights-analytics/hugot/pipelineBackends"
+	"github.com/knights-analytics/hugot/pipelines"
 )
 
 // FEATURE EXTRACTION
@@ -349,4 +351,44 @@ func BenchmarkORTCPUEmbedding(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		runBenchmarkEmbedding(&p, false)
 	}
+}
+
+func TestTextGenerationPipelineORT(t *testing.T) {
+	session, err := NewORTSession()
+	checkT(t, err)
+	defer func(session *Session) {
+		destroyErr := session.Destroy()
+		checkT(t, destroyErr)
+	}(session)
+	textGenerationPipeline(t, session)
+}
+
+func TestHugoPipelineORT(t *testing.T) {
+	session, err := NewORTSession()
+	check(err)
+
+	defer func(session *Session) {
+		err := session.Destroy()
+		check(err)
+	}(session)
+
+	config := TextGenerationConfig{
+		ModelPath:    "./models/KnightsAnalytics_gemma-3-1b-it-ONNX",
+		Name:         "testPipeline",
+		OnnxFilename: "model.onnx",
+		Options: []pipelineBackends.PipelineOption[*pipelines.TextGenerationPipeline]{
+			pipelines.WithMaxTokens(15),
+		},
+	}
+
+	gemmaPipeline, err := NewPipeline(session, config)
+	gemmaPipeline.MaxNewTokens = 15
+	gemmaPipeline.Model.FixedCacheSize = 0
+	check(err)
+
+	batch := []string{"who was the fourty third president of the United States?",
+		"who is the president of the Netherlands?"}
+	batchResult, err := gemmaPipeline.Run(batch)
+	check(err)
+	fmt.Println(batchResult.GetOutput())
 }
