@@ -134,23 +134,22 @@ func RunSessionOnBatch(batch *PipelineBatch, p *BasePipeline) error {
 
 // CreateInputTensorsTraining creates input tensors for training. Same as CreateInputTensors but
 // we never pad the batch size as we expect regular batch sizes from the dataset.
-func CreateInputTensorsTraining(batch *PipelineBatch, inputsMeta []InputOutputInfo, runtime string) error {
+func CreateInputTensorsTraining(batch *PipelineBatch, model *Model, runtime string) error {
 	switch runtime {
 	case "ORT":
-		return createInputTensorsORT(batch, inputsMeta)
+		return createInputTensorsORT(batch, model)
 	case "GO", "XLA":
-		return createInputTensorsGoMLX(batch, inputsMeta, false)
+		return createInputTensorsGoMLX(batch, model, false)
 	}
 	return nil
 }
 
-func CreateInputTensors(batch *PipelineBatch, inputsMeta []InputOutputInfo, runtime string) error {
-
+func CreateInputTensors(batch *PipelineBatch, model *Model, runtime string) error {
 	switch runtime {
 	case "ORT":
-		return createInputTensorsORT(batch, inputsMeta)
+		return createInputTensorsORT(batch, model)
 	case "GO", "XLA":
-		return createInputTensorsGoMLX(batch, inputsMeta, true)
+		return createInputTensorsGoMLX(batch, model, true)
 	}
 	return nil
 }

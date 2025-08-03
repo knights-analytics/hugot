@@ -63,10 +63,10 @@ func (s *SemanticSimilarityDataset) Yield() (spec any, inputs []*tensors.Tensor,
 		pipelineBackends.TokenizeInputs(batchLhs, s.pipeline.Model.Tokenizer, inputsLhs)
 		pipelineBackends.TokenizeInputs(batchRhs, s.pipeline.Model.Tokenizer, inputsRhs)
 
-		if err := pipelineBackends.CreateInputTensorsTraining(batchLhs, s.pipeline.Model.InputsMeta, s.pipeline.Runtime); err != nil {
+		if err := pipelineBackends.CreateInputTensorsTraining(batchLhs, s.pipeline.Model, s.pipeline.Runtime); err != nil {
 			return nil, nil, nil, err
 		}
-		if err := pipelineBackends.CreateInputTensorsTraining(batchRhs, s.pipeline.Model.InputsMeta, s.pipeline.Runtime); err != nil {
+		if err := pipelineBackends.CreateInputTensorsTraining(batchRhs, s.pipeline.Model, s.pipeline.Runtime); err != nil {
 			return nil, nil, nil, err
 		}
 		inputLhs = batchLhs.InputValues.([]*tensors.Tensor)

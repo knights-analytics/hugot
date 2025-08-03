@@ -61,16 +61,16 @@ func loadInputOutputMetaORT(onnxBytes []byte) ([]InputOutputInfo, []InputOutputI
 	return convertORTInputOutputs(inputs), convertORTInputOutputs(outputs), nil
 }
 
-func createInputTensorsORT(batch *PipelineBatch, inputsMeta []InputOutputInfo) error {
+func createInputTensorsORT(batch *PipelineBatch, model *Model) error {
 	batchSize := len(batch.Input)
 	tensorSize := batchSize * batch.MaxSequenceLength
 
-	inputTensors := make([]ort.Value, len(inputsMeta))
+	inputTensors := make([]ort.Value, len(model.InputsMeta))
 	var tensorCreationErr error
 
 	paddingMasks := make([][]bool, batchSize)
 
-	for i, inputMeta := range inputsMeta {
+	for i, inputMeta := range model.InputsMeta {
 		backingSlice := make([]int64, tensorSize)
 		counter := 0
 

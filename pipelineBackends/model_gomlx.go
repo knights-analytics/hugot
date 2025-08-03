@@ -130,7 +130,7 @@ func loadInputOutputMetaGoMLX(model *onnx.Model) ([]InputOutputInfo, []InputOutp
 	return inputs, outputs
 }
 
-func createInputTensorsGoMLX(batch *PipelineBatch, inputsMeta []InputOutputInfo, padBatchDimension bool) error {
+func createInputTensorsGoMLX(batch *PipelineBatch, model *Model, padBatchDimension bool) error {
 	batchSize := len(batch.Input)
 	batchSizePadded := batchSize
 	if padBatchDimension {
@@ -139,9 +139,9 @@ func createInputTensorsGoMLX(batch *PipelineBatch, inputsMeta []InputOutputInfo,
 	maxSequenceLengthPadded := nextPowerOf2(batch.MaxSequenceLength)
 	tensorSize := batchSizePadded * maxSequenceLengthPadded
 
-	inputTensors := make([]*tensors.Tensor, len(inputsMeta))
+	inputTensors := make([]*tensors.Tensor, len(model.InputsMeta))
 	paddingMasks := make([][]bool, batchSize)
-	for i, inputMeta := range inputsMeta {
+	for i, inputMeta := range model.InputsMeta {
 		backingSlice := make([]int64, tensorSize)
 		counter := 0
 		for j, input := range batch.Input {
