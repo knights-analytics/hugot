@@ -3,6 +3,7 @@
 package main
 
 import (
+	"context"
 	_ "embed"
 	"fmt"
 	"os"
@@ -23,7 +24,7 @@ var tokenClassificationData []byte
 const onnxRuntimeSharedLibrary = "/usr/lib64/onnxruntime.so"
 
 func TestTextClassificationCli(t *testing.T) {
-	app := &cli.App{
+	app := &cli.Command{
 		Name:     "hugot",
 		Usage:    "Huggingface transformers from the command line - alpha",
 		Commands: []*cli.Command{runCommand},
@@ -51,13 +52,13 @@ func TestTextClassificationCli(t *testing.T) {
 		fmt.Sprintf("--s=%s", onnxRuntimeSharedLibrary),
 		fmt.Sprintf("--model=%s", testModel),
 		"--type=textClassification")
-	if err := app.Run(args); err != nil {
+	if err := app.Run(context.Background(), args); err != nil {
 		check(t, err)
 	}
 }
 
 func TestTokenClassificationCli(t *testing.T) {
-	app := &cli.App{
+	app := &cli.Command{
 		Name:     "hugot",
 		Usage:    "Huggingface transformers from the command line - alpha",
 		Commands: []*cli.Command{runCommand},
@@ -82,7 +83,7 @@ func TestTokenClassificationCli(t *testing.T) {
 		fmt.Sprintf("--model=%s", testModel),
 		"--type=tokenClassification",
 		fmt.Sprintf("--output=%s", testDataDir))
-	if err := app.Run(args); err != nil {
+	if err := app.Run(context.Background(), args); err != nil {
 		check(t, err)
 	}
 	result, err := os.ReadFile(path.Join(testDataDir, "result-0.jsonl"))
@@ -91,7 +92,7 @@ func TestTokenClassificationCli(t *testing.T) {
 }
 
 func TestFeatureExtractionCli(t *testing.T) {
-	app := &cli.App{
+	app := &cli.Command{
 		Name:     "hugot",
 		Usage:    "Huggingface transformers from the command line - alpha",
 		Commands: []*cli.Command{runCommand},
@@ -115,7 +116,7 @@ func TestFeatureExtractionCli(t *testing.T) {
 		fmt.Sprintf("--onnxFilename=%s", "model.onnx"),
 		"--type=featureExtraction",
 		fmt.Sprintf("--output=%s", testDataDir))
-	if err := app.Run(args); err != nil {
+	if err := app.Run(context.Background(), args); err != nil {
 		check(t, err)
 	}
 	result, err := os.ReadFile(path.Join(testDataDir, "result-0.jsonl"))
@@ -124,7 +125,7 @@ func TestFeatureExtractionCli(t *testing.T) {
 }
 
 func TestModelChain(t *testing.T) {
-	app := &cli.App{
+	app := &cli.Command{
 		Name:     "hugot",
 		Usage:    "Huggingface transformers from the command line - alpha",
 		Commands: []*cli.Command{runCommand},
@@ -154,7 +155,7 @@ func TestModelChain(t *testing.T) {
 		fmt.Sprintf("--s=%s", onnxRuntimeSharedLibrary),
 		fmt.Sprintf("--model=%s", "KnightsAnalytics/distilbert-base-uncased-finetuned-sst-2-english"),
 		"--type=textClassification")
-	if err := app.Run(args); err != nil {
+	if err := app.Run(context.Background(), args); err != nil {
 		check(t, err)
 	}
 
@@ -163,7 +164,7 @@ func TestModelChain(t *testing.T) {
 		fmt.Sprintf("--model=%s", "KnightsAnalytics/distilbert-base-uncased-finetuned-sst-2-english"),
 		fmt.Sprintf("--s=%s", onnxRuntimeSharedLibrary),
 		"--type=textClassification")
-	if err := app.Run(args); err != nil {
+	if err := app.Run(context.Background(), args); err != nil {
 		check(t, err)
 	}
 }
