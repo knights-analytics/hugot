@@ -38,16 +38,18 @@ func (t *FeatureExtractionOutput) GetOutput() []any {
 
 // WithNormalization applies normalization to the mean pooled output of the feature pipeline.
 func WithNormalization() pipelineBackends.PipelineOption[*FeatureExtractionPipeline] {
-	return func(pipeline *FeatureExtractionPipeline) {
+	return func(pipeline *FeatureExtractionPipeline) error {
 		pipeline.Normalization = true
+		return nil
 	}
 }
 
 // WithOutputName if there are multiple outputs from the underlying model, which output should
 // be returned. If not passed, the first output from the feature pipeline is returned.
 func WithOutputName(outputName string) pipelineBackends.PipelineOption[*FeatureExtractionPipeline] {
-	return func(pipeline *FeatureExtractionPipeline) {
+	return func(pipeline *FeatureExtractionPipeline) error {
 		pipeline.OutputName = outputName
+		return nil
 	}
 }
 
@@ -61,7 +63,10 @@ func NewFeatureExtractionPipeline(config pipelineBackends.PipelineConfig[*Featur
 
 	pipeline := &FeatureExtractionPipeline{BasePipeline: defaultPipeline}
 	for _, o := range config.Options {
-		o(pipeline)
+		err = o(pipeline)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	// filter outputs

@@ -15,13 +15,11 @@ import (
 
 type ZeroShotClassificationPipeline struct {
 	*pipelineBackends.BasePipeline
-	IDLabelMap         map[int]string
 	Sequences          []string
 	Labels             []string
 	HypothesisTemplate string
 	Multilabel         bool
 	EntailmentID       int
-	SeparatorToken     string
 }
 
 type ZeroShotClassificationOutput struct {
@@ -40,22 +38,25 @@ type ZeroShotOutput struct {
 
 // WithMultilabel can be used to set whether the pipeline is multilabel.
 func WithMultilabel(multilabel bool) pipelineBackends.PipelineOption[*ZeroShotClassificationPipeline] {
-	return func(pipeline *ZeroShotClassificationPipeline) {
+	return func(pipeline *ZeroShotClassificationPipeline) error {
 		pipeline.Multilabel = multilabel
+		return nil
 	}
 }
 
 // WithLabels can be used to set the labels to classify the examples.
 func WithLabels(labels []string) pipelineBackends.PipelineOption[*ZeroShotClassificationPipeline] {
-	return func(pipeline *ZeroShotClassificationPipeline) {
+	return func(pipeline *ZeroShotClassificationPipeline) error {
 		pipeline.Labels = labels
+		return nil
 	}
 }
 
 // WithHypothesisTemplate can be used to set the hypothesis template for classification.
 func WithHypothesisTemplate(hypothesisTemplate string) pipelineBackends.PipelineOption[*ZeroShotClassificationPipeline] {
-	return func(pipeline *ZeroShotClassificationPipeline) {
+	return func(pipeline *ZeroShotClassificationPipeline) error {
 		pipeline.HypothesisTemplate = hypothesisTemplate
+		return nil
 	}
 }
 
@@ -114,7 +115,10 @@ func NewZeroShotClassificationPipeline(config pipelineBackends.PipelineConfig[*Z
 
 	pipeline := &ZeroShotClassificationPipeline{BasePipeline: defaultPipeline}
 	for _, o := range config.Options {
-		o(pipeline)
+		err = o(pipeline)
+		if err != nil {
+			return nil, err
+		}
 	}
 	pipeline.EntailmentID = -1 // Default value
 	pipeline.HypothesisTemplate = "This example is {}."
@@ -123,18 +127,13 @@ func NewZeroShotClassificationPipeline(config pipelineBackends.PipelineConfig[*Z
 		return nil, fmt.Errorf("no labels provided, please provide labels using the WithLabels() option")
 	}
 
-	// Set IDLabelMap
-	pipeline.IDLabelMap = model.IDLabelMap
-
 	// Find entailment ID
-	for id, label := range pipeline.IDLabelMap {
+	for id, label := range model.IDLabelMap {
 		if strings.HasPrefix(strings.ToLower(label), "entail") {
 			pipeline.EntailmentID = id
 			break
 		}
 	}
-
-	pipeline.SeparatorToken = model.SeparatorToken
 
 	return pipeline, err
 }
@@ -303,7 +302,7 @@ func (p *ZeroShotClassificationPipeline) RunPipeline(inputs []string) (*ZeroShot
 			// need to find a way to determine how many to insert or find a better way to tokenize inputs
 			// The difference in outputs for one separator vs two is very small (differences in the thousandths place), but they
 			// definitely are different
-			concatenatedString := pair[0] + p.SeparatorToken + pair[1]
+			concatenatedString := pair[0] + p.Model.SeparatorToken + pair[1]
 			runErrors = append(runErrors, p.Preprocess(batch, []string{concatenatedString}))
 			if e := errors.Join(runErrors...); e != nil {
 				return nil, errors.Join(e, batch.Destroy())
@@ -365,7 +364,7 @@ func (p *ZeroShotClassificationPipeline) Run(inputs []string) (pipelineBackends.
 func (p *ZeroShotClassificationPipeline) Validate() error {
 	var validationErrors []error
 
-	if len(p.IDLabelMap) <= 0 {
+	if len(p.Model.IDLabelMap) <= 0 {
 		validationErrors = append(validationErrors, fmt.Errorf("pipeline configuration invalid: length of id2label map for zero shot classification pipeline must be greater than zero"))
 	}
 

@@ -419,11 +419,11 @@ func textClassificationPipelineValidation(t *testing.T, session *Session) {
 	checkT(t, err)
 
 	t.Run("id-label-map", func(t *testing.T) {
-		labelMapInitial := sentimentPipeline.IDLabelMap
+		labelMapInitial := sentimentPipeline.Model.IDLabelMap
 		defer func() {
-			sentimentPipeline.IDLabelMap = labelMapInitial
+			sentimentPipeline.Model.IDLabelMap = labelMapInitial
 		}()
-		sentimentPipeline.IDLabelMap = map[int]string{}
+		sentimentPipeline.Model.IDLabelMap = map[int]string{}
 		err = sentimentPipeline.Validate()
 		assert.Error(t, err)
 	})
@@ -678,11 +678,11 @@ func zeroShotClassificationPipelineValidation(t *testing.T, session *Session) {
 	checkT(t, err)
 
 	t.Run("id-label-map", func(t *testing.T) {
-		labelMapInitial := sentimentPipeline.IDLabelMap
+		labelMapInitial := sentimentPipeline.Model.IDLabelMap
 		defer func() {
-			sentimentPipeline.IDLabelMap = labelMapInitial
+			sentimentPipeline.Model.IDLabelMap = labelMapInitial
 		}()
-		sentimentPipeline.IDLabelMap = map[int]string{}
+		sentimentPipeline.Model.IDLabelMap = map[int]string{}
 		err = sentimentPipeline.Validate()
 		assert.Error(t, err)
 	})

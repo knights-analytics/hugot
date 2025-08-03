@@ -64,7 +64,7 @@ type Pipeline interface {
 }
 
 // PipelineOption is an option for a pipeline type.
-type PipelineOption[T Pipeline] func(eo T)
+type PipelineOption[T Pipeline] func(eo T) error
 
 // PipelineConfig is a configuration for a pipeline type that can be used
 // to create that pipeline.
@@ -100,6 +100,7 @@ type PipelineBatch struct {
 	PaddingMask       [][]bool
 	DestroyInputs     func() error
 	OutputValues      []any
+	MaxNewTokens      int
 }
 
 func (b *PipelineBatch) Destroy() error {

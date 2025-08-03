@@ -16,7 +16,6 @@ import (
 
 type TextClassificationPipeline struct {
 	*pipelineBackends.BasePipeline
-	IDLabelMap              map[int]string
 	AggregationFunctionName string
 	ProblemType             string
 }
@@ -41,26 +40,30 @@ func (t *TextClassificationOutput) GetOutput() []any {
 // options
 
 func WithSoftmax() pipelineBackends.PipelineOption[*TextClassificationPipeline] {
-	return func(pipeline *TextClassificationPipeline) {
+	return func(pipeline *TextClassificationPipeline) error {
 		pipeline.AggregationFunctionName = "SOFTMAX"
+		return nil
 	}
 }
 
 func WithSigmoid() pipelineBackends.PipelineOption[*TextClassificationPipeline] {
-	return func(pipeline *TextClassificationPipeline) {
+	return func(pipeline *TextClassificationPipeline) error {
 		pipeline.AggregationFunctionName = "SIGMOID"
+		return nil
 	}
 }
 
 func WithSingleLabel() pipelineBackends.PipelineOption[*TextClassificationPipeline] {
-	return func(pipeline *TextClassificationPipeline) {
+	return func(pipeline *TextClassificationPipeline) error {
 		pipeline.ProblemType = "singleLabel"
+		return nil
 	}
 }
 
 func WithMultiLabel() pipelineBackends.PipelineOption[*TextClassificationPipeline] {
-	return func(pipeline *TextClassificationPipeline) {
+	return func(pipeline *TextClassificationPipeline) error {
 		pipeline.ProblemType = "multiLabel"
+		return nil
 	}
 }
 
@@ -74,7 +77,10 @@ func NewTextClassificationPipeline(config pipelineBackends.PipelineConfig[*TextC
 
 	pipeline := &TextClassificationPipeline{BasePipeline: defaultPipeline}
 	for _, o := range config.Options {
-		o(pipeline)
+		err = o(pipeline)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	if pipeline.ProblemType == "" {
@@ -87,9 +93,6 @@ func NewTextClassificationPipeline(config pipelineBackends.PipelineConfig[*TextC
 			pipeline.AggregationFunctionName = "SIGMOID"
 		}
 	}
-
-	// read id to label map
-	pipeline.IDLabelMap = model.IDLabelMap
 
 	// validate
 	err = pipeline.Validate()
@@ -137,7 +140,7 @@ func (p *TextClassificationPipeline) GetStats() []string {
 func (p *TextClassificationPipeline) Validate() error {
 	var validationErrors []error
 
-	if len(p.IDLabelMap) <= 0 {
+	if len(p.Model.IDLabelMap) <= 0 {
 		validationErrors = append(validationErrors, fmt.Errorf("pipeline configuration invalid: length of id2label map for text classification pipeline must be greater than zero"))
 	}
 
@@ -156,7 +159,7 @@ func (p *TextClassificationPipeline) Validate() error {
 		}
 	}
 	nLogits := int(outDims[len(outDims)-1])
-	if len(p.IDLabelMap) != nLogits {
+	if len(p.Model.IDLabelMap) != nLogits {
 		validationErrors = append(validationErrors, fmt.Errorf("pipeline configuration invalid: length of id2label map does not match number of logits in output (%d)", nLogits))
 	}
 	return errors.Join(validationErrors...)
@@ -221,7 +224,7 @@ func (p *TextClassificationPipeline) Postprocess(batch *pipelineBackends.Pipelin
 				err = errArgMax
 				continue
 			}
-			class, ok := p.IDLabelMap[index]
+			class, ok := p.Model.IDLabelMap[index]
 			if !ok {
 				err = fmt.Errorf("class with index number %d not found in id label map", index)
 			}
@@ -231,9 +234,9 @@ func (p *TextClassificationPipeline) Postprocess(batch *pipelineBackends.Pipelin
 			}
 			batchClassificationOutputs.ClassificationOutputs[i] = inputClassificationOutputs
 		case "multiLabel":
-			inputClassificationOutputs := make([]ClassificationOutput, len(p.IDLabelMap))
+			inputClassificationOutputs := make([]ClassificationOutput, len(p.Model.IDLabelMap))
 			for j := range outputCast[i] {
-				class, ok := p.IDLabelMap[j]
+				class, ok := p.Model.IDLabelMap[j]
 				if !ok {
 					err = fmt.Errorf("class with index number %d not found in id label map", j)
 				}

@@ -52,45 +52,51 @@ func (t *TokenClassificationOutput) GetOutput() []any {
 // WithSimpleAggregation sets the aggregation strategy for the token labels to simple
 // It reproduces simple aggregation from the huggingface implementation.
 func WithSimpleAggregation() pipelineBackends.PipelineOption[*TokenClassificationPipeline] {
-	return func(pipeline *TokenClassificationPipeline) {
+	return func(pipeline *TokenClassificationPipeline) error {
 		pipeline.AggregationStrategy = "SIMPLE"
+		return nil
 	}
 }
 
 // WithAverageAggregation sets the aggregation strategy for the token labels to average
 // It reproduces simple aggregation from the huggingface implementation.
 func WithAverageAggregation() pipelineBackends.PipelineOption[*TokenClassificationPipeline] {
-	return func(pipeline *TokenClassificationPipeline) {
+	return func(pipeline *TokenClassificationPipeline) error {
 		pipeline.AggregationStrategy = "AVERAGE"
+		return nil
 	}
 }
 
 // WithMaxAggregation sets the aggregation strategy for the token labels to Max
 // It reproduces max aggregation from the huggingface implementation.
 func WithMaxAggregation() pipelineBackends.PipelineOption[*TokenClassificationPipeline] {
-	return func(pipeline *TokenClassificationPipeline) {
+	return func(pipeline *TokenClassificationPipeline) error {
 		pipeline.AggregationStrategy = "MAX"
+		return nil
 	}
 }
 
 // WithFirstAggregation sets the aggregation strategy for the token labels to first
 // It reproduces first aggregation from the huggingface implementation.
 func WithFirstAggregation() pipelineBackends.PipelineOption[*TokenClassificationPipeline] {
-	return func(pipeline *TokenClassificationPipeline) {
+	return func(pipeline *TokenClassificationPipeline) error {
 		pipeline.AggregationStrategy = "FIRST"
+		return nil
 	}
 }
 
 // WithoutAggregation returns the token labels.
 func WithoutAggregation() pipelineBackends.PipelineOption[*TokenClassificationPipeline] {
-	return func(pipeline *TokenClassificationPipeline) {
+	return func(pipeline *TokenClassificationPipeline) error {
 		pipeline.AggregationStrategy = "NONE"
+		return nil
 	}
 }
 
 func WithIgnoreLabels(ignoreLabels []string) pipelineBackends.PipelineOption[*TokenClassificationPipeline] {
-	return func(pipeline *TokenClassificationPipeline) {
+	return func(pipeline *TokenClassificationPipeline) error {
 		pipeline.IgnoreLabels = ignoreLabels
+		return nil
 	}
 }
 
@@ -103,7 +109,10 @@ func NewTokenClassificationPipeline(config pipelineBackends.PipelineConfig[*Toke
 
 	pipeline := &TokenClassificationPipeline{BasePipeline: defaultPipeline}
 	for _, o := range config.Options {
-		o(pipeline)
+		err = o(pipeline)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	// Id label map

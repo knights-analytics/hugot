@@ -144,7 +144,7 @@ func TrainGoMLX(s *TrainingSession) error {
 
 		if s.earlyStopping != nil {
 			var bestLoss float32 = math.MaxFloat32
-			var epochsWithoutImprovement int = 0
+			epochsWithoutImprovement := 0
 
 			var evaluateEpoch train.OnStepFn = func(loop *train.Loop, metrics []*tensors.Tensor) error {
 				if loop.Epoch != currentEpoch {
