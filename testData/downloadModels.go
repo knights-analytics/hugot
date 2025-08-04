@@ -8,6 +8,20 @@ import (
 )
 
 // download the test models.
+
+type downloadModel struct {
+	name         string
+	onnxFilePath string
+}
+
+var models []downloadModel = []downloadModel{
+	{"KnightsAnalytics/deberta-v3-base-zeroshot-v1", ""},
+	{"KnightsAnalytics/distilbert-base-uncased-finetuned-sst-2-english", ""},
+	{"KnightsAnalytics/distilbert-NER", ""},
+	{"KnightsAnalytics/roberta-base-go_emotions", ""},
+	{"KnightsAnalytics/jina-reranker-v1-tiny-en", "model.onnx"},
+}
+
 func main() {
 	if ok, err := util.FileExists("./models"); err == nil {
 		if !ok {
@@ -17,29 +31,12 @@ func main() {
 				panic(err)
 			}
 
-			downloadOptions := hugot.NewDownloadOptions()
-
-			for _, modelName := range []string{
-				"KnightsAnalytics/all-MiniLM-L6-v2",
-				"KnightsAnalytics/deberta-v3-base-zeroshot-v1",
-				"KnightsAnalytics/distilbert-base-uncased-finetuned-sst-2-english",
-				"KnightsAnalytics/distilbert-NER",
-				"KnightsAnalytics/roberta-base-go_emotions",
-			} {
-				_, dlErr := hugot.DownloadModel(modelName, "./models", downloadOptions)
-				if dlErr != nil {
-					panic(dlErr)
+			for _, downloadModel := range models {
+				options := hugot.NewDownloadOptions()
+				if downloadModel.onnxFilePath != "" {
+					options.OnnxFilePath = downloadModel.onnxFilePath
 				}
-			}
-
-			// External models
-			downloadOptions.OnnxFilePath = "onnx/model.onnx"
-
-			for _, modelName := range []string{
-				"jinaai/jina-reranker-v1-tiny-en",
-				"cross-encoder/ms-marco-MiniLM-L6-v2",
-			} {
-				_, dlErr := hugot.DownloadModel(modelName, "./models", downloadOptions)
+				_, dlErr := hugot.DownloadModel(downloadModel.name, "./models", options)
 				if dlErr != nil {
 					panic(dlErr)
 				}

@@ -216,4 +216,3 @@ func TestReadmeExample(t *testing.T) {
 	fmt.Println(string(s))
 	// OUTPUT: {"ClassificationOutputs":[[{"Label":"POSITIVE","Score":0.9998536}],[{"Label":"NEGATIVE","Score":0.99752176}]]}
 }
-

@@ -811,7 +811,7 @@ func tokenClassificationPipelineValidation(t *testing.T, session *Session) {
 
 func crossEncoderPipeline(t *testing.T, session *Session) {
 	config := CrossEncoderConfig{
-		ModelPath: "./models/jinaai_jina-reranker-v1-tiny-en",
+		ModelPath: "./models/KnightsAnalytics_jina-reranker-v1-tiny-en",
 		Name:      "test-cross-encoder",
 	}
 	pipeline, err := NewPipeline(session, config)
@@ -845,12 +845,33 @@ func crossEncoderPipeline(t *testing.T, session *Session) {
 
 func crossEncoderPipelineValidation(t *testing.T, session *Session) {
 	config := CrossEncoderConfig{
-		ModelPath: "./models/KnightsAnalytics_distilbert-base-uncased-finetuned-sst-2-english",
+		ModelPath: "./models/KnightsAnalytics_jina-reranker-v1-tiny-en",
 		Name:      "test-cross-encoder-validation",
 	}
-	_, err := NewPipeline(session, config)
+	pipeline, err := NewPipeline(session, config)
+	if err != nil {
+		t.Fatalf("Failed to create pipeline: %v", err)
+	}
+
+	// 1. Test: output dims length != 2
+	pipeline.Model.OutputsMeta[0].Dimensions = pipelineBackends.NewShape(1)
+	err = pipeline.Validate()
 	if err == nil {
-		t.Fatal("expected validation error for cross encoder pipeline")
+		t.Errorf("Expected error for output dims length != 2, got %v", err)
+	}
+
+	// 2. Test: output dims second dim != 1
+	pipeline.Model.OutputsMeta[0].Dimensions = pipelineBackends.NewShape(2, 3)
+	err = pipeline.Validate()
+	if err == nil || err.Error() == "" {
+		t.Errorf("Expected error for output dims second dim != 1, got %v", err)
+	}
+
+	// 3. Test: more than one dynamic dim (-1)
+	pipeline.Model.OutputsMeta[0].Dimensions = pipelineBackends.NewShape(-1, -1)
+	err = pipeline.Validate()
+	if err == nil || err.Error() == "" {
+		t.Errorf("Expected error for more than one dynamic dim, got %v", err)
 	}
 }
 

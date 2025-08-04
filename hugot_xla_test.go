@@ -182,6 +182,26 @@ func TestZeroShotClassificationPipelineValidationXLA(t *testing.T) {
 	zeroShotClassificationPipelineValidation(t, session)
 }
 
+func TestCrossEncoderPipelineXLA(t *testing.T) {
+	session, err := NewXLASession()
+	checkT(t, err)
+	defer func(session *Session) {
+		destroyErr := session.Destroy()
+		checkT(t, destroyErr)
+	}(session)
+	crossEncoderPipeline(t, session)
+}
+
+func TestCrossEncoderPipelineValidationXLA(t *testing.T) {
+	session, err := NewXLASession()
+	checkT(t, err)
+	defer func(session *Session) {
+		destroyErr := session.Destroy()
+		checkT(t, destroyErr)
+	}(session)
+	crossEncoderPipelineValidation(t, session)
+}
+
 // No same name
 
 func TestNoSameNamePipelineXLA(t *testing.T) {

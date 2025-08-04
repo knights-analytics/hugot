@@ -13,17 +13,11 @@ import (
 	"github.com/knights-analytics/hugot/util"
 )
 
-var _ pipelineBackends.Pipeline = (*CrossEncoderPipeline)(nil)
-
 type CrossEncoderPipeline struct {
 	*pipelineBackends.BasePipeline
-	batchSize         int
-	maxConcurrentReqs int
-	sortResults       bool
-	scoreThreshold    *float32
-
-	// Performance monitoring
-	batchProcessor *BatchProcessor
+	batchSize      int
+	sortResults    bool
+	scoreThreshold *float32
 	stats          CrossEncoderStats
 }
 
@@ -39,47 +33,31 @@ type CrossEncoderStats struct {
 type CrossEncoderResult struct {
 	Document string
 	Score    float32
-	Index    int // Original position for stable sorting
+	Index    int
 }
 
 type CrossEncoderOutput struct {
-	Results   []CrossEncoderResult
-	QueryTime time.Duration
-	Stats     CrossEncoderStats
-}
-
-type BatchProcessor struct {
-	maxBatchSize int
-	timeout      time.Duration
-	requests     chan *BatchRequest
-}
-
-type BatchRequest struct {
-	query     string
-	documents []string
-	response  chan *BatchResponse
-}
-
-type BatchResponse struct {
-	output *CrossEncoderOutput
-	err    error
+	Results []CrossEncoderResult
 }
 
 func WithBatchSize(size int) pipelineBackends.PipelineOption[*CrossEncoderPipeline] {
-	return func(p *CrossEncoderPipeline) {
+	return func(p *CrossEncoderPipeline) error {
 		p.batchSize = size
+		return nil
 	}
 }
 
 func WithSortResults(sort bool) pipelineBackends.PipelineOption[*CrossEncoderPipeline] {
-	return func(p *CrossEncoderPipeline) {
+	return func(p *CrossEncoderPipeline) error {
 		p.sortResults = sort
+		return nil
 	}
 }
 
 func WithScoreThreshold(threshold float32) pipelineBackends.PipelineOption[*CrossEncoderPipeline] {
-	return func(p *CrossEncoderPipeline) {
+	return func(p *CrossEncoderPipeline) error {
 		p.scoreThreshold = &threshold
+		return nil
 	}
 }
 
@@ -99,7 +77,7 @@ func NewCrossEncoderPipeline(config pipelineBackends.PipelineConfig[*CrossEncode
 
 	pipeline := &CrossEncoderPipeline{
 		BasePipeline: defaultPipeline,
-		batchSize:    1, // Not sure why but I always get the best performance with 1
+		batchSize:    1,
 		sortResults:  true,
 	}
 
@@ -196,7 +174,7 @@ func (p *CrossEncoderPipeline) Preprocess(batch *pipelineBackends.PipelineBatch,
 
 	atomic.AddUint64(&p.Model.Tokenizer.TokenizerTimings.NumCalls, 1)
 	atomic.AddUint64(&p.Model.Tokenizer.TokenizerTimings.TotalNS, uint64(time.Since(start)))
-	err := pipelineBackends.CreateInputTensors(batch, p.Model.InputsMeta, p.Runtime)
+	err := pipelineBackends.CreateInputTensors(batch, p.Model, p.Runtime)
 	return err
 }
 
@@ -271,10 +249,6 @@ func (p *CrossEncoderPipeline) RunPipeline(query string, documents []string) (*C
 		p.stats.AverageLatency += duration
 	}()
 
-	return p.runSequential(query, documents)
-}
-
-func (p *CrossEncoderPipeline) runSequential(query string, documents []string) (*CrossEncoderOutput, error) {
 	var runErrors []error
 	allResults := make([]CrossEncoderResult, 0, len(documents))
 
@@ -298,8 +272,7 @@ func (p *CrossEncoderPipeline) runSequential(query string, documents []string) (
 	}
 
 	output := &CrossEncoderOutput{
-		Results:   allResults,
-		QueryTime: time.Since(time.Now()),
+		Results: allResults,
 	}
 
 	return output, errors.Join(runErrors...)
