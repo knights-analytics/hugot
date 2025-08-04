@@ -27,7 +27,6 @@ const onnxRuntimeSharedLibrary = "/usr/lib64/onnxruntime.so"
 // test download validation
 
 func TestDownloadValidation(t *testing.T) {
-
 	downloadOptions := NewDownloadOptions()
 
 	// a model with the required files in a subfolder should not error
@@ -808,6 +807,53 @@ func tokenClassificationPipelineValidation(t *testing.T, session *Session) {
 	})
 }
 
+// Cross Encoder
+
+func crossEncoderPipeline(t *testing.T, session *Session) {
+	config := CrossEncoderConfig{
+		ModelPath: "./models/jinaai_jina-reranker-v1-tiny-en",
+		Name:      "test-cross-encoder",
+	}
+	pipeline, err := NewPipeline(session, config)
+	checkT(t, err)
+
+	query := "What is the capital of France?"
+	documents := []string{
+		"Paris is the capital of France.",
+		"The Eiffel Tower is in Paris.",
+		"France is a country in Europe.",
+	}
+
+	inputs := append([]string{query}, documents...)
+	output, err := pipeline.Run(inputs)
+	checkT(t, err)
+
+	results := output.(*pipelines.CrossEncoderOutput).Results
+	if len(results) != 3 {
+		t.Errorf("Expected 3 results, got %d", len(results))
+	}
+	if results[0].Document != "Paris is the capital of France." {
+		t.Errorf("Expected 'Paris is the capital of France.' as best document, got '%s'", results[0].Document)
+	}
+	if results[0].Score <= results[1].Score {
+		t.Errorf("Expected result 0 to have higher score than result 1, but got %f and %f", results[0].Score, results[1].Score)
+	}
+	if results[1].Score <= results[2].Score {
+		t.Errorf("Expected result 1 to have higher score than result 2, but got %f and %f", results[1].Score, results[2].Score)
+	}
+}
+
+func crossEncoderPipelineValidation(t *testing.T, session *Session) {
+	config := CrossEncoderConfig{
+		ModelPath: "./models/KnightsAnalytics_distilbert-base-uncased-finetuned-sst-2-english",
+		Name:      "test-cross-encoder-validation",
+	}
+	_, err := NewPipeline(session, config)
+	if err == nil {
+		t.Fatal("expected validation error for cross encoder pipeline")
+	}
+}
+
 // No same name
 
 func noSameNamePipeline(t *testing.T, session *Session) {
@@ -829,8 +875,6 @@ func noSameNamePipeline(t *testing.T, session *Session) {
 	assert.Error(t, err3)
 }
 
-// destroy pipelines
-
 func destroyPipelines(t *testing.T, session *Session) {
 	t.Helper()
 
@@ -843,10 +887,8 @@ func destroyPipelines(t *testing.T, session *Session) {
 			pipelines.WithIgnoreLabels([]string{"O"}),
 		},
 	}
-	_, err2 := NewPipeline(session, configSimple)
-	if err2 != nil {
-		t.FailNow()
-	}
+	_, err := NewPipeline(session, configSimple)
+	checkT(t, err)
 
 	if len(session.models) != 1 {
 		t.Fatal("Session should have 1 model")

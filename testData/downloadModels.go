@@ -16,13 +16,29 @@ func main() {
 			if err != nil {
 				panic(err)
 			}
+
 			downloadOptions := hugot.NewDownloadOptions()
+
 			for _, modelName := range []string{
 				"KnightsAnalytics/all-MiniLM-L6-v2",
 				"KnightsAnalytics/deberta-v3-base-zeroshot-v1",
 				"KnightsAnalytics/distilbert-base-uncased-finetuned-sst-2-english",
 				"KnightsAnalytics/distilbert-NER",
-				"KnightsAnalytics/roberta-base-go_emotions"} {
+				"KnightsAnalytics/roberta-base-go_emotions",
+			} {
+				_, dlErr := hugot.DownloadModel(modelName, "./models", downloadOptions)
+				if dlErr != nil {
+					panic(dlErr)
+				}
+			}
+
+			// External models
+			downloadOptions.OnnxFilePath = "onnx/model.onnx"
+
+			for _, modelName := range []string{
+				"jinaai/jina-reranker-v1-tiny-en",
+				"cross-encoder/ms-marco-MiniLM-L6-v2",
+			} {
 				_, dlErr := hugot.DownloadModel(modelName, "./models", downloadOptions)
 				if dlErr != nil {
 					panic(dlErr)

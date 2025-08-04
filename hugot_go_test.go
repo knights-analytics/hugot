@@ -104,6 +104,28 @@ func TestTokenClassificationPipelineValidationGo(t *testing.T) {
 //	zeroShotClassificationPipelineValidation(t, session)
 // }
 
+// Cross Encoder
+
+func TestCrossEncoderPipelineGo(t *testing.T) {
+	session, err := NewGoSession()
+	checkT(t, err)
+	defer func(session *Session) {
+		destroyErr := session.Destroy()
+		checkT(t, destroyErr)
+	}(session)
+	crossEncoderPipeline(t, session)
+}
+
+func TestCrossEncoderPipelineValidationGo(t *testing.T) {
+	session, err := NewGoSession()
+	checkT(t, err)
+	defer func(session *Session) {
+		destroyErr := session.Destroy()
+		checkT(t, destroyErr)
+	}(session)
+	crossEncoderPipelineValidation(t, session)
+}
+
 // No same name
 
 func TestNoSameNamePipelineGo(t *testing.T) {
@@ -194,3 +216,4 @@ func TestReadmeExample(t *testing.T) {
 	fmt.Println(string(s))
 	// OUTPUT: {"ClassificationOutputs":[[{"Label":"POSITIVE","Score":0.9998536}],[{"Label":"NEGATIVE","Score":0.99752176}]]}
 }
+
