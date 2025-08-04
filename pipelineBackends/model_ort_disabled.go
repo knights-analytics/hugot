@@ -16,7 +16,7 @@ func createORTModelBackend(_ *Model, _ *options.Options) error {
 	return errors.New("ORT is not enabled")
 }
 
-func createInputTensorsORT(_ *PipelineBatch, _ []InputOutputInfo) error {
+func createInputTensorsORT(_ *PipelineBatch, _ *Model) error {
 	return errors.New("ORT is not enabled")
 }
 
