@@ -10,7 +10,7 @@ require (
 	github.com/gomlx/gopjrt v0.7.3
 	github.com/gomlx/onnx-gomlx v0.2.4
 	github.com/stretchr/testify v1.10.0
-	github.com/sugarme/tokenizer v0.2.3-0.20250716014333-b9b58278e3cc
+	github.com/sugarme/tokenizer v0.2.3-0.20250805004751-c821d4774253
 	github.com/urfave/cli/v3 v3.3.8
 	github.com/viant/afs v1.26.3
 	github.com/yalue/onnxruntime_go v1.21.0

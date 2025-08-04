@@ -2,7 +2,6 @@ package pipelineBackends
 
 import (
 	"bytes"
-	"errors"
 	"log"
 
 	"github.com/sugarme/tokenizer"
@@ -14,9 +13,6 @@ type GoTokenizer struct {
 }
 
 func loadGoTokenizer(tokenizerBytes []byte, model *Model) error {
-	if bytes.Contains(tokenizerBytes, []byte(`"type": "Unigram"`)) {
-		return errors.New("unigram tokenizer is not implemented in pure Go. Please use XLA/ORT backend instead")
-	}
 	tk, tkErr := pretrained.FromReader(bytes.NewReader(tokenizerBytes))
 	if tkErr != nil {
 		return tkErr

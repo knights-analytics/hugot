@@ -83,26 +83,26 @@ func TestTokenClassificationPipelineValidationGo(t *testing.T) {
 }
 
 // Zero shot
-//
-// func TestZeroShotClassificationPipelineGo(t *testing.T) {
-//	session, err := NewGoSession()
-//	check(t, err)
-//	defer func(session *Session) {
-//		destroyErr := session.Destroy()
-//		check(t, destroyErr)
-//	}(session)
-//	zeroShotClassificationPipeline(t, session)
-// }
-//
-// func TestZeroShotClassificationPipelineValidationGo(t *testing.T) {
-//	session, err := NewGoSession()
-//	check(t, err)
-//	defer func(session *Session) {
-//		destroyErr := session.Destroy()
-//		check(t, destroyErr)
-//	}(session)
-//	zeroShotClassificationPipelineValidation(t, session)
-// }
+
+func TestZeroShotClassificationPipelineGo(t *testing.T) {
+	session, err := NewGoSession()
+	checkT(t, err)
+	defer func(session *Session) {
+		destroyErr := session.Destroy()
+		checkT(t, destroyErr)
+	}(session)
+	zeroShotClassificationPipeline(t, session)
+}
+
+func TestZeroShotClassificationPipelineValidationGo(t *testing.T) {
+	session, err := NewGoSession()
+	checkT(t, err)
+	defer func(session *Session) {
+		destroyErr := session.Destroy()
+		checkT(t, destroyErr)
+	}(session)
+	zeroShotClassificationPipelineValidation(t, session)
+}
 
 // Cross Encoder
 
