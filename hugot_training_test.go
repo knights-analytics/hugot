@@ -329,6 +329,13 @@ func TestTrainEval(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	defer func() {
+		err := os.RemoveAll("./models/testTrainEval")
+		if err != nil {
+			t.Fatal(err)
+		}
+	}()
+
 	trainingConfig := TrainingConfig{
 		ModelPath:   modelPath,
 		Dataset:     trainDataset,
@@ -350,5 +357,10 @@ func TestTrainEval(t *testing.T) {
 	// train the model
 	if trainErr := trainingSession.Train(); trainErr != nil {
 		t.Fatal(trainErr)
+	}
+
+	// save the model
+	if saveErr := trainingSession.Save("./models/testTrainEval"); saveErr != nil {
+		t.Fatal(saveErr)
 	}
 }

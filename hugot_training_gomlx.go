@@ -137,10 +137,15 @@ func TrainGoMLX(s *TrainingSession) error {
 
 		// Loop for given number of epochs.
 		if s.config.Verbose {
-			fmt.Printf("Training for %d epochs\n", s.maxEpochs)
+			if s.earlyStopping != nil {
+				fmt.Printf("Training for %d epochs with early stopping\n", s.maxEpochs)
+			} else {
+				fmt.Printf("Training for %d epochs", s.maxEpochs)
+			}
 		}
 
 		var currentEpoch int
+		var evalLosses []float32
 
 		if s.earlyStopping != nil {
 			var bestLoss float32 = math.MaxFloat32
@@ -153,6 +158,7 @@ func TrainGoMLX(s *TrainingSession) error {
 					}
 					lossAndMetrics := gomlxTrainer.Eval(s.config.EvalDataset)
 					meanLoss := lossAndMetrics[1].Value().(float32)
+					evalLosses = append(evalLosses, meanLoss)
 
 					if bestLoss-meanLoss > s.earlyStopping.tolerance {
 						bestLoss = meanLoss
@@ -197,6 +203,9 @@ func TrainGoMLX(s *TrainingSession) error {
 		}
 		if s.config.Verbose {
 			fmt.Println("Training complete")
+		}
+		s.statistics = TrainingStatistics{
+			EpochEvalLosses: evalLosses,
 		}
 	}
 	return nil

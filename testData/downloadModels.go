@@ -15,6 +15,7 @@ type downloadModel struct {
 }
 
 var models []downloadModel = []downloadModel{
+	{"KnightsAnalytics/all-MiniLM-L6-v2", ""},
 	{"KnightsAnalytics/deberta-v3-base-zeroshot-v1", ""},
 	{"KnightsAnalytics/distilbert-base-uncased-finetuned-sst-2-english", ""},
 	{"KnightsAnalytics/distilbert-NER", ""},

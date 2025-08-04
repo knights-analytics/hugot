@@ -2,6 +2,7 @@ package hugot
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -19,6 +20,10 @@ type earlyStopping struct {
 	tolerance float32 // tolerance for loss comparison
 }
 
+type TrainingStatistics struct {
+	EpochEvalLosses []float32 `json:"epochEvalLosses"` // stores the evaluation loss for each epoch
+}
+
 type TrainingSession struct {
 	backend          string
 	pipeline         pipelineBackends.Pipeline
@@ -26,6 +31,7 @@ type TrainingSession struct {
 	cuda             bool
 	maxEpochs        int
 	earlyStopping    *earlyStopping
+	statistics       TrainingStatistics
 	freezeEmbeddings bool  // freeze the embedding layers of the transfomer model
 	freezeLayers     []int // freeze the layers of the transformer model, 0 is the first layer etc. Set [-1] to freeze all layers apart from the last one
 }
@@ -183,7 +189,6 @@ func newTrainingSession[T pipelineBackends.Pipeline](backend string, config Trai
 	default:
 		return nil, fmt.Errorf("training for pipeline type is not supported")
 	}
-
 	if session.config.Verbose {
 		session.config.Dataset.SetVerbose(true)
 	}
@@ -209,6 +214,21 @@ func (s *TrainingSession) Save(path string) error {
 	}
 
 	var writeErr error
+
+	sw, err := util.NewFileWriter(util.PathJoinSafe(path, "statistics.txt"), "")
+	if err != nil {
+		return err
+	}
+	defer func() {
+		writeErr = errors.Join(writeErr, sw.Close())
+	}()
+	statisticsBytes, err := json.Marshal(s.statistics)
+	if err != nil {
+		return fmt.Errorf("failed to marshal training statistics: %w", err)
+	}
+	if _, err = sw.Write(statisticsBytes); err != nil {
+		return fmt.Errorf("failed to write training statistics: %w", err)
+	}
 
 	model := s.pipeline.GetModel()
 	if model != nil {
@@ -242,6 +262,7 @@ func (s *TrainingSession) Save(path string) error {
 	} else {
 		return fmt.Errorf("pipeline model is nil")
 	}
+	return writeErr
 }
 
 func copyTokenizer(from, to string) error {
