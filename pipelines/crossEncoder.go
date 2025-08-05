@@ -280,16 +280,17 @@ func (p *CrossEncoderPipeline) RunPipeline(query string, documents []string) (*C
 
 func (p *CrossEncoderPipeline) runBatch(query string, documents []string, startIndex int) (*CrossEncoderOutput, error) {
 	var runErrors []error
-	batch := pipelineBackends.NewBatch()
-
-	defer func(*pipelineBackends.PipelineBatch) {
-		runErrors = append(runErrors, batch.Destroy())
-	}(batch)
 
 	inputs := make([]string, len(documents))
 	for i, doc := range documents {
 		inputs[i] = fmt.Sprintf("[CLS] %s [SEP] %s [SEP]", query, doc)
 	}
+
+	batch := pipelineBackends.NewBatch(len(inputs))
+
+	defer func(*pipelineBackends.PipelineBatch) {
+		runErrors = append(runErrors, batch.Destroy())
+	}(batch)
 
 	runErrors = append(runErrors, p.Preprocess(batch, inputs))
 	if e := errors.Join(runErrors...); e != nil {

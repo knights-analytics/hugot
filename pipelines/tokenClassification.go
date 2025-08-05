@@ -531,7 +531,7 @@ func (p *TokenClassificationPipeline) Run(inputs []string) (pipelineBackends.Pip
 // RunPipeline is like Run but returns the concrete type rather than the interface.
 func (p *TokenClassificationPipeline) RunPipeline(inputs []string) (*TokenClassificationOutput, error) {
 	var runErrors []error
-	batch := pipelineBackends.NewBatch()
+	batch := pipelineBackends.NewBatch(len(inputs))
 	defer func(*pipelineBackends.PipelineBatch) {
 		runErrors = append(runErrors, batch.Destroy())
 	}(batch)

@@ -62,7 +62,7 @@ func loadInputOutputMetaORT(onnxBytes []byte) ([]InputOutputInfo, []InputOutputI
 }
 
 func createInputTensorsORT(batch *PipelineBatch, model *Model) error {
-	batchSize := len(batch.Input)
+	batchSize := batch.Size
 	tensorSize := batchSize * batch.MaxSequenceLength
 
 	inputTensors := make([]ort.Value, len(model.InputsMeta))
@@ -119,7 +119,7 @@ func createInputTensorsORT(batch *PipelineBatch, model *Model) error {
 }
 
 func runORTSessionOnBatch(batch *PipelineBatch, p *BasePipeline) error {
-	actualBatchSize := int64(len(batch.Input))
+	actualBatchSize := int64(batch.Size)
 	maxSequenceLength := int64(batch.MaxSequenceLength)
 	var err error
 
@@ -167,9 +167,9 @@ func runORTSessionOnBatch(batch *PipelineBatch, p *BasePipeline) error {
 	for i, t := range outputTensors {
 		switch v := t.(type) {
 		case *ort.Tensor[float32]:
-			convertedOutput[i] = ReshapeOutput(v.GetData(), p.Model.OutputsMeta[i], batch.PaddingMask, batch.MaxSequenceLength)
+			convertedOutput[i] = ReshapeOutput(v.GetData(), p.Model.OutputsMeta[i], batch.Size, batch.PaddingMask, batch.MaxSequenceLength)
 		case *ort.Tensor[int64]:
-			convertedOutput[i] = ReshapeOutput(v.GetData(), p.Model.OutputsMeta[i], batch.PaddingMask, batch.MaxSequenceLength)
+			convertedOutput[i] = ReshapeOutput(v.GetData(), p.Model.OutputsMeta[i], batch.Size, batch.PaddingMask, batch.MaxSequenceLength)
 		}
 	}
 

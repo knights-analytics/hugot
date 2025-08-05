@@ -131,7 +131,7 @@ func loadInputOutputMetaGoMLX(model *onnx.Model) ([]InputOutputInfo, []InputOutp
 }
 
 func createInputTensorsGoMLX(batch *PipelineBatch, model *Model, padBatchDimension bool) error {
-	batchSize := len(batch.Input)
+	batchSize := batch.Size
 	batchSizePadded := batchSize
 	if padBatchDimension {
 		batchSizePadded = nextPowerOf2(batchSize)
@@ -204,11 +204,11 @@ func runGoMLXSessionOnBatch(batch *PipelineBatch, p *BasePipeline) error {
 		switch t.DType() {
 		case dtypes.Float32:
 			tensors.ConstFlatData(t, func(flat []float32) {
-				convertedOutput[i] = ReshapeOutput(flat, p.Model.OutputsMeta[i], batch.PaddingMask, batch.MaxSequenceLength)
+				convertedOutput[i] = ReshapeOutput(flat, p.Model.OutputsMeta[i], batch.Size, batch.PaddingMask, batch.MaxSequenceLength)
 			})
 		case dtypes.Int64:
 			tensors.ConstFlatData(t, func(flat []int64) {
-				convertedOutput[i] = ReshapeOutput(flat, p.Model.OutputsMeta[i], batch.PaddingMask, batch.MaxSequenceLength)
+				convertedOutput[i] = ReshapeOutput(flat, p.Model.OutputsMeta[i], batch.Size, batch.PaddingMask, batch.MaxSequenceLength)
 			})
 		}
 	}

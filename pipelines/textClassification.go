@@ -260,7 +260,7 @@ func (p *TextClassificationPipeline) Run(inputs []string) (pipelineBackends.Pipe
 
 func (p *TextClassificationPipeline) RunPipeline(inputs []string) (*TextClassificationOutput, error) {
 	var runErrors []error
-	batch := pipelineBackends.NewBatch()
+	batch := pipelineBackends.NewBatch(len(inputs))
 	defer func(*pipelineBackends.PipelineBatch) {
 		runErrors = append(runErrors, batch.Destroy())
 	}(batch)

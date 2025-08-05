@@ -293,7 +293,7 @@ func (p *ZeroShotClassificationPipeline) RunPipeline(inputs []string) (*ZeroShot
 		var sequenceTensors [][]float32
 		for _, pair := range sequence {
 
-			batch := pipelineBackends.NewBatch()
+			batch := pipelineBackends.NewBatch(len(inputs))
 
 			// have to do this because python inserts a separator token in between the two clauses when tokenizing
 			// separator token isn't universal and depends on its value in special_tokens_map.json of model

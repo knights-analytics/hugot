@@ -94,6 +94,7 @@ type TokenizedInput struct {
 
 // PipelineBatch represents a batch of inputs that runs through the pipeline.
 type PipelineBatch struct {
+	Size              int
 	Input             []TokenizedInput
 	MaxSequenceLength int
 	InputValues       any
@@ -108,10 +109,12 @@ func (b *PipelineBatch) Destroy() error {
 }
 
 // NewBatch initializes a new batch for inference.
-func NewBatch() *PipelineBatch {
+func NewBatch(size int) *PipelineBatch {
 	return &PipelineBatch{DestroyInputs: func() error {
 		return nil
-	}}
+	},
+		Size: size,
+	}
 }
 
 func GetNames(info []InputOutputInfo) []string {

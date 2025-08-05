@@ -236,7 +236,7 @@ func (p *FeatureExtractionPipeline) Run(inputs []string) (pipelineBackends.Pipel
 // RunPipeline is like Run, but returns the concrete feature extraction output type rather than the interface.
 func (p *FeatureExtractionPipeline) RunPipeline(inputs []string) (*FeatureExtractionOutput, error) {
 	var runErrors []error
-	batch := pipelineBackends.NewBatch()
+	batch := pipelineBackends.NewBatch(len(inputs))
 	defer func(*pipelineBackends.PipelineBatch) {
 		runErrors = append(runErrors, batch.Destroy())
 	}(batch)

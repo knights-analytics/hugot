@@ -48,8 +48,8 @@ func (s *SemanticSimilarityDataset) Yield() (spec any, inputs []*tensors.Tensor,
 	var labelTensor []*tensors.Tensor
 
 	if len(exampleBatch) > 0 {
-		batchLhs := pipelineBackends.NewBatch()
-		batchRhs := pipelineBackends.NewBatch()
+		batchLhs := pipelineBackends.NewBatch(len(exampleBatch))
+		batchRhs := pipelineBackends.NewBatch(len(exampleBatch))
 
 		inputsLhs := make([]string, 0, len(exampleBatch))
 		inputsRhs := make([]string, 0, len(exampleBatch))

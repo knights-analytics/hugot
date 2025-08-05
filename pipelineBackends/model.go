@@ -272,26 +272,26 @@ func loadModelConfig(model *Model) error {
 	return nil
 }
 
-func ReshapeOutput[T float32 | int64](input []T, meta InputOutputInfo, paddingMask [][]bool, sequenceLength int) any {
+func ReshapeOutput[T float32 | int64](input []T, meta InputOutputInfo, batchSize int, paddingMask [][]bool, sequenceLength int) any {
 
 	var outArray any
 	dimensions := meta.Dimensions.ValuesInt()
 	lenDimensions := len(dimensions)
 	switch lenDimensions {
 	case 2:
-		outArray = flatDataTo2D(input, paddingMask, dimensions[lenDimensions-1])
+		outArray = flatDataTo2D(input, batchSize, dimensions[lenDimensions-1])
 	case 3:
 		outArray = flatDataTo3D(input, paddingMask, sequenceLength, dimensions[lenDimensions-1])
 	}
 	return outArray
 }
 
-func flatDataTo2D[T float32 | int64](input []T, paddingMask [][]bool, dimension int) [][]T {
+func flatDataTo2D[T float32 | int64](input []T, batchSize int, dimension int) [][]T {
 	// Input string, token, dimension
-	output := make([][]T, len(paddingMask))
+	output := make([][]T, batchSize)
 
 	counter := 0
-	for batchIndex := range paddingMask {
+	for batchIndex := range batchSize {
 		inputEmbedding := make([]T, dimension)
 
 		for i := 0; i < dimension; i++ {
