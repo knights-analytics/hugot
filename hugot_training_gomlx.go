@@ -145,17 +145,22 @@ func TrainGoMLX(s *TrainingSession) error {
 		}
 
 		var currentEpoch int
+		var trainLosses []float32
 		var evalLosses []float32
 
-		if s.earlyStopping != nil {
-			var bestLoss float32 = math.MaxFloat32
-			epochsWithoutImprovement := 0
+		var bestLoss float32 = math.MaxFloat32
+		epochsWithoutImprovement := 0
 
-			var evaluateEpoch train.OnStepFn = func(loop *train.Loop, metrics []*tensors.Tensor) error {
-				if loop.Epoch != currentEpoch {
-					if s.config.Verbose {
-						fmt.Printf("Running evaluation for epoch %d\n", loop.Epoch)
-					}
+		var evaluateEpoch train.OnStepFn = func(loop *train.Loop, metrics []*tensors.Tensor) error {
+			if loop.Epoch != currentEpoch {
+				if s.config.Verbose {
+					fmt.Printf("Running evaluation for epoch %d\n", loop.Epoch)
+				}
+				lossAndMetrics := gomlxTrainer.Eval(s.config.Dataset)
+				meanTrainLoss := lossAndMetrics[1].Value().(float32)
+				trainLosses = append(trainLosses, meanTrainLoss)
+
+				if s.earlyStopping != nil {
 					lossAndMetrics := gomlxTrainer.Eval(s.config.EvalDataset)
 					meanLoss := lossAndMetrics[1].Value().(float32)
 					evalLosses = append(evalLosses, meanLoss)
@@ -180,10 +185,10 @@ func TrainGoMLX(s *TrainingSession) error {
 					}
 				}
 				currentEpoch = loop.Epoch
-				return nil
 			}
-			loop.OnStep("evaluateAfterEpoch", train.Priority(1), evaluateEpoch)
+			return nil
 		}
+		loop.OnStep("evaluateAfterEpoch", train.Priority(1), evaluateEpoch)
 
 		// we rely on try catch because an error is returned if there is an initialization error but
 		// a panic will be thrown if e.g. dataset reset fails.
@@ -205,7 +210,8 @@ func TrainGoMLX(s *TrainingSession) error {
 			fmt.Println("Training complete")
 		}
 		s.statistics = TrainingStatistics{
-			EpochEvalLosses: evalLosses,
+			EpochTrainLosses: trainLosses,
+			EpochEvalLosses:  evalLosses,
 		}
 	}
 	return nil

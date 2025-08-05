@@ -21,7 +21,8 @@ type earlyStopping struct {
 }
 
 type TrainingStatistics struct {
-	EpochEvalLosses []float32 `json:"epochEvalLosses"` // stores the evaluation loss for each epoch
+	EpochTrainLosses []float32 `json:"epochTrainLosses"` // stores the training loss for each epoch
+	EpochEvalLosses  []float32 `json:"epochEvalLosses"`  // stores the evaluation loss for each epoch
 }
 
 type TrainingSession struct {
@@ -215,18 +216,19 @@ func (s *TrainingSession) Save(path string) error {
 
 	var writeErr error
 
-	sw, err := util.NewFileWriter(util.PathJoinSafe(path, "statistics.txt"), "")
+	statisticsWriter, err := util.NewFileWriter(util.PathJoinSafe(path, "statistics.txt"), "")
 	if err != nil {
 		return err
 	}
 	defer func() {
-		writeErr = errors.Join(writeErr, sw.Close())
+		writeErr = errors.Join(writeErr, statisticsWriter.Close())
 	}()
+
 	statisticsBytes, err := json.Marshal(s.statistics)
 	if err != nil {
 		return fmt.Errorf("failed to marshal training statistics: %w", err)
 	}
-	if _, err = sw.Write(statisticsBytes); err != nil {
+	if _, err = statisticsWriter.Write(statisticsBytes); err != nil {
 		return fmt.Errorf("failed to write training statistics: %w", err)
 	}
 
@@ -236,26 +238,21 @@ func (s *TrainingSession) Save(path string) error {
 			goMLXModel := model.GoMLXModel
 
 			if goMLXModel != nil {
-				w, err := util.NewFileWriter(util.PathJoinSafe(path, "model.onnx"), "")
+				modelWriter, err := util.NewFileWriter(util.PathJoinSafe(path, "model.onnx"), "")
 				if err != nil {
 					return err
 				}
 				defer func() {
-					writeErr = errors.Join(writeErr, w.Close())
+					writeErr = errors.Join(writeErr, modelWriter.Close())
 				}()
-
-				if writeErr = goMLXModel.Save(w); writeErr != nil {
-					return writeErr
-				}
+				writeErr = errors.Join(writeErr, goMLXModel.Save(modelWriter))
 				if model.Tokenizer != nil {
 					// copy tokenizer files from original model
-					if writeErr = copyTokenizer(model.Path, path); writeErr != nil {
-						return writeErr
-					}
+					writeErr = errors.Join(writeErr, copyTokenizer(model.Path, path))
 				}
-				return writeErr
+			} else {
+				return fmt.Errorf("gomlx model is nil")
 			}
-			return fmt.Errorf("model is nil")
 		} else {
 			return fmt.Errorf("go or XLA backends are required for saving a training model")
 		}
