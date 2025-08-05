@@ -17,6 +17,7 @@ type Session struct {
 	textClassificationPipelines     pipelineMap[*pipelines.TextClassificationPipeline]
 	zeroShotClassificationPipelines pipelineMap[*pipelines.ZeroShotClassificationPipeline]
 	crossEncoderPipelines           pipelineMap[*pipelines.CrossEncoderPipeline]
+	imageClassificationPipelines    pipelineMap[*pipelines.ImageClassificationPipeline]
 	models                          map[string]*pipelineBackends.Model
 	options                         *options.Options
 	environmentDestroy              func() error
@@ -42,6 +43,7 @@ func newSession(backend string, opts ...options.WithOption) (*Session, error) {
 		tokenClassificationPipelines:    map[string]*pipelines.TokenClassificationPipeline{},
 		zeroShotClassificationPipelines: map[string]*pipelines.ZeroShotClassificationPipeline{},
 		crossEncoderPipelines:           map[string]*pipelines.CrossEncoderPipeline{},
+		imageClassificationPipelines:    map[string]*pipelines.ImageClassificationPipeline{},
 		models:                          map[string]*pipelineBackends.Model{},
 		options:                         parsedOptions,
 		environmentDestroy: func() error {
@@ -92,6 +94,12 @@ type CrossEncoderConfig = pipelineBackends.PipelineConfig[*pipelines.CrossEncode
 // CrossEncoderOption is an option for a cross encoder pipeline
 type CrossEncoderOption = pipelineBackends.PipelineOption[*pipelines.CrossEncoderPipeline]
 
+// ImageClassificationConfig is the configuration for an image classification pipeline
+type ImageClassificationConfig = pipelineBackends.PipelineConfig[*pipelines.ImageClassificationPipeline]
+
+// ImageClassificationOption is an option for an image classification pipeline
+type ImageClassificationOption = pipelineBackends.PipelineOption[*pipelines.ImageClassificationPipeline]
+
 // NewPipeline can be used to create a new pipeline of type T. The initialised pipeline will be returned and it
 // will also be stored in the session object so that all created pipelines can be destroyed with session.Destroy()
 // at once.
@@ -139,6 +147,8 @@ func NewPipeline[T pipelineBackends.Pipeline](s *Session, pipelineConfig pipelin
 		s.zeroShotClassificationPipelines[name] = typedPipeline
 	case *pipelines.CrossEncoderPipeline:
 		s.crossEncoderPipelines[name] = typedPipeline
+	case *pipelines.ImageClassificationPipeline:
+		s.imageClassificationPipelines[name] = typedPipeline
 	default:
 		return pipeline, fmt.Errorf("pipeline type not supported: %T", typedPipeline)
 	}
@@ -190,6 +200,14 @@ func InitializePipeline[T pipelineBackends.Pipeline](p T, pipelineConfig pipelin
 		}
 		pipeline = any(pipelineInitialised).(T)
 		name = config.Name
+	case *pipelines.ImageClassificationPipeline:
+		config := any(pipelineConfig).(pipelineBackends.PipelineConfig[*pipelines.ImageClassificationPipeline])
+		pipelineInitialised, err := pipelines.NewImageClassificationPipeline(config, options, model)
+		if err != nil {
+			return pipeline, name, err
+		}
+		pipeline = any(pipelineInitialised).(T)
+		name = config.Name
 	default:
 		return pipeline, name, fmt.Errorf("not implemented")
 	}
@@ -228,6 +246,12 @@ func GetPipeline[T pipelineBackends.Pipeline](s *Session, name string) (T, error
 		return any(p).(T), nil
 	case *pipelines.CrossEncoderPipeline:
 		p, ok := s.crossEncoderPipelines[name]
+		if !ok {
+			return pipeline, &pipelineNotFoundError{pipelineName: name}
+		}
+		return any(p).(T), nil
+	case *pipelines.ImageClassificationPipeline:
+		p, ok := s.imageClassificationPipelines[name]
 		if !ok {
 			return pipeline, &pipelineNotFoundError{pipelineName: name}
 		}
@@ -289,6 +313,17 @@ func ClosePipeline[T pipelineBackends.Pipeline](s *Session, name string) error {
 		if ok {
 			model := p.Model
 			delete(s.crossEncoderPipelines, name)
+			delete(model.Pipelines, name)
+			if len(model.Pipelines) == 0 {
+				delete(s.models, model.Path)
+				return model.Destroy()
+			}
+		}
+	case *pipelines.ImageClassificationPipeline:
+		p, ok := s.imageClassificationPipelines[name]
+		if ok {
+			model := p.Model
+			delete(s.imageClassificationPipelines, name)
 			delete(model.Pipelines, name)
 			if len(model.Pipelines) == 0 {
 				delete(s.models, model.Path)

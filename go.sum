@@ -33,8 +33,11 @@ github.com/gomlx/gomlx v0.21.1 h1:B3xkO4raitt4RlqW1zG0QKS9ro9JncrjOC3iPr/g4D0=
 github.com/gomlx/gomlx v0.21.1/go.mod h1:0t5TiwpXZtg5o4D8HLN3sHiegT6HjAwCNWJuiH0IuGs=
 github.com/gomlx/gopjrt v0.7.4 h1:IfAHxLSvTor4WBcWO11CaRS0ZdHzptxYIPEY3Ko0UwE=
 github.com/gomlx/gopjrt v0.7.4/go.mod h1:VswjttDY1uSllQ+Vs69P4kgsH3EkFEHADUCdDbfgh0Y=
+<<<<<<< HEAD
+=======
 github.com/gomlx/onnx-gomlx v0.2.4 h1:vZXXeUBq6XjPemZ16iwjNaJs/qMDMMQ+nb6wALQeCGc=
 github.com/gomlx/onnx-gomlx v0.2.4/go.mod h1:mBFZF1OT5hW/jsc0ae58VKoB9BaGYpEaZ36xakWxEds=
+>>>>>>> fa31e9f (fixes)
 github.com/google/go-cmp v0.6.0 h1:ofyhxvXcZhMsU5ulbFiLKl/XBFqE1GSq7atu8tAmTRI=
 github.com/google/go-cmp v0.6.0/go.mod h1:17dUlkBOakJ0+DkrSSNjCkIjxS6bF9zb3elmeNGIjoY=
 github.com/google/uuid v1.6.0 h1:NIvaJDMOsjHA8n1jAhLSgzrAzy1Hgr+hNrb57e+94F0=

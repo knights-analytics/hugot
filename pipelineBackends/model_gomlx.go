@@ -71,11 +71,9 @@ func createGoMLXModelBackend(model *Model, options *options.Options) error {
 
 		// Create model executor.
 		callFunc := func(ctx *context.Context, inputs []*graph.Node) []*graph.Node {
-			inputsMap := map[string]*graph.Node{
-				"input_ids":      inputs[0],
-				"attention_mask": inputs[1]}
-			if modelParsed.NumInputs() == 3 {
-				inputsMap["token_type_ids"] = inputs[2]
+			inputsMap := map[string]*graph.Node{}
+			for i, inputMeta := range model.InputsMeta {
+				inputsMap[inputMeta.Name] = inputs[i]
 			}
 			return modelParsed.CallGraph(ctx, inputs[0].Graph(), inputsMap, outputNames...)
 		}
@@ -246,6 +244,34 @@ func (goMLXModel *GoMLXModel) Save(w io.Writer) error {
 	err := goMLXModel.OnnxModel.Write(w)
 	if err != nil {
 		return err
+	}
+	return nil
+}
+
+func createImageTensorsGoXLA(batch *PipelineBatch, preprocessed [][][][]float32) error {
+	if len(preprocessed) == 0 {
+		return errors.New("no preprocessed images provided")
+	}
+	n, c, h, w := len(preprocessed), len(preprocessed[0]), len(preprocessed[0][0]), len(preprocessed[0][0][0])
+	backing := make([]float32, n*c*h*w)
+	idx := 0
+	for i := range preprocessed {
+		for ch := range preprocessed[i] {
+			for y := range preprocessed[i][ch] {
+				for x := range preprocessed[i][ch][y] {
+					backing[idx] = preprocessed[i][ch][y][x]
+					idx++
+				}
+			}
+		}
+	}
+	inputTensors := []*tensors.Tensor{tensors.FromFlatDataAndDimensions(backing, n, c, h, w)}
+	batch.InputValues = inputTensors
+	batch.DestroyInputs = func() error {
+		for _, input := range inputTensors {
+			input.FinalizeAll()
+		}
+		return nil
 	}
 	return nil
 }

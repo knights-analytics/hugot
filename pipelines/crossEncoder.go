@@ -135,6 +135,10 @@ func (p *CrossEncoderPipeline) GetStats() []string {
 func (p *CrossEncoderPipeline) Validate() error {
 	var validationErrors []error
 
+	if p.Model.Tokenizer == nil {
+		validationErrors = append(validationErrors, fmt.Errorf("cross encoder pipeline requires a tokenizer"))
+	}
+
 	outDims := p.Model.OutputsMeta[0].Dimensions
 	if len(outDims) != 2 {
 		validationErrors = append(validationErrors, fmt.Errorf("pipeline configuration invalid: cross encoder must have 2 dimensional output"))

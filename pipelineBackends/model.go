@@ -74,7 +74,10 @@ func LoadModel(path string, onnxFilename string, options *options.Options) (*Mod
 	}
 
 	model.Destroy = func() error {
-		destroyErr := model.Tokenizer.Destroy()
+		var destroyErr error
+		if model.Tokenizer != nil {
+			destroyErr = model.Tokenizer.Destroy()
+		}
 		switch options.Backend {
 		case "ORT":
 			destroyErr = errors.Join(destroyErr, model.ORTModel.Destroy())
@@ -289,6 +292,12 @@ func ReshapeOutput[T float32 | int64](input []T, meta InputOutputInfo, batchSize
 func flatDataTo2D[T float32 | int64](input []T, batchSize int, dimension int) [][]T {
 	// Input string, token, dimension
 	output := make([][]T, batchSize)
+
+	if dimension == -1 {
+		// it can happen in principle that the embedding dimension is -1 if it was so exported from onnx even though there
+		// is a fixed out dimension so we do this.
+		dimension = len(input) / batchSize
+	}
 
 	counter := 0
 	for batchIndex := range batchSize {

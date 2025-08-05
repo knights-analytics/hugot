@@ -126,6 +126,28 @@ func TestCrossEncoderPipelineValidationGo(t *testing.T) {
 	crossEncoderPipelineValidation(t, session)
 }
 
+// Image classification
+
+func TestImageClassificationPipelineGo(t *testing.T) {
+	session, err := NewXLASession()
+	checkT(t, err)
+	defer func(session *Session) {
+		destroyErr := session.Destroy()
+		checkT(t, destroyErr)
+	}(session)
+	imageClassificationPipeline(t, session)
+}
+
+func TestImageClassificationPipelineValidationGo(t *testing.T) {
+	session, err := NewXLASession()
+	checkT(t, err)
+	defer func(session *Session) {
+		destroyErr := session.Destroy()
+		checkT(t, destroyErr)
+	}(session)
+	imageClassificationPipelineValidation(t, session)
+}
+
 // No same name
 
 func TestNoSameNamePipelineGo(t *testing.T) {

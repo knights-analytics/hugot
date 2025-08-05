@@ -172,10 +172,8 @@ func runORTSessionOnBatch(batch *PipelineBatch, p *BasePipeline) error {
 			convertedOutput[i] = ReshapeOutput(v.GetData(), p.Model.OutputsMeta[i], batch.Size, batch.PaddingMask, batch.MaxSequenceLength)
 		}
 	}
-
 	// store resulting tensors
 	batch.OutputValues = convertedOutput
-
 	return err
 }
 
@@ -188,4 +186,32 @@ func convertORTInputOutputs(inputOutputs []ort.InputOutputInfo) []InputOutputInf
 		}
 	}
 	return inputOutputsStandardised
+}
+
+func createImageTensorsORT(batch *PipelineBatch, preprocessed [][][][]float32) error {
+	if len(preprocessed) == 0 {
+		return errors.New("no preprocessed images provided")
+	}
+	n, c, h, w := len(preprocessed), len(preprocessed[0]), len(preprocessed[0][0]), len(preprocessed[0][0][0])
+	backing := make([]float32, n*c*h*w)
+	idx := 0
+	for i := range n {
+		for ch := range c {
+			for y := range h {
+				for x := range w {
+					backing[idx] = preprocessed[i][ch][y][x]
+					idx++
+				}
+			}
+		}
+	}
+	tensor, err := ort.NewTensor(ort.NewShape(int64(n), int64(c), int64(h), int64(w)), backing)
+	if err != nil {
+		return err
+	}
+	batch.InputValues = []ort.Value{tensor}
+	batch.DestroyInputs = func() error {
+		return tensor.Destroy()
+	}
+	return nil
 }

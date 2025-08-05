@@ -149,9 +149,7 @@ func validateDownloadHfModel(repo *hub.Repo, options DownloadOptions) ([]string,
 	}
 
 	var errs []error
-	if tokenizerPath == "" {
-		errs = append(errs, fmt.Errorf("model does not have a tokenizer.json file"))
-	}
+
 	if onnxFilePath != "" {
 		if onnxPath == "" {
 			errs = append(errs, fmt.Errorf("model .onnx file not found at %s", onnxFilePath))
@@ -165,5 +163,9 @@ func validateDownloadHfModel(repo *hub.Repo, options DownloadOptions) ([]string,
 		}
 	}
 
-	return append(toDownload, tokenizerPath, onnxPath), errors.Join(errs...)
+	files := append(toDownload, onnxPath)
+	if tokenizerPath != "" {
+		files = append(files, tokenizerPath)
+	}
+	return files, errors.Join(errs...)
 }

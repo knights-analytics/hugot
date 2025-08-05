@@ -174,6 +174,10 @@ func (p *TokenClassificationPipeline) GetStats() []string {
 func (p *TokenClassificationPipeline) Validate() error {
 	var validationErrors []error
 
+	if p.Model.Tokenizer == nil {
+		validationErrors = append(validationErrors, fmt.Errorf("token classification pipeline requires a tokenizer"))
+	}
+
 	outputDim := p.Model.OutputsMeta[0].Dimensions
 	if len(outputDim) != 3 {
 		validationErrors = append(validationErrors,
