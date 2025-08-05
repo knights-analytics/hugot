@@ -133,6 +133,10 @@ func (p *FeatureExtractionPipeline) GetStats() []string {
 func (p *FeatureExtractionPipeline) Validate() error {
 	var validationErrors []error
 
+	if p.Model.Tokenizer == nil {
+		validationErrors = append(validationErrors, fmt.Errorf("feature extraction pipeline requires a tokenizer"))
+	}
+
 	for _, input := range p.Model.InputsMeta {
 		dims := []int64(input.Dimensions)
 		if len(dims) > 3 {

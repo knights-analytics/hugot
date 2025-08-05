@@ -13,6 +13,7 @@ import (
 
 	"github.com/knights-analytics/hugot/pipelineBackends"
 	"github.com/knights-analytics/hugot/pipelines"
+	"github.com/knights-analytics/hugot/util"
 )
 
 //go:embed testData/tokenExpected.json
@@ -873,6 +874,60 @@ func crossEncoderPipelineValidation(t *testing.T, session *Session) {
 	if err == nil || err.Error() == "" {
 		t.Errorf("Expected error for more than one dynamic dim, got %v", err)
 	}
+}
+
+// Image classification test using HuggingFace SqueezeNet and a sample image
+func imageClassificationPipeline(t *testing.T, session *Session) {
+	t.Helper()
+
+	modelPath := "./models/KnightsAnalytics_resnet50"
+	imagePath := "./models/imageData/cat.jpg"
+
+	config := ImageClassificationConfig{
+		ModelPath:    modelPath,
+		Name:         "testImageClassification",
+		OnnxFilename: "squeezenet1.1.onnx",
+		Options: []ImageClassificationOption{
+			pipelines.WithTopK(3),
+			pipelines.WithPreprocessSteps(
+				util.ResizeStep(224),
+				util.CenterCropStep(224, 224),
+			),
+			pipelines.WithNormalizationSteps(
+				util.ImagenetPixelNormalizationStep(),
+				util.RescaleStep(),
+			),
+		},
+	}
+	pipeline, err := NewPipeline(session, config)
+	checkT(t, err)
+
+	result, err := pipeline.RunPipeline([]string{imagePath, imagePath})
+	checkT(t, err)
+
+	for i, pred := range result.Predictions[0] {
+		fmt.Printf("%d: %s (score: %.4f)\n", i+1, pred.Label, pred.Score)
+	}
+	if result.Predictions[0][0].Label != "tabby, tabby cat" {
+		t.Errorf("Expected label 'tabby, tabby cat', got '%s'", result.Predictions[0][0].Label)
+	}
+}
+
+func imageClassificationPipelineValidation(t *testing.T, session *Session) {
+	t.Helper()
+
+	modelPath := "./models/KnightsAnalytics_resnet50-onnx"
+	config := ImageClassificationConfig{
+		ModelPath: modelPath,
+		Name:      "testImageClassification",
+	}
+	pipeline, err := NewPipeline(session, config)
+	checkT(t, err)
+
+	pipeline.Model.InputsMeta[0].Dimensions = pipelineBackends.NewShape(-1, -1, -1)
+
+	err = pipeline.Validate()
+	assert.Error(t, err)
 }
 
 // No same name

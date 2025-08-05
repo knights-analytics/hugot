@@ -364,6 +364,10 @@ func (p *ZeroShotClassificationPipeline) Run(inputs []string) (pipelineBackends.
 func (p *ZeroShotClassificationPipeline) Validate() error {
 	var validationErrors []error
 
+	if p.Model.Tokenizer == nil {
+		validationErrors = append(validationErrors, fmt.Errorf("zero shot classification pipeline requires a tokenizer"))
+	}
+
 	if len(p.Model.IDLabelMap) <= 0 {
 		validationErrors = append(validationErrors, fmt.Errorf("pipeline configuration invalid: length of id2label map for zero shot classification pipeline must be greater than zero"))
 	}

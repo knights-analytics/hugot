@@ -182,6 +182,8 @@ func TestZeroShotClassificationPipelineValidationXLA(t *testing.T) {
 	zeroShotClassificationPipelineValidation(t, session)
 }
 
+// Cross encoder
+
 func TestCrossEncoderPipelineXLA(t *testing.T) {
 	session, err := NewXLASession()
 	checkT(t, err)
@@ -200,6 +202,28 @@ func TestCrossEncoderPipelineValidationXLA(t *testing.T) {
 		checkT(t, destroyErr)
 	}(session)
 	crossEncoderPipelineValidation(t, session)
+}
+
+// Image classification
+
+func TestImageClassificationPipelineXLA(t *testing.T) {
+	session, err := NewXLASession()
+	checkT(t, err)
+	defer func(session *Session) {
+		destroyErr := session.Destroy()
+		checkT(t, destroyErr)
+	}(session)
+	imageClassificationPipeline(t, session)
+}
+
+func TestImageClassificationPipelineValidationXLA(t *testing.T) {
+	session, err := NewXLASession()
+	checkT(t, err)
+	defer func(session *Session) {
+		destroyErr := session.Destroy()
+		checkT(t, destroyErr)
+	}(session)
+	imageClassificationPipelineValidation(t, session)
 }
 
 // No same name

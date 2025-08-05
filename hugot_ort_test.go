@@ -250,6 +250,29 @@ func TestCrossEncoderPipelineValidationORT(t *testing.T) {
 	crossEncoderPipelineValidation(t, session)
 }
 
+// Image classification
+func TestImageClassificationPipelineORT(t *testing.T) {
+	opts := []options.WithOption{options.WithOnnxLibraryPath(onnxRuntimeSharedLibrary)}
+	session, err := NewORTSession(opts...)
+	checkT(t, err)
+	defer func(session *Session) {
+		destroyErr := session.Destroy()
+		checkT(t, destroyErr)
+	}(session)
+	imageClassificationPipeline(t, session)
+}
+
+func TestImageClassificationPipelineValidationORT(t *testing.T) {
+	opts := []options.WithOption{options.WithOnnxLibraryPath(onnxRuntimeSharedLibrary)}
+	session, err := NewORTSession(opts...)
+	checkT(t, err)
+	defer func(session *Session) {
+		destroyErr := session.Destroy()
+		checkT(t, destroyErr)
+	}(session)
+	imageClassificationPipelineValidation(t, session)
+}
+
 // No Same Name
 
 func TestNoSameNamePipelineORT(t *testing.T) {

@@ -17,19 +17,26 @@ type Tokenizer struct {
 }
 
 func LoadTokenizer(model *Model, s *options.Options) error {
-	tokenizerBytes, err := util.ReadFileBytes(util.PathJoinSafe(model.Path, "tokenizer.json"))
-	if err != nil {
-		return err
-	}
+	if exists, err := util.FileExists(util.PathJoinSafe(model.Path, "tokenizer.json")); err == nil {
+		if exists {
+			tokenizerBytes, err := util.ReadFileBytes(util.PathJoinSafe(model.Path, "tokenizer.json"))
+			if err != nil {
+				return err
+			}
 
-	switch s.Backend {
-	case "ORT", "XLA":
-		return loadRustTokenizer(tokenizerBytes, model)
-	case "GO":
-		return loadGoTokenizer(tokenizerBytes, model)
-	default:
-		return fmt.Errorf("runtime %s not recognized", s.Backend)
+			switch s.Backend {
+			case "ORT", "XLA":
+				return loadRustTokenizer(tokenizerBytes, model)
+			case "GO":
+				return loadGoTokenizer(tokenizerBytes, model)
+			default:
+				return fmt.Errorf("runtime %s not recognized", s.Backend)
+			}
+		}
+	} else {
+		return fmt.Errorf("error checking for existence of tokenizer.json: %w", err)
 	}
+	return nil
 }
 
 func TokenizeInputs(batch *PipelineBatch, tk *Tokenizer, inputs []string) {

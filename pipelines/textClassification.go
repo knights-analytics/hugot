@@ -140,6 +140,10 @@ func (p *TextClassificationPipeline) GetStats() []string {
 func (p *TextClassificationPipeline) Validate() error {
 	var validationErrors []error
 
+	if p.Model.Tokenizer == nil {
+		validationErrors = append(validationErrors, fmt.Errorf("feature extraction pipeline requires a tokenizer"))
+	}
+
 	if len(p.Model.IDLabelMap) <= 0 {
 		validationErrors = append(validationErrors, fmt.Errorf("pipeline configuration invalid: length of id2label map for text classification pipeline must be greater than zero"))
 	}
