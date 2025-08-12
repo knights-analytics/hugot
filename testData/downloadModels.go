@@ -2,9 +2,8 @@ package main
 
 import (
 	"fmt"
-	"io"
-	"net/http"
 	"os"
+	"strings"
 
 	"github.com/knights-analytics/hugot"
 	"github.com/knights-analytics/hugot/util"
@@ -13,19 +12,20 @@ import (
 // download the test models.
 
 type downloadModel struct {
-	name         string
-	onnxFilePath string
+	name             string
+	onnxFilePath     string
+	externalDataPath string
 }
 
 var models = []downloadModel{
-	{"KnightsAnalytics/all-MiniLM-L6-v2", ""},
-	{"KnightsAnalytics/deberta-v3-base-zeroshot-v1", ""},
-	{"KnightsAnalytics/distilbert-base-uncased-finetuned-sst-2-english", ""},
-	{"KnightsAnalytics/distilbert-NER", ""},
-	{"KnightsAnalytics/roberta-base-go_emotions", ""},
-	{"KnightsAnalytics/jina-reranker-v1-tiny-en", "model.onnx"},
-	{"KnightsAnalytics/resnet50", ""},
-	{"KnightsAnalytics/Phi-3-mini-4k-instruct-onnx", "model.onnx"},
+	{name: "KnightsAnalytics/all-MiniLM-L6-v2"},
+	{name: "KnightsAnalytics/deberta-v3-base-zeroshot-v1"},
+	{name: "KnightsAnalytics/distilbert-base-uncased-finetuned-sst-2-english"},
+	{name: "KnightsAnalytics/distilbert-NER"},
+	{name: "KnightsAnalytics/roberta-base-go_emotions"},
+	{name: "KnightsAnalytics/jina-reranker-v1-tiny-en", onnxFilePath: "model.onnx"},
+	{name: "KnightsAnalytics/resnet50"},
+	{name: "KnightsAnalytics/Phi-3-mini-4k-instruct-onnx", onnxFilePath: "model.onnx", externalDataPath: "phi3-mini-4k-instruct-cpu-int4-rtn-block-32.onnx.data"},
 }
 
 // Additional files to download (direct URLs)
@@ -44,33 +44,21 @@ func main() {
 				panic(err)
 			}
 		}
-		for _, downloadModel := range models {
-			options := hugot.NewDownloadOptions()
-			if downloadModel.onnxFilePath != "" {
-				options.OnnxFilePath = downloadModel.onnxFilePath
-			}
-			_, dlErr := hugot.DownloadModel(downloadModel.name, "./models", options)
-			if dlErr != nil {
-				panic(dlErr)
-			}
-		}
-	} else {
-		panic(err)
-	}
-
-	// Download extra files (images, labels)
-	if ok, err := util.FileExists("./models/imageData"); err == nil {
-		if !ok {
-			err = os.MkdirAll("./models/imageData", os.ModePerm)
-			if err != nil {
-				panic(err)
-			}
-		}
-		for _, f := range extraFiles {
-			if exists, _ := util.FileExists(f.dest); !exists {
-				if err := downloadFile(f.url, f.dest); err != nil {
-					panic(err)
+		for _, model := range models {
+			if ok, err = util.FileExists("./models/" + strings.Replace(model.name, "/", "_", -1)); err == nil {
+				if !ok {
+					options := hugot.NewDownloadOptions()
+					options.OnnxFilePath = model.onnxFilePath
+					options.ExternalDataPath = model.externalDataPath
+					fmt.Println(fmt.Sprintf("Downloading %s", model.name))
+					outPath, dlErr := hugot.DownloadModel(model.name, "./models", options)
+					if dlErr != nil {
+						panic(dlErr)
+					}
+					fmt.Println(fmt.Sprintf("Downloaded %s to %s", model.name, outPath))
 				}
+			} else {
+				panic(err)
 			}
 		}
 	} else {

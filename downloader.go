@@ -19,6 +19,7 @@ import (
 type DownloadOptions struct {
 	AuthToken             string
 	OnnxFilePath          string
+	ExternalDataPath      string
 	Branch                string
 	MaxRetries            int
 	RetryInterval         int
@@ -104,8 +105,6 @@ func DownloadModel(modelName string, destination string, options DownloadOptions
 
 func validateDownloadHfModel(repo *hub.Repo, options DownloadOptions) ([]string, error) {
 
-	onnxFilePath := options.OnnxFilePath
-
 	for i := 0; i < options.MaxRetries; i++ {
 		err := repo.DownloadInfo(false)
 		if err != nil {
@@ -137,22 +136,24 @@ func validateDownloadHfModel(repo *hub.Repo, options DownloadOptions) ([]string,
 			baseFileName == "vocab.txt" {
 			toDownload = append(toDownload, fileName)
 		} else if filepath.Ext(baseFileName) == ".onnx" {
-			if onnxFilePath != "" {
-				if fileName == onnxFilePath {
+			if options.OnnxFilePath != "" {
+				if fileName == options.OnnxFilePath {
 					onnxPath = fileName
 				}
 			} else {
 				onnxPath = fileName
 			}
 			allOnnx = append(allOnnx, fileName)
+		} else if options.ExternalDataPath != "" && fileName == options.ExternalDataPath {
+			toDownload = append(toDownload, fileName)
 		}
 	}
 
 	var errs []error
 
-	if onnxFilePath != "" {
+	if options.OnnxFilePath != "" {
 		if onnxPath == "" {
-			errs = append(errs, fmt.Errorf("model .onnx file not found at %s", onnxFilePath))
+			errs = append(errs, fmt.Errorf("model .onnx file not found at %s", options.OnnxFilePath))
 		}
 	} else {
 		numModels := len(allOnnx)
