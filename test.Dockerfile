@@ -1,8 +1,11 @@
 ARG BUILD_PLATFORM=linux/amd64
 
+FROM ghcr.io/knights-analytics/hugot/models:latest AS models
+
 FROM --platform=$BUILD_PLATFORM hugot:latest AS hugot-test
 
 COPY . /build
+COPY --from=models /models /build/models
 
 RUN cd /build && \
     chown -R testuser:testuser /build && \
