@@ -33,7 +33,7 @@ jobs:
         run: |
           go mod download
       - name: Build and run tests
-        run: make run-tests BUILD_TAG=ALL
+        run: ./scripts/run-unit-tests.sh ALL
       - name: Install goveralls
         run: go install github.com/mattn/goveralls@latest
       - name: Send coverage

@@ -30,7 +30,8 @@ else
 fi
 
 # build with compose
-docker compose -f "$src_dir/compose-test.yaml" build
+docker compose -f "$src_dir/compose-test.yaml" build hugot && \
+docker compose -f "$src_dir/compose-test.yaml" build hugot-test
 
 echo "Running tests for commit hash: $commit_hash"
 docker compose -f "$src_dir/compose-test.yaml" up && \
