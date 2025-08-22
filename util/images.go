@@ -122,18 +122,3 @@ func resizeImage(img image.Image, newW, newH int) image.Image {
 	}
 	return dst
 }
-
-// centerCrop crops the center region of size (w,h)
-func centerCrop(img image.Image, cropW, cropH int) image.Image {
-	bounds := img.Bounds()
-	x0 := bounds.Min.X + (bounds.Dx()-cropW)/2
-	y0 := bounds.Min.Y + (bounds.Dy()-cropH)/2
-	rect := image.Rect(0, 0, cropW, cropH)
-	dst := image.NewRGBA(rect)
-	for y := 0; y < cropH; y++ {
-		for x := 0; x < cropW; x++ {
-			dst.Set(x, y, img.At(x0+x, y0+y))
-		}
-	}
-	return dst
-}

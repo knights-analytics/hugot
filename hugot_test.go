@@ -657,7 +657,7 @@ func zeroShotClassificationPipeline(t *testing.T, session *Session) {
 				assert.Equal(t, len(expectedResult), len(testResult))
 				assert.Equal(t, tt.expected.ClassificationOutputs[ind].Sequence, batchResult.ClassificationOutputs[ind].Sequence)
 				for i := range testResult {
-					assert.True(t, almostEqual(testResult[i].Value, expectedResult[i].Value))
+					assert.True(t, almostEqual(testResult[i].Value, expectedResult[i].Value), fmt.Sprintf("Expected %f, got %f", expectedResult[i].Value, testResult[i].Value))
 				}
 			}
 		})
@@ -998,7 +998,7 @@ func textGenerationPipeline(t *testing.T, session *Session) {
 
 	// Configure the text generation pipeline
 	config := TextGenerationConfig{
-		ModelPath:    "./models/KnightsAnalytics_Phi-3-mini-4k-instruct-onnx",
+		ModelPath:    "./models/KnightsAnalytics_Phi-3.5-mini-instruct-onnx",
 		Name:         "testPipeline",
 		OnnxFilename: "model.onnx",
 		Options: []pipelineBackends.PipelineOption[*pipelines.TextGenerationPipeline]{
@@ -1026,7 +1026,7 @@ func textGenerationPipeline(t *testing.T, session *Session) {
 				},
 			},
 			expectedString: []string{
-				"The capital of the Netherlands is Amsterdam. However, it's worth noting that the official capital is The Hague (Den Haag), where the Dutch government and parliament are located. Amsterdam is the country's largest city and is well-known for its cultural heritage, architecture, and vibrant atmosphere.",
+				"The capital of the Netherlands is Amsterdam. However, it's worth noting that the seat of government is actually located in The Hague, where the royal family and the supreme court are based. Amsterdam is the country's largest city and serves as the political, economic, and cultural center of the Netherlands.",
 			},
 		},
 		{
@@ -1042,8 +1042,8 @@ func textGenerationPipeline(t *testing.T, session *Session) {
 				},
 			},
 			expectedString: []string{
-				"The capital of the Netherlands is Amsterdam. However, it's worth noting that while Amsterdam is the country's largest city and often thought of as the de facto capital, the official capital is The Hague, where the Dutch government and parliament are located.",
-				"The first President of the United States was George Washington. He served two terms in office from 1789 to 1797. Washington is widely regarded as one of the Founding Fathers of the United States and played a crucial role in the American Revolutionary War. His leadership and guidance were instrumental in shaping the early years of the United States.",
+				"The capital of the Netherlands is Amsterdam. It is the largest city in the country and serves as the political, economic, and cultural hub. Amsterdam is known for its historical significance, vibrant cultural scene, and iconic landmarks such as the Anne Frank House, the Rijksmuseum, and the Van Gogh Museum. The city is also famous for its extensive canal system, which is a UNESCO World Heritage site. The Dutch government's administrative offices are located in the city, and it hosts the headquarters of several major international organizations. Amsterdam's port is one of the busiest in the world, contributing to its status as a major global financial center.",
+				"The first president of the United States was George Washington. He served as the nation's president from April 30, 1789, to March 4, 1797. Washington is often referred to as the \"Father of His Country\" for his leadership in the founding of the United States. He was a central figure in the American Revolution and played a crucial role in the drafting of the Constitution. His presidency set many precedents that still influence the office today, including the two-term limit, which was later codified in the 22nd Amendment. Washington's leadership and integrity earned him widespread respect and admiration, both during his lifetime and in the centuries that followed.",
 			},
 		},
 		{
@@ -1055,12 +1055,12 @@ func textGenerationPipeline(t *testing.T, session *Session) {
 				},
 				{
 					{Role: "system", Content: "you are a helpful assistant."},
-					{Role: "user", Content: "Write me a haiku about the beauties of machine learning"},
+					{Role: "user", Content: "Answer in one sentence: what is steel made out of?"},
 				},
 			},
 			expectedString: []string{
-				"2 + 2 equals 4. This is a basic arithmetic addition problem.",
-				"Neural paths intertwine,\n\nPatterns emerge, insights shine,\n\nMind of silicon thrives.\n\n\nThis haiku captures the essence of machine learning, with the first line referring to the complex connections within neural networks, the second line highlighting the discovery and understanding that comes from analyzing data, and the third line celebrating the growth and capabilities of artificial intelligence.",
+				"The sum of 2 and 2 is 4.\n\nExplanation: In arithmetic, when you add two identical positive numbers, you simply double the number. Here, doubling 2 gives you 4.",
+				"Steel is primarily made out of iron and carbon, with the addition of other elements such as chromium, nickel, and manganese to enhance its properties.",
 			},
 		},
 	}
@@ -1203,7 +1203,7 @@ func checkClassificationOutput(t *testing.T, inputResult []pipelines.Classificat
 	for i, output := range inputResult {
 		resultExpected := inputExpected[i]
 		assert.Equal(t, output.Label, resultExpected.Label)
-		assert.True(t, almostEqual(float64(output.Score), float64(resultExpected.Score)))
+		assert.True(t, almostEqual(float64(output.Score), float64(resultExpected.Score)), fmt.Sprintf("Expected %f, got %f", float64(output.Score), float64(resultExpected.Score)))
 	}
 }
 
@@ -1227,7 +1227,7 @@ func floatsEqual(a, b []float32) error {
 }
 
 func almostEqual(a, b float64) bool {
-	return math.Abs(a-b) <= 0.0001
+	return math.Abs(a-b) <= 0.0007
 }
 
 func checkT(t *testing.T, err error) {

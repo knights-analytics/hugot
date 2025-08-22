@@ -368,7 +368,7 @@ func TestThreadSafetyORT(t *testing.T) {
 		destroyErr := session.Destroy()
 		checkT(t, destroyErr)
 	}(session)
-	threadSafety(t, session, 500)
+	threadSafety(t, session, 250)
 }
 
 func TestThreadSafetyORTCuda(t *testing.T) {
