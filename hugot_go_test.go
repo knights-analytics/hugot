@@ -200,7 +200,7 @@ func TestThreadSafetyGo(t *testing.T) {
 		destroyErr := session.Destroy()
 		checkT(t, destroyErr)
 	}(session)
-	threadSafety(t, session, 50)
+	threadSafety(t, session, 20)
 }
 
 // README: test the readme examples

@@ -1,7 +1,10 @@
 package main
 
 import (
+	"errors"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"strings"
 
@@ -25,7 +28,7 @@ var models = []downloadModel{
 	{name: "KnightsAnalytics/roberta-base-go_emotions"},
 	{name: "KnightsAnalytics/jina-reranker-v1-tiny-en", onnxFilePath: "model.onnx"},
 	{name: "KnightsAnalytics/resnet50"},
-	{name: "KnightsAnalytics/Phi-3-mini-4k-instruct-onnx", onnxFilePath: "model.onnx", externalDataPath: "phi3-mini-4k-instruct-cpu-int4-rtn-block-32.onnx.data"},
+	{name: "KnightsAnalytics/Phi-3.5-mini-instruct-onnx", onnxFilePath: "phi-3.5-mini-instruct-cpu-int4-awq-block-128-acc-level-4.onnx", externalDataPath: "phi-3.5-mini-instruct-cpu-int4-awq-block-128-acc-level-4.onnx.data"},
 }
 
 // Additional files to download (direct URLs)
@@ -65,6 +68,24 @@ func main() {
 		panic(err)
 	}
 
+	// Download extra files (images, labels)
+	if ok, err := util.FileExists("./models/imageData"); err == nil {
+		if !ok {
+			err = os.MkdirAll("./models/imageData", os.ModePerm)
+			if err != nil {
+				panic(err)
+			}
+		}
+		for _, f := range extraFiles {
+			if exists, _ := util.FileExists(f.dest); !exists {
+				if err := downloadFile(f.url, f.dest); err != nil {
+					panic(err)
+				}
+			}
+		}
+	} else {
+		panic(err)
+	}
 }
 
 // downloadFile downloads a file from a URL to a destination path.
@@ -73,13 +94,17 @@ func downloadFile(url, dest string) error {
 	if err != nil {
 		return err
 	}
-	defer out.Close()
+	defer func() {
+		err = errors.Join(out.Close())
+	}()
 
 	resp, err := http.Get(url)
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		err = errors.Join(resp.Body.Close())
+	}()
 
 	if resp.StatusCode != 200 {
 		return fmt.Errorf("failed to download %s: status %s", url, resp.Status)

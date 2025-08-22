@@ -4,13 +4,12 @@ import (
 	"errors"
 	"fmt"
 	"image"
+	_ "image/jpeg"
+	_ "image/png"
 	"math"
 	"sort"
 	"sync/atomic"
 	"time"
-
-	_ "image/jpeg"
-	_ "image/png"
 
 	"github.com/knights-analytics/hugot/options"
 	"github.com/knights-analytics/hugot/pipelineBackends"

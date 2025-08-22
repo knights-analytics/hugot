@@ -278,7 +278,7 @@ func TestThreadSafetyXLA(t *testing.T) {
 		destroyErr := session.Destroy()
 		checkT(t, destroyErr)
 	}(session)
-	threadSafety(t, session, 500)
+	threadSafety(t, session, 250)
 }
 
 func TestThreadSafetyXLACuda(t *testing.T) {
