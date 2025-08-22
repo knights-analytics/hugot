@@ -1,5 +1,6 @@
 .vscode
 .history
+.cache
 .idea
 models
 testTarget
