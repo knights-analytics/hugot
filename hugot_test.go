@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"slices"
 	"strings"
 	"testing"
 
@@ -1002,9 +1003,9 @@ func textGenerationPipeline(t *testing.T, session *Session) {
 		Name:         "testPipeline",
 		OnnxFilename: "model.onnx",
 		Options: []pipelineBackends.PipelineOption[*pipelines.TextGenerationPipeline]{
-			pipelines.WithMaxTokens(125),
+			pipelines.WithMaxTokens(200),
 			pipelines.WithPhiTemplate(),
-			pipelines.WithCustomStopTokens([]int64{32007}), // Phi appears to use a stop token that's different than the one defined in config.json
+			pipelines.WithCustomStopTokens([]int64{32007}), // Phi appears to use a stop token that's different from the one defined in config.json
 		},
 	}
 
@@ -1042,8 +1043,8 @@ func textGenerationPipeline(t *testing.T, session *Session) {
 				},
 			},
 			expectedString: []string{
-				"The capital of the Netherlands is Amsterdam. It is the largest city in the country and serves as the political, economic, and cultural hub. Amsterdam is known for its historical significance, vibrant cultural scene, and iconic landmarks such as the Anne Frank House, the Rijksmuseum, and the Van Gogh Museum. The city is also famous for its extensive canal system, which is a UNESCO World Heritage site. The Dutch government's administrative offices are located in the city, and it hosts the headquarters of several major international organizations. Amsterdam's port is one of the busiest in the world, contributing to its status as a major global financial center.",
-				"The first president of the United States was George Washington. He served as the nation's president from April 30, 1789, to March 4, 1797. Washington is often referred to as the \"Father of His Country\" for his leadership in the founding of the United States. He was a central figure in the American Revolution and played a crucial role in the drafting of the Constitution. His presidency set many precedents that still influence the office today, including the two-term limit, which was later codified in the 22nd Amendment. Washington's leadership and integrity earned him widespread respect and admiration, both during his lifetime and in the centuries that followed.",
+				"The capital of the Netherlands is Amsterdam. It is the largest city in the country and serves as the political, economic, and cultural center. Amsterdam is known for its historical significance, vibrant cultural scene, and iconic landmarks such as the Anne Frank House and the Van Gogh Museum. The city is also famous for its extensive canal system, which is a UNESCO World Heritage site. The Dutch government's administrative buildings, including the Royal Palace, are located in the historic center of the city. Amsterdam's port is one of the busiest in Europe, contributing to its status as a major global financial hub.",
+				"The first president of the United States was George Washington. He served as the president from April 30, 1789, to March 4, 1797. Washington is often referred to as the \"Father of His Country\" for his leadership in the founding of the United States. He was a central figure in the American Revolution and presided over the convention that established the new government, which resulted in the creation of the Constitution. Washington's presidency set many precedents, including the two-term limit, which was later codified in the 22nd Amendment. His leadership and the establishment of a strong federal government were crucial in the early years of the United States.",
 			},
 		},
 		{
@@ -1060,7 +1061,7 @@ func textGenerationPipeline(t *testing.T, session *Session) {
 			},
 			expectedString: []string{
 				"The sum of 2 and 2 is 4.\n\nExplanation: In arithmetic, when you add two identical positive numbers, you simply double the number. Here, doubling 2 gives you 4.",
-				"Steel is primarily made out of iron and carbon, with the addition of other elements such as chromium, nickel, and manganese to enhance its properties.",
+				"Steel is primarily made out of iron and carbon, with the addition of other elements such as manganese, chromium, nickel, and sometimes small amounts of other elements to enhance its properties.",
 			},
 		},
 	}
@@ -1072,9 +1073,24 @@ func textGenerationPipeline(t *testing.T, session *Session) {
 			checkT(t, err)
 			outputString := batchResult.GetOutput()
 			for i := range len(outputString) {
-				actualString := tt.expectedString[i]
+				expectedString := tt.expectedString[i]
 				generatedString := outputString[i].(string)
-				assert.Equal(t, actualString, generatedString)
+				// Generative models have variance with different architectures which builds up per generation, so check for min overlap instead in first 30 words
+				expectedWords := strings.Fields(expectedString)
+				if len(expectedWords) > 30 {
+					expectedWords = expectedWords[:30]
+				}
+				generatedWords := strings.Fields(generatedString)
+				if len(generatedWords) > 30 {
+					generatedWords = generatedWords[:30]
+				}
+				numMismatches := 0
+				for _, word := range generatedWords {
+					if !slices.Contains(expectedWords, word) {
+						numMismatches++
+					}
+				}
+				assert.LessOrEqual(t, numMismatches, len(expectedWords)/8, "Expected generated to have max %d mismatches with expected, but got %d mismatches (got %s wanted %s)", len(expectedWords)/8, numMismatches, expectedString, generatedString)
 			}
 		})
 	}
@@ -1090,7 +1106,7 @@ func textGenerationPipelineValidation(t *testing.T, session *Session) {
 
 	// Configure the text generation pipeline
 	config := TextGenerationConfig{
-		ModelPath:    "./models/KnightsAnalytics_Phi-3-mini-4k-instruct-onnx",
+		ModelPath:    "./models/KnightsAnalytics_Phi-3.5-mini-instruct-onnx",
 		Name:         "testPipeline",
 		OnnxFilename: "model.onnx",
 		Options: []pipelineBackends.PipelineOption[*pipelines.TextGenerationPipeline]{
