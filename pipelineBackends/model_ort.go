@@ -27,24 +27,34 @@ func argmax3D(logits [][][]float32) []int64 {
 	}
 
 	output := make([]int64, batchSize)
-	for i := range output {
-		if len(logits[i]) == 0 {
+	for i := 0; i < batchSize; i++ {
+		seq := logits[i]
+		if len(seq) == 0 {
 			output[i] = 0
 			continue
 		}
 
-		lastTokenLogits := logits[i][len(logits[i])-1]
+		last := seq[len(seq)-1]
+		if len(last) == 0 {
+			output[i] = 0
+			continue
+		}
 
-		maxIdx := 0
-		maxVal := lastTokenLogits[0]
-		for j, val := range lastTokenLogits[1:] {
-			if val > maxVal {
-				maxVal = val
-				maxIdx = j + 1
+		maxIdx := -1
+		var maxVal float32
+		for j := 0; j < len(last); j++ {
+			v := last[j]
+			if maxIdx == -1 || v > maxVal {
+				maxVal = v
+				maxIdx = j
 			}
 		}
 
-		output[i] = int64(maxIdx)
+		if maxIdx == -1 {
+			output[i] = 0
+		} else {
+			output[i] = int64(maxIdx)
+		}
 	}
 
 	return output
