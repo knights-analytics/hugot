@@ -110,7 +110,8 @@ func WithEarlyStoppingParams(patience int, tolerance float32) TrainingOption {
 type TrainingConfig struct {
 	ModelPath            string
 	OnnxFilename         string
-	Dataset              datasets.Dataset
+	TrainDataset         datasets.Dataset
+	TrainEvalDataset     datasets.Dataset // used to evaluate on training
 	EvalDataset          datasets.Dataset // optional, used for early stopping and eval metrics
 	Options              []TrainingOption
 	Verbose              bool
@@ -166,23 +167,32 @@ func newTrainingSession[T pipelineBackends.Pipeline](backend string, config Trai
 
 		// hook the datasets up with the pipeline for tokenization
 		var trainDS *datasets.SemanticSimilarityDataset
+		var trainEvalDS *datasets.SemanticSimilarityDataset
 		var evalDS *datasets.SemanticSimilarityDataset
 		var ok bool
 
-		trainDS, ok = session.config.Dataset.(*datasets.SemanticSimilarityDataset)
+		trainDS, ok = session.config.TrainDataset.(*datasets.SemanticSimilarityDataset)
 		if !ok {
-			return nil, fmt.Errorf("expected SemanticSimilarityDataset for train dataset, got %T", trainDS)
+			return nil, fmt.Errorf("expected SemanticSimilarityDataset for train dataset, got %T", session.config.TrainDataset)
+		}
+		if setErr := trainDS.SetTokenizationPipeline(pipeline); setErr != nil {
+			return nil, fmt.Errorf("failed to set tokenization pipeline for training dataset: %w", setErr)
+		}
+
+		if session.config.TrainEvalDataset != nil {
+			trainEvalDS, ok = session.config.TrainEvalDataset.(*datasets.SemanticSimilarityDataset)
+			if !ok {
+				return nil, fmt.Errorf("expected SemanticSimilarityDataset for train eval dataset, got %T", session.config.TrainEvalDataset)
+			}
+			if setErr := trainEvalDS.SetTokenizationPipeline(pipeline); setErr != nil {
+				return nil, fmt.Errorf("failed to set tokenization pipeline for train evaluation dataset: %w", setErr)
+			}
 		}
 		if session.config.EvalDataset != nil {
 			evalDS, ok = session.config.EvalDataset.(*datasets.SemanticSimilarityDataset)
 			if !ok {
 				return nil, fmt.Errorf("expected SemanticSimilarityDataset for eval dataset, got %T", session.config.EvalDataset)
 			}
-		}
-		if setErr := trainDS.SetTokenizationPipeline(pipeline); setErr != nil {
-			return nil, fmt.Errorf("failed to set tokenization pipeline for training dataset: %w", setErr)
-		}
-		if evalDS != nil {
 			if setErr := evalDS.SetTokenizationPipeline(pipeline); setErr != nil {
 				return nil, fmt.Errorf("failed to set tokenization pipeline for evaluation dataset: %w", setErr)
 			}
@@ -191,7 +201,7 @@ func newTrainingSession[T pipelineBackends.Pipeline](backend string, config Trai
 		return nil, fmt.Errorf("training for pipeline type is not supported")
 	}
 	if session.config.Verbose {
-		session.config.Dataset.SetVerbose(true)
+		session.config.TrainDataset.SetVerbose(true)
 	}
 
 	return session, nil

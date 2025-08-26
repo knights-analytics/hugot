@@ -140,7 +140,7 @@ func TrainGoMLX(s *TrainingSession) error {
 			if s.earlyStopping != nil {
 				fmt.Printf("Training for %d epochs with early stopping\n", s.maxEpochs)
 			} else {
-				fmt.Printf("Training for %d epochs", s.maxEpochs)
+				fmt.Printf("Training for %d epochs\n", s.maxEpochs)
 			}
 		}
 
@@ -153,14 +153,19 @@ func TrainGoMLX(s *TrainingSession) error {
 
 		var evaluateEpoch train.OnStepFn = func(loop *train.Loop, metrics []*tensors.Tensor) error {
 			if loop.Epoch != currentEpoch {
-				if s.config.Verbose {
-					fmt.Printf("Running evaluation for epoch %d\n", loop.Epoch)
+				if s.config.TrainEvalDataset != nil {
+					if s.config.Verbose {
+						fmt.Printf("Running evaluation for epoch %d\n on trainEvalDataset", loop.Epoch)
+					}
+					lossAndMetrics := gomlxTrainer.Eval(s.config.TrainEvalDataset)
+					meanTrainLoss := lossAndMetrics[1].Value().(float32)
+					trainLosses = append(trainLosses, meanTrainLoss)
 				}
-				lossAndMetrics := gomlxTrainer.Eval(s.config.Dataset)
-				meanTrainLoss := lossAndMetrics[1].Value().(float32)
-				trainLosses = append(trainLosses, meanTrainLoss)
 
 				if s.earlyStopping != nil {
+					if s.config.Verbose {
+						fmt.Printf("Running evaluation for epoch %d\n on evalDataset", loop.Epoch)
+					}
 					lossAndMetrics := gomlxTrainer.Eval(s.config.EvalDataset)
 					meanLoss := lossAndMetrics[1].Value().(float32)
 					evalLosses = append(evalLosses, meanLoss)
@@ -193,7 +198,7 @@ func TrainGoMLX(s *TrainingSession) error {
 		// we rely on try catch because an error is returned if there is an initialization error but
 		// a panic will be thrown if e.g. dataset reset fails.
 		err := exceptions.TryCatch[error](func() {
-			if _, err := loop.RunEpochs(s.config.Dataset, s.maxEpochs); err != nil {
+			if _, err := loop.RunEpochs(s.config.TrainDataset, s.maxEpochs); err != nil {
 				if errors.Is(err, stoppingError{}) {
 					if s.config.Verbose {
 						fmt.Printf("Training stopped after epoch %d\n", currentEpoch)

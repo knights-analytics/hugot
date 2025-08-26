@@ -20,7 +20,7 @@ import (
 
 func cosineSimilarityTester(x []float32, y []float32) float64 {
 	var sum, s1, s2 float64
-	for i := 0; i < len(x); i++ {
+	for i := range x {
 		sum += float64(x[i]) * float64(y[i])
 		s1 += math.Pow(float64(x[i]), 2)
 		s2 += math.Pow(float64(y[i]), 2)
@@ -157,20 +157,29 @@ func TestTrainSemanticSimilarity(t *testing.T) {
 
 	// TRAINING: We now fine-tune the model
 
-	// first we create a dataset object. This allows us to loop over the dataset for potentially multiple epochs.
+	// first we create a train dataset object. This allows us to loop over the dataset for potentially multiple epochs.
 	// We need to specify the batch size. For cpu lower batches seem to be faster.
 	// The datasets.NewSemanticSimilarityDataset function also accepts a custom function that will be applied
 	// to all examples in a batch before they are passed to the model. This can be used to apply whatever preprocessing
 	// you need.
-	dataset, err := datasets.NewSemanticSimilarityDataset("./testData/semanticSimilarityTest.jsonl", 1, nil)
+	trainDataset, err := datasets.NewSemanticSimilarityDataset("./testData/semanticSimilarityTest.jsonl", 1, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// next we create a trainEvalDataset. This is the same as the train dataset, but it will be used to evaluate the model on
+	// in-sample data at the end of each epoch.
+	// We can also specify an eval dataset with early stopping (see test below).
+	trainEvalDataset, err := datasets.NewSemanticSimilarityDataset("./testData/semanticSimilarityTest.jsonl", 1, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// we now train the model with the dataset
 	trainingConfig := TrainingConfig{
-		ModelPath: modelPath,
-		Dataset:   dataset,
+		ModelPath:        modelPath,
+		TrainDataset:     trainDataset,
+		TrainEvalDataset: trainEvalDataset,
 		Options: []TrainingOption{
 			WithEpochs(2),
 		},
@@ -202,13 +211,13 @@ func TestTrainSemanticSimilarity(t *testing.T) {
 	}
 	inMemoryDataset, err := datasets.NewInMemorySemanticSimilarityDataset(examples, 1, nil)
 	checkT(t, err)
-	trainingConfig.Dataset = inMemoryDataset
+	trainingConfig.TrainDataset = inMemoryDataset
 	similaritiesGoMLXTrainedInMemory := trainSimilarity(t, trainingConfig, examplesLhs, examplesRhs)
 	for i := range similaritiesGoMLXTrainedInMemory {
 		assert.Equal(t, round3decimals(similaritiesGoMLXTrained[i]), round3decimals(similaritiesGoMLXTrainedInMemory[i]))
 	}
 
-	// we can also train but freeze the embeddings and/or layers.
+	// we can also freeze layers
 	trainingConfig.Options = append(trainingConfig.Options, WithFreezeLayers([]int{-1})) // freeze all layers but the last one
 	similaritiesGoMLXTrainedFrozen := trainSimilarity(t, trainingConfig, examplesLhs, examplesRhs)
 
@@ -240,8 +249,8 @@ func TestTrainSemanticSimilarityCuda(t *testing.T) {
 
 	session, err := NewXLATrainingSession[*pipelines.FeatureExtractionPipeline](
 		TrainingConfig{
-			ModelPath: modelPath,
-			Dataset:   dataset,
+			ModelPath:    modelPath,
+			TrainDataset: dataset,
 			Options: []TrainingOption{
 				WithEpochs(1),
 				WithCuda(), // enable cuda
@@ -286,8 +295,8 @@ func TestTrainSemanticSimilarityGo(t *testing.T) {
 
 	session, err := NewGoTrainingSession[*pipelines.FeatureExtractionPipeline](
 		TrainingConfig{
-			ModelPath: modelPath,
-			Dataset:   dataset,
+			ModelPath:    modelPath,
+			TrainDataset: dataset,
 			Options: []TrainingOption{
 				WithEpochs(1),
 			},
@@ -317,7 +326,7 @@ func TestTrainSemanticSimilarityGo(t *testing.T) {
 	}
 }
 
-func TestTrainEval(t *testing.T) {
+func TestEarlyStopping(t *testing.T) {
 	modelPath := "./models/KnightsAnalytics_all-MiniLM-L6-v2"
 
 	trainDataset, err := datasets.NewSemanticSimilarityDataset("./testData/semanticSimilarityTest.jsonl", 1, nil)
@@ -337,9 +346,9 @@ func TestTrainEval(t *testing.T) {
 	}()
 
 	trainingConfig := TrainingConfig{
-		ModelPath:   modelPath,
-		Dataset:     trainDataset,
-		EvalDataset: evalDataset,
+		ModelPath:    modelPath,
+		TrainDataset: trainDataset,
+		EvalDataset:  evalDataset,
 		Options: []TrainingOption{
 			WithEarlyStoppingParams(2, 1e-4),
 		},

@@ -31,13 +31,16 @@ github.com/gomlx/go-huggingface v0.2.2 h1:k9EGJpTecY+vbMrKOsMocSY6e7Ul6WW47mODue
 github.com/gomlx/go-huggingface v0.2.2/go.mod h1:pSI9KFkGVksYYnNNO5lqLPBR0hzboFQb2FGrpGjseIY=
 github.com/gomlx/gomlx v0.21.1 h1:B3xkO4raitt4RlqW1zG0QKS9ro9JncrjOC3iPr/g4D0=
 github.com/gomlx/gomlx v0.21.1/go.mod h1:0t5TiwpXZtg5o4D8HLN3sHiegT6HjAwCNWJuiH0IuGs=
+github.com/gomlx/gomlx v0.22.1 h1:vPSjMqW6J8Oq9MwrOa7d1C+XqYWsAKfRt7UjS7KM20k=
+github.com/gomlx/gomlx v0.22.1/go.mod h1:0LXDKNFzZtCbVzkRzqKsIbfSkj9vPXMnAvf5jHFisa0=
 github.com/gomlx/gopjrt v0.7.4 h1:IfAHxLSvTor4WBcWO11CaRS0ZdHzptxYIPEY3Ko0UwE=
 github.com/gomlx/gopjrt v0.7.4/go.mod h1:VswjttDY1uSllQ+Vs69P4kgsH3EkFEHADUCdDbfgh0Y=
-<<<<<<< HEAD
-=======
+github.com/gomlx/gopjrt v0.8.0 h1:0VeyRh9p3yLfAB1/8ULkVt2gmrK9gN2xJ4X7pS2KZOY=
+github.com/gomlx/gopjrt v0.8.0/go.mod h1:VswjttDY1uSllQ+Vs69P4kgsH3EkFEHADUCdDbfgh0Y=
 github.com/gomlx/onnx-gomlx v0.2.4 h1:vZXXeUBq6XjPemZ16iwjNaJs/qMDMMQ+nb6wALQeCGc=
 github.com/gomlx/onnx-gomlx v0.2.4/go.mod h1:mBFZF1OT5hW/jsc0ae58VKoB9BaGYpEaZ36xakWxEds=
->>>>>>> fa31e9f (fixes)
+github.com/gomlx/onnx-gomlx v0.2.5 h1:Gv7jm7I4HaNLVS5U0g4BxamKkJzB/nM/EZkKKasFBHg=
+github.com/gomlx/onnx-gomlx v0.2.5/go.mod h1:7hMQbGU4T397IzXBVQJFj3by1cHam7f0VBI+CwMFMh4=
 github.com/google/go-cmp v0.6.0 h1:ofyhxvXcZhMsU5ulbFiLKl/XBFqE1GSq7atu8tAmTRI=
 github.com/google/go-cmp v0.6.0/go.mod h1:17dUlkBOakJ0+DkrSSNjCkIjxS6bF9zb3elmeNGIjoY=
 github.com/google/uuid v1.6.0 h1:NIvaJDMOsjHA8n1jAhLSgzrAzy1Hgr+hNrb57e+94F0=
@@ -96,6 +99,8 @@ golang.org/x/crypto v0.41.0 h1:WKYxWedPGCTVVl5+WHSSrOBT0O8lx32+zxmHxijgXp4=
 golang.org/x/crypto v0.41.0/go.mod h1:pO5AFd7FA68rFak7rOAGVuygIISepHftHnr8dr6+sUc=
 golang.org/x/exp v0.0.0-20250813145105-42675adae3e6 h1:SbTAbRFnd5kjQXbczszQ0hdk3ctwYf3qBNH9jIsGclE=
 golang.org/x/exp v0.0.0-20250813145105-42675adae3e6/go.mod h1:4QTo5u+SEIbbKW1RacMZq1YEfOBqeXa19JeshGi+zc4=
+golang.org/x/exp v0.0.0-20250819193227-8b4c13bb791b h1:DXr+pvt3nC887026GRP39Ej11UATqWDmWuS99x26cD0=
+golang.org/x/exp v0.0.0-20250819193227-8b4c13bb791b/go.mod h1:4QTo5u+SEIbbKW1RacMZq1YEfOBqeXa19JeshGi+zc4=
 golang.org/x/sys v0.35.0 h1:vz1N37gP5bs89s7He8XuIYXpyY0+QlsKmzipCbUtyxI=
 golang.org/x/sys v0.35.0/go.mod h1:BJP2sWEmIv4KK5OTEluFJCKSidICx8ciO85XgH3Ak8k=
 golang.org/x/term v0.34.0 h1:O/2T7POpk0ZZ7MAzMeWFSg6S5IpWd/RXDlM9hgM3DR4=
@@ -104,6 +109,8 @@ golang.org/x/text v0.28.0 h1:rhazDwis8INMIwQ4tpjLDzUhx6RlXqZNPEM0huQojng=
 golang.org/x/text v0.28.0/go.mod h1:U8nCwOR8jO/marOQ0QbDiOngZVEBB7MAiitBuMjXiNU=
 google.golang.org/protobuf v1.36.7 h1:IgrO7UwFQGJdRNXH/sQux4R1Dj1WAKcLElzeeRaXV2A=
 google.golang.org/protobuf v1.36.7/go.mod h1:jduwjTPXsFjZGTmRluh+L6NjiWu7pchiJ2/5YcXBHnY=
+google.golang.org/protobuf v1.36.8 h1:xHScyCOEuuwZEc6UtSOvPbAT4zRh0xcNRYekJwfqyMc=
+google.golang.org/protobuf v1.36.8/go.mod h1:fuxRtAxBytpl4zzqUh6/eyUujkJdNiuEkXntxiD/uRU=
 gopkg.in/check.v1 v0.0.0-20161208181325-20d25e280405/go.mod h1:Co6ibVJAznAaIkqp8huTwlJQCZ016jof/cbN4VW5Yz0=
 gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c h1:Hei/4ADfdWqJk1ZMxUNpqntNwaWcugrBjAiHlqqRiVk=
 gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c/go.mod h1:JHkPIbrfpd72SG/EVd6muEfDQjcINNoR0C8j2r3qZ4Q=
