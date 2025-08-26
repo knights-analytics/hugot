@@ -138,9 +138,7 @@ func createGoMLXModelBackend(model *Model, options *options.Options) error {
 			return modelParsed.CallGraph(ctx, inputs[0].Graph(), inputsMap, outputNames...)
 		}
 
-		// use this as distinction between generative models or not, can't use len(eosTokens) > 0 because text classification also has it
-		// maybe add model.IsGenerative?
-		if model.NumKeyValueHeads > 0 {
+		if model.IsGenerative {
 			callFunc = createGenerativeCallFunc(model, modelParsed, outputNames)
 		}
 
@@ -216,7 +214,7 @@ func createInputTensorsGoMLX(batch *PipelineBatch, model *Model, padBatchDimensi
 
 	// 2) prepare result containers - now we use all inputs, not filtering
 	inputTensors := make([]*tensors.Tensor, len(model.InputsMeta))
-	masks := make([][]bool, batchSize)
+	paddingMasks := make([][]bool, batch.Size)
 
 	// 3) build each tensor
 	for mi, meta := range model.InputsMeta {
@@ -267,7 +265,7 @@ func createInputTensorsGoMLX(batch *PipelineBatch, model *Model, padBatchDimensi
 						}
 						idx++
 					}
-					masks[bi] = maskRow
+					paddingMasks[bi] = maskRow
 				}
 			case "token_type_ids":
 				for _, inp := range batch.Input {
@@ -316,7 +314,7 @@ func createInputTensorsGoMLX(batch *PipelineBatch, model *Model, padBatchDimensi
 
 	// 4) assign and prepare cleanup
 	batch.InputValues = inputTensors
-	batch.PaddingMask = masks
+	batch.PaddingMask = paddingMasks
 	batch.DestroyInputs = func() error {
 		for _, t := range inputTensors {
 			t.FinalizeAll()
