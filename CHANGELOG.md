@@ -4,6 +4,36 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
+## [0.5.0] - 2025-08-18
+
+### 🚀 Generative pipeline in hugot!
+
+- The new TextGenerationPipeline allows you to run generative models such as Gemma and Phi in golang. Kudos to [Riley Oh](https://github.com/riley-oh6) for getting this one
+over the line!
+- Currently only implemented for the ORT backend. Implementations for XLA and GO backend coming soon!
+- See the documentation for how to get started
+
+### 🚀 New pipelines: cross encoder and image classification
+
+- The CrossEncoderPipeline implements the equivalent of sentence transformers' [Cross Encoder](https://sbert.net/docs/package_reference/cross_encoder/cross_encoder.html). Kudos to
+[Fábio Correia](https://github.com/fabiodcorreia) for providing the initial implementation
+- The ImageClassificationPipeline implements the equivalent of [Hugging Face's Image Classification](https://huggingface.co/tasks/image-classification) pipeline
+
+### ✨ Training improvements
+
+- The training session to fine-tune embeddings now accept TrainEval and Eval datasets to compute in-sample and test statistics
+- The training session now implements early stopping based on the loss on the Eval dataset. Early stopping is evaluated at the end of each training epoch.
+- The training session now accepts a layer freezing configuration to specify which layers of the transformer will be frozen during fine-tuning
+
+### 📝 Tokenization
+
+- The go tokenizer now supports unigram tokenization
+
+### Changed
+
+- Updated go to 1.25.0
+- Upgraded GoMLX to 0.22.1
+
 ## [0.4.3] - 2025-07-18
 
 ### Changed
