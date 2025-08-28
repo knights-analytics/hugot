@@ -15,20 +15,6 @@ mkdir -p "$test_folder"
 host_uid=$(id -u "$USER")
 export host_uid
 
-if [ $# -eq 0 ]; then
-    echo "running without build tags"
-    export HUGOT_BUILD_TAG=""
-else
-    first_arg=$1
-    if [[ $first_arg == "ALL" ]]; then
-        echo "running with build tag ALL"
-        export HUGOT_BUILD_TAG="ALL"
-    else
-        echo "build tag $first_arg is not supported"
-        exit 1
-    fi
-fi
-
 # build with compose
 docker compose -f "$src_dir/compose-test.yaml" build hugot && \
 docker compose -f "$src_dir/compose-test.yaml" build hugot-test

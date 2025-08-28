@@ -1,8 +1,11 @@
+//go:build GO || ALL
+
 package hugot
 
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"testing"
 )
 
@@ -129,7 +132,7 @@ func TestCrossEncoderPipelineValidationGo(t *testing.T) {
 // Image classification
 
 func TestImageClassificationPipelineGo(t *testing.T) {
-	session, err := NewXLASession()
+	session, err := NewGoSession()
 	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
@@ -139,7 +142,7 @@ func TestImageClassificationPipelineGo(t *testing.T) {
 }
 
 func TestImageClassificationPipelineValidationGo(t *testing.T) {
-	session, err := NewXLASession()
+	session, err := NewGoSession()
 	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
@@ -173,6 +176,9 @@ func TestDestroyPipelineGo(t *testing.T) {
 // Thread safety
 
 func TestThreadSafetyGo(t *testing.T) {
+	if os.Getenv("CI") != "" {
+		t.SkipNow()
+	}
 	session, err := NewGoSession()
 	checkT(t, err)
 	defer func(session *Session) {

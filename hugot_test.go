@@ -916,7 +916,7 @@ func imageClassificationPipeline(t *testing.T, session *Session) {
 func imageClassificationPipelineValidation(t *testing.T, session *Session) {
 	t.Helper()
 
-	modelPath := "./models/KnightsAnalytics_resnet50-onnx"
+	modelPath := "./models/KnightsAnalytics_resnet50"
 	config := ImageClassificationConfig{
 		ModelPath: modelPath,
 		Name:      "testImageClassification",

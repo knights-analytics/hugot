@@ -2,20 +2,46 @@
 
 set -e
 
+folder=/test/unit
+
 cd /build && \
-mkdir -p /test/unit && \
+mkdir -p $folder && \
 go run ./testData/downloadModels.go
 
-echo HUGOT_BUILD_TAG is "$HUGOT_BUILD_TAG"
+echo "Running ORT tests..."
 
-if [[ -n $HUGOT_BUILD_TAG ]]; then 
-    echo "running with -tags=ALL"
-    gotestsum --junitfile=/test/unit/unit.xml --jsonfile=/test/unit/unit.json -- -tags=ALL -coverprofile=/test/unit/cover.out.pre -coverpkg ./... -timeout 60m -race -covermode=atomic ./...
-else 
-    echo "running without build tags"
-    gotestsum --junitfile=/test/unit/unit.xml --jsonfile=/test/unit/unit.json -- -coverprofile=/test/unit/cover.out.pre  ./... -timeout 60m -race -covermode=atomic ./...
-fi
+gotestsum --format testname --junitfile=$folder/unit-ort.xml --jsonfile=$folder/unit-ort.json -- -coverprofile=$folder/cover-ort.out -coverpkg ./... -tags=ORT -timeout 60m -race
 
-grep -v "downloadModels.go" /test/unit/cover.out.pre > /test/unit/cover.out && rm  /test/unit/cover.out.pre
+echo "ORT tests completed."
+
+echo "Running XLA tests..."
+
+gotestsum --format testname --junitfile=$folder/unit-xla.xml --jsonfile=$folder/unit-xla.json -- -coverprofile=$folder/cover-xla.out -coverpkg ./... -tags=XLA -timeout 60m -race
+
+echo "XLA tests completed."
+
+echo "Running training tests..."
+
+gotestsum --format testname --junitfile=$folder/unit-training.xml --jsonfile=$folder/unit-training.json -- -coverprofile=$folder/cover-training.out -coverpkg ./... -tags=ORT,XLA,TRAINING -timeout 60m -race
+
+echo "Training tests completed."
+
+# echo "Running simplego tests..."
+
+gotestsum --format testname --junitfile=$folder/unit-go.xml --jsonfile=$folder/unit-go.json -- -tags=GO -timeout 60m
+
+# echo "simplego tests completed."
+
+echo "merging coverage files"
+head -n 1 $folder/cover-ort.out > $folder/cover.out
+tail -n +2 $folder/cover-ort.out >> $folder/cover.out
+tail -n +2 $folder/cover-xla.out >> $folder/cover.out
+tail -n +2 $folder/cover-training.out >> $folder/cover.out
+# tail -n +2 $folder/cover-go.out >> $folder/cover.out
+
+head -n 1 $folder/cover.out > $folder/cover.dedup.out
+tail -n +2 $folder/cover.out | sort | uniq >> $folder/cover.dedup.out
+grep -v "downloadModels.go" $folder/cover.dedup.out > $folder/cover.final.out
+cat $folder/cover.final.out
 
 echo Done.

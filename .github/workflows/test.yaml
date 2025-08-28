@@ -23,13 +23,22 @@ jobs:
         run: |
           go mod download
       - name: Build and run tests
-        run: ./scripts/run-unit-tests.sh ALL
+        run: ./scripts/run-unit-tests.sh
       - name: Install goveralls
         run: go install github.com/mattn/goveralls@latest
+      - name: list files
+        run: |
+          ls -R ./testTarget/unit
       - name: Send coverage
         env:
           COVERALLS_TOKEN: ${{ secrets.COVERALLS_TOKEN }}
-        run: goveralls -coverprofile=./testTarget/unit/cover.out -service=github
+        run: goveralls -coverprofile=./testTarget/unit/cover.final.out -service=github
+        continue-on-error: true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cover.final.out
+          path: ./testTarget/unit/cover.final.out
+        continue-on-error: true
       - uses: actions/upload-artifact@v4
         with:
           name: libtokenizers.a

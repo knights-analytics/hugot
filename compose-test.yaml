@@ -23,7 +23,6 @@ services:
     environment:
       - HOST_UID=$host_uid
       - CI=$CI
-      - HUGOT_BUILD_TAG=$HUGOT_BUILD_TAG
     command: /run-unit-tests-container.sh
     # deploy:
     #   resources:
