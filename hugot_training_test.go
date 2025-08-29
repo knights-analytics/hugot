@@ -1,4 +1,4 @@
-//go:build (ORT && XLA && TRAINING) || ALL
+//go:build (ORT && XLA && TRAINING) || (ALL && TRAINING)
 
 package hugot
 

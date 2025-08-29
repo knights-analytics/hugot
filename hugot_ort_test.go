@@ -1,4 +1,4 @@
-//go:build ORT || ALL
+//go:build (ORT || ALL) && !TRAINING
 
 package hugot
 
@@ -313,6 +313,9 @@ func TestImageClassificationPipelineValidationORT(t *testing.T) {
 // Text generation
 
 func TestTextGenerationPipelineORT(t *testing.T) {
+	if os.Getenv("CI") != "" {
+		t.SkipNow()
+	}
 	opts := []options.WithOption{options.WithOnnxLibraryPath(onnxRuntimeSharedLibrary)}
 	session, err := NewORTSession(opts...)
 	checkT(t, err)
@@ -343,6 +346,9 @@ func TestTextGenerationPipelineORTCuda(t *testing.T) {
 }
 
 func TestTextGenerationPipelineValidationORT(t *testing.T) {
+	if os.Getenv("CI") != "" {
+		t.SkipNow()
+	}
 	opts := []options.WithOption{options.WithOnnxLibraryPath(onnxRuntimeSharedLibrary)}
 	session, err := NewORTSession(opts...)
 	checkT(t, err)

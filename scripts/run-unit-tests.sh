@@ -19,6 +19,9 @@ export host_uid
 docker compose -f "$src_dir/compose-test.yaml" build hugot && \
 docker compose -f "$src_dir/compose-test.yaml" build hugot-test
 
+docker rmi ghcr.io/knights-analytics/hugot/models:latest || true
+docker builder prune --all || true
+
 echo "Running tests for commit hash: $commit_hash"
 docker compose -f "$src_dir/compose-test.yaml" up && \
 docker compose -f "$src_dir/compose-test.yaml" logs --no-color >& "$test_folder/logs.txt"

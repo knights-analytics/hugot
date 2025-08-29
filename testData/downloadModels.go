@@ -48,6 +48,10 @@ func main() {
 			}
 		}
 		for _, model := range models {
+			if os.Getenv("CI") != "" && model.name == "KnightsAnalytics/Phi-3.5-mini-instruct-onnx" {
+				continue // skipping this model for cicd
+			}
+
 			if ok, err = util.FileExists("./models/" + strings.Replace(model.name, "/", "_", -1)); err == nil {
 				if !ok {
 					options := hugot.NewDownloadOptions()
