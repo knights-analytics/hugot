@@ -9,7 +9,7 @@ require (
 	github.com/gomlx/gomlx v0.22.1
 	github.com/gomlx/gopjrt v0.8.0
 	github.com/gomlx/onnx-gomlx v0.2.5
-	github.com/stretchr/testify v1.11.0
+	github.com/stretchr/testify v1.11.1
 	github.com/sugarme/tokenizer v0.2.3-0.20250806005049-d78f65a68e82
 	github.com/urfave/cli/v3 v3.4.1
 	github.com/viant/afs v1.26.3
