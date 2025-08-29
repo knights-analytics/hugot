@@ -1,11 +1,6 @@
 name: Build test models
 
-on:
-  push:
-    branches:
-      - '**'
-
-# on: workflow_dispatch
+on: workflow_dispatch
 
 permissions:
   contents: write
