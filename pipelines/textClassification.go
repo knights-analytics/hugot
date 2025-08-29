@@ -18,6 +18,7 @@ type TextClassificationPipeline struct {
 	*pipelineBackends.BasePipeline
 	AggregationFunctionName string
 	ProblemType             string
+	FixedPaddingLength      int
 }
 
 type ClassificationOutput struct {
@@ -63,6 +64,13 @@ func WithSingleLabel() pipelineBackends.PipelineOption[*TextClassificationPipeli
 func WithMultiLabel() pipelineBackends.PipelineOption[*TextClassificationPipeline] {
 	return func(pipeline *TextClassificationPipeline) error {
 		pipeline.ProblemType = "multiLabel"
+		return nil
+	}
+}
+
+func WithFixedPadding(fixedPaddingLength int) pipelineBackends.PipelineOption[*TextClassificationPipeline] {
+	return func(pipeline *TextClassificationPipeline) error {
+		pipeline.FixedPaddingLength = fixedPaddingLength
 		return nil
 	}
 }
@@ -174,6 +182,11 @@ func (p *TextClassificationPipeline) Preprocess(batch *pipelineBackends.Pipeline
 	start := time.Now()
 	pipelineBackends.TokenizeInputs(batch, p.Model.Tokenizer, inputs)
 	atomic.AddUint64(&p.Model.Tokenizer.TokenizerTimings.NumCalls, 1)
+
+	if p.FixedPaddingLength > 0 {
+		batch.MaxSequenceLength = p.FixedPaddingLength
+	}
+
 	atomic.AddUint64(&p.Model.Tokenizer.TokenizerTimings.TotalNS, uint64(time.Since(start)))
 	err := pipelineBackends.CreateInputTensors(batch, p.Model, p.Runtime)
 	return err

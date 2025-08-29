@@ -258,6 +258,7 @@ func textClassificationPipelineMulti(t *testing.T, session *Session) {
 		Options: []TextClassificationOption{
 			pipelines.WithMultiLabel(),
 			pipelines.WithSigmoid(),
+			pipelines.WithFixedPadding(128),
 		},
 	}
 	sentimentPipelineMulti, err := NewPipeline(session, configMulti)
