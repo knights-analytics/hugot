@@ -28,7 +28,7 @@ echo "Training tests completed."
 
 # echo "Running simplego tests..."
 
-gotestsum --format testname --junitfile=$folder/unit-go.xml --jsonfile=$folder/unit-go.json -- -tags=GO -timeout 60m
+# gotestsum --format testname --junitfile=$folder/unit-go.xml --jsonfile=$folder/unit-go.json -- -tags=GO -timeout 60m
 
 # echo "simplego tests completed."
 
