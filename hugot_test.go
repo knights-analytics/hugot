@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -1137,7 +1138,7 @@ func textGenerationPipelineValidation(t *testing.T, session *Session) {
 // Thread safety
 
 func threadSafety(t *testing.T, session *Session, numEmbeddings int) {
-	const numWorkers = 4
+	numWorkers := min(runtime.NumCPU(), 6)
 	numResults := numWorkers * numEmbeddings
 
 	t.Helper()
