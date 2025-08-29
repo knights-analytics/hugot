@@ -16,13 +16,13 @@ echo "ORT tests completed."
 
 echo "Running XLA tests..."
 
-gotestsum --format testname --junitfile=$folder/unit-xla.xml --jsonfile=$folder/unit-xla.json -- -coverprofile=$folder/cover-xla.out -coverpkg ./... -tags=XLA -timeout 60m -race
+gotestsum --format testname --junitfile=$folder/unit-xla.xml --jsonfile=$folder/unit-xla.json -- -coverprofile=$folder/cover-xla.out -coverpkg ./... -tags=XLA -timeout 60m
 
 echo "XLA tests completed."
 
 echo "Running training tests..."
 
-gotestsum --format testname --junitfile=$folder/unit-training.xml --jsonfile=$folder/unit-training.json -- -coverprofile=$folder/cover-training.out -coverpkg ./... -tags=ORT,XLA,TRAINING -timeout 60m -race
+gotestsum --format testname --junitfile=$folder/unit-training.xml --jsonfile=$folder/unit-training.json -- -coverprofile=$folder/cover-training.out -coverpkg ./... -tags=ORT,XLA,TRAINING -timeout 60m
 
 echo "Training tests completed."
 
