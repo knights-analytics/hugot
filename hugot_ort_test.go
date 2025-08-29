@@ -442,7 +442,7 @@ func runBenchmarkEmbedding(strings *[]string, cuda bool) {
 		}
 	}(session)
 
-	modelPath := "./models/sentence-transformers_all-MiniLM-L6-v2"
+	modelPath := "./models/KnightsAnalytics_all-MiniLM-L6-v2"
 	config := FeatureExtractionConfig{
 		ModelPath: modelPath,
 		Name:      "benchmarkEmbedding",
@@ -463,10 +463,10 @@ func BenchmarkORTCudaEmbedding(b *testing.B) {
 		b.SkipNow()
 	}
 	p := make([]string, 30000)
-	for i := 0; i < 30000; i++ {
+	for i := range 30000 {
 		p[i] = "The goal of this library is to provide an easy, scalable, and hassle-free way to run huggingface transformer pipelines in golang applications."
 	}
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		runBenchmarkEmbedding(&p, true)
 	}
 }
@@ -475,11 +475,11 @@ func BenchmarkORTCPUEmbedding(b *testing.B) {
 	if os.Getenv("CI") != "" {
 		b.SkipNow()
 	}
-	p := make([]string, 30000)
-	for i := 0; i < 30000; i++ {
+	p := make([]string, 5000)
+	for i := range 5000 {
 		p[i] = "The goal of this library is to provide an easy, scalable, and hassle-free way to run huggingface transformer pipelines in golang applications."
 	}
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		runBenchmarkEmbedding(&p, false)
 	}
 }

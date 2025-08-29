@@ -130,19 +130,15 @@ func loadInputOutputMetaORT(onnxBytes []byte) ([]InputOutputInfo, []InputOutputI
 
 func createInputTensorsORT(batch *PipelineBatch, model *Model) error {
 	padLeft := len(model.EosTokenIDs) > 0
-	// 1) determine max seq length across batch
-	for _, inp := range batch.Input {
-		batch.MaxSequenceLength = max(batch.MaxSequenceLength, len(inp.TokenIDs))
-	}
 	batchSize := batch.Size
 	maxSequenceLength := batch.MaxSequenceLength
 	total := batchSize * maxSequenceLength
 
-	// 2) prepare result containers - now we use all inputs, not filtering
+	// 1) prepare result containers - now we use all inputs, not filtering
 	inputVals := make([]ort.Value, len(model.InputsMeta))
 	masks := make([][]bool, batchSize)
 
-	// 3) build each tensor
+	// 2) build each tensor
 	for mi, meta := range model.InputsMeta {
 		switch {
 		case strings.HasPrefix(meta.Name, "past_key"):
@@ -237,7 +233,7 @@ func createInputTensorsORT(batch *PipelineBatch, model *Model) error {
 		}
 	}
 
-	// 4) assign and prepare cleanup
+	// 3) assign and prepare cleanup
 	batch.InputValues = inputVals
 	batch.PaddingMask = masks
 	batch.DestroyInputs = func() error {
