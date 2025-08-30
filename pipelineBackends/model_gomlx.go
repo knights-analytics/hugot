@@ -198,10 +198,7 @@ func createInputTensorsGoMLX(batch *PipelineBatch, model *Model, padBatchDimensi
 
 	// TODO: replace this once dynamic input shapes fixed
 	model.FixedCacheSize = 150
-	// 1) Determine max sequence length
-	for _, inp := range batch.Input {
-		batch.MaxSequenceLength = max(batch.MaxSequenceLength, len(inp.TokenIDs))
-	}
+
 	batchSize := batch.Size
 	if padBatchDimension {
 		batchSize = nextPowerOf2(batchSize)
@@ -212,11 +209,11 @@ func createInputTensorsGoMLX(batch *PipelineBatch, model *Model, padBatchDimensi
 	}
 	total := batchSize * maxSeqLength
 
-	// 2) prepare result containers - now we use all inputs, not filtering
+	// 1) prepare result containers - now we use all inputs, not filtering
 	inputTensors := make([]*tensors.Tensor, len(model.InputsMeta))
 	paddingMasks := make([][]bool, batch.Size)
 
-	// 3) build each tensor
+	// 2) build each tensor
 	for mi, meta := range model.InputsMeta {
 		switch {
 		case strings.HasPrefix(meta.Name, "past_key"):
@@ -312,7 +309,7 @@ func createInputTensorsGoMLX(batch *PipelineBatch, model *Model, padBatchDimensi
 		}
 	}
 
-	// 4) assign and prepare cleanup
+	// 3) assign and prepare cleanup
 	batch.InputValues = inputTensors
 	batch.PaddingMask = paddingMasks
 	batch.DestroyInputs = func() error {
