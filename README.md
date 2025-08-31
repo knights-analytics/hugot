@@ -211,6 +211,8 @@ following models:
  
 - **Gemma Family**: `onnx-community/gemma-3-1b-it-ONNX`, `onnx-community/gemma-3-270m-it-ONNX`
 - **Phi Family**: `microsoft/Phi-3-mini-4k-instruct-onnx`, `microsoft/Phi-3.5-mini-instruct-onnx`
+
+Generative models typically use external weights, so use the downloadOptions.ExternalDataPath option when downloading the model. See the [example](./testData/downloadModels.go ) here.
  
 ### Example Usage
 ````go
