@@ -193,7 +193,7 @@ func loadInputOutputMetaGoMLX(model *onnx.Model) ([]InputOutputInfo, []InputOutp
 	return inputs, outputs
 }
 
-func createInputTensorsGoMLX(batch *PipelineBatch, model *Model, padBatchDimension bool) error {
+func createInputTensorsGoMLX(batch *PipelineBatch, model *Model, padBatchDimension bool, padSequenceDimension bool) error {
 	leftPad := len(model.EosTokenIDs) > 0
 
 	// TODO: replace this once dynamic input shapes fixed
@@ -204,7 +204,7 @@ func createInputTensorsGoMLX(batch *PipelineBatch, model *Model, padBatchDimensi
 		batchSize = nextPowerOf2(batchSize)
 	}
 	maxSeqLength := batch.MaxSequenceLength
-	if !leftPad {
+	if padSequenceDimension && !leftPad {
 		maxSeqLength = nextPowerOf2(maxSeqLength)
 	}
 	total := batchSize * maxSeqLength
