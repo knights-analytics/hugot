@@ -140,8 +140,10 @@ func RunGenerativeSessionOnBatch(batch *PipelineBatch, p *BasePipeline) error {
 	switch p.Runtime {
 	case "ORT":
 		return runGenerativeORTSessionOnBatch(batch, p)
-	case "GO", "XLA":
-		return errors.New("GO/XLA backend is not yet implemented for generative models")
+	case "GO":
+		return errors.New("GO backend is not yet implemented for generative models")
+	case "XLA":
+		return errors.New("XLA backend is not yet implemented for generative models")
 	default:
 		return errors.New("invalid backend")
 	}
@@ -153,8 +155,10 @@ func CreateInputTensorsTraining(batch *PipelineBatch, model *Model, runtime stri
 	switch runtime {
 	case "ORT":
 		return createInputTensorsORT(batch, model)
-	case "GO", "XLA":
-		return createInputTensorsGoMLX(batch, model, false)
+	case "GO":
+		return createInputTensorsGoMLX(batch, model, false, false)
+	case "XLA":
+		return createInputTensorsGoMLX(batch, model, false, true)
 	}
 	return nil
 }
@@ -163,8 +167,10 @@ func CreateInputTensors(batch *PipelineBatch, model *Model, runtime string) erro
 	switch runtime {
 	case "ORT":
 		return createInputTensorsORT(batch, model)
-	case "GO", "XLA":
-		return createInputTensorsGoMLX(batch, model, true)
+	case "GO":
+		return createInputTensorsGoMLX(batch, model, false, false)
+	case "XLA":
+		return createInputTensorsGoMLX(batch, model, true, true)
 	}
 	return nil
 }

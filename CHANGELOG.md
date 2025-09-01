@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
+## [0.5.3] - 2025-09-01
+
+### Changed
+
+- Performance improvement: do not pad inputs to POW2 when using simplego backend
+
 ## [0.5.2] - 2025-08-30
 
 ### Changed
