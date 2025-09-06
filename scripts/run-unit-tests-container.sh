@@ -22,9 +22,9 @@ echo "XLA tests completed."
 
 # echo "Running training tests..."
 
-# gotestsum --format testname --junitfile=$folder/unit-training.xml --jsonfile=$folder/unit-training.json -- -coverprofile=$folder/cover-training.out -coverpkg ./... -tags=ORT,XLA,TRAINING -timeout 60m
+gotestsum --format testname --junitfile=$folder/unit-training.xml --jsonfile=$folder/unit-training.json -- -coverprofile=$folder/cover-training.out -coverpkg ./... -tags=ORT,XLA,TRAINING -timeout 60m
 
-# echo "Training tests completed."
+echo "Training tests completed."
 
 # echo "Running simplego tests..."
 
@@ -36,7 +36,7 @@ echo "merging coverage files"
 head -n 1 $folder/cover-ort.out > $folder/cover.out
 tail -n +2 $folder/cover-ort.out >> $folder/cover.out
 tail -n +2 $folder/cover-xla.out >> $folder/cover.out
-# tail -n +2 $folder/cover-training.out >> $folder/cover.out
+tail -n +2 $folder/cover-training.out >> $folder/cover.out
 # tail -n +2 $folder/cover-go.out >> $folder/cover.out
 
 head -n 1 $folder/cover.out > $folder/cover.dedup.out

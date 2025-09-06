@@ -57,12 +57,12 @@ func main() {
 					options := hugot.NewDownloadOptions()
 					options.OnnxFilePath = model.onnxFilePath
 					options.ExternalDataPath = model.externalDataPath
-					fmt.Println(fmt.Sprintf("Downloading %s", model.name))
+					fmt.Printf("Downloading %s\n", model.name)
 					outPath, dlErr := hugot.DownloadModel(model.name, "./models", options)
 					if dlErr != nil {
 						panic(dlErr)
 					}
-					fmt.Println(fmt.Sprintf("Downloaded %s to %s", model.name, outPath))
+					fmt.Printf("Downloaded %s to %s\n", model.name, outPath)
 				}
 			} else {
 				panic(err)

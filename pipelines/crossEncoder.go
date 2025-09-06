@@ -22,12 +22,11 @@ type CrossEncoderPipeline struct {
 }
 
 type CrossEncoderStats struct {
-	TotalQueries       uint64
-	TotalDocuments     uint64
-	AverageLatency     time.Duration
-	AverageBatchSize   float64
-	TruncatedSequences uint64
-	FilteredResults    uint64
+	TotalQueries     uint64
+	TotalDocuments   uint64
+	AverageLatency   time.Duration
+	AverageBatchSize float64
+	FilteredResults  uint64
 }
 
 type CrossEncoderResult struct {
@@ -122,7 +121,6 @@ func (p *CrossEncoderPipeline) GetStats() []string {
 		fmt.Sprintf("Total documents scored: %d", p.stats.TotalDocuments),
 		fmt.Sprintf("Average latency per query: %s", avgLatency),
 		fmt.Sprintf("Average batch size: %.2f", p.stats.AverageBatchSize),
-		fmt.Sprintf("Truncated sequences: %d", p.stats.TruncatedSequences),
 		fmt.Sprintf("Filtered results: %d", p.stats.FilteredResults),
 		fmt.Sprintf("Tokenizer: Total time=%s, Execution count=%d, Average query time=%s",
 			time.Duration(p.Model.Tokenizer.TokenizerTimings.TotalNS),
@@ -140,6 +138,14 @@ func (p *CrossEncoderPipeline) Validate() error {
 
 	if p.Model.Tokenizer == nil {
 		validationErrors = append(validationErrors, fmt.Errorf("cross encoder pipeline requires a tokenizer"))
+	}
+
+	if p.Model.SeparatorToken == "" {
+		validationErrors = append(validationErrors, fmt.Errorf("cross encoder pipeline requires a separator token to be set in the model"))
+	}
+
+	if p.Model.SeparatorToken != "[SEP]" && p.Model.SeparatorToken != "</s>" {
+		validationErrors = append(validationErrors, fmt.Errorf("cross encoder pipeline only supports [SEP] (BERT) and </s> (Roberta) as separator tokens, got %s", p.Model.SeparatorToken))
 	}
 
 	outDims := p.Model.OutputsMeta[0].Dimensions
@@ -167,16 +173,47 @@ func (p *CrossEncoderPipeline) Validate() error {
 	return errors.Join(validationErrors...)
 }
 
+func patchBertSequenceTokenTypeIDs(batch *pipelineBackends.PipelineBatch, sepToken string) {
+	// Fix token_type_ids for BERT-style models when we manually concatenated the pair as a single sequence.
+	// Pattern expected: [CLS] query [SEP] doc [SEP]
+	// HF sets token_type_ids=0 up to and including first [SEP], then 1 for remainder (including final [SEP]).
+	for index := range batch.Input {
+		input := &batch.Input[index]
+		// Only adjust if type ids exist and are all zero
+		allZero := true
+		for _, t := range input.TypeIDs {
+			if t != 0 {
+				allZero = false
+				break
+			}
+		}
+		if !allZero || len(input.TypeIDs) == 0 {
+			continue
+		}
+		// Find first [SEP] token index (skip position 0 which should be [CLS])
+		firstSep := -1
+		for iTok := 1; iTok < len(input.Tokens); iTok++ {
+			if input.Tokens[iTok] == sepToken {
+				firstSep = iTok
+				break
+			}
+		}
+		if firstSep == -1 || firstSep == len(input.Tokens)-1 { // nothing to split
+			continue
+		}
+		for iTok := firstSep + 1; iTok < len(input.TypeIDs); iTok++ {
+			input.TypeIDs[iTok] = 1
+		}
+	}
+}
+
 func (p *CrossEncoderPipeline) Preprocess(batch *pipelineBackends.PipelineBatch, inputs []string) error {
 	start := time.Now()
 
 	pipelineBackends.TokenizeInputs(batch, p.Model.Tokenizer, inputs)
 
-	// Track truncated sequences (tokenizer already handles truncation)
-	for _, tokenizedInput := range batch.Input {
-		if len(tokenizedInput.TokenIDs) >= p.Model.Tokenizer.MaxAllowedTokens {
-			atomic.AddUint64(&p.stats.TruncatedSequences, 1)
-		}
+	if p.Model != nil && p.Model.Tokenizer != nil && p.Model.SeparatorToken == "[SEP]" {
+		patchBertSequenceTokenTypeIDs(batch, p.Model.SeparatorToken)
 	}
 
 	atomic.AddUint64(&p.Model.Tokenizer.TokenizerTimings.NumCalls, 1)
@@ -289,8 +326,16 @@ func (p *CrossEncoderPipeline) runBatch(query string, documents []string, startI
 	var runErrors []error
 
 	inputs := make([]string, len(documents))
+	sep := p.Model.SeparatorToken
+
 	for i, doc := range documents {
-		inputs[i] = fmt.Sprintf("[CLS] %s [SEP] %s [SEP]", query, doc)
+		if sep == "</s>" {
+			// RoBERTa style: query </s> </s> document
+			inputs[i] = fmt.Sprintf("%s%s%s%s", query, sep, sep, doc)
+		} else {
+			// BERT style: query [SEP] document [SEP]
+			inputs[i] = fmt.Sprintf("%s%s%s", query, sep, doc)
+		}
 	}
 
 	batch := pipelineBackends.NewBatch(len(inputs))
@@ -300,6 +345,7 @@ func (p *CrossEncoderPipeline) runBatch(query string, documents []string, startI
 	}(batch)
 
 	runErrors = append(runErrors, p.Preprocess(batch, inputs))
+
 	if e := errors.Join(runErrors...); e != nil {
 		return nil, e
 	}
