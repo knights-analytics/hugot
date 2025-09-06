@@ -820,29 +820,50 @@ func crossEncoderPipeline(t *testing.T, session *Session) {
 	pipeline, err := NewPipeline(session, config)
 	checkT(t, err)
 
-	query := "What is the capital of France?"
+	query := "Organic skincare products for sensitive skin"
 	documents := []string{
-		"Paris is the capital of France.",
-		"The Eiffel Tower is in Paris.",
-		"France is a country in Europe.",
+		"Eco-friendly kitchenware for modern homes",
+		"Biodegradable cleaning supplies for eco-conscious consumers",
+		"Organic cotton baby clothes for sensitive skin",
+		"Natural organic skincare range for sensitive skin",
+		"Tech gadgets for smart homes: 2024 edition",
+		"Sustainable gardening tools and compost solutions",
+		"Sensitive skin-friendly facial cleansers and toners",
+		"Organic food wraps and storage solutions",
+		"All-natural pet food for dogs with allergies",
+		"Yoga mats made from recycled materials",
+	}
+
+	type Expected struct {
+		Document string
+		Score    float32
+	}
+
+	expectedRoberta := []Expected{
+		{Document: "Natural organic skincare range for sensitive skin", Score: 0.95478064},
+		{Document: "Organic cotton baby clothes for sensitive skin", Score: 0.8185698},
+		{Document: "Sensitive skin-friendly facial cleansers and toners", Score: 0.5848757},
+		{Document: "Organic food wraps and storage solutions", Score: 0.2567817},
+		{Document: "Biodegradable cleaning supplies for eco-conscious consumers", Score: 0.22029042},
+		{Document: "Yoga mats made from recycled materials", Score: 0.20082192},
+		{Document: "Sustainable gardening tools and compost solutions", Score: 0.19299757},
+		{Document: "All-natural pet food for dogs with allergies", Score: 0.18836288},
+		{Document: "Eco-friendly kitchenware for modern homes", Score: 0.18346606},
+		{Document: "Tech gadgets for smart homes: 2024 edition", Score: 0.16224432},
 	}
 
 	inputs := append([]string{query}, documents...)
 	output, err := pipeline.Run(inputs)
 	checkT(t, err)
-
 	results := output.(*pipelines.CrossEncoderOutput).Results
-	if len(results) != 3 {
-		t.Errorf("Expected 3 results, got %d", len(results))
-	}
-	if results[0].Document != "Paris is the capital of France." {
-		t.Errorf("Expected 'Paris is the capital of France.' as best document, got '%s'", results[0].Document)
-	}
-	if results[0].Score <= results[1].Score {
-		t.Errorf("Expected result 0 to have higher score than result 1, but got %f and %f", results[0].Score, results[1].Score)
-	}
-	if results[1].Score <= results[2].Score {
-		t.Errorf("Expected result 1 to have higher score than result 2, but got %f and %f", results[1].Score, results[2].Score)
+
+	for i, expected := range expectedRoberta {
+		if expected.Document != results[i].Document {
+			t.Errorf("Expected document '%s', got '%s'", expected.Document, results[i].Document)
+		}
+		if math.Abs(float64(expected.Score-results[i].Score)) > 0.01 {
+			t.Errorf("Expected score '%f', got '%f'", expected.Score, results[i].Score)
+		}
 	}
 }
 
