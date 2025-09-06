@@ -142,6 +142,14 @@ func (p *CrossEncoderPipeline) Validate() error {
 		validationErrors = append(validationErrors, fmt.Errorf("cross encoder pipeline requires a tokenizer"))
 	}
 
+	if p.Model.SeparatorToken == "" {
+		validationErrors = append(validationErrors, fmt.Errorf("cross encoder pipeline requires a separator token to be set in the model"))
+	}
+
+	if p.Model.SeparatorToken != "[SEP]" && p.Model.SeparatorToken != "</s>" {
+		validationErrors = append(validationErrors, fmt.Errorf("cross encoder pipeline only supports [SEP] (BERT) and </s> (Roberta) as separator tokens, got %s", p.Model.SeparatorToken))
+	}
+
 	outDims := p.Model.OutputsMeta[0].Dimensions
 	if len(outDims) != 2 {
 		validationErrors = append(validationErrors, fmt.Errorf("pipeline configuration invalid: cross encoder must have 2 dimensional output"))
@@ -289,8 +297,16 @@ func (p *CrossEncoderPipeline) runBatch(query string, documents []string, startI
 	var runErrors []error
 
 	inputs := make([]string, len(documents))
+	sep := p.Model.SeparatorToken
+
 	for i, doc := range documents {
-		inputs[i] = fmt.Sprintf("[CLS] %s [SEP] %s [SEP]", query, doc)
+		if sep == "</s>" {
+			// RoBERTa style: query </s> </s> document
+			inputs[i] = fmt.Sprintf("%s%s%s%s", query, sep, sep, doc)
+		} else {
+			// BERT style: query [SEP] document [SEP]
+			inputs[i] = fmt.Sprintf("%s%s%s%s", query, sep, doc, sep)
+		}
 	}
 
 	batch := pipelineBackends.NewBatch(len(inputs))
