@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync/atomic"
+	"time"
 
 	ort "github.com/yalue/onnxruntime_go"
 
@@ -334,10 +336,15 @@ func runGenerativeORTSessionOnBatch(batch *PipelineBatch, p *BasePipeline) error
 	finish := make([]bool, batchSize)
 	finishCount := 0
 
+	var prefillStart time.Time
+	prefillStart = time.Now()
+
 iterations:
 	for step := 0; step < batch.MaxNewTokens; step++ {
 		inputTensors := batch.InputValues.([]ort.Value)
 		outputTensors := make([]ort.Value, len(p.Model.OutputsMeta))
+		// Track full iteration time (session run + minimal bookkeeping)
+		runStart := time.Now()
 		err := p.Model.ORTModel.Session.Run(inputTensors, outputTensors)
 		if err != nil {
 			return err
@@ -355,6 +362,29 @@ iterations:
 		// EOS until the longest output sequence terminates
 		// should give an array of batchSize amount of tokens
 		greedyTokens := argmax3D(logitsReshaped)
+		// Record latency to first token (after prefill) and switch phase timing accounting
+		stepDuration := time.Since(runStart)
+		if step == 0 {
+			// Prefill (prompt processing + first token) timing
+			prefillDuration := time.Since(prefillStart)
+			if len(batch.PaddingMask) > 0 {
+				var promptTokens int
+				for _, row := range batch.PaddingMask {
+					for _, v := range row {
+						if v {
+							promptTokens++
+						}
+					}
+				}
+				atomicAddUint64(&p.PipelineTimings.PrefillTokens, uint64(promptTokens))
+			}
+			atomicAddUint64(&p.PipelineTimings.PrefillNS, uint64(prefillDuration.Nanoseconds()))
+			atomicAddUint64(&p.PipelineTimings.FirstTokenLatencyNS, uint64(prefillDuration.Nanoseconds()))
+			// Include first iteration run duration also in generation time so decode TPS reflects all generated tokens
+			atomicAddUint64(&p.PipelineTimings.GenerationNS, uint64(stepDuration.Nanoseconds()))
+		} else {
+			atomicAddUint64(&p.PipelineTimings.GenerationNS, uint64(stepDuration.Nanoseconds()))
+		}
 		for i, greedyToken := range greedyTokens {
 			if !finish[i] {
 				generatedTokens[i] = append(generatedTokens[i], greedyToken)
@@ -362,6 +392,8 @@ iterations:
 					finish[i] = true
 					finishCount++
 				}
+				// Count generated token
+				atomicAddUint64(&p.PipelineTimings.GeneratedTokens, 1)
 			}
 		}
 		if finishCount == batchSize {
@@ -387,7 +419,7 @@ iterations:
 				seqLen := len(positionIDs) / batchSize
 				lastIdx := seqLen - 1
 				newPositionIDs := make([]int64, batchSize)
-				for j := 0; j < batchSize; j++ {
+				for j := range batchSize {
 					newPositionIDs[j] = positionIDs[j*seqLen+lastIdx] + 1
 				}
 				newPositionIDsTensor, positionErr := ort.NewTensor(
@@ -449,6 +481,10 @@ iterations:
 		batch.OutputValues[i] = generatedTokens[i]
 	}
 	return nil
+}
+
+func atomicAddUint64(addr *uint64, delta uint64) {
+	atomic.AddUint64(addr, delta)
 }
 
 func convertORTInputOutputs(inputOutputs []ort.InputOutputInfo) []InputOutputInfo {

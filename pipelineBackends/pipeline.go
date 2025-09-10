@@ -79,6 +79,14 @@ type PipelineConfig[T Pipeline] struct {
 type timings struct {
 	NumCalls uint64
 	TotalNS  uint64
+	// Prefill phase (first forward pass with full prompt)
+	PrefillNS     uint64
+	PrefillTokens uint64
+	// Autoregressive decode phase (subsequent token-by-token steps)
+	GenerationNS    uint64
+	GeneratedTokens uint64
+	// Time to first token (prefill latency) aggregated across runs
+	FirstTokenLatencyNS uint64
 }
 
 // TokenizedInput holds the result of running tokenizer on an input.
