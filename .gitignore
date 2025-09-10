@@ -6,3 +6,4 @@ models
 testTarget
 artifacts
 data
+*gguf
