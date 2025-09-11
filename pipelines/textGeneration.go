@@ -130,6 +130,18 @@ func WithPhiTemplate() pipelineBackends.PipelineOption[*TextGenerationPipeline] 
 	}
 }
 
+// WithQwenTemplate applies a Qwen-style chat template
+func WithQwenTemplate() pipelineBackends.PipelineOption[*TextGenerationPipeline] {
+	return func(pipeline *TextGenerationPipeline) error {
+		tmpl, err := template.New("qwen").Funcs(chatTemplates.FuncMap).Parse(chatTemplates.QwenTemplate)
+		if err != nil {
+			return errors.New("parsing of qwen template failed")
+		}
+		pipeline.Template = tmpl
+		return nil
+	}
+}
+
 func WithCustomStopTokens(stopTokens []int64) pipelineBackends.PipelineOption[*TextGenerationPipeline] {
 	return func(pipeline *TextGenerationPipeline) error {
 		for _, token := range stopTokens {
@@ -177,6 +189,27 @@ func (p *TextGenerationPipeline) GetModel() *pipelineBackends.Model {
 }
 
 func (p *TextGenerationPipeline) GetStats() []string {
+	// Derived metrics (avoid divide-by-zero)
+	prefillTokens := p.PipelineTimings.PrefillTokens
+	genTokens := p.PipelineTimings.GeneratedTokens
+	prefillSeconds := float64(p.PipelineTimings.PrefillNS) / 1e9
+	genSeconds := float64(p.PipelineTimings.GenerationNS) / 1e9
+	totalGeneratedTPS := 0.0
+	decodeTPS := 0.0
+	prefillTPS := 0.0
+	if genSeconds > 0 && genTokens > 0 {
+		decodeTPS = float64(genTokens) / genSeconds
+	}
+	if prefillSeconds > 0 && prefillTokens > 0 {
+		prefillTPS = float64(prefillTokens) / prefillSeconds
+	}
+	if (prefillSeconds+genSeconds) > 0 && (genTokens > 0) {
+		totalGeneratedTPS = float64(genTokens) / (prefillSeconds + genSeconds)
+	}
+	avgTTFT := time.Duration(0)
+	if p.PipelineTimings.NumCalls > 0 {
+		avgTTFT = time.Duration(float64(p.PipelineTimings.FirstTokenLatencyNS) / float64(p.PipelineTimings.NumCalls))
+	}
 	return []string{
 		fmt.Sprintf("Statistics for pipeline: %s", p.PipelineName),
 		fmt.Sprintf("Tokenizer: Total time=%s, Execution count=%d, Average query time=%s",
@@ -187,6 +220,10 @@ func (p *TextGenerationPipeline) GetStats() []string {
 			time.Duration(p.PipelineTimings.TotalNS),
 			p.PipelineTimings.NumCalls,
 			time.Duration(float64(p.PipelineTimings.TotalNS)/math.Max(1, float64(p.PipelineTimings.NumCalls)))),
+		fmt.Sprintf("Prefill: tokens=%d time=%s tps=%.2f", prefillTokens, time.Duration(p.PipelineTimings.PrefillNS), prefillTPS),
+		fmt.Sprintf("Decode: tokens=%d time=%s tps=%.2f", genTokens, time.Duration(p.PipelineTimings.GenerationNS), decodeTPS),
+		fmt.Sprintf("Overall generation TPS: %.2f", totalGeneratedTPS),
+		fmt.Sprintf("Avg TTFT: %s", avgTTFT),
 	}
 }
 

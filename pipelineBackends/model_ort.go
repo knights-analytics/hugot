@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync/atomic"
+	"time"
 
 	ort "github.com/yalue/onnxruntime_go"
 
@@ -195,16 +197,45 @@ func createInputTensorsORT(batch *PipelineBatch, model *Model) error {
 				}
 			case "attention_mask":
 				if model.IsGenerative {
-					for range batch.Input {
-						for range maxSequenceLength {
-							backing[idx] = 1
+					// Build mask reflecting actual padding: 0 for pads, 1 for real tokens.
+					for bi, inp := range batch.Input {
+						seqLen := len(inp.TokenIDs)
+						padLen := maxSequenceLength - seqLen
+						for pos := range maxSequenceLength {
+							if padLeft { // left padding
+								if pos < padLen {
+									backing[idx] = 0
+								} else {
+									backing[idx] = 1
+								}
+							} else { // right padding
+								if pos < seqLen {
+									backing[idx] = 1
+								} else {
+									backing[idx] = 0
+								}
+							}
 							idx++
+						}
+						// ensure masks[bi] exists if input_ids not yet processed
+						if masks[bi] == nil {
+							maskRow := make([]bool, maxSequenceLength)
+							if padLeft {
+								for pos := padLen; pos < maxSequenceLength; pos++ {
+									maskRow[pos] = true
+								}
+							} else {
+								for pos := 0; pos < seqLen; pos++ {
+									maskRow[pos] = true
+								}
+							}
+							masks[bi] = maskRow
 						}
 					}
 				} else {
-					// For non-generative models, take the input mask from the tokenizer output
+					// Non-generative: use tokenizer mask (already right padded)
 					for _, inp := range batch.Input {
-						for pos := range maxSequenceLength {
+						for pos := 0; pos < maxSequenceLength; pos++ {
 							if pos < len(inp.TokenIDs) {
 								backing[idx] = int64(inp.AttentionMask[pos])
 							}
@@ -213,10 +244,34 @@ func createInputTensorsORT(batch *PipelineBatch, model *Model) error {
 					}
 				}
 			case "position_ids":
-				for range batch.Input {
-					for pos := range maxSequenceLength {
-						// 1-indexed positions
-						backing[idx] = int64(pos + 1)
+				// HuggingFace-style position ids based on attention_mask cumsum.
+				// position_ids = cumsum(attention_mask) - 1; then masked_fill(attention_mask==0, 1)
+				// We reconstruct (or infer) the same mask logic here using masks slice.
+				for bi, inp := range batch.Input {
+					maskRow := masks[bi]
+					if maskRow == nil { // fallback build if attention_mask came after and input_ids not seen
+						seqLen := len(inp.TokenIDs)
+						padLen := maxSequenceLength - seqLen
+						maskRow = make([]bool, maxSequenceLength)
+						if padLeft {
+							for pos := padLen; pos < maxSequenceLength; pos++ {
+								maskRow[pos] = true
+							}
+						} else {
+							for pos := 0; pos < seqLen; pos++ {
+								maskRow[pos] = true
+							}
+						}
+						masks[bi] = maskRow
+					}
+					cumulative := 0
+					for pos := 0; pos < maxSequenceLength; pos++ {
+						if maskRow[pos] {
+							backing[idx] = int64(cumulative)
+							cumulative++
+						} else {
+							backing[idx] = 1 // mask fill value per HF pattern described
+						}
 						idx++
 					}
 				}
@@ -334,10 +389,15 @@ func runGenerativeORTSessionOnBatch(batch *PipelineBatch, p *BasePipeline) error
 	finish := make([]bool, batchSize)
 	finishCount := 0
 
+	var prefillStart time.Time
+	prefillStart = time.Now()
+
 iterations:
 	for step := 0; step < batch.MaxNewTokens; step++ {
 		inputTensors := batch.InputValues.([]ort.Value)
 		outputTensors := make([]ort.Value, len(p.Model.OutputsMeta))
+		// Track full iteration time (session run + minimal bookkeeping)
+		runStart := time.Now()
 		err := p.Model.ORTModel.Session.Run(inputTensors, outputTensors)
 		if err != nil {
 			return err
@@ -355,6 +415,29 @@ iterations:
 		// EOS until the longest output sequence terminates
 		// should give an array of batchSize amount of tokens
 		greedyTokens := argmax3D(logitsReshaped)
+		// Record latency to first token (after prefill) and switch phase timing accounting
+		stepDuration := time.Since(runStart)
+		if step == 0 {
+			// Prefill (prompt processing + first token) timing
+			prefillDuration := time.Since(prefillStart)
+			if len(batch.PaddingMask) > 0 {
+				var promptTokens int
+				for _, row := range batch.PaddingMask {
+					for _, v := range row {
+						if v {
+							promptTokens++
+						}
+					}
+				}
+				atomicAddUint64(&p.PipelineTimings.PrefillTokens, uint64(promptTokens))
+			}
+			atomicAddUint64(&p.PipelineTimings.PrefillNS, uint64(prefillDuration.Nanoseconds()))
+			atomicAddUint64(&p.PipelineTimings.FirstTokenLatencyNS, uint64(prefillDuration.Nanoseconds()))
+			// Include first iteration run duration also in generation time so decode TPS reflects all generated tokens
+			atomicAddUint64(&p.PipelineTimings.GenerationNS, uint64(stepDuration.Nanoseconds()))
+		} else {
+			atomicAddUint64(&p.PipelineTimings.GenerationNS, uint64(stepDuration.Nanoseconds()))
+		}
 		for i, greedyToken := range greedyTokens {
 			if !finish[i] {
 				generatedTokens[i] = append(generatedTokens[i], greedyToken)
@@ -362,6 +445,8 @@ iterations:
 					finish[i] = true
 					finishCount++
 				}
+				// Count generated token
+				atomicAddUint64(&p.PipelineTimings.GeneratedTokens, 1)
 			}
 		}
 		if finishCount == batchSize {
@@ -387,7 +472,7 @@ iterations:
 				seqLen := len(positionIDs) / batchSize
 				lastIdx := seqLen - 1
 				newPositionIDs := make([]int64, batchSize)
-				for j := 0; j < batchSize; j++ {
+				for j := range batchSize {
 					newPositionIDs[j] = positionIDs[j*seqLen+lastIdx] + 1
 				}
 				newPositionIDsTensor, positionErr := ort.NewTensor(
@@ -449,6 +534,10 @@ iterations:
 		batch.OutputValues[i] = generatedTokens[i]
 	}
 	return nil
+}
+
+func atomicAddUint64(addr *uint64, delta uint64) {
+	atomic.AddUint64(addr, delta)
 }
 
 func convertORTInputOutputs(inputOutputs []ort.InputOutputInfo) []InputOutputInfo {
