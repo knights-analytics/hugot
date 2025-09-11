@@ -364,9 +364,9 @@ func TestTextGenerationPipelineValidationORT(t *testing.T) {
 
 // TestTextGenerationLongPromptCUDA tests a long prompt with the Phi-3.5-mini-instruct-onnx model on GPU.
 func TestTextGenerationLongPromptCUDA(t *testing.T) {
-	if os.Getenv("CI") != "" {
-		t.SkipNow()
-	}
+	// if os.Getenv("CI") != "" {
+	// 	t.SkipNow()
+	// }
 	opts := []options.WithOption{
 		options.WithOnnxLibraryPath("/usr/lib64/onnxruntime-gpu/libonnxruntime.so"),
 		options.WithCuda(map[string]string{"device_id": "0"}),
@@ -377,9 +377,186 @@ func TestTextGenerationLongPromptCUDA(t *testing.T) {
 	}
 	defer func() { _ = session.Destroy() }()
 
-	system := `You are an assistant that helps summarise json documents`
+	system := `You are an assistant that helps summarise json documents. For a list of json documents, provide a concise summary of the key details and differences.`
 
-	testPrompt := `
+	msg := [][]pipelines.Message{{
+		{Role: "system", Content: system},
+		{Role: "user", Content: longTestPrompt},
+	}}
+
+	// config := TextGenerationConfig{
+	// 	ModelPath:    "./models/onnx-community_Qwen2.5-1.5B",
+	// 	Name:         "qwen-long-prompt-gpu",
+	// 	OnnxFilename: "model_quantized.onnx",
+	// 	Options: []pipelineBackends.PipelineOption[*pipelines.TextGenerationPipeline]{
+	// 		pipelines.WithMaxTokens(256),
+	// 		pipelines.WithQwenTemplate(),
+	// 		// Stop on <|endoftext|> (151643) or <|im_end|> (151645)
+	// 		pipelines.WithCustomStopTokens([]int64{151643, 151645}),
+	// 	},
+	// }
+
+	config := TextGenerationConfig{
+		ModelPath:    "./models/KnightsAnalytics_Phi-3.5-mini-instruct-onnx",
+		Name:         "long-prompt-test-gpu",
+		OnnxFilename: "model.onnx",
+		Options: []pipelineBackends.PipelineOption[*pipelines.TextGenerationPipeline]{
+			pipelines.WithMaxTokens(500),
+			pipelines.WithPhiTemplate(),
+			pipelines.WithCustomStopTokens([]int64{32007}),
+		},
+	}
+	textGenPipeline, err := NewPipeline(session, config)
+	if err != nil {
+		t.Fatalf("pipeline init failed: %v", err)
+	}
+
+	start := time.Now()
+	fmt.Println("Starting generation...")
+	out, err := textGenPipeline.RunWithTemplate(msg)
+	if err != nil {
+		t.Fatalf("generation failed: %v", err)
+	}
+	fmt.Println("Generation completed.")
+	wall := time.Since(start)
+	genOut, ok := out.(*pipelines.TextGenerationOutput)
+	if !ok || len(genOut.GeneratedTokens) == 0 {
+		t.Fatalf("unexpected output type or empty tokens")
+	}
+	stats := textGenPipeline.GetStats()
+	fmt.Printf("WallTime=%s\n", wall)
+	fmt.Printf("generated output: %s\n", genOut.GetOutput()...)
+	for _, s := range stats {
+		fmt.Println(s)
+	}
+}
+
+// No Same Name
+
+func TestNoSameNamePipelineORT(t *testing.T) {
+	opts := []options.WithOption{options.WithOnnxLibraryPath(onnxRuntimeSharedLibrary)}
+	session, err := NewORTSession(opts...)
+	checkT(t, err)
+	defer func(session *Session) {
+		destroyErr := session.Destroy()
+		checkT(t, destroyErr)
+	}(session)
+	noSameNamePipeline(t, session)
+}
+
+func TestClosePipelineORT(t *testing.T) {
+	opts := []options.WithOption{options.WithOnnxLibraryPath(onnxRuntimeSharedLibrary)}
+	session, err := NewORTSession(opts...)
+	checkT(t, err)
+	defer func(session *Session) {
+		destroyErr := session.Destroy()
+		checkT(t, destroyErr)
+	}(session)
+	destroyPipelines(t, session)
+}
+
+// Thread safety
+
+func TestThreadSafetyORT(t *testing.T) {
+	opts := []options.WithOption{options.WithOnnxLibraryPath(onnxRuntimeSharedLibrary)}
+	session, err := NewORTSession(opts...)
+	checkT(t, err)
+	defer func(session *Session) {
+		destroyErr := session.Destroy()
+		checkT(t, destroyErr)
+	}(session)
+	threadSafety(t, session, 250)
+}
+
+func TestThreadSafetyORTCuda(t *testing.T) {
+	if os.Getenv("CI") != "" {
+		t.SkipNow()
+	}
+	opts := []options.WithOption{
+		options.WithOnnxLibraryPath("/usr/lib64/onnxruntime-gpu/libonnxruntime.so"),
+		options.WithCuda(map[string]string{
+			"device_id": "0",
+		}),
+	}
+	session, err := NewORTSession(opts...)
+	checkT(t, err)
+	defer func(session *Session) {
+		destroyErr := session.Destroy()
+		checkT(t, destroyErr)
+	}(session)
+	threadSafety(t, session, 1000)
+}
+
+// Benchmarks
+
+func runBenchmarkEmbedding(strings *[]string, cuda bool) {
+	var opts []options.WithOption
+	switch cuda {
+	case true:
+		opts = []options.WithOption{
+			options.WithOnnxLibraryPath("/usr/lib64/onnxruntime-gpu/libonnxruntime.so"),
+			options.WithCuda(map[string]string{
+				"device_id": "0",
+			}),
+		}
+	default:
+		opts = []options.WithOption{options.WithOnnxLibraryPath("/usr/lib64/onnxruntime.so")}
+	}
+	session, err := NewORTSession(opts...)
+	if err != nil {
+		panic(err)
+	}
+
+	defer func(session *Session) {
+		errDestroy := session.Destroy()
+		if errDestroy != nil {
+			panic(errDestroy)
+		}
+	}(session)
+
+	modelPath := "./models/KnightsAnalytics_all-MiniLM-L6-v2"
+	config := FeatureExtractionConfig{
+		ModelPath: modelPath,
+		Name:      "benchmarkEmbedding",
+	}
+	pipelineEmbedder, err2 := NewPipeline(session, config)
+	if err2 != nil {
+		panic(err2)
+	}
+	res, err := pipelineEmbedder.Run(*strings)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(len(res.GetOutput()))
+}
+
+func BenchmarkORTCudaEmbedding(b *testing.B) {
+	if os.Getenv("CI") != "" {
+		b.SkipNow()
+	}
+	p := make([]string, 30000)
+	for i := range 30000 {
+		p[i] = "The goal of this library is to provide an easy, scalable, and hassle-free way to run huggingface transformer pipelines in golang applications."
+	}
+	for b.Loop() {
+		runBenchmarkEmbedding(&p, true)
+	}
+}
+
+func BenchmarkORTCPUEmbedding(b *testing.B) {
+	if os.Getenv("CI") != "" {
+		b.SkipNow()
+	}
+	p := make([]string, 5000)
+	for i := range 5000 {
+		p[i] = "The goal of this library is to provide an easy, scalable, and hassle-free way to run huggingface transformer pipelines in golang applications."
+	}
+	for b.Loop() {
+		runBenchmarkEmbedding(&p, false)
+	}
+}
+
+const longTestPrompt = `
 	Summarise this list of jsons:
 
 	{
@@ -608,167 +785,3 @@ func TestTextGenerationLongPromptCUDA(t *testing.T) {
     "favoriteFruit": "strawberry"
   }
 	`
-	msg := [][]pipelines.Message{{
-		{Role: "system", Content: system},
-		{Role: "user", Content: testPrompt},
-	}}
-
-	config := TextGenerationConfig{
-		ModelPath:    "./models/KnightsAnalytics_Phi-3.5-mini-instruct-onnx",
-		Name:         "long-prompt-test-gpu",
-		OnnxFilename: "model.onnx",
-		Options: []pipelineBackends.PipelineOption[*pipelines.TextGenerationPipeline]{
-			pipelines.WithMaxTokens(500),
-			pipelines.WithPhiTemplate(),
-			pipelines.WithCustomStopTokens([]int64{32007}),
-		},
-	}
-	textGenPipeline, err := NewPipeline(session, config)
-	if err != nil {
-		t.Fatalf("pipeline init failed: %v", err)
-	}
-
-	start := time.Now()
-	fmt.Println("Starting generation...")
-	out, err := textGenPipeline.RunWithTemplate(msg)
-	if err != nil {
-		t.Fatalf("generation failed: %v", err)
-	}
-	fmt.Println("Generation completed.")
-	wall := time.Since(start)
-	genOut, ok := out.(*pipelines.TextGenerationOutput)
-	if !ok || len(genOut.GeneratedTokens) == 0 {
-		t.Fatalf("unexpected output type or empty tokens")
-	}
-	stats := textGenPipeline.GetStats()
-	fmt.Printf("WallTime=%s\n", wall)
-	fmt.Printf("generated output: %s\n", genOut.GetOutput()...)
-	for _, s := range stats {
-		fmt.Println(s)
-	}
-}
-
-// No Same Name
-
-func TestNoSameNamePipelineORT(t *testing.T) {
-	opts := []options.WithOption{options.WithOnnxLibraryPath(onnxRuntimeSharedLibrary)}
-	session, err := NewORTSession(opts...)
-	checkT(t, err)
-	defer func(session *Session) {
-		destroyErr := session.Destroy()
-		checkT(t, destroyErr)
-	}(session)
-	noSameNamePipeline(t, session)
-}
-
-func TestClosePipelineORT(t *testing.T) {
-	opts := []options.WithOption{options.WithOnnxLibraryPath(onnxRuntimeSharedLibrary)}
-	session, err := NewORTSession(opts...)
-	checkT(t, err)
-	defer func(session *Session) {
-		destroyErr := session.Destroy()
-		checkT(t, destroyErr)
-	}(session)
-	destroyPipelines(t, session)
-}
-
-// Thread safety
-
-func TestThreadSafetyORT(t *testing.T) {
-	opts := []options.WithOption{options.WithOnnxLibraryPath(onnxRuntimeSharedLibrary)}
-	session, err := NewORTSession(opts...)
-	checkT(t, err)
-	defer func(session *Session) {
-		destroyErr := session.Destroy()
-		checkT(t, destroyErr)
-	}(session)
-	threadSafety(t, session, 250)
-}
-
-func TestThreadSafetyORTCuda(t *testing.T) {
-	if os.Getenv("CI") != "" {
-		t.SkipNow()
-	}
-	opts := []options.WithOption{
-		options.WithOnnxLibraryPath("/usr/lib64/onnxruntime-gpu/libonnxruntime.so"),
-		options.WithCuda(map[string]string{
-			"device_id": "0",
-		}),
-	}
-	session, err := NewORTSession(opts...)
-	checkT(t, err)
-	defer func(session *Session) {
-		destroyErr := session.Destroy()
-		checkT(t, destroyErr)
-	}(session)
-	threadSafety(t, session, 1000)
-}
-
-// Benchmarks
-
-func runBenchmarkEmbedding(strings *[]string, cuda bool) {
-	var opts []options.WithOption
-	switch cuda {
-	case true:
-		opts = []options.WithOption{
-			options.WithOnnxLibraryPath("/usr/lib64/onnxruntime-gpu/libonnxruntime.so"),
-			options.WithCuda(map[string]string{
-				"device_id": "0",
-			}),
-		}
-	default:
-		opts = []options.WithOption{options.WithOnnxLibraryPath("/usr/lib64/onnxruntime.so")}
-	}
-	session, err := NewORTSession(opts...)
-	if err != nil {
-		panic(err)
-	}
-
-	defer func(session *Session) {
-		errDestroy := session.Destroy()
-		if errDestroy != nil {
-			panic(errDestroy)
-		}
-	}(session)
-
-	modelPath := "./models/KnightsAnalytics_all-MiniLM-L6-v2"
-	config := FeatureExtractionConfig{
-		ModelPath: modelPath,
-		Name:      "benchmarkEmbedding",
-	}
-	pipelineEmbedder, err2 := NewPipeline(session, config)
-	if err2 != nil {
-		panic(err2)
-	}
-	res, err := pipelineEmbedder.Run(*strings)
-	if err != nil {
-		panic(err)
-	}
-	fmt.Println(len(res.GetOutput()))
-}
-
-func BenchmarkORTCudaEmbedding(b *testing.B) {
-	if os.Getenv("CI") != "" {
-		b.SkipNow()
-	}
-	p := make([]string, 30000)
-	for i := range 30000 {
-		p[i] = "The goal of this library is to provide an easy, scalable, and hassle-free way to run huggingface transformer pipelines in golang applications."
-	}
-	for b.Loop() {
-		runBenchmarkEmbedding(&p, true)
-	}
-}
-
-func BenchmarkORTCPUEmbedding(b *testing.B) {
-	if os.Getenv("CI") != "" {
-		b.SkipNow()
-	}
-	p := make([]string, 5000)
-	for i := range 5000 {
-		p[i] = "The goal of this library is to provide an easy, scalable, and hassle-free way to run huggingface transformer pipelines in golang applications."
-	}
-	for b.Loop() {
-		runBenchmarkEmbedding(&p, false)
-	}
-}

@@ -197,16 +197,45 @@ func createInputTensorsORT(batch *PipelineBatch, model *Model) error {
 				}
 			case "attention_mask":
 				if model.IsGenerative {
-					for range batch.Input {
-						for range maxSequenceLength {
-							backing[idx] = 1
+					// Build mask reflecting actual padding: 0 for pads, 1 for real tokens.
+					for bi, inp := range batch.Input {
+						seqLen := len(inp.TokenIDs)
+						padLen := maxSequenceLength - seqLen
+						for pos := range maxSequenceLength {
+							if padLeft { // left padding
+								if pos < padLen {
+									backing[idx] = 0
+								} else {
+									backing[idx] = 1
+								}
+							} else { // right padding
+								if pos < seqLen {
+									backing[idx] = 1
+								} else {
+									backing[idx] = 0
+								}
+							}
 							idx++
+						}
+						// ensure masks[bi] exists if input_ids not yet processed
+						if masks[bi] == nil {
+							maskRow := make([]bool, maxSequenceLength)
+							if padLeft {
+								for pos := padLen; pos < maxSequenceLength; pos++ {
+									maskRow[pos] = true
+								}
+							} else {
+								for pos := 0; pos < seqLen; pos++ {
+									maskRow[pos] = true
+								}
+							}
+							masks[bi] = maskRow
 						}
 					}
 				} else {
-					// For non-generative models, take the input mask from the tokenizer output
+					// Non-generative: use tokenizer mask (already right padded)
 					for _, inp := range batch.Input {
-						for pos := range maxSequenceLength {
+						for pos := 0; pos < maxSequenceLength; pos++ {
 							if pos < len(inp.TokenIDs) {
 								backing[idx] = int64(inp.AttentionMask[pos])
 							}
@@ -215,10 +244,34 @@ func createInputTensorsORT(batch *PipelineBatch, model *Model) error {
 					}
 				}
 			case "position_ids":
-				for range batch.Input {
-					for pos := range maxSequenceLength {
-						// 1-indexed positions
-						backing[idx] = int64(pos + 1)
+				// HuggingFace-style position ids based on attention_mask cumsum.
+				// position_ids = cumsum(attention_mask) - 1; then masked_fill(attention_mask==0, 1)
+				// We reconstruct (or infer) the same mask logic here using masks slice.
+				for bi, inp := range batch.Input {
+					maskRow := masks[bi]
+					if maskRow == nil { // fallback build if attention_mask came after and input_ids not seen
+						seqLen := len(inp.TokenIDs)
+						padLen := maxSequenceLength - seqLen
+						maskRow = make([]bool, maxSequenceLength)
+						if padLeft {
+							for pos := padLen; pos < maxSequenceLength; pos++ {
+								maskRow[pos] = true
+							}
+						} else {
+							for pos := 0; pos < seqLen; pos++ {
+								maskRow[pos] = true
+							}
+						}
+						masks[bi] = maskRow
+					}
+					cumulative := 0
+					for pos := 0; pos < maxSequenceLength; pos++ {
+						if maskRow[pos] {
+							backing[idx] = int64(cumulative)
+							cumulative++
+						} else {
+							backing[idx] = 1 // mask fill value per HF pattern described
+						}
 						idx++
 					}
 				}
