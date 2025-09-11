@@ -1058,7 +1058,7 @@ func textGenerationPipeline(t *testing.T, session *Session) {
 			input: [][]pipelines.Message{
 				{
 					{Role: "system", Content: "you are a helpful assistant."},
-					{Role: "user", Content: "what is the capital of the Netherlands?"},
+					{Role: "user", Content: "what is the capital of the Netherlands? Just answer the question and stop."},
 				},
 				{
 					{Role: "system", Content: "you are a helpful assistant."},
