@@ -153,6 +153,9 @@ func (s *Session) initialiseORT() (bool, error) {
 		if err := sessionOptions.AppendExecutionProviderCUDA(cudaOptions); err != nil {
 			return true, err
 		}
+		if err := cudaOptions.Destroy(); err != nil {
+			return true, err
+		}
 	}
 	if o.CoreMLOptions != nil {
 		if err := sessionOptions.AppendExecutionProviderCoreMLV2(o.CoreMLOptions); err != nil {

@@ -380,20 +380,14 @@ func runGenerativeORTSessionOnBatch(batch *PipelineBatch, p *BasePipeline) error
 	generatedTokens := make([][]int64, batchSize)
 	eosTokenIDs := p.Model.EosTokenIDs
 
-	// Map input metadata for intelligent ordering
-	inputMetaMap := make(map[string]int)
-	for i, inputMeta := range p.Model.InputsMeta {
-		inputMetaMap[inputMeta.Name] = i
-	}
-
 	finish := make([]bool, batchSize)
 	finishCount := 0
 
 	var prefillStart time.Time
 	prefillStart = time.Now()
 
-iterations:
 	for step := 0; step < batch.MaxNewTokens; step++ {
+		fmt.Println(step+1, "out of", batch.MaxNewTokens, "tokens generated")
 		inputTensors := batch.InputValues.([]ort.Value)
 		outputTensors := make([]ort.Value, len(p.Model.OutputsMeta))
 		// Track full iteration time (session run + minimal bookkeeping)
@@ -449,84 +443,90 @@ iterations:
 				atomicAddUint64(&p.PipelineTimings.GeneratedTokens, 1)
 			}
 		}
-		if finishCount == batchSize {
-			break iterations
-		}
-
-		// initialize next loop in correct order of the input metadata
-		newModelInputs := make([]ort.Value, len(p.Model.InputsMeta))
-		for i, inputMeta := range p.Model.InputsMeta {
-			switch inputMeta.Name {
-			case "input_ids":
-				generatedTokenTensor, inputErr := ort.NewTensor(
-					ort.NewShape(batchSize64, 1),
-					greedyTokens,
-				)
-				if inputErr != nil {
-					return inputErr
-				}
-				newModelInputs[i] = generatedTokenTensor
-			case "position_ids":
-				// Compute next position ids without 2D reshaping: take last column per row and add 1
-				positionIDs := inputTensors[inputMetaMap["position_ids"]].(*ort.Tensor[int64]).GetData()
-				seqLen := len(positionIDs) / batchSize
-				lastIdx := seqLen - 1
-				newPositionIDs := make([]int64, batchSize)
-				for j := range batchSize {
-					newPositionIDs[j] = positionIDs[j*seqLen+lastIdx] + 1
-				}
-				newPositionIDsTensor, positionErr := ort.NewTensor(
-					ort.NewShape(batchSize64, 1),
-					newPositionIDs,
-				)
-				if positionErr != nil {
-					return positionErr
-				}
-				newModelInputs[i] = newPositionIDsTensor
-			case "attention_mask":
-				// Extend each row by one "1" without reshaping to 2D
-				attentionMask := inputTensors[inputMetaMap["attention_mask"]].(*ort.Tensor[int64]).GetData()
-				seqLen := len(attentionMask) / batchSize
-				newAttentionMask := make([]int64, batchSize*(seqLen+1))
-				for j := 0; j < batchSize; j++ {
-					srcBase := j * seqLen
-					dstBase := j * (seqLen + 1)
-					copy(newAttentionMask[dstBase:dstBase+seqLen], attentionMask[srcBase:srcBase+seqLen])
-					newAttentionMask[dstBase+seqLen] = 1
-				}
-				newAttentionMaskTensor, attentionErr := ort.NewTensor(
-					ort.NewShape(batchSize64, int64(seqLen+1)),
-					newAttentionMask,
-				)
-				if attentionErr != nil {
-					return attentionErr
-				}
-				newModelInputs[i] = newAttentionMaskTensor
-
-			default:
-				// handle cache inputs (past_key_values, etc.)
-				if strings.HasPrefix(inputMeta.Name, "past_key") {
-					cacheInputIndex := 0
-					for j, meta := range p.Model.InputsMeta {
-						if j < i && strings.HasPrefix(meta.Name, "past_key") {
-							cacheInputIndex++
-						}
+		keepOutputTensors := make([]bool, len(outputTensors))
+		if finishCount < batchSize {
+			// initialize next loop in correct order of the input metadata
+			newModelInputs := make([]ort.Value, len(p.Model.InputsMeta))
+			for i, inputMeta := range p.Model.InputsMeta {
+				switch inputMeta.Name {
+				case "input_ids":
+					generatedTokenTensor, inputErr := ort.NewTensor(
+						ort.NewShape(batchSize64, 1),
+						greedyTokens,
+					)
+					if inputErr != nil {
+						return inputErr
 					}
-					newModelInputs[i] = outputTensors[1+cacheInputIndex]
-				} else {
-					return fmt.Errorf("unhandled input type: %s", inputMeta.Name)
+					newModelInputs[i] = generatedTokenTensor
+				case "position_ids":
+					// Compute next position ids without 2D reshaping: take last column per row and add 1
+					positionIDs := inputTensors[i].(*ort.Tensor[int64]).GetData()
+					seqLen := len(positionIDs) / batchSize
+					lastIdx := seqLen - 1
+					newPositionIDs := make([]int64, batchSize)
+					for j := range batchSize {
+						newPositionIDs[j] = positionIDs[j*seqLen+lastIdx] + 1
+					}
+					newPositionIDsTensor, positionErr := ort.NewTensor(
+						ort.NewShape(batchSize64, 1),
+						newPositionIDs,
+					)
+					if positionErr != nil {
+						return positionErr
+					}
+					newModelInputs[i] = newPositionIDsTensor
+				case "attention_mask":
+					// Extend each row by one "1" without reshaping to 2D
+					attentionMask := inputTensors[i].(*ort.Tensor[int64]).GetData()
+					seqLen := len(attentionMask) / batchSize
+					newAttentionMask := make([]int64, batchSize*(seqLen+1))
+					for j := 0; j < batchSize; j++ {
+						srcBase := j * seqLen
+						dstBase := j * (seqLen + 1)
+						copy(newAttentionMask[dstBase:dstBase+seqLen], attentionMask[srcBase:srcBase+seqLen])
+						newAttentionMask[dstBase+seqLen] = 1
+					}
+					newAttentionMaskTensor, attentionErr := ort.NewTensor(
+						ort.NewShape(batchSize64, int64(seqLen+1)),
+						newAttentionMask,
+					)
+					if attentionErr != nil {
+						return attentionErr
+					}
+					newModelInputs[i] = newAttentionMaskTensor
+				default:
+					// handle cache inputs (past_key_values, etc.)
+					if strings.HasPrefix(inputMeta.Name, "past_key") {
+						cacheInputIndex := 0
+						for j, meta := range p.Model.InputsMeta {
+							if j < i && strings.HasPrefix(meta.Name, "past_key") {
+								cacheInputIndex++
+							}
+						}
+						newModelInputs[i] = outputTensors[1+cacheInputIndex]
+						keepOutputTensors[1+cacheInputIndex] = true
+					} else {
+						return fmt.Errorf("unhandled input type: %s", inputMeta.Name)
+					}
 				}
 			}
+			batch.InputValues = newModelInputs
 		}
 
-		for _, val := range batch.InputValues.([]ort.Value) {
+		for _, val := range inputTensors {
 			err = errors.Join(err, val.Destroy())
+		}
+		for i, val := range outputTensors {
+			if !keepOutputTensors[i] {
+				err = errors.Join(err, val.Destroy())
+			}
 		}
 		if err != nil {
 			return err
 		}
-
-		batch.InputValues = newModelInputs
+		if finishCount == batchSize {
+			break
+		}
 	}
 
 	batch.OutputValues = make([]any, batchSize)

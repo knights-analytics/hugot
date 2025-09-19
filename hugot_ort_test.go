@@ -379,11 +379,6 @@ func TestTextGenerationLongPromptCUDA(t *testing.T) {
 
 	system := `You are an assistant that helps summarise json documents. For a list of json documents, provide a concise summary of the key details and differences.`
 
-	msg := [][]pipelines.Message{{
-		{Role: "system", Content: system},
-		{Role: "user", Content: longTestPrompt},
-	}}
-
 	// config := TextGenerationConfig{
 	// 	ModelPath:    "./models/onnx-community_Qwen2.5-1.5B",
 	// 	Name:         "qwen-long-prompt-gpu",
@@ -411,12 +406,29 @@ func TestTextGenerationLongPromptCUDA(t *testing.T) {
 		t.Fatalf("pipeline init failed: %v", err)
 	}
 
+	msg := [][]pipelines.Message{{
+		{Role: "system", Content: system},
+		{Role: "user", Content: `{"a":"hi"},{"b":"hi"},{"c":"hi"}`},
+	}}
+
+	fmt.Println("Warming generation...")
+	_, err = textGenPipeline.RunWithTemplate(msg)
+	if err != nil {
+		t.Fatalf("generation failed: %v", err)
+	}
+	fmt.Println("Generation warmed...")
+
 	start := time.Now()
 	fmt.Println("Starting generation...")
+	msg = [][]pipelines.Message{{
+		{Role: "system", Content: system},
+		{Role: "user", Content: longTestPrompt},
+	}}
 	out, err := textGenPipeline.RunWithTemplate(msg)
 	if err != nil {
 		t.Fatalf("generation failed: %v", err)
 	}
+
 	fmt.Println("Generation completed.")
 	wall := time.Since(start)
 	genOut, ok := out.(*pipelines.TextGenerationOutput)
