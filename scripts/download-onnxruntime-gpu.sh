@@ -16,7 +16,7 @@ fi
 
 name="onnxruntime-linux-x64-${onnxruntime_version}"
 url="https://github.com/microsoft/onnxruntime/releases/download/v${onnxruntime_version}/$name.tgz"
-url_gpu=https://github.com/microsoft/onnxruntime/releases/download/v${onnxruntime_version}/onnxruntime-linux-x64-gpu-${onnxruntime_version}.tgz && \
+url_gpu=https://github.com/microsoft/onnxruntime/releases/download/v${onnxruntime_version}/onnxruntime-linux-x64-gpu-${onnxruntime_version}.tgz
 
 echo Downloading version "$onnxruntime_version" \(cpu and gpu\) from "${url} into $(pwd)"
 

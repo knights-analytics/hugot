@@ -1,6 +1,6 @@
 #--- dockerfile to test hugot  ---
 
-ARG GO_VERSION=1.25.0
+ARG GO_VERSION=1.25.1
 ARG ONNXRUNTIME_VERSION=1.22.0
 ARG BUILD_PLATFORM=linux/amd64
 
@@ -15,7 +15,7 @@ ENV PATH="$PATH:/usr/local/go/bin" \
 
 COPY ./scripts/download-onnxruntime-gpu.sh /download-onnxruntime-gpu.sh
 RUN --mount=src=./go.mod,dst=/go.mod \
-    dnf --allowerasing -y install gcc jq bash tar xz gzip glibc-static libstdc++ wget zip git dirmngr sudo which && \
+    dnf --allowerasing -y install gcc jq bash tar xz gzip glibc-static libstdc++ wget zip git dirmngr sudo which python3.11 python3.11-pip && \
     ln -s /usr/lib64/libstdc++.so.6 /usr/lib64/libstdc++.so && \
     dnf install -y 'dnf-command(config-manager)' && \
     # from rhel
@@ -33,8 +33,9 @@ RUN --mount=src=./go.mod,dst=/go.mod \
     sed -i 's/\r//g' /download-onnxruntime-gpu.sh && chmod +x /download-onnxruntime-gpu.sh && \
     /download-onnxruntime-gpu.sh ${ONNXRUNTIME_VERSION} && \
     # XLA/goMLX
+    ln -sf /usr/bin/python3.11 /usr/bin/python3 && \
     curl -sSf https://raw.githubusercontent.com/gomlx/gopjrt/main/cmd/install_linux_amd64_amazonlinux.sh | bash && \
-    curl -sSf https://raw.githubusercontent.com/gomlx/gopjrt/main/cmd/install_cuda.sh | bash && \
+    curl -sSf https://raw.githubusercontent.com/gomlx/gopjrt/main/cmd/install_cuda13.sh | bash && \
     # go
     curl -LO https://golang.org/dl/go${GO_VERSION}.linux-amd64.tar.gz && \
     tar -C /usr/local -xzf go${GO_VERSION}.linux-amd64.tar.gz && \
