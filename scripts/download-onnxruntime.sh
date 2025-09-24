@@ -7,14 +7,23 @@ this_dir="$( cd "$( dirname "$0" )" && pwd )"
 src_dir="$(realpath "${this_dir}/..")"
 export src_dir
 
-onnxruntime_version="$1"
+os="$1"
+arch="$2"
+
+onnxruntime_version=$(grep 'github.com/yalue/onnxruntime_go' /go.mod | awk '{print $2}' | sed 's/^v//')
 
 if [[ -z $onnxruntime_version ]]; then
-    echo version is required
+    echo "Could not extract version for onnxruntime"
     exit 1
 fi
 
-name="onnxruntime-linux-x64-${onnxruntime_version}"
+if [[ $arch == "arm64" ]]; then
+  arch="aarch64"
+elif [[ $arch == "amd64" ]]; then
+  arch="x64"
+fi
+
+name="onnxruntime-${os}-${arch}-${onnxruntime_version}"
 url="https://github.com/microsoft/onnxruntime/releases/download/v${onnxruntime_version}/$name.tgz"
 
 echo Downloading version "$onnxruntime_version" \(cpu\) from "${url} into $(pwd)"
