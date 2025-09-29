@@ -330,9 +330,9 @@ func TestTextGenerationPipelineORT(t *testing.T) {
 }
 
 func TestTextGenerationPipelineORTCuda(t *testing.T) {
-	if os.Getenv("CI") != "" {
-		t.SkipNow()
-	}
+	// if os.Getenv("CI") != "" {
+	// 	t.SkipNow()
+	// }
 	opts := []options.WithOption{
 		options.WithOnnxLibraryPath("/usr/lib64/onnxruntime-gpu/libonnxruntime.so"),
 		options.WithCuda(map[string]string{

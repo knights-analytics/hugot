@@ -9,10 +9,10 @@ services:
     volumes:
       - $src_dir:/home/testuser/repositories/hugot
     entrypoint: ["tail", "-f", "/dev/null"]
-    # deploy:
-    #   resources:
-    #     reservations:
-    #       devices:
-    #         - driver: nvidia
-    #           count: 1
-    #           capabilities: [gpu]
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]

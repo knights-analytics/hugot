@@ -386,8 +386,44 @@ func runGenerativeORTSessionOnBatch(batch *PipelineBatch, p *BasePipeline) error
 	var prefillStart time.Time
 	prefillStart = time.Now()
 
+	// Precompute indices
+	type cacheMap struct{ inputIdx, outputIdx int }
+	inputIDsIdx, posIDsIdx, attnMaskIdx := -1, -1, -1
+	var caches []cacheMap
+	cacheOrdinal := 0
+	for i, meta := range p.Model.InputsMeta {
+		switch meta.Name {
+		case "input_ids":
+			inputIDsIdx = i
+		case "position_ids":
+			posIDsIdx = i
+		case "attention_mask":
+			attnMaskIdx = i
+		default:
+			if strings.HasPrefix(meta.Name, "past_key") {
+				caches = append(caches, cacheMap{inputIdx: i, outputIdx: 1 + cacheOrdinal})
+				cacheOrdinal++
+			}
+		}
+	}
+	if inputIDsIdx == -1 {
+		return fmt.Errorf("missing required generative input input_ids")
+	}
+	hasPosIDs := posIDsIdx != -1
+	hasAttnMask := attnMaskIdx != -1
+	if len(p.Model.OutputsMeta) > 0 {
+		expectedCaches := len(p.Model.OutputsMeta) - 1 // subtract logits
+		if expectedCaches != len(caches) {
+			return fmt.Errorf("expected %d cache outputs but mapped %d", expectedCaches, len(caches))
+		}
+	}
+
+	keepOutputTensors := make([]bool, len(p.Model.OutputsMeta))
+	var newPositionIDs []int64
+	var newAttentionMask []int64
+
 	for step := 0; step < batch.MaxNewTokens; step++ {
-		fmt.Println(step+1, "out of", batch.MaxNewTokens, "tokens generated")
+		fmt.Println("[hugot][gen] step", step+1, "/", batch.MaxNewTokens)
 		inputTensors := batch.InputValues.([]ort.Value)
 		outputTensors := make([]ort.Value, len(p.Model.OutputsMeta))
 		// Track full iteration time (session run + minimal bookkeeping)
@@ -443,72 +479,69 @@ func runGenerativeORTSessionOnBatch(batch *PipelineBatch, p *BasePipeline) error
 				atomicAddUint64(&p.PipelineTimings.GeneratedTokens, 1)
 			}
 		}
-		keepOutputTensors := make([]bool, len(outputTensors))
+		// reset keep flags in-place
+		for i := range keepOutputTensors {
+			keepOutputTensors[i] = false
+		}
 		if finishCount < batchSize {
-			// initialize next loop in correct order of the input metadata
 			newModelInputs := make([]ort.Value, len(p.Model.InputsMeta))
-			for i, inputMeta := range p.Model.InputsMeta {
-				switch inputMeta.Name {
-				case "input_ids":
-					generatedTokenTensor, inputErr := ort.NewTensor(
-						ort.NewShape(batchSize64, 1),
-						greedyTokens,
-					)
-					if inputErr != nil {
-						return inputErr
-					}
-					newModelInputs[i] = generatedTokenTensor
-				case "position_ids":
-					// Compute next position ids without 2D reshaping: take last column per row and add 1
-					positionIDs := inputTensors[i].(*ort.Tensor[int64]).GetData()
-					seqLen := len(positionIDs) / batchSize
-					lastIdx := seqLen - 1
-					newPositionIDs := make([]int64, batchSize)
-					for j := range batchSize {
-						newPositionIDs[j] = positionIDs[j*seqLen+lastIdx] + 1
-					}
-					newPositionIDsTensor, positionErr := ort.NewTensor(
-						ort.NewShape(batchSize64, 1),
-						newPositionIDs,
-					)
-					if positionErr != nil {
-						return positionErr
-					}
-					newModelInputs[i] = newPositionIDsTensor
-				case "attention_mask":
-					// Extend each row by one "1" without reshaping to 2D
-					attentionMask := inputTensors[i].(*ort.Tensor[int64]).GetData()
-					seqLen := len(attentionMask) / batchSize
-					newAttentionMask := make([]int64, batchSize*(seqLen+1))
-					for j := 0; j < batchSize; j++ {
-						srcBase := j * seqLen
-						dstBase := j * (seqLen + 1)
-						copy(newAttentionMask[dstBase:dstBase+seqLen], attentionMask[srcBase:srcBase+seqLen])
-						newAttentionMask[dstBase+seqLen] = 1
-					}
-					newAttentionMaskTensor, attentionErr := ort.NewTensor(
-						ort.NewShape(batchSize64, int64(seqLen+1)),
-						newAttentionMask,
-					)
-					if attentionErr != nil {
-						return attentionErr
-					}
-					newModelInputs[i] = newAttentionMaskTensor
-				default:
-					// handle cache inputs (past_key_values, etc.)
-					if strings.HasPrefix(inputMeta.Name, "past_key") {
-						cacheInputIndex := 0
-						for j, meta := range p.Model.InputsMeta {
-							if j < i && strings.HasPrefix(meta.Name, "past_key") {
-								cacheInputIndex++
-							}
-						}
-						newModelInputs[i] = outputTensors[1+cacheInputIndex]
-						keepOutputTensors[1+cacheInputIndex] = true
-					} else {
-						return fmt.Errorf("unhandled input type: %s", inputMeta.Name)
-					}
+			// input_ids always present
+			generatedTokenTensor, inputErr := ort.NewTensor(ort.NewShape(batchSize64, 1), greedyTokens)
+			if inputErr != nil {
+				return inputErr
+			}
+			newModelInputs[inputIDsIdx] = generatedTokenTensor
+
+			// position_ids
+			if hasPosIDs {
+				positionIDs := inputTensors[posIDsIdx].(*ort.Tensor[int64]).GetData()
+				seqLen := len(positionIDs) / batchSize
+				lastIdx := seqLen - 1
+				if cap(newPositionIDs) < batchSize {
+					newPositionIDs = make([]int64, batchSize)
+				} else {
+					newPositionIDs = newPositionIDs[:batchSize]
 				}
+				for j := 0; j < batchSize; j++ {
+					newPositionIDs[j] = positionIDs[j*seqLen+lastIdx] + 1
+				}
+				newPositionIDsTensor, positionErr := ort.NewTensor(ort.NewShape(batchSize64, 1), newPositionIDs)
+				if positionErr != nil {
+					return positionErr
+				}
+				newModelInputs[posIDsIdx] = newPositionIDsTensor
+			}
+
+			// attention_mask
+			if hasAttnMask {
+				attentionMask := inputTensors[attnMaskIdx].(*ort.Tensor[int64]).GetData()
+				seqLenMask := len(attentionMask) / batchSize
+				targetLen := batchSize * (seqLenMask + 1)
+				if cap(newAttentionMask) < targetLen {
+					newAttentionMask = make([]int64, targetLen)
+				} else {
+					newAttentionMask = newAttentionMask[:targetLen]
+				}
+				for j := 0; j < batchSize; j++ {
+					srcBase := j * seqLenMask
+					dstBase := j * (seqLenMask + 1)
+					copy(newAttentionMask[dstBase:dstBase+seqLenMask], attentionMask[srcBase:srcBase+seqLenMask])
+					newAttentionMask[dstBase+seqLenMask] = 1
+				}
+				newAttentionMaskTensor, attentionErr := ort.NewTensor(ort.NewShape(batchSize64, int64(seqLenMask+1)), newAttentionMask)
+				if attentionErr != nil {
+					return attentionErr
+				}
+				newModelInputs[attnMaskIdx] = newAttentionMaskTensor
+			}
+
+			// caches reuse outputs directly
+			for _, cm := range caches {
+				if cm.outputIdx >= len(outputTensors) {
+					return fmt.Errorf("cache output index %d out of range (len=%d)", cm.outputIdx, len(outputTensors))
+				}
+				newModelInputs[cm.inputIdx] = outputTensors[cm.outputIdx]
+				keepOutputTensors[cm.outputIdx] = true
 			}
 			batch.InputValues = newModelInputs
 		}
