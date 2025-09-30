@@ -4,7 +4,9 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/knights-analytics/hugot)](https://goreportcard.com/report/github.com/knights-analytics/hugot)
 [![Coverage Status](https://coveralls.io/repos/github/knights-analytics/hugot/badge.svg?branch=main)](https://coveralls.io/github/knights-analytics/hugot?branch=main)
 
-<img src="./hug-gopher.webp" width="300" alt="Hugging Face and Gopher">
+<div style="text-align:center">
+<img src="./hugot.png" width="300" alt="Go Gopher Transformer">
+</div>
 
 ## What
 
