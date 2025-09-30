@@ -1028,7 +1028,11 @@ func textGenerationPipeline(t *testing.T, session *Session) {
 		Options: []pipelineBackends.PipelineOption[*pipelines.TextGenerationPipeline]{
 			pipelines.WithMaxTokens(200),
 			pipelines.WithPhiTemplate(),
-			pipelines.WithCustomStopTokens([]int64{32007}), // Phi appears to use a stop token that's different from the one defined in config.json
+			pipelines.WithCustomStopTokens([]int64{
+				32007,
+				32001,
+				32000,
+			}),
 		},
 	}
 

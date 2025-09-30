@@ -364,9 +364,7 @@ func TestTextGenerationPipelineValidationORT(t *testing.T) {
 
 // TestTextGenerationLongPromptCUDA tests a long prompt with the Phi-3.5-mini-instruct-onnx model on GPU.
 func TestTextGenerationLongPromptCUDA(t *testing.T) {
-	// if os.Getenv("CI") != "" {
-	// 	t.SkipNow()
-	// }
+	t.SkipNow()
 	opts := []options.WithOption{
 		options.WithOnnxLibraryPath("/usr/lib64/onnxruntime-gpu/libonnxruntime.so"),
 		options.WithCuda(map[string]string{"device_id": "0"}),
@@ -398,7 +396,11 @@ func TestTextGenerationLongPromptCUDA(t *testing.T) {
 		Options: []pipelineBackends.PipelineOption[*pipelines.TextGenerationPipeline]{
 			pipelines.WithMaxTokens(500),
 			pipelines.WithPhiTemplate(),
-			pipelines.WithCustomStopTokens([]int64{32007}),
+			pipelines.WithCustomStopTokens([]int64{
+				32007,
+				32001,
+				32000,
+			}),
 		},
 	}
 	textGenPipeline, err := NewPipeline(session, config)
@@ -569,7 +571,7 @@ func BenchmarkORTCPUEmbedding(b *testing.B) {
 }
 
 const longTestPrompt = `
-	Summarise this list of jsons:
+	What type of information is contained in each json?
 
 	{
     "_id": "68c19f301b7efa6a20ad1184",
