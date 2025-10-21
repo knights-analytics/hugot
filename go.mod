@@ -11,7 +11,7 @@ require (
 	github.com/gomlx/onnx-gomlx v0.3.0
 	github.com/stretchr/testify v1.11.1
 	github.com/sugarme/tokenizer v0.3.0
-	github.com/urfave/cli/v3 v3.4.1
+	github.com/urfave/cli/v3 v3.5.0
 	github.com/viant/afs v1.26.3
 	github.com/yalue/onnxruntime_go v1.21.0
 )

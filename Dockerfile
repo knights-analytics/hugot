@@ -2,6 +2,7 @@
 
 ARG GO_VERSION=1.25.3
 ARG ONNXRUNTIME_VERSION=1.22.0
+ARG GOPJRT_VERSION=0.8.3
 ARG BUILD_PLATFORM=linux/amd64
 
 #--- runtime layer with all hugot dependencies for cpu 
@@ -10,15 +11,20 @@ ARG BUILD_PLATFORM=linux/amd64
 FROM --platform=$BUILD_PLATFORM public.ecr.aws/amazonlinux/amazonlinux:2023 AS hugot-runtime
 ARG GO_VERSION
 ARG ONNXRUNTIME_VERSION
+ARG GOPJRT_VERSION
 
 ENV PATH="$PATH:/usr/local/go/bin" \
     GOPJRT_NOSUDO=1
 
 COPY ./scripts/download-onnxruntime.sh /download-onnxruntime.sh
 RUN --mount=src=./go.mod,dst=/go.mod \
-    dnf --allowerasing -y install gcc jq bash tar xz gzip glibc-static libstdc++ wget zip git dirmngr sudo which python3.11 python3.11-pip && \
+    dnf --allowerasing -y install gcc jq bash tar xz gzip glibc-static libstdc++ wget zip git dirmngr sudo which && \
     ln -s /usr/lib64/libstdc++.so.6 /usr/lib64/libstdc++.so && \
     dnf clean all && \
+    # go
+    curl -LO https://golang.org/dl/go${GO_VERSION}.linux-amd64.tar.gz && \
+    tar -C /usr/local -xzf go${GO_VERSION}.linux-amd64.tar.gz && \
+    rm go${GO_VERSION}.linux-amd64.tar.gz && \
     # tokenizers
     tokenizer_version=$(grep 'github.com/daulet/tokenizers' /go.mod | awk '{print $2}') && \
     tokenizer_version=$(echo $tokenizer_version | awk -F'-' '{print $NF}') && \
@@ -30,12 +36,7 @@ RUN --mount=src=./go.mod,dst=/go.mod \
     sed -i 's/\r//g' /download-onnxruntime.sh && chmod +x /download-onnxruntime.sh && \
     /download-onnxruntime.sh ${ONNXRUNTIME_VERSION} && \
     # XLA/goMLX
-    ln -sf /usr/bin/python3.11 /usr/bin/python3 && \
-    curl -sSf https://raw.githubusercontent.com/gomlx/gopjrt/main/cmd/install_linux_amd64_amazonlinux.sh | bash && \
-    # go
-    curl -LO https://golang.org/dl/go${GO_VERSION}.linux-amd64.tar.gz && \
-    tar -C /usr/local -xzf go${GO_VERSION}.linux-amd64.tar.gz && \
-    rm go${GO_VERSION}.linux-amd64.tar.gz && \
+    GOPROXY=direct go run github.com/gomlx/gopjrt/cmd/gopjrt_installer@latest -plugin=amazonlinux -version=v${GOPJRT_VERSION} -path=/usr/local && \
     # NON-PRIVILEGED USER
     # create non-privileged testuser with id: 1000
     useradd -u 1000 -m testuser && usermod -a -G wheel testuser && \
