@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/daulet/tokenizers"
+	"errors"
 )
 
 type RustTokenizer struct {
@@ -23,7 +24,7 @@ func loadRustTokenizer(tokenizerBytes []byte, model *Model) error {
 	// tokenizer init
 	rustOptions, optErr := getRustTokenizerOptions(model.InputsMeta)
 	if optErr != nil {
-		return optErr
+		return errors.Join(optErr, tk.Close())
 	}
 	model.Tokenizer = &Tokenizer{Runtime: "RUST", RustTokenizer: &RustTokenizer{Tokenizer: tk, Options: rustOptions}, TokenizerTimings: &timings{}, MaxAllowedTokens: model.MaxPositionEmbeddings, Destroy: func() error {
 		return tk.Close()

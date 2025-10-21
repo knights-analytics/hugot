@@ -54,9 +54,8 @@ func WithOnnxLibraryPath(ortLibraryPath string) WithOption {
 		if o.Backend == "ORT" {
 			o.ORTOptions.LibraryPath = &ortLibraryPath
 			return nil
-		} else {
-			return fmt.Errorf("WithOnnxLibraryPath is only supported for ORT backend")
 		}
+		return fmt.Errorf("WithOnnxLibraryPath is only supported for ORT backend")
 	}
 }
 
@@ -67,9 +66,8 @@ func WithTelemetry() WithOption {
 			enabled := true
 			o.ORTOptions.Telemetry = &enabled
 			return nil
-		} else {
-			return fmt.Errorf("WithTelemetry is only supported for ORT backend")
 		}
+		return fmt.Errorf("WithTelemetry is only supported for ORT backend")
 	}
 }
 
@@ -80,9 +78,8 @@ func WithIntraOpNumThreads(numThreads int) WithOption {
 		if o.Backend == "ORT" {
 			o.ORTOptions.IntraOpNumThreads = &numThreads
 			return nil
-		} else {
-			return fmt.Errorf("WithIntraOpNumThreads is only supported for ORT backend")
 		}
+		return fmt.Errorf("WithIntraOpNumThreads is only supported for ORT backend")
 	}
 }
 
@@ -93,9 +90,8 @@ func WithInterOpNumThreads(numThreads int) WithOption {
 		if o.Backend == "ORT" {
 			o.ORTOptions.InterOpNumThreads = &numThreads
 			return nil
-		} else {
-			return fmt.Errorf("WithInterOpNumThreads is only supported for ORT backend")
 		}
+		return fmt.Errorf("WithInterOpNumThreads is only supported for ORT backend")
 	}
 }
 
@@ -106,9 +102,8 @@ func WithCpuMemArena(enable bool) WithOption {
 		if o.Backend == "ORT" {
 			o.ORTOptions.CPUMemArena = &enable
 			return nil
-		} else {
-			return fmt.Errorf("WithCpuMemArena is only supported for ORT backend")
 		}
+		return fmt.Errorf("WithCpuMemArena is only supported for ORT backend")
 	}
 }
 
@@ -119,9 +114,8 @@ func WithMemPattern(enable bool) WithOption {
 		if o.Backend == "ORT" {
 			o.ORTOptions.MemPattern = &enable
 			return nil
-		} else {
-			return fmt.Errorf("WithMemPattern is only supported for ORT backend")
 		}
+		return fmt.Errorf("WithMemPattern is only supported for ORT backend")
 	}
 }
 
@@ -131,9 +125,8 @@ func WithExecutionMode(parallel bool) WithOption {
 		if o.Backend == "ORT" {
 			o.ORTOptions.ParallelExecutionMode = &parallel
 			return nil
-		} else {
-			return fmt.Errorf("WithExecutionMode is only supported for ORT backend")
 		}
+		return fmt.Errorf("WithExecutionMode is only supported for ORT backend")
 	}
 }
 
@@ -144,9 +137,8 @@ func WithIntraOpSpinning(spinning bool) WithOption {
 		if o.Backend == "ORT" {
 			o.ORTOptions.IntraOpSpinning = &spinning
 			return nil
-		} else {
-			return fmt.Errorf("WithIntraOpSpinning is only supported for ORT backend")
 		}
+		return fmt.Errorf("WithIntraOpSpinning is only supported for ORT backend")
 	}
 }
 
@@ -157,9 +149,8 @@ func WithInterOpSpinning(spinning bool) WithOption {
 		if o.Backend == "ORT" {
 			o.ORTOptions.InterOpSpinning = &spinning
 			return nil
-		} else {
-			return fmt.Errorf("WithInterOpSpinning is only supported for ORT backend")
 		}
+		return fmt.Errorf("WithInterOpSpinning is only supported for ORT backend")
 	}
 }
 
@@ -189,9 +180,8 @@ func WithCoreML(flags map[string]string) WithOption {
 		if o.Backend == "ORT" {
 			o.ORTOptions.CoreMLOptions = flags
 			return nil
-		} else {
-			return fmt.Errorf("WithCoreML is only supported for ORT backend")
 		}
+		return fmt.Errorf("WithCoreML is only supported for ORT backend")
 	}
 }
 
@@ -202,9 +192,8 @@ func WithDirectML(deviceID int) WithOption {
 		if o.Backend == "ORT" {
 			o.ORTOptions.DirectMLOptions = &deviceID
 			return nil
-		} else {
-			return fmt.Errorf("WithDirectML is only supported for ORT backend")
 		}
+		return fmt.Errorf("WithDirectML is only supported for ORT backend")
 	}
 }
 
@@ -218,9 +207,8 @@ func WithOpenVINO(options map[string]string) WithOption {
 		if o.Backend == "ORT" {
 			o.ORTOptions.OpenVINOOptions = options
 			return nil
-		} else {
-			return fmt.Errorf("WithOpenVINO is only supported for ORT backend")
 		}
+		return fmt.Errorf("WithOpenVINO is only supported for ORT backend")
 	}
 }
 
@@ -240,8 +228,7 @@ func WithTensorRT(options map[string]string) WithOption {
 		if o.Backend == "ORT" {
 			o.ORTOptions.TensorRTOptions = options
 			return nil
-		} else {
-			return fmt.Errorf("WithTensorRT is only supported for ORT backend")
 		}
+		return fmt.Errorf("WithTensorRT is only supported for ORT backend")
 	}
 }

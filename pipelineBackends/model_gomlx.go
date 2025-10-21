@@ -9,12 +9,10 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/backends"
-	"github.com/gomlx/gomlx/graph"
-	. "github.com/gomlx/gomlx/graph"
-	"github.com/gomlx/gomlx/ml/context"
-	"github.com/gomlx/gomlx/types/tensors"
+	"github.com/gomlx/gomlx/pkg/core/graph"
+	"github.com/gomlx/gomlx/pkg/ml/context"
+	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/gomlx/onnx-gomlx/onnx"
 
@@ -85,83 +83,81 @@ func loadExternalData(path string, model *onnx.Model) error {
 }
 
 func createGoMLXModelBackend(model *Model, options *options.Options) error {
-	var insideError, recoverErr error
 
-	// we never want to panic so the calling program has a chance to shut down gracefully on error.
-	// we therefore catch all panics from goMLX as errors.
-	recoverErr = exceptions.TryCatch[error](func() {
-		var modelParsed *onnx.Model
-		modelParsed, insideError = onnx.Parse(model.OnnxBytes)
-		if insideError != nil {
-			return
+	modelParsed, err := onnx.Parse(model.OnnxBytes)
+	if err != nil {
+		return err
+	}
+
+	inputs, outputs := loadInputOutputMetaGoMLX(modelParsed)
+	var outputNames []string
+	for _, v := range outputs {
+		outputNames = append(outputNames, v.Name)
+	}
+
+	if err = loadExternalData(model.Path, modelParsed); err != nil {
+		return err
+	}
+
+	ctx := context.New()
+	// Mark it to reuse variables: it will be an error to create a new variable – for safety.
+	ctx = ctx.Reuse()
+
+	// Read variables from ONNX model.
+	err = modelParsed.VariablesToContext(ctx)
+	if err != nil {
+		return err
+	}
+
+	config := "go"
+	if options.GoMLXOptions.Cuda {
+		config = "xla:cuda"
+	} else if options.GoMLXOptions.XLA {
+		config = "xla:cpu"
+	}
+
+	backend, backendErr := backends.NewWithConfig(config)
+	if backendErr != nil {
+		return backendErr
+	}
+
+	// Create model executor.
+	callFunc := func(ctx *context.Context, inputs []*graph.Node) []*graph.Node {
+		inputsMap := map[string]*graph.Node{}
+		for i, inputMeta := range model.InputsMeta {
+			inputsMap[inputMeta.Name] = inputs[i]
 		}
+		return modelParsed.CallGraph(ctx, inputs[0].Graph(), inputsMap, outputNames...)
+	}
 
-		inputs, outputs := loadInputOutputMetaGoMLX(modelParsed)
-		var outputNames []string
-		for _, v := range outputs {
-			outputNames = append(outputNames, v.Name)
-		}
+	if model.IsGenerative {
+		callFunc = createGenerativeCallFunc(model, modelParsed, outputNames)
+	}
 
-		if insideError = loadExternalData(model.Path, modelParsed); insideError != nil {
-			return
-		}
+	exec, contextErr := context.NewExec(backend, ctx, callFunc)
+	if contextErr != nil {
+		return contextErr
+	}
 
-		ctx := context.New()
-		// Mark it to reuse variables: it will be an error to create a new variable – for safety.
-		ctx = ctx.Reuse()
+	exec.SetMaxCache(-1)
 
-		// Read variables from ONNX model.
-		insideError = modelParsed.VariablesToContext(ctx)
-		if insideError != nil {
-			return
-		}
+	model.GoMLXModel = &GoMLXModel{
+		Backend:   backend,
+		OnnxModel: modelParsed,
+		Ctx:       ctx,
+		Exec:      exec,
+		Call:      callFunc,
+		Destroy: func() {
+			exec.Finalize()
+			ctx.Finalize()
+			backend.Finalize()
+		},
+	}
+	model.InputsMeta = inputs
+	model.OutputsMeta = outputs
 
-		config := "go"
-		if options.GoMLXOptions.Cuda {
-			config = "stablehlo:cuda"
-		} else if options.GoMLXOptions.XLA {
-			config = "stablehlo:cpu"
-		}
-
-		var backend backends.Backend
-		backend, insideError = backends.NewWithConfig(config)
-		if insideError != nil {
-			return
-		}
-
-		// Create model executor.
-		callFunc := func(ctx *context.Context, inputs []*graph.Node) []*graph.Node {
-			inputsMap := map[string]*graph.Node{}
-			for i, inputMeta := range model.InputsMeta {
-				inputsMap[inputMeta.Name] = inputs[i]
-			}
-			return modelParsed.CallGraph(ctx, inputs[0].Graph(), inputsMap, outputNames...)
-		}
-
-		if model.IsGenerative {
-			callFunc = createGenerativeCallFunc(model, modelParsed, outputNames)
-		}
-
-		exec := context.NewExec(backend, ctx, callFunc)
-		exec.SetMaxCache(-1)
-
-		model.GoMLXModel = &GoMLXModel{
-			Backend:   backend,
-			OnnxModel: modelParsed,
-			Ctx:       ctx,
-			Exec:      exec,
-			Call:      callFunc,
-			Destroy: func() {
-				exec.Finalize()
-				ctx.Finalize()
-				backend.Finalize()
-			},
-		}
-		model.InputsMeta = inputs
-		model.OutputsMeta = outputs
-	})
 	model.OnnxBytes = nil
-	return errors.Join(insideError, recoverErr)
+	return err
 }
 
 func loadInputOutputMetaGoMLX(model *onnx.Model) ([]InputOutputInfo, []InputOutputInfo) {
@@ -396,27 +392,27 @@ func createGenerativeCallFunc(model *Model, modelParsed *onnx.Model, outputNames
 		shape := logits.Shape().Dimensions
 		vocabSize := shape[2]
 		seqLen := shape[1]
-		lastIdx := Scalar(g, dtypes.Int32, seqLen-1)
+		lastIdx := graph.Scalar(g, dtypes.Int32, seqLen-1)
 
 		// greedily select next token
-		logitsLast := DynamicSlice(
+		logitsLast := graph.DynamicSlice(
 			logits,
-			[]*Node{ScalarZero(g, dtypes.Int32), lastIdx, ScalarZero(g, dtypes.Int32)},
+			[]*graph.Node{graph.ScalarZero(g, dtypes.Int32), lastIdx, graph.ScalarZero(g, dtypes.Int32)},
 			[]int{shape[0], 1, vocabSize},
 		)
 		batchSize := shape[0]
-		logitsLast = Reshape(logitsLast, batchSize, vocabSize)
-		nextPredictedToken := ArgMax(logitsLast, 1, dtypes.Int64)
-		nextPredictedToken = Reshape(nextPredictedToken, batchSize, 1)
+		logitsLast = graph.Reshape(logitsLast, batchSize, vocabSize)
+		nextPredictedToken := graph.ArgMax(logitsLast, 1, dtypes.Int64)
+		nextPredictedToken = graph.Reshape(nextPredictedToken, batchSize, 1)
 
 		// early stopping flags
 		var terminate *graph.Node
 		for eosID := range model.EosTokenIDs {
-			eosNode := Squeeze(Equal(nextPredictedToken, Scalar(g, dtypes.Int64, eosID)))
+			eosNode := graph.Squeeze(graph.Equal(nextPredictedToken, graph.Scalar(g, dtypes.Int64, eosID)))
 			if terminate == nil {
 				terminate = eosNode
 			} else {
-				terminate = Or(terminate, eosNode)
+				terminate = graph.Or(terminate, eosNode)
 			}
 		}
 
@@ -424,57 +420,57 @@ func createGenerativeCallFunc(model *Model, modelParsed *onnx.Model, outputNames
 		inputIDs := nextPredictedToken
 		posShape := inputs[1].Shape().Dimensions
 		posLen := posShape[1]
-		lastIdxNode := Scalar(g, dtypes.Int32, posLen-1)
-		prevPosLast := DynamicSlice(
+		lastIdxNode := graph.Scalar(g, dtypes.Int32, posLen-1)
+		prevPosLast := graph.DynamicSlice(
 			inputs[1],
-			[]*Node{ScalarZero(g, dtypes.Int32), lastIdxNode},
+			[]*graph.Node{graph.ScalarZero(g, dtypes.Int32), lastIdxNode},
 			[]int{batchSize, 1},
 		)
-		positionIDs := OnePlus(prevPosLast)
+		positionIDs := graph.OnePlus(prevPosLast)
 		offset := posLen
 
-		currentPosValue := Squeeze(prevPosLast)
+		currentPosValue := graph.Squeeze(prevPosLast)
 		var currentIteration *graph.Node
 
 		// attention mask:
-		var attentionMask *Node
+		var attentionMask *graph.Node
 		if inputsMap["attention_mask"] != nil {
-			newTokenMask := OnesLike(nextPredictedToken)
-			attentionMask = Concatenate([]*graph.Node{inputsMap["attention_mask"], newTokenMask}, 1)
+			newTokenMask := graph.OnesLike(nextPredictedToken)
+			attentionMask = graph.Concatenate([]*graph.Node{inputsMap["attention_mask"], newTokenMask}, 1)
 		}
 
 		if currentPosValue.Rank() == 0 {
-			currentIteration = Sub(currentPosValue, Scalar(g, dtypes.Int64, offset))
+			currentIteration = graph.Sub(currentPosValue, graph.Scalar(g, dtypes.Int64, offset))
 		} else {
-			first := Slice(currentPosValue, AxisElem(0))
-			scalar := Squeeze(first)
-			currentIteration = Sub(scalar, Scalar(g, dtypes.Int64, offset))
+			first := graph.Slice(currentPosValue, graph.AxisElem(0))
+			scalar := graph.Squeeze(first)
+			currentIteration = graph.Sub(scalar, graph.Scalar(g, dtypes.Int64, offset))
 		}
 
 		// deal with new cache
-		updatedKvCache := make([]*Node, len(presentKeyValues))
+		updatedKvCache := make([]*graph.Node, len(presentKeyValues))
 		keys := sortedKeys(pastKeyValues)
 		if model.FirstIteration {
 			// past_key_values[key][:, :, :offset, :] = present_key_values[j][:, :, fixed_cache_value:, :]
 			j := 0
 			for _, key := range keys {
 				fixedCacheValue := model.FixedCacheSize
-				update := Slice(
+				update := graph.Slice(
 					presentKeyValues[j],
-					AxisRange(),
-					AxisRange(),
-					AxisRange(fixedCacheValue),
-					AxisRange(),
+					graph.AxisRange(),
+					graph.AxisRange(),
+					graph.AxisRange(fixedCacheValue),
+					graph.AxisRange(),
 				)
 
-				updatedKvCache[j] = DynamicUpdateSlice(
+				updatedKvCache[j] = graph.DynamicUpdateSlice(
 					pastKeyValues[key],
 					update,
-					[]*Node{
-						ScalarZero(g, dtypes.Int32),
-						ScalarZero(g, dtypes.Int32),
-						ScalarZero(g, dtypes.Int32),
-						ScalarZero(g, dtypes.Int32),
+					[]*graph.Node{
+						graph.ScalarZero(g, dtypes.Int32),
+						graph.ScalarZero(g, dtypes.Int32),
+						graph.ScalarZero(g, dtypes.Int32),
+						graph.ScalarZero(g, dtypes.Int32),
 					},
 				)
 				j++
@@ -482,24 +478,24 @@ func createGenerativeCallFunc(model *Model, modelParsed *onnx.Model, outputNames
 		} else {
 			// past_key_values[key][:, :, offset+i:offset+i+1, :] = present_key_values[j][:, :, -1:, :]
 			j := 0
-			updatePos := ConvertDType(Add(Scalar(g, dtypes.Int64, offset), currentIteration), dtypes.Int32)
+			updatePos := graph.ConvertDType(graph.Add(graph.Scalar(g, dtypes.Int64, offset), currentIteration), dtypes.Int32)
 			for _, key := range keys {
-				update := Slice(
+				update := graph.Slice(
 					presentKeyValues[j],
-					AxisRange(),
-					AxisRange(),
-					AxisElem(-1),
-					AxisRange(),
+					graph.AxisRange(),
+					graph.AxisRange(),
+					graph.AxisElem(-1),
+					graph.AxisRange(),
 				)
 
-				updatedKvCache[j] = DynamicUpdateSlice(
+				updatedKvCache[j] = graph.DynamicUpdateSlice(
 					pastKeyValues[key],
 					update,
-					[]*Node{
-						ScalarZero(g, dtypes.Int32),
-						ScalarZero(g, dtypes.Int32),
+					[]*graph.Node{
+						graph.ScalarZero(g, dtypes.Int32),
+						graph.ScalarZero(g, dtypes.Int32),
 						updatePos,
-						ScalarZero(g, dtypes.Int32),
+						graph.ScalarZero(g, dtypes.Int32),
 					},
 				)
 				j++
@@ -507,7 +503,7 @@ func createGenerativeCallFunc(model *Model, modelParsed *onnx.Model, outputNames
 		}
 
 		// make sure outputs are being loaded in correct order
-		newInputs := make([]*Node, len(model.InputsMeta)+1)
+		newInputs := make([]*graph.Node, len(model.InputsMeta)+1)
 		cacheIdx := 0
 		for i, name := range model.InputsMeta {
 			switch name.Name {
@@ -537,6 +533,13 @@ func RunGenerativeGoMLXSessionOnBatch(batch *PipelineBatch, p *BasePipeline) err
 	generatedTokens := make([][]int64, batchSize)
 
 	var outputTensors []*tensors.Tensor
+	var err error
+	defer func() {
+		for _, t := range outputTensors {
+			t.FinalizeAll()
+		}
+	}()
+
 	for step := 0; step < batch.MaxNewTokens; step++ {
 		if step == 0 {
 			p.Model.FirstIteration = true
@@ -545,7 +548,10 @@ func RunGenerativeGoMLXSessionOnBatch(batch *PipelineBatch, p *BasePipeline) err
 		}
 		modelInputs := batch.InputValues.([]*tensors.Tensor)
 
-		outputTensors = p.Model.GoMLXModel.Exec.Call(modelInputs)
+		outputTensors, err = p.Model.GoMLXModel.Exec.Exec(modelInputs)
+		if err != nil {
+			return err
+		}
 
 		genTensor := outputTensors[0]
 		var flatTokens []int64
@@ -582,12 +588,6 @@ func RunGenerativeGoMLXSessionOnBatch(batch *PipelineBatch, p *BasePipeline) err
 		batch.InputValues = outputTensors
 	}
 
-	defer func() {
-		for _, t := range outputTensors {
-			t.FinalizeAll()
-		}
-	}()
-
 	batch.OutputValues = make([]any, batchSize)
 	for i := range generatedTokens {
 		batch.OutputValues[i] = generatedTokens[i]
@@ -598,19 +598,15 @@ func RunGenerativeGoMLXSessionOnBatch(batch *PipelineBatch, p *BasePipeline) err
 
 func runGoMLXSessionOnBatch(batch *PipelineBatch, p *BasePipeline) error {
 	// Non-generative models
-	var outputTensors []*tensors.Tensor
+	outputTensors, err := p.Model.GoMLXModel.Exec.Exec(batch.InputValues.([]*tensors.Tensor))
+	if err != nil {
+		return err
+	}
 	defer func() {
 		for _, t := range outputTensors {
 			t.FinalizeAll()
 		}
 	}()
-
-	err := exceptions.TryCatch[error](func() {
-		outputTensors = p.Model.GoMLXModel.Exec.Call(batch.InputValues.([]*tensors.Tensor))
-	})
-	if err != nil {
-		return err
-	}
 
 	convertedOutput := make([]any, len(outputTensors))
 	for i, t := range outputTensors {
