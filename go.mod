@@ -7,7 +7,7 @@ require (
 	github.com/gomlx/exceptions v0.0.3
 	github.com/gomlx/go-huggingface v0.2.2
 	github.com/gomlx/gomlx v0.24.1
-	github.com/gomlx/gopjrt v0.8.4
+	github.com/gomlx/gopjrt v0.9.1
 	github.com/gomlx/onnx-gomlx v0.3.0
 	github.com/stretchr/testify v1.11.1
 	github.com/sugarme/tokenizer v0.3.0
@@ -23,7 +23,7 @@ require (
 	github.com/go-errors/errors v1.5.1 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/gofrs/flock v0.13.0 // indirect
-	github.com/gomlx/stablehlo v0.0.6 // indirect
+	github.com/gomlx/stablehlo v0.1.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/mitchellh/colorstring v0.0.0-20190213212951-d06e56a500db // indirect
 	github.com/patrickmn/go-cache v2.1.0+incompatible // indirect
