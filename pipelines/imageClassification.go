@@ -8,6 +8,7 @@ import (
 	_ "image/png"
 	"math"
 	"sort"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -26,6 +27,7 @@ type ImageClassificationPipeline struct {
 	IDLabelMap         map[int]string
 	preprocessSteps    []util.PreprocessStep
 	normalizationSteps []util.NormalizationStep
+	format             string
 }
 
 type ImageClassificationResult struct {
@@ -64,12 +66,44 @@ func WithNormalizationSteps(steps ...util.NormalizationStep) pipelineBackends.Pi
 	}
 }
 
+func WithNHWCFormat() pipelineBackends.PipelineOption[*ImageClassificationPipeline] {
+	return func(pipeline *ImageClassificationPipeline) error {
+		pipeline.format = "NHWC"
+		return nil
+	}
+}
+
+func WithNCHWFormat() pipelineBackends.PipelineOption[*ImageClassificationPipeline] {
+	return func(pipeline *ImageClassificationPipeline) error {
+		pipeline.format = "NCHW"
+		return nil
+	}
+}
+
 // WithTopK sets the number of top classifications to return.
 func WithTopK(topK int) pipelineBackends.PipelineOption[*ImageClassificationPipeline] {
 	return func(pipeline *ImageClassificationPipeline) error {
 		pipeline.TopK = topK
 		return nil
 	}
+}
+
+func detectInputFormat(model *pipelineBackends.Model) (string, error) {
+	inputInfo := model.InputsMeta
+	if len(inputInfo) == 0 {
+		return "", fmt.Errorf("no inputs found in model")
+	}
+	info := inputInfo[0]
+	shape := info.Dimensions
+	if len(shape) != 4 {
+		return "", fmt.Errorf("expected 4D input, got %dD", len(shape))
+	}
+	if shape[1] == 3 && shape[3] != 3 {
+		return "NCHW", nil
+	} else if shape[3] == 3 {
+		return "NHWC", nil
+	}
+	return "", fmt.Errorf("unable to infer format from shape %v", shape)
 }
 
 // NewImageClassificationPipeline initializes an image classification pipeline.
@@ -88,6 +122,14 @@ func NewImageClassificationPipeline(config pipelineBackends.PipelineConfig[*Imag
 	}
 
 	pipeline.IDLabelMap = model.IDLabelMap
+
+	if pipeline.format == "" {
+		detectedFormat, err := detectInputFormat(model)
+		if err != nil {
+			return nil, err
+		}
+		pipeline.format = detectedFormat
+	}
 
 	// validate pipeline
 	err = pipeline.Validate()
@@ -147,10 +189,10 @@ func (p *ImageClassificationPipeline) Preprocess(batch *pipelineBackends.Pipelin
 
 func (p *ImageClassificationPipeline) preprocessImages(images []image.Image) ([][][][]float32, error) {
 	batchSize := len(images)
-	nchw := make([][][][]float32, batchSize)
+	out := make([][][][]float32, batchSize)
+
 	for i, img := range images {
 		processed := img
-		// Chain image processing steps
 		for _, step := range p.preprocessSteps {
 			var err error
 			processed, err = step.Apply(processed)
@@ -159,35 +201,66 @@ func (p *ImageClassificationPipeline) preprocessImages(images []image.Image) ([]
 			}
 		}
 
-		c := 3
 		hh := processed.Bounds().Dy()
 		ww := processed.Bounds().Dx()
+		c := 3
 
-		tensor := make([][][]float32, c)
-		for ch := range c {
-			tensor[ch] = make([][]float32, hh)
+		switch strings.ToUpper(p.format) {
+		case "NHWC":
+			// Height × Width × Channels
+			tensor := make([][][]float32, hh)
 			for y := range hh {
-				tensor[ch][y] = make([]float32, ww)
-			}
-		}
-		for y := range hh {
-			for x := range ww {
-				r, g, b, _ := processed.At(x, y).RGBA()
-				rf := float32(r >> 8)
-				gf := float32(g >> 8)
-				bf := float32(b >> 8)
-				// Chain normalization steps
-				for _, step := range p.normalizationSteps {
-					rf, gf, bf = step.Apply(rf, gf, bf)
+				tensor[y] = make([][]float32, ww)
+				for x := range ww {
+					tensor[y][x] = make([]float32, c)
 				}
-				tensor[0][y][x] = rf
-				tensor[1][y][x] = gf
-				tensor[2][y][x] = bf
 			}
+
+			for y := range hh {
+				for x := range ww {
+					r, g, b, _ := processed.At(x, y).RGBA()
+					rf := float32(r >> 8)
+					gf := float32(g >> 8)
+					bf := float32(b >> 8)
+					for _, step := range p.normalizationSteps {
+						rf, gf, bf = step.Apply(rf, gf, bf)
+					}
+					tensor[y][x][0] = rf
+					tensor[y][x][1] = gf
+					tensor[y][x][2] = bf
+				}
+			}
+			out[i] = tensor
+		case "NCHW":
+			// Channels × Height × Width
+			tensor := make([][][]float32, c)
+			for ch := range c {
+				tensor[ch] = make([][]float32, hh)
+				for y := range hh {
+					tensor[ch][y] = make([]float32, ww)
+				}
+			}
+
+			for y := range hh {
+				for x := range ww {
+					r, g, b, _ := processed.At(x, y).RGBA()
+					rf := float32(r >> 8)
+					gf := float32(g >> 8)
+					bf := float32(b >> 8)
+					for _, step := range p.normalizationSteps {
+						rf, gf, bf = step.Apply(rf, gf, bf)
+					}
+					tensor[0][y][x] = rf
+					tensor[1][y][x] = gf
+					tensor[2][y][x] = bf
+				}
+			}
+			out[i] = tensor
+		default:
+			return nil, fmt.Errorf("unsupported format: %s", p.format)
 		}
-		nchw[i] = tensor
 	}
-	return nchw, nil
+	return out, nil
 }
 
 // Forward runs inference.
