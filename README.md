@@ -114,9 +114,9 @@ func main() {
     // start a new session
     session, err := hugot.NewGoSession()
 	// For XLA (requires go build tags "XLA" or "ALL"):
-	// session, err := NewXLASession()
+	// session, err := hugot.NewXLASession()
 	// For ORT (requires go build tags "ORT" or "ALL"):
-	// session, err := NewORTSession()
+	// session, err := hugot.NewORTSession()
 	// This looks for the onnxruntime.so library in its default path, e.g. /usr/lib/onnxruntime.so
     // If your onnxruntime.so is somewhere else, you can explicitly set it by using WithOnnxLibraryPath
     // session, err := hugot.NewORTSession(WithOnnxLibraryPath("/path/to/onnxruntime.so"))
@@ -134,14 +134,14 @@ func main() {
     modelPath, err := hugot.DownloadModel("KnightsAnalytics/distilbert-base-uncased-finetuned-sst-2-english", "./models/", hugot.NewDownloadOptions())
     check(err)
 
-    // we now create the configuration for the text classification pipeline we want to create.
+    //We now create the configuration for the text classification pipeline we want to create.
     // Options to the pipeline can be set here using the Options field
-    config := TextClassificationConfig{
+    config := hugot.TextClassificationConfig{
     ModelPath: modelPath,
     Name:      "testPipeline",
     }
     // then we create out pipeline.
-    // Note: the pipeline will also be added to the session object so all pipelines can be destroyed at once
+    // Note: the pipeline will also be added to the session object, so all pipelines can be destroyed at once
     sentimentPipeline, err := NewPipeline(session, config)
     check(err)
 
