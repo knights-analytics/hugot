@@ -99,9 +99,12 @@ Alternatively, you can also use the [docker image](https://github.com/knights-an
 The library can be used as follows:
 
 ```go
+package main
+
 import (
-	"github.com/knights-analytics/hugot"
-	"github.com/knights-analytics/hugot/pipelines"
+    "github.com/knights-analytics/hugot"
+    "encoding/json"
+    "fmt"
 )
 
 func check(err error) {
@@ -114,9 +117,9 @@ func main() {
     // start a new session
     session, err := hugot.NewGoSession()
 	// For XLA (requires go build tags "XLA" or "ALL"):
-	// session, err := NewXLASession()
+	// session, err := hugot.NewXLASession()
 	// For ORT (requires go build tags "ORT" or "ALL"):
-	// session, err := NewORTSession()
+	// session, err := hugot.NewORTSession()
 	// This looks for the onnxruntime.so library in its default path, e.g. /usr/lib/onnxruntime.so
     // If your onnxruntime.so is somewhere else, you can explicitly set it by using WithOnnxLibraryPath
     // session, err := hugot.NewORTSession(WithOnnxLibraryPath("/path/to/onnxruntime.so"))
@@ -134,15 +137,15 @@ func main() {
     modelPath, err := hugot.DownloadModel("KnightsAnalytics/distilbert-base-uncased-finetuned-sst-2-english", "./models/", hugot.NewDownloadOptions())
     check(err)
 
-    // we now create the configuration for the text classification pipeline we want to create.
+    // We now create the configuration for the text classification pipeline we want to create.
     // Options to the pipeline can be set here using the Options field
-    config := TextClassificationConfig{
-    ModelPath: modelPath,
-    Name:      "testPipeline",
+    config := hugot.TextClassificationConfig{
+        ModelPath: modelPath,
+        Name:      "testPipeline",
     }
     // then we create out pipeline.
-    // Note: the pipeline will also be added to the session object so all pipelines can be destroyed at once
-    sentimentPipeline, err := NewPipeline(session, config)
+    // Note: the pipeline will also be added to the session object, so all pipelines can be destroyed at once
+    sentimentPipeline, err := hugot.NewPipeline(session, config)
     check(err)
 
     // we can now use the pipeline for prediction on a batch of strings
@@ -155,7 +158,7 @@ func main() {
     check(err)
     fmt.Println(string(s))
 }
-// OUTPUT: {"ClassificationOutputs":[[{"Label":"POSITIVE","Score":0.9998536}],[{"Label":"NEGATIVE","Score":0.99752176}]]}
+// OUTPUT: {"ClassificationOutputs":[[{"Label":"POSITIVE","Score":0.99031734}],[{"Label":"NEGATIVE","Score":0.963696}]]}
 ```
 
 See also hugot_test.go for further examples for all pipelines.
