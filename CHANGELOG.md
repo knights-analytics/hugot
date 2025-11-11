@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
+## [0.5.7] - 2025-11-11
+
+### Changed
+
+- Update Go, Tokenizers, OnnxRuntime and GoMLX dependencies
+- Compatibility with NHWC and NCHW formats in Image Classification Pipeline
+
 ## [0.5.6] - 2025-10-22
 
 ### Changed
