@@ -20,6 +20,7 @@ type FeatureExtractionPipeline struct {
 	Normalization bool
 	OutputName    string
 	Output        pipelineBackends.InputOutputInfo
+	OutputIndex   int // Record the index of the output selected, defaults to first (0)
 }
 
 type FeatureExtractionOutput struct {
@@ -71,9 +72,10 @@ func NewFeatureExtractionPipeline(config pipelineBackends.PipelineConfig[*Featur
 
 	// filter outputs
 	if pipeline.OutputName != "" {
-		for _, output := range model.OutputsMeta {
+		for index, output := range model.OutputsMeta {
 			if output.Name == pipeline.OutputName {
 				pipeline.Output = output
+				pipeline.OutputIndex = index
 				break
 			}
 		}
@@ -85,6 +87,7 @@ func NewFeatureExtractionPipeline(config pipelineBackends.PipelineConfig[*Featur
 			return nil, fmt.Errorf("no model outputs metadata available for %s", model.Path)
 		}
 		pipeline.Output = model.OutputsMeta[0] // we take the first output otherwise, like transformers does
+		pipeline.OutputIndex = 0
 	}
 
 	// validate pipeline
@@ -187,7 +190,7 @@ func (p *FeatureExtractionPipeline) Postprocess(batch *pipelineBackends.Pipeline
 	// we need an ndarray type that can be the return type of this pipeline. Need to think
 	// about how to do this in a lightweight manner.
 
-	output := batch.OutputValues[0]
+	output := batch.OutputValues[p.OutputIndex] // Use the index of the output we want to return
 	batchEmbeddings := make([][]float32, batch.Size)
 	outputDimensions := []int64(p.Output.Dimensions)
 	embeddingDimension := outputDimensions[len(outputDimensions)-1]
