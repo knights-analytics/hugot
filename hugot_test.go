@@ -1028,13 +1028,20 @@ func textGenerationPipeline(t *testing.T, session *Session) {
 		Options: []pipelineBackends.PipelineOption[*pipelines.TextGenerationPipeline]{
 			pipelines.WithMaxTokens(200),
 			pipelines.WithPhiTemplate(),
-			pipelines.WithCustomStopTokens([]int64{32007}), // Phi appears to use a stop token that's different from the one defined in config.json
+			pipelines.WithCustomStopTokens([]int64{
+				32007,
+				32001,
+				32000,
+			}),
 		},
 	}
 
 	// Create the pipeline
 	textGenPipeline, err := NewPipeline(session, config)
 	checkT(t, err)
+
+	systemPrompt := pipelines.Message{Role: "system",
+		Content: `you are a helpful assistant that answers a specific question.`}
 
 	tests := []struct {
 		name           string
@@ -1045,7 +1052,7 @@ func textGenerationPipeline(t *testing.T, session *Session) {
 			name: "small test",
 			input: [][]pipelines.Message{
 				{
-					{Role: "system", Content: "you are a helpful assistant."},
+					systemPrompt,
 					{Role: "user", Content: "what is the capital of the Netherlands?"},
 				},
 			},
@@ -1057,11 +1064,11 @@ func textGenerationPipeline(t *testing.T, session *Session) {
 			name: "batched input, short sequence first, long sequence second",
 			input: [][]pipelines.Message{
 				{
-					{Role: "system", Content: "you are a helpful assistant."},
+					systemPrompt,
 					{Role: "user", Content: "what is the capital of the Netherlands?"},
 				},
 				{
-					{Role: "system", Content: "you are a helpful assistant."},
+					systemPrompt,
 					{Role: "user", Content: "who was the first president of the United States?"},
 				},
 			},
@@ -1074,11 +1081,11 @@ func textGenerationPipeline(t *testing.T, session *Session) {
 			name: "batched input, long sequence first, short sequence second",
 			input: [][]pipelines.Message{
 				{
-					{Role: "system", Content: "you are a helpful assistant."},
+					systemPrompt,
 					{Role: "user", Content: "Solve this equation: 2 + 2 = ? Be very brief in your explanation."},
 				},
 				{
-					{Role: "system", Content: "you are a helpful assistant."},
+					systemPrompt,
 					{Role: "user", Content: "Answer in one sentence: what is steel made out of?"},
 				},
 			},
@@ -1096,6 +1103,7 @@ func textGenerationPipeline(t *testing.T, session *Session) {
 			checkT(t, err)
 			outputString := batchResult.GetOutput()
 			for i := range len(outputString) {
+				fmt.Println("Generated:", outputString[i])
 				expectedString := tt.expectedString[i]
 				generatedString := outputString[i].(string)
 				// Generative models have variance with different architectures which builds up per generation, so check for min overlap instead in first 30 words
