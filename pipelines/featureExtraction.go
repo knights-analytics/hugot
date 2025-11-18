@@ -87,7 +87,6 @@ func NewFeatureExtractionPipeline(config pipelineBackends.PipelineConfig[*Featur
 			return nil, fmt.Errorf("no model outputs metadata available for %s", model.Path)
 		}
 		pipeline.Output = model.OutputsMeta[0] // we take the first output otherwise, like transformers does
-		pipeline.OutputIndex = 0
 	}
 
 	// validate pipeline
