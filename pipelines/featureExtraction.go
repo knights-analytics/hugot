@@ -219,7 +219,8 @@ func meanPooling(tokens [][]float32, input pipelineBackends.TokenizedInput, maxS
 	length := len(input.AttentionMask)
 	vector := make([]float32, dimensions)
 	for j := 0; j < maxSequence; j++ {
-		if j+1 <= length && input.AttentionMask[j] != 0 {
+		// if there is no attention mask, take all tokens
+		if length == 0 || (j+1 <= length && input.AttentionMask[j] != 0) {
 			for k, vectorValue := range tokens[j] {
 				vector[k] = vector[k] + vectorValue
 			}
