@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
+## [0.5.8] - 2025-11-22
+
+### Changed
+
+- Support models that do not utilize attention masks in FeatureExtractionPipeline
+- Bump onnx-gomlx to v0.3.2 for expanded model support in Go sessions.
+
 ## [0.5.7] - 2025-11-11
 
 ### Changed
