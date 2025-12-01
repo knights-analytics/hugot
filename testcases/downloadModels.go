@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -9,7 +10,7 @@ import (
 	"strings"
 
 	"github.com/knights-analytics/hugot"
-	"github.com/knights-analytics/hugot/util"
+	"github.com/knights-analytics/hugot/util/fileutil"
 )
 
 // download the test models.
@@ -31,7 +32,7 @@ var models = []downloadModel{
 	{name: "KnightsAnalytics/Phi-3.5-mini-instruct-onnx", onnxFilePath: "phi-3.5-mini-instruct-cpu-int4-awq-block-128-acc-level-4.onnx", externalDataPath: "phi-3.5-mini-instruct-cpu-int4-awq-block-128-acc-level-4.onnx.data"},
 }
 
-// Additional files to download (direct URLs)
+// Additional files to download (direct URLs).
 var extraFiles = []struct {
 	url, dest string
 }{
@@ -40,7 +41,7 @@ var extraFiles = []struct {
 }
 
 func main() {
-	if ok, err := util.FileExists("./models"); err == nil {
+	if ok, err := fileutil.FileExists("./models"); err == nil {
 		if !ok {
 			err = os.MkdirAll("./models", os.ModePerm)
 			if err != nil {
@@ -52,7 +53,7 @@ func main() {
 				continue // skipping this model for cicd
 			}
 
-			if ok, err = util.FileExists("./models/" + strings.Replace(model.name, "/", "_", -1)); err == nil {
+			if ok, err = fileutil.FileExists("./models/" + strings.ReplaceAll(model.name, "/", "_")); err == nil {
 				if !ok {
 					options := hugot.NewDownloadOptions()
 					options.OnnxFilePath = model.onnxFilePath
@@ -73,7 +74,7 @@ func main() {
 	}
 
 	// Download extra files (images, labels)
-	if ok, err := util.FileExists("./models/imageData"); err == nil {
+	if ok, err := fileutil.FileExists("./models/imageData"); err == nil {
 		if !ok {
 			err = os.MkdirAll("./models/imageData", os.ModePerm)
 			if err != nil {
@@ -81,8 +82,8 @@ func main() {
 			}
 		}
 		for _, f := range extraFiles {
-			if exists, _ := util.FileExists(f.dest); !exists {
-				if err := downloadFile(f.url, f.dest); err != nil {
+			if exists, _ := fileutil.FileExists(f.dest); !exists {
+				if err = downloadFile(context.Background(), f.url, f.dest); err != nil {
 					panic(err)
 				}
 			}
@@ -93,7 +94,7 @@ func main() {
 }
 
 // downloadFile downloads a file from a URL to a destination path.
-func downloadFile(url, dest string) error {
+func downloadFile(ctx context.Context, url string, dest string) error {
 	out, err := os.Create(dest)
 	if err != nil {
 		return err
@@ -102,7 +103,11 @@ func downloadFile(url, dest string) error {
 		err = errors.Join(out.Close())
 	}()
 
-	resp, err := http.Get(url)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil) // #nosec G107 Users may choose to download models from internal sources
+	if err != nil {
+		return err
+	}
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return err
 	}
@@ -110,7 +115,7 @@ func downloadFile(url, dest string) error {
 		err = errors.Join(resp.Body.Close())
 	}()
 
-	if resp.StatusCode != 200 {
+	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("failed to download %s: status %s", url, resp.Status)
 	}
 

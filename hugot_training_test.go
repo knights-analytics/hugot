@@ -15,7 +15,7 @@ import (
 	"github.com/knights-analytics/hugot/datasets"
 	"github.com/knights-analytics/hugot/options"
 	"github.com/knights-analytics/hugot/pipelines"
-	"github.com/knights-analytics/hugot/util"
+	"github.com/knights-analytics/hugot/util/fileutil"
 )
 
 func cosineSimilarityTester(x []float32, y []float32) float64 {
@@ -126,7 +126,7 @@ func TestTrainSemanticSimilarity(t *testing.T) {
 
 	// each line in this dataset is an example. In training we will use the dataset object but for inference
 	// we just load the strings here.
-	data, err := os.ReadFile("./testData/semanticSimilarityTest.jsonl")
+	data, err := os.ReadFile("./testcases/semanticSimilarityTest.jsonl")
 	checkT(t, err)
 	lines := bytes.Split(data, []byte("\n"))
 
@@ -162,7 +162,7 @@ func TestTrainSemanticSimilarity(t *testing.T) {
 	// The datasets.NewSemanticSimilarityDataset function also accepts a custom function that will be applied
 	// to all examples in a batch before they are passed to the model. This can be used to apply whatever preprocessing
 	// you need.
-	trainDataset, err := datasets.NewSemanticSimilarityDataset("./testData/semanticSimilarityTest.jsonl", 1, nil)
+	trainDataset, err := datasets.NewSemanticSimilarityDataset("./testcases/semanticSimilarityTest.jsonl", 1, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -170,7 +170,7 @@ func TestTrainSemanticSimilarity(t *testing.T) {
 	// next we create a trainEvalDataset. This is the same as the train dataset, but it will be used to evaluate the model on
 	// in-sample data at the end of each epoch.
 	// We can also specify an eval dataset with early stopping (see test below).
-	trainEvalDataset, err := datasets.NewSemanticSimilarityDataset("./testData/semanticSimilarityTest.jsonl", 1, nil)
+	trainEvalDataset, err := datasets.NewSemanticSimilarityDataset("./testcases/semanticSimilarityTest.jsonl", 1, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -240,7 +240,7 @@ func TestTrainSemanticSimilarityCuda(t *testing.T) {
 		t.SkipNow()
 	}
 
-	dataset, err := datasets.NewSemanticSimilarityDataset("./testData/semanticSimilarityTest.jsonl", 32, nil)
+	dataset, err := datasets.NewSemanticSimilarityDataset("./testcases/semanticSimilarityTest.jsonl", 32, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -271,12 +271,12 @@ func TestTrainSemanticSimilarityCuda(t *testing.T) {
 	if e := session.Save("./models/testTrain"); e != nil {
 		t.Fatal(e)
 	}
-	if exists, existsErr := util.FileExists("./models/testTrain"); existsErr != nil {
+	if exists, existsErr := fileutil.FileExists("./models/testTrain"); existsErr != nil {
 		t.Fatal(err)
 	} else if !exists {
 		t.Fatal("model file ./models/testTrain does not exist")
 	}
-	if err = util.DeleteFile("./models/testTrain"); err != nil {
+	if err = fileutil.DeleteFile("./models/testTrain"); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -286,7 +286,7 @@ func TestTrainSemanticSimilarityGo(t *testing.T) {
 		t.SkipNow()
 	}
 
-	dataset, err := datasets.NewSemanticSimilarityDataset("./testData/semanticSimilarityTest.jsonl", 1, nil)
+	dataset, err := datasets.NewSemanticSimilarityDataset("./testcases/semanticSimilarityTest.jsonl", 1, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -316,12 +316,12 @@ func TestTrainSemanticSimilarityGo(t *testing.T) {
 	if e := session.Save("./models/testTrain"); e != nil {
 		t.Fatal(e)
 	}
-	if exists, existsErr := util.FileExists("./models/testTrain"); existsErr != nil {
+	if exists, existsErr := fileutil.FileExists("./models/testTrain"); existsErr != nil {
 		t.Fatal(err)
 	} else if !exists {
 		t.Fatal("model file ./models/testTrain does not exist")
 	}
-	if err = util.DeleteFile("./models/testTrain"); err != nil {
+	if err = fileutil.DeleteFile("./models/testTrain"); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -329,11 +329,11 @@ func TestTrainSemanticSimilarityGo(t *testing.T) {
 func TestEarlyStopping(t *testing.T) {
 	modelPath := "./models/KnightsAnalytics_all-MiniLM-L6-v2"
 
-	trainDataset, err := datasets.NewSemanticSimilarityDataset("./testData/semanticSimilarityTest.jsonl", 1, nil)
+	trainDataset, err := datasets.NewSemanticSimilarityDataset("./testcases/semanticSimilarityTest.jsonl", 1, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	evalDataset, err := datasets.NewSemanticSimilarityDataset("./testData/semanticSimilarityTestEval.jsonl", 1, nil)
+	evalDataset, err := datasets.NewSemanticSimilarityDataset("./testcases/semanticSimilarityTestEval.jsonl", 1, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

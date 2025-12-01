@@ -7,16 +7,16 @@ import (
 	"io"
 	"path/filepath"
 
-	"github.com/knights-analytics/hugot/pipelineBackends"
+	"github.com/knights-analytics/hugot/backends"
 	"github.com/knights-analytics/hugot/pipelines"
-	"github.com/knights-analytics/hugot/util"
+	"github.com/knights-analytics/hugot/util/fileutil"
 )
 
 func (s *SemanticSimilarityDataset) SetVerbose(v bool) {
 	s.verbose = v
 }
 
-func (s *SemanticSimilarityDataset) SetTokenizationPipeline(pipeline pipelineBackends.Pipeline) error {
+func (s *SemanticSimilarityDataset) SetTokenizationPipeline(pipeline backends.Pipeline) error {
 	if pipeline == nil {
 		return fmt.Errorf("pipeline is required")
 	}
@@ -41,12 +41,11 @@ func (s *SemanticSimilarityDataset) Validate() error {
 
 // SemanticSimilarityExample is a single example for the semantic similarity dataset.
 type SemanticSimilarityExample struct {
+	Data      map[string]any // to store any additional data for the example. Not used by the dataset.
 	Sentence1 string         `json:"sentence1"`
 	Sentence2 string         `json:"sentence2"`
 	Score     float32        `json:"score"`
-	Data      map[string]any // to store any additional data for the example. Not used by the dataset.
 }
-
 type ExamplePreprocessFunc func([]SemanticSimilarityExample) ([]SemanticSimilarityExample, error)
 
 // NewSemanticSimilarityDataset creates a new SemanticSimilarityDataset.
@@ -64,8 +63,7 @@ func NewSemanticSimilarityDataset(trainingPath string, batchSize int, preprocess
 	if err := d.Validate(); err != nil {
 		return nil, err
 	}
-
-	sourceReadCloser, err := util.OpenFile(trainingPath)
+	sourceReadCloser, err := fileutil.OpenFile(trainingPath)
 	if err != nil {
 		return nil, err
 	}
@@ -95,18 +93,15 @@ func (s *SemanticSimilarityDataset) Reset() {
 		fmt.Printf("completed epoch in %d batches of %d examples, resetting dataset\n", s.batchN, s.batchSize)
 	}
 	s.batchN = 0
-
 	if len(s.trainingExamples) == 0 {
 		if err := s.sourceFile.Close(); err != nil {
 			panic(err)
 		}
-
-		sourceReadCloser, err := util.OpenFile(s.trainingPath)
+		sourceReadCloser, err := fileutil.OpenFile(s.trainingPath)
 		if err != nil {
 			panic(err) // note: these panics will be catched later with the TryExcept
 		}
 		s.sourceFile = sourceReadCloser
-
 		// restart the reader
 		s.reader = bufio.NewReader(sourceReadCloser)
 	}
@@ -116,14 +111,11 @@ func (s *SemanticSimilarityDataset) Reset() {
 // provided at creation time, the examples will be preprocessed before being returned.
 func (s *SemanticSimilarityDataset) YieldRaw() ([]SemanticSimilarityExample, error) {
 	batchCounter := 0
-
 	var lineBytes []byte
 	var readErr error
 	var lineData SemanticSimilarityExample
-
 	examplesBatch := make([]SemanticSimilarityExample, 0, s.batchSize)
 	var preprocessErr error
-
 	for batchCounter < s.batchSize {
 		if len(s.trainingExamples) > 0 {
 			// in memory dataset
@@ -136,11 +128,10 @@ func (s *SemanticSimilarityDataset) YieldRaw() ([]SemanticSimilarityExample, err
 				examplesBatch = append(examplesBatch, s.trainingExamples[i])
 			}
 		} else {
-			lineBytes, readErr = util.ReadLine(s.reader)
+			lineBytes, readErr = fileutil.ReadLine(s.reader)
 			if readErr != nil {
 				return examplesBatch, readErr
 			}
-
 			if err := json.Unmarshal(lineBytes, &lineData); err != nil {
 				return nil, fmt.Errorf("failed to parse JSON line: %w", err)
 			}
@@ -149,14 +140,12 @@ func (s *SemanticSimilarityDataset) YieldRaw() ([]SemanticSimilarityExample, err
 		batchCounter++
 	}
 	s.batchN++
-
 	if s.preprocessFunc != nil {
 		examplesBatch, preprocessErr = s.preprocessFunc(examplesBatch)
 		if preprocessErr != nil {
 			return nil, preprocessErr
 		}
 	}
-
 	return examplesBatch, nil
 }
 

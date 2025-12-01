@@ -7,17 +7,16 @@ import (
 	"io"
 	"slices"
 
-	"github.com/gomlx/gomlx/pkg/ml/train"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
-
-	"github.com/knights-analytics/hugot/pipelineBackends"
+	"github.com/gomlx/gomlx/pkg/ml/train"
+	"github.com/knights-analytics/hugot/backends"
 	"github.com/knights-analytics/hugot/pipelines"
 )
 
 type Dataset interface {
 	train.Dataset
 	Validate() error
-	SetTokenizationPipeline(pipeline pipelineBackends.Pipeline) error
+	SetTokenizationPipeline(pipeline backends.Pipeline) error
 	SetVerbose(bool)
 	Close() error
 }
@@ -25,13 +24,13 @@ type Dataset interface {
 // SemanticSimilarityDataset is a dataset for fine-tuning a feature extraction pipeline for textual semantic similarity.
 type SemanticSimilarityDataset struct {
 	train.Dataset
-	trainingPath     string
-	trainingExamples []SemanticSimilarityExample
+	sourceFile       io.ReadCloser
 	preprocessFunc   ExamplePreprocessFunc
-	batchSize        int
 	pipeline         *pipelines.FeatureExtractionPipeline
 	reader           *bufio.Reader
-	sourceFile       io.ReadCloser
+	trainingPath     string
+	trainingExamples []SemanticSimilarityExample
+	batchSize        int
 	batchN           int
 	verbose          bool
 }
@@ -42,41 +41,34 @@ func (s *SemanticSimilarityDataset) Yield() (spec any, inputs []*tensors.Tensor,
 	if rawErr != nil && !errors.Is(rawErr, io.EOF) {
 		return nil, nil, nil, err
 	}
-
-	var inputLhs []*tensors.Tensor
-	var inputRhs []*tensors.Tensor
+	var inputLHS []*tensors.Tensor
+	var inputRHS []*tensors.Tensor
 	var labelTensor []*tensors.Tensor
-
 	if len(exampleBatch) > 0 {
-		batchLhs := pipelineBackends.NewBatch(len(exampleBatch))
-		batchRhs := pipelineBackends.NewBatch(len(exampleBatch))
-
-		inputsLhs := make([]string, 0, len(exampleBatch))
-		inputsRhs := make([]string, 0, len(exampleBatch))
+		batchLHS := backends.NewBatch(len(exampleBatch))
+		batchRHS := backends.NewBatch(len(exampleBatch))
+		inputsLHS := make([]string, 0, len(exampleBatch))
+		inputsRHS := make([]string, 0, len(exampleBatch))
 		scores := make([]float32, 0, len(exampleBatch))
 		for _, example := range exampleBatch {
-			inputsLhs = append(inputsLhs, example.Sentence1)
-			inputsRhs = append(inputsRhs, example.Sentence2)
+			inputsLHS = append(inputsLHS, example.Sentence1)
+			inputsRHS = append(inputsRHS, example.Sentence2)
 			scores = append(scores, example.Score)
 		}
-
-		pipelineBackends.TokenizeInputs(batchLhs, s.pipeline.Model.Tokenizer, inputsLhs)
-		pipelineBackends.TokenizeInputs(batchRhs, s.pipeline.Model.Tokenizer, inputsRhs)
-
-		if err := pipelineBackends.CreateInputTensorsTraining(batchLhs, s.pipeline.Model, s.pipeline.Runtime); err != nil {
+		backends.TokenizeInputs(batchLHS, s.pipeline.Model.Tokenizer, inputsLHS)
+		backends.TokenizeInputs(batchRHS, s.pipeline.Model.Tokenizer, inputsRHS)
+		if err := backends.CreateInputTensorsTraining(batchLHS, s.pipeline.Model, s.pipeline.Runtime); err != nil {
 			return nil, nil, nil, err
 		}
-		if err := pipelineBackends.CreateInputTensorsTraining(batchRhs, s.pipeline.Model, s.pipeline.Runtime); err != nil {
+		if err := backends.CreateInputTensorsTraining(batchRHS, s.pipeline.Model, s.pipeline.Runtime); err != nil {
 			return nil, nil, nil, err
 		}
-		inputLhs = batchLhs.InputValues.([]*tensors.Tensor)
-		inputRhs = batchRhs.InputValues.([]*tensors.Tensor)
+		inputLHS = batchLHS.InputValues.([]*tensors.Tensor)
+		inputRHS = batchRHS.InputValues.([]*tensors.Tensor)
 		labelTensor = []*tensors.Tensor{tensors.FromFlatDataAndDimensions(scores, len(scores), 1)}
-
 		if s.verbose {
 			fmt.Printf("processing batch %d\n", s.batchN)
 		}
 	}
-
-	return nil, slices.Concat(inputLhs, inputRhs), labelTensor, rawErr
+	return nil, slices.Concat(inputLHS, inputRHS), labelTensor, rawErr
 }

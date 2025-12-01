@@ -1,4 +1,4 @@
-package pipelineBackends
+package backends
 
 import (
 	"bytes"
@@ -6,6 +6,8 @@ import (
 
 	"github.com/sugarme/tokenizer"
 	"github.com/sugarme/tokenizer/pretrained"
+
+	"github.com/knights-analytics/hugot/util/safeconv"
 )
 
 type GoTokenizer struct {
@@ -53,12 +55,12 @@ func tokenizeInputsGo(batch *PipelineBatch, tk *Tokenizer, inputs []string) {
 		outputs[i] = TokenizedInput{
 			Raw:               input,
 			Tokens:            output.Tokens,
-			TokenIDs:          convertIntsToUints(output.Ids),
-			TypeIDs:           convertIntsToUints(output.TypeIds),
-			AttentionMask:     convertIntsToUints(output.AttentionMask),
+			TokenIDs:          safeconv.IntSliceToUint32Slice(output.Ids),
+			TypeIDs:           safeconv.IntSliceToUint32Slice(output.TypeIds),
+			AttentionMask:     safeconv.IntSliceToUint32Slice(output.AttentionMask),
 			MaxAttentionIndex: maxAttentionIndex,
-			SpecialTokensMask: convertIntsToUints(output.SpecialTokenMask),
-			Offsets:           convertGoOffsets(output.Offsets), // we need the offsets here for postprocessing later
+			SpecialTokensMask: safeconv.IntSliceToUint32Slice(output.SpecialTokenMask),
+			Offsets:           safeconv.IntOffsetsToUintPairs(output.Offsets), // we need the offsets here for postprocessing later
 		}
 		if maxAttentionIndex > maxSequence {
 			maxSequence = maxAttentionIndex
@@ -70,29 +72,7 @@ func tokenizeInputsGo(batch *PipelineBatch, tk *Tokenizer, inputs []string) {
 }
 
 func decodeGo(tokens []uint32, tokenizer *Tokenizer, skipSpecialTokens bool) string {
-	return tokenizer.GoTokenizer.Tokenizer.Decode(convertUintsToInts(tokens), skipSpecialTokens)
+	return tokenizer.GoTokenizer.Tokenizer.Decode(safeconv.Uint32SliceToIntSlice(tokens), skipSpecialTokens)
 }
 
-func convertIntsToUints(input []int) []uint32 {
-	output := make([]uint32, len(input))
-	for i, x := range input {
-		output[i] = uint32(x)
-	}
-	return output
-}
-
-func convertUintsToInts(input []uint32) []int {
-	output := make([]int, len(input))
-	for i, x := range input {
-		output[i] = int(x)
-	}
-	return output
-}
-
-func convertGoOffsets(input [][]int) [][2]uint {
-	output := make([][2]uint, len(input))
-	for i, x := range input {
-		output[i] = [2]uint{uint(x[0]), uint(x[1])}
-	}
-	return output
-}
+// conversion helpers moved to util/safeconv.go

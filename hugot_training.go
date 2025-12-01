@@ -8,37 +8,35 @@ import (
 	"io"
 	"os"
 
+	"github.com/knights-analytics/hugot/backends"
 	"github.com/knights-analytics/hugot/datasets"
 	"github.com/knights-analytics/hugot/options"
-	"github.com/knights-analytics/hugot/pipelineBackends"
 	"github.com/knights-analytics/hugot/pipelines"
-	"github.com/knights-analytics/hugot/util"
+	"github.com/knights-analytics/hugot/util/fileutil"
 )
 
 type earlyStopping struct {
 	patience  int     // number of epochs to wait for improvement before stopping
 	tolerance float32 // tolerance for loss comparison
 }
-
 type TrainingStatistics struct {
 	EpochTrainLosses []float32 `json:"epochTrainLosses"` // stores the training loss for each epoch
 	EpochEvalLosses  []float32 `json:"epochEvalLosses"`  // stores the evaluation loss for each epoch
 }
-
 type TrainingSession struct {
-	backend          string
-	pipeline         pipelineBackends.Pipeline
-	config           TrainingConfig
-	cuda             bool
-	maxEpochs        int
+	pipeline         backends.Pipeline
 	earlyStopping    *earlyStopping
+	backend          string
 	statistics       TrainingStatistics
-	freezeEmbeddings bool  // freeze the embedding layers of the transfomer model
 	freezeLayers     []int // freeze the layers of the transformer model, 0 is the first layer etc. Set [-1] to freeze all layers apart from the last one
+	config           TrainingConfig
+	maxEpochs        int
+	cuda             bool
+	freezeEmbeddings bool // freeze the embedding layers of the transfomer model
 }
 
 // GetPipeline returns the pipeline used in the training session.
-func (s *TrainingSession) GetPipeline() pipelineBackends.Pipeline {
+func (s *TrainingSession) GetPipeline() backends.Pipeline {
 	return s.pipeline
 }
 
@@ -108,35 +106,31 @@ func WithEarlyStoppingParams(patience int, tolerance float32) TrainingOption {
 }
 
 type TrainingConfig struct {
-	ModelPath            string
-	OnnxFilename         string
 	TrainDataset         datasets.Dataset
 	TrainEvalDataset     datasets.Dataset // used to evaluate on training
 	EvalDataset          datasets.Dataset // optional, used for early stopping and eval metrics
+	GOMLXTrainingOptions *GOMLXTrainingOptions
+	ModelPath            string
+	OnnxFilename         string
 	Options              []TrainingOption
 	Verbose              bool
-	GOMLXTrainingOptions *GOMLXTrainingOptions
 }
 
-func newTrainingSession[T pipelineBackends.Pipeline](backend string, config TrainingConfig) (*TrainingSession, error) {
+func newTrainingSession[T backends.Pipeline](backend string, config TrainingConfig) (*TrainingSession, error) {
 	session := &TrainingSession{
 		config:  config,
 		backend: backend,
 	}
-
 	var trainingPipeline T
-	var model *pipelineBackends.Model
+	var model *backends.Model
 	var err error
-
 	opts := options.Defaults()
 	opts.Backend = backend
-
 	for _, opt := range config.Options {
 		if err = opt(session); err != nil {
 			return nil, err
 		}
 	}
-
 	switch backend {
 	case "XLA":
 		opts.GoMLXOptions.XLA = true
@@ -145,16 +139,13 @@ func newTrainingSession[T pipelineBackends.Pipeline](backend string, config Trai
 	default:
 		return nil, fmt.Errorf("runtime %s is not supported", backend)
 	}
-
 	if session.maxEpochs <= 0 {
 		session.maxEpochs = 100 // default to 100 epochs if not set
 	}
-
-	model, err = pipelineBackends.LoadModel(config.ModelPath, config.OnnxFilename, opts)
+	model, err = backends.LoadModel(config.ModelPath, config.OnnxFilename, opts)
 	if err != nil {
 		return nil, err
 	}
-
 	switch any(trainingPipeline).(type) {
 	case *pipelines.FeatureExtractionPipeline:
 		pipelineConfig := FeatureExtractionConfig{}
@@ -164,13 +155,11 @@ func newTrainingSession[T pipelineBackends.Pipeline](backend string, config Trai
 			return nil, err
 		}
 		session.pipeline = pipeline
-
 		// hook the datasets up with the pipeline for tokenization
 		var trainDS *datasets.SemanticSimilarityDataset
 		var trainEvalDS *datasets.SemanticSimilarityDataset
 		var evalDS *datasets.SemanticSimilarityDataset
 		var ok bool
-
 		trainDS, ok = session.config.TrainDataset.(*datasets.SemanticSimilarityDataset)
 		if !ok {
 			return nil, fmt.Errorf("expected SemanticSimilarityDataset for train dataset, got %T", session.config.TrainDataset)
@@ -178,7 +167,6 @@ func newTrainingSession[T pipelineBackends.Pipeline](backend string, config Trai
 		if setErr := trainDS.SetTokenizationPipeline(pipeline); setErr != nil {
 			return nil, fmt.Errorf("failed to set tokenization pipeline for training dataset: %w", setErr)
 		}
-
 		if session.config.TrainEvalDataset != nil {
 			trainEvalDS, ok = session.config.TrainEvalDataset.(*datasets.SemanticSimilarityDataset)
 			if !ok {
@@ -203,7 +191,6 @@ func newTrainingSession[T pipelineBackends.Pipeline](backend string, config Trai
 	if session.config.Verbose {
 		session.config.TrainDataset.SetVerbose(true)
 	}
-
 	return session, nil
 }
 
@@ -223,17 +210,14 @@ func (s *TrainingSession) Save(path string) error {
 	if path == "" {
 		return fmt.Errorf("path is required")
 	}
-
 	var writeErr error
-
-	statisticsWriter, err := util.NewFileWriter(util.PathJoinSafe(path, "statistics.txt"), "")
+	statisticsWriter, err := fileutil.NewFileWriter(fileutil.PathJoinSafe(path, "statistics.txt"), "")
 	if err != nil {
 		return err
 	}
 	defer func() {
 		writeErr = errors.Join(writeErr, statisticsWriter.Close())
 	}()
-
 	statisticsBytes, err := json.Marshal(s.statistics)
 	if err != nil {
 		return fmt.Errorf("failed to marshal training statistics: %w", err)
@@ -241,14 +225,12 @@ func (s *TrainingSession) Save(path string) error {
 	if _, err = statisticsWriter.Write(statisticsBytes); err != nil {
 		return fmt.Errorf("failed to write training statistics: %w", err)
 	}
-
 	model := s.pipeline.GetModel()
 	if model != nil {
 		if s.backend == "GO" || s.backend == "XLA" {
 			goMLXModel := model.GoMLXModel
-
 			if goMLXModel != nil {
-				modelWriter, err := util.NewFileWriter(util.PathJoinSafe(path, "model.onnx"), "")
+				modelWriter, err := fileutil.NewFileWriter(fileutil.PathJoinSafe(path, "model.onnx"), "")
 				if err != nil {
 					return err
 				}
@@ -279,14 +261,13 @@ func copyTokenizer(from, to string) error {
 		"tokenizer.json":          true,
 		"vocab.txt":               true,
 	}
-
-	walker := func(_ context.Context, _ string, parent string, info os.FileInfo, _ io.Reader) (toContinue bool, err error) {
+	walker := func(ctx context.Context, _ string, parent string, info os.FileInfo, _ io.Reader) (toContinue bool, err error) {
 		if toCopy[info.Name()] {
-			if err = util.CopyFile(util.PathJoinSafe(from, parent, info.Name()), to); err != nil {
+			if err = fileutil.CopyFile(ctx, fileutil.PathJoinSafe(from, parent, info.Name()), to); err != nil {
 				return false, err
 			}
 		}
 		return true, nil
 	}
-	return util.WalkDir()(context.Background(), from, walker)
+	return fileutil.WalkDir()(context.Background(), from, walker)
 }

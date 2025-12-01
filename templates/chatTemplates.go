@@ -1,4 +1,4 @@
-package chatTemplates
+package templates
 
 import (
 	"strings"

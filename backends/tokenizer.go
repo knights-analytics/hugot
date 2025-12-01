@@ -1,29 +1,28 @@
-package pipelineBackends
+package backends
 
 import (
 	"fmt"
 
 	"github.com/knights-analytics/hugot/options"
-	"github.com/knights-analytics/hugot/util"
+	"github.com/knights-analytics/hugot/util/fileutil"
 )
 
 type Tokenizer struct {
-	Runtime          string
 	RustTokenizer    *RustTokenizer
 	GoTokenizer      *GoTokenizer
 	TokenizerTimings *timings
-	MaxAllowedTokens int
 	Destroy          func() error
+	Runtime          string
+	MaxAllowedTokens int
 }
 
 func LoadTokenizer(model *Model, s *options.Options) error {
-	if exists, err := util.FileExists(util.PathJoinSafe(model.Path, "tokenizer.json")); err == nil {
+	if exists, err := fileutil.FileExists(fileutil.PathJoinSafe(model.Path, "tokenizer.json")); err == nil {
 		if exists {
-			tokenizerBytes, err := util.ReadFileBytes(util.PathJoinSafe(model.Path, "tokenizer.json"))
+			tokenizerBytes, err := fileutil.ReadFileBytes(fileutil.PathJoinSafe(model.Path, "tokenizer.json"))
 			if err != nil {
 				return err
 			}
-
 			switch s.Backend {
 			case "ORT", "XLA":
 				return loadRustTokenizer(tokenizerBytes, model)

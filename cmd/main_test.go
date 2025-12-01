@@ -4,7 +4,6 @@ package main
 
 import (
 	"context"
-	_ "embed"
 	"fmt"
 	"os"
 	"path"
@@ -12,14 +11,9 @@ import (
 
 	"github.com/urfave/cli/v3"
 
-	"github.com/knights-analytics/hugot/util"
+	"github.com/knights-analytics/hugot/testcases/embedded"
+	"github.com/knights-analytics/hugot/util/fileutil"
 )
-
-//go:embed testData/textClassification.jsonl
-var textClassificationData []byte
-
-//go:embed testData/tokenClassification.jsonl
-var tokenClassificationData []byte
 
 const onnxRuntimeSharedLibrary = "/usr/lib64/onnxruntime.so"
 
@@ -38,9 +32,9 @@ func TestTextClassificationCli(t *testing.T) {
 	recurseDir := path.Join(testDataDir, "cliRecurseTest")
 	err := os.MkdirAll(recurseDir, os.ModePerm)
 	check(t, err)
-	err = os.WriteFile(path.Join(testDataDir, "test-0.jsonl"), textClassificationData, 0o600)
+	err = os.WriteFile(path.Join(testDataDir, "test-0.jsonl"), embedded.TextClassificationData, 0o600)
 	check(t, err)
-	err = os.WriteFile(path.Join(recurseDir, "test-1.jsonl"), textClassificationData, 0o600)
+	err = os.WriteFile(path.Join(recurseDir, "test-1.jsonl"), embedded.TextClassificationData, 0o600)
 	check(t, err)
 	defer func() {
 		err := os.RemoveAll(testDataDir)
@@ -70,7 +64,7 @@ func TestTokenClassificationCli(t *testing.T) {
 	testDataDir := path.Join(os.TempDir(), "hugoTestData")
 	err := os.MkdirAll(testDataDir, os.ModePerm)
 	check(t, err)
-	err = os.WriteFile(path.Join(testDataDir, "test-token-classification.jsonl"), tokenClassificationData, 0o600)
+	err = os.WriteFile(path.Join(testDataDir, "test-token-classification.jsonl"), embedded.TokenClassificationData, 0o600)
 	check(t, err)
 	defer func() {
 		err := os.RemoveAll(testDataDir)
@@ -102,7 +96,7 @@ func TestFeatureExtractionCli(t *testing.T) {
 	testDataDir := path.Join(os.TempDir(), "hugoTestData")
 	err := os.MkdirAll(testDataDir, os.ModePerm)
 	check(t, err)
-	err = os.WriteFile(path.Join(testDataDir, "test-feature-extraction.jsonl"), tokenClassificationData, 0o600)
+	err = os.WriteFile(path.Join(testDataDir, "test-feature-extraction.jsonl"), embedded.TokenClassificationData, 0o600)
 	check(t, err)
 	defer func() {
 		err := os.RemoveAll(testDataDir)
@@ -137,7 +131,7 @@ func TestModelChain(t *testing.T) {
 	recurseDir := path.Join(testDataDir, "cliRecurseTest")
 	err := os.MkdirAll(recurseDir, os.ModePerm)
 	check(t, err)
-	err = os.WriteFile(path.Join(testDataDir, "test-0.jsonl"), textClassificationData, 0o600)
+	err = os.WriteFile(path.Join(testDataDir, "test-0.jsonl"), embedded.TextClassificationData, 0o600)
 	check(t, err)
 	defer func() {
 		err := os.RemoveAll(testDataDir)
@@ -147,7 +141,7 @@ func TestModelChain(t *testing.T) {
 	// wipe the hugo folder
 	userFolder, err := os.UserHomeDir()
 	check(t, err)
-	check(t, util.DeleteFile(util.PathJoinSafe(userFolder, "hugot")))
+	check(t, fileutil.DeleteFile(fileutil.PathJoinSafe(userFolder, "hugot")))
 
 	// try to download the model to hugo folder and run it
 	args := append(baseArgs, "run",

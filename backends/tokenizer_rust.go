@@ -1,13 +1,13 @@
 //go:build ORT || XLA || ALL
 
-package pipelineBackends
+package backends
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/daulet/tokenizers"
-	"errors"
 )
 
 type RustTokenizer struct {

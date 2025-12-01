@@ -3,6 +3,7 @@
 package hugot
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"path"
@@ -12,7 +13,7 @@ import (
 
 	"github.com/gomlx/go-huggingface/hub"
 
-	"github.com/knights-analytics/hugot/util"
+	"github.com/knights-analytics/hugot/util/fileutil"
 )
 
 // DownloadOptions is a struct of options that can be passed to DownloadModel.
@@ -41,13 +42,12 @@ func NewDownloadOptions() DownloadOptions {
 // DownloadModel can be used to download a model directly from huggingface. Before the model is downloaded,
 // validation occurs to ensure there is an .onnx and tokenizers.json file. Hugot only works with onnx models.
 func DownloadModel(modelName string, destination string, options DownloadOptions) (string, error) {
-
 	// replicates code in hf downloader
 	modelP := modelName
 	if strings.Contains(modelP, ":") {
 		modelP = strings.Split(modelName, ":")[0]
 	}
-	modelPath := path.Join(destination, strings.Replace(modelP, "/", "_", -1))
+	modelPath := path.Join(destination, strings.ReplaceAll(modelP, "/", "_"))
 
 	repo := hub.New(modelName)
 	if options.AuthToken != "" {
@@ -73,6 +73,7 @@ func DownloadModel(modelName string, destination string, options DownloadOptions
 		return "", err
 	}
 
+	ctx := context.Background()
 	for i := 0; i < options.MaxRetries; i++ {
 		downloadPaths, downloadErr := repo.DownloadFiles(downloadFiles...)
 		if downloadErr != nil {
@@ -88,7 +89,7 @@ func DownloadModel(modelName string, destination string, options DownloadOptions
 			if symErr != nil {
 				return "", symErr
 			}
-			moveErr := util.CopyFile(truePath, fmt.Sprintf("%s/%s", modelPath, path.Base(downloadFiles[j])))
+			moveErr := fileutil.CopyFile(ctx, truePath, fmt.Sprintf("%s/%s", modelPath, path.Base(downloadFiles[j])))
 			if moveErr != nil {
 				return "", moveErr
 			}
@@ -104,7 +105,6 @@ func DownloadModel(modelName string, destination string, options DownloadOptions
 }
 
 func validateDownloadHfModel(repo *hub.Repo, options DownloadOptions) ([]string, error) {
-
 	for i := 0; i < options.MaxRetries; i++ {
 		err := repo.DownloadInfo(false)
 		if err != nil {

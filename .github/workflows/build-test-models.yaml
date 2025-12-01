@@ -28,7 +28,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v2
         with:
-          go-version: '1.25.4'
+          go-version: '1.25.5'
       - name: Checkout code
         uses: actions/checkout@v4
       - name: Install dependencies
@@ -36,7 +36,7 @@ jobs:
           go mod download
       - name: download models
         run: |
-          go run testData/downloadModels.go
+          go run testcases/downloadModels.go
       - name: List models directory
         run: ls -l ./models
       - name: Remove models from .dockerignore # make sure models folder is not ignored

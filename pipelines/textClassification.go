@@ -7,15 +7,16 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/knights-analytics/hugot/backends"
 	"github.com/knights-analytics/hugot/options"
-	"github.com/knights-analytics/hugot/pipelineBackends"
-	"github.com/knights-analytics/hugot/util"
+	"github.com/knights-analytics/hugot/util/safeconv"
+	"github.com/knights-analytics/hugot/util/vectorutil"
 )
 
 // types
 
 type TextClassificationPipeline struct {
-	*pipelineBackends.BasePipeline
+	*backends.BasePipeline
 	AggregationFunctionName string
 	ProblemType             string
 	FixedPaddingLength      int
@@ -40,35 +41,35 @@ func (t *TextClassificationOutput) GetOutput() []any {
 
 // options
 
-func WithSoftmax() pipelineBackends.PipelineOption[*TextClassificationPipeline] {
+func WithSoftmax() backends.PipelineOption[*TextClassificationPipeline] {
 	return func(pipeline *TextClassificationPipeline) error {
 		pipeline.AggregationFunctionName = "SOFTMAX"
 		return nil
 	}
 }
 
-func WithSigmoid() pipelineBackends.PipelineOption[*TextClassificationPipeline] {
+func WithSigmoid() backends.PipelineOption[*TextClassificationPipeline] {
 	return func(pipeline *TextClassificationPipeline) error {
 		pipeline.AggregationFunctionName = "SIGMOID"
 		return nil
 	}
 }
 
-func WithSingleLabel() pipelineBackends.PipelineOption[*TextClassificationPipeline] {
+func WithSingleLabel() backends.PipelineOption[*TextClassificationPipeline] {
 	return func(pipeline *TextClassificationPipeline) error {
 		pipeline.ProblemType = "singleLabel"
 		return nil
 	}
 }
 
-func WithMultiLabel() pipelineBackends.PipelineOption[*TextClassificationPipeline] {
+func WithMultiLabel() backends.PipelineOption[*TextClassificationPipeline] {
 	return func(pipeline *TextClassificationPipeline) error {
 		pipeline.ProblemType = "multiLabel"
 		return nil
 	}
 }
 
-func WithFixedPadding(fixedPaddingLength int) pipelineBackends.PipelineOption[*TextClassificationPipeline] {
+func WithFixedPadding(fixedPaddingLength int) backends.PipelineOption[*TextClassificationPipeline] {
 	return func(pipeline *TextClassificationPipeline) error {
 		pipeline.FixedPaddingLength = fixedPaddingLength
 		return nil
@@ -76,9 +77,8 @@ func WithFixedPadding(fixedPaddingLength int) pipelineBackends.PipelineOption[*T
 }
 
 // NewTextClassificationPipeline initializes a new text classification pipeline.
-func NewTextClassificationPipeline(config pipelineBackends.PipelineConfig[*TextClassificationPipeline], s *options.Options, model *pipelineBackends.Model) (*TextClassificationPipeline, error) {
-
-	defaultPipeline, err := pipelineBackends.NewBasePipeline(config, s, model)
+func NewTextClassificationPipeline(config backends.PipelineConfig[*TextClassificationPipeline], s *options.Options, model *backends.Model) (*TextClassificationPipeline, error) {
+	defaultPipeline, err := backends.NewBasePipeline(config, s, model)
 	if err != nil {
 		return nil, err
 	}
@@ -112,15 +112,15 @@ func NewTextClassificationPipeline(config pipelineBackends.PipelineConfig[*TextC
 
 // INTERFACE IMPLEMENTATION
 
-func (p *TextClassificationPipeline) GetModel() *pipelineBackends.Model {
-	return p.BasePipeline.Model
+func (p *TextClassificationPipeline) GetModel() *backends.Model {
+	return p.Model
 }
 
 // GetMetadata returns metadata information about the pipeline, in particular:
 // OutputInfo: names and dimensions of the output layer used for text classification.
-func (p *TextClassificationPipeline) GetMetadata() pipelineBackends.PipelineMetadata {
-	return pipelineBackends.PipelineMetadata{
-		OutputsInfo: []pipelineBackends.OutputInfo{
+func (p *TextClassificationPipeline) GetMetadata() backends.PipelineMetadata {
+	return backends.PipelineMetadata{
+		OutputsInfo: []backends.OutputInfo{
 			{
 				Name:       p.Model.OutputsMeta[0].Name,
 				Dimensions: p.Model.OutputsMeta[0].Dimensions,
@@ -134,11 +134,11 @@ func (p *TextClassificationPipeline) GetStats() []string {
 	return []string{
 		fmt.Sprintf("Statistics for pipeline: %s", p.PipelineName),
 		fmt.Sprintf("Tokenizer: Total time=%s, Execution count=%d, Average query time=%s",
-			time.Duration(p.Model.Tokenizer.TokenizerTimings.TotalNS),
+			safeconv.U64ToDuration(p.Model.Tokenizer.TokenizerTimings.TotalNS),
 			p.Model.Tokenizer.TokenizerTimings.NumCalls,
 			time.Duration(float64(p.Model.Tokenizer.TokenizerTimings.TotalNS)/math.Max(1, float64(p.Model.Tokenizer.TokenizerTimings.NumCalls)))),
 		fmt.Sprintf("ONNX: Total time=%s, Execution count=%d, Average query time=%s",
-			time.Duration(p.PipelineTimings.TotalNS),
+			safeconv.U64ToDuration(p.PipelineTimings.TotalNS),
 			p.PipelineTimings.NumCalls,
 			time.Duration(float64(p.PipelineTimings.TotalNS)/math.Max(1, float64(p.PipelineTimings.NumCalls)))),
 	}
@@ -178,38 +178,38 @@ func (p *TextClassificationPipeline) Validate() error {
 }
 
 // Preprocess tokenizes the input strings.
-func (p *TextClassificationPipeline) Preprocess(batch *pipelineBackends.PipelineBatch, inputs []string) error {
+func (p *TextClassificationPipeline) Preprocess(batch *backends.PipelineBatch, inputs []string) error {
 	start := time.Now()
-	pipelineBackends.TokenizeInputs(batch, p.Model.Tokenizer, inputs)
+	backends.TokenizeInputs(batch, p.Model.Tokenizer, inputs)
 	atomic.AddUint64(&p.Model.Tokenizer.TokenizerTimings.NumCalls, 1)
 
 	if p.FixedPaddingLength > 0 {
 		batch.MaxSequenceLength = p.FixedPaddingLength
 	}
 
-	atomic.AddUint64(&p.Model.Tokenizer.TokenizerTimings.TotalNS, uint64(time.Since(start)))
-	err := pipelineBackends.CreateInputTensors(batch, p.Model, p.Runtime)
+	atomic.AddUint64(&p.Model.Tokenizer.TokenizerTimings.TotalNS, safeconv.DurationToU64(time.Since(start)))
+	err := backends.CreateInputTensors(batch, p.Model, p.Runtime)
 	return err
 }
 
-func (p *TextClassificationPipeline) Forward(batch *pipelineBackends.PipelineBatch) error {
+func (p *TextClassificationPipeline) Forward(batch *backends.PipelineBatch) error {
 	start := time.Now()
-	err := pipelineBackends.RunSessionOnBatch(batch, p.BasePipeline)
+	err := backends.RunSessionOnBatch(batch, p.BasePipeline)
 	if err != nil {
 		return err
 	}
 	atomic.AddUint64(&p.PipelineTimings.NumCalls, 1)
-	atomic.AddUint64(&p.PipelineTimings.TotalNS, uint64(time.Since(start)))
+	atomic.AddUint64(&p.PipelineTimings.TotalNS, safeconv.DurationToU64(time.Since(start)))
 	return nil
 }
 
-func (p *TextClassificationPipeline) Postprocess(batch *pipelineBackends.PipelineBatch) (*TextClassificationOutput, error) {
+func (p *TextClassificationPipeline) Postprocess(batch *backends.PipelineBatch) (*TextClassificationOutput, error) {
 	var aggregationFunction func([]float32) []float32
 	switch p.AggregationFunctionName {
 	case "SIGMOID":
-		aggregationFunction = util.Sigmoid
+		aggregationFunction = vectorutil.Sigmoid
 	case "SOFTMAX":
-		aggregationFunction = util.SoftMax
+		aggregationFunction = vectorutil.SoftMax
 	default:
 		return nil, fmt.Errorf("aggregation function %s is not supported", p.AggregationFunctionName)
 	}
@@ -236,7 +236,7 @@ func (p *TextClassificationPipeline) Postprocess(batch *pipelineBackends.Pipelin
 		switch p.ProblemType {
 		case "singleLabel":
 			inputClassificationOutputs := make([]ClassificationOutput, 1)
-			index, value, errArgMax := util.ArgMax(outputCast[i])
+			index, value, errArgMax := vectorutil.ArgMax(outputCast[i])
 			if errArgMax != nil {
 				err = errArgMax
 				continue
@@ -271,14 +271,14 @@ func (p *TextClassificationPipeline) Postprocess(batch *pipelineBackends.Pipelin
 }
 
 // Run the pipeline on a string batch.
-func (p *TextClassificationPipeline) Run(inputs []string) (pipelineBackends.PipelineBatchOutput, error) {
+func (p *TextClassificationPipeline) Run(inputs []string) (backends.PipelineBatchOutput, error) {
 	return p.RunPipeline(inputs)
 }
 
 func (p *TextClassificationPipeline) RunPipeline(inputs []string) (*TextClassificationOutput, error) {
 	var runErrors []error
-	batch := pipelineBackends.NewBatch(len(inputs))
-	defer func(*pipelineBackends.PipelineBatch) {
+	batch := backends.NewBatch(len(inputs))
+	defer func(*backends.PipelineBatch) {
 		runErrors = append(runErrors, batch.Destroy())
 	}(batch)
 

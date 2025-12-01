@@ -1,6 +1,6 @@
 //go:build !ORT && !ALL
 
-package pipelineBackends
+package backends
 
 import (
 	"errors"

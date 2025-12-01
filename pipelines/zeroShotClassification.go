@@ -9,19 +9,19 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/knights-analytics/hugot/backends"
 	"github.com/knights-analytics/hugot/options"
-	"github.com/knights-analytics/hugot/pipelineBackends"
+	"github.com/knights-analytics/hugot/util/safeconv"
 )
 
 type ZeroShotClassificationPipeline struct {
-	*pipelineBackends.BasePipeline
+	*backends.BasePipeline
+	HypothesisTemplate string
 	Sequences          []string
 	Labels             []string
-	HypothesisTemplate string
-	Multilabel         bool
 	EntailmentID       int
+	Multilabel         bool
 }
-
 type ZeroShotClassificationOutput struct {
 	Sequence     string
 	SortedValues []struct {
@@ -29,7 +29,6 @@ type ZeroShotClassificationOutput struct {
 		Value float64
 	}
 }
-
 type ZeroShotOutput struct {
 	ClassificationOutputs []ZeroShotClassificationOutput
 }
@@ -37,7 +36,7 @@ type ZeroShotOutput struct {
 // options
 
 // WithMultilabel can be used to set whether the pipeline is multilabel.
-func WithMultilabel(multilabel bool) pipelineBackends.PipelineOption[*ZeroShotClassificationPipeline] {
+func WithMultilabel(multilabel bool) backends.PipelineOption[*ZeroShotClassificationPipeline] {
 	return func(pipeline *ZeroShotClassificationPipeline) error {
 		pipeline.Multilabel = multilabel
 		return nil
@@ -45,7 +44,7 @@ func WithMultilabel(multilabel bool) pipelineBackends.PipelineOption[*ZeroShotCl
 }
 
 // WithLabels can be used to set the labels to classify the examples.
-func WithLabels(labels []string) pipelineBackends.PipelineOption[*ZeroShotClassificationPipeline] {
+func WithLabels(labels []string) backends.PipelineOption[*ZeroShotClassificationPipeline] {
 	return func(pipeline *ZeroShotClassificationPipeline) error {
 		pipeline.Labels = labels
 		return nil
@@ -53,7 +52,7 @@ func WithLabels(labels []string) pipelineBackends.PipelineOption[*ZeroShotClassi
 }
 
 // WithHypothesisTemplate can be used to set the hypothesis template for classification.
-func WithHypothesisTemplate(hypothesisTemplate string) pipelineBackends.PipelineOption[*ZeroShotClassificationPipeline] {
+func WithHypothesisTemplate(hypothesisTemplate string) backends.PipelineOption[*ZeroShotClassificationPipeline] {
 	return func(pipeline *ZeroShotClassificationPipeline) error {
 		pipeline.HypothesisTemplate = hypothesisTemplate
 		return nil
@@ -75,12 +74,10 @@ func createSequencePairs(sequences interface{}, labels []string, hypothesisTempl
 	if len(labels) == 0 || sequences == nil {
 		return nil, nil, errors.New("you must include at least one label and at least one sequence")
 	}
-
 	// Check if hypothesisTemplate can be formatted with labels
 	if fmt.Sprintf(hypothesisTemplate, labels[0]) == hypothesisTemplate {
 		return nil, nil, fmt.Errorf(`the provided hypothesis_template "%s" was not able to be formatted with the target labels. Make sure the passed template includes formatting syntax such as {{}} where the label should go`, hypothesisTemplate)
 	}
-
 	// Convert sequences to []string if it's a single string
 	var seqs []string
 	switch v := sequences.(type) {
@@ -91,7 +88,6 @@ func createSequencePairs(sequences interface{}, labels []string, hypothesisTempl
 	default:
 		return nil, nil, errors.New("sequences must be either a string or a []string")
 	}
-
 	// Create sequence_pairs
 	var sequencePairs [][][]string
 	for _, sequence := range seqs {
@@ -106,13 +102,11 @@ func createSequencePairs(sequences interface{}, labels []string, hypothesisTempl
 }
 
 // NewZeroShotClassificationPipeline create new Zero Shot Classification Pipeline.
-func NewZeroShotClassificationPipeline(config pipelineBackends.PipelineConfig[*ZeroShotClassificationPipeline], s *options.Options, model *pipelineBackends.Model) (*ZeroShotClassificationPipeline, error) {
-
-	defaultPipeline, err := pipelineBackends.NewBasePipeline(config, s, model)
+func NewZeroShotClassificationPipeline(config backends.PipelineConfig[*ZeroShotClassificationPipeline], s *options.Options, model *backends.Model) (*ZeroShotClassificationPipeline, error) {
+	defaultPipeline, err := backends.NewBasePipeline(config, s, model)
 	if err != nil {
 		return nil, err
 	}
-
 	pipeline := &ZeroShotClassificationPipeline{BasePipeline: defaultPipeline}
 	for _, o := range config.Options {
 		err = o(pipeline)
@@ -122,11 +116,9 @@ func NewZeroShotClassificationPipeline(config pipelineBackends.PipelineConfig[*Z
 	}
 	pipeline.EntailmentID = -1 // Default value
 	pipeline.HypothesisTemplate = "This example is {}."
-
 	if len(pipeline.Labels) == 0 {
 		return nil, fmt.Errorf("no labels provided, please provide labels using the WithLabels() option")
 	}
-
 	// Find entailment ID
 	for id, label := range model.IDLabelMap {
 		if strings.HasPrefix(strings.ToLower(label), "entail") {
@@ -134,43 +126,39 @@ func NewZeroShotClassificationPipeline(config pipelineBackends.PipelineConfig[*Z
 			break
 		}
 	}
-
 	return pipeline, err
 }
 
-func (p *ZeroShotClassificationPipeline) Preprocess(batch *pipelineBackends.PipelineBatch, inputs []string) error {
+func (p *ZeroShotClassificationPipeline) Preprocess(batch *backends.PipelineBatch, inputs []string) error {
 	start := time.Now()
-	pipelineBackends.TokenizeInputs(batch, p.Model.Tokenizer, inputs)
+	backends.TokenizeInputs(batch, p.Model.Tokenizer, inputs)
 	atomic.AddUint64(&p.Model.Tokenizer.TokenizerTimings.NumCalls, 1)
-	atomic.AddUint64(&p.Model.Tokenizer.TokenizerTimings.TotalNS, uint64(time.Since(start)))
-	err := pipelineBackends.CreateInputTensors(batch, p.Model, p.Runtime)
+	atomic.AddUint64(&p.Model.Tokenizer.TokenizerTimings.TotalNS, safeconv.DurationToU64(time.Since(start)))
+	err := backends.CreateInputTensors(batch, p.Model, p.Runtime)
 	return err
 }
 
-func (p *ZeroShotClassificationPipeline) Forward(batch *pipelineBackends.PipelineBatch) error {
+func (p *ZeroShotClassificationPipeline) Forward(batch *backends.PipelineBatch) error {
 	start := time.Now()
-	err := pipelineBackends.RunSessionOnBatch(batch, p.BasePipeline)
+	err := backends.RunSessionOnBatch(batch, p.BasePipeline)
 	if err != nil {
 		return err
 	}
 	atomic.AddUint64(&p.PipelineTimings.NumCalls, 1)
-	atomic.AddUint64(&p.PipelineTimings.TotalNS, uint64(time.Since(start)))
+	atomic.AddUint64(&p.PipelineTimings.TotalNS, safeconv.DurationToU64(time.Since(start)))
 	return nil
 }
 
 func (p *ZeroShotClassificationPipeline) Postprocess(outputTensors [][][]float32, labels []string, sequences []string) (*ZeroShotOutput, error) {
 	classificationOutputs := make([]ZeroShotClassificationOutput, 0, len(sequences))
-
 	LabelLikelihood := make(map[string]float64)
 	if p.Multilabel || len(p.Labels) == 1 {
 		for ind, sequence := range outputTensors {
 			output := ZeroShotClassificationOutput{
 				Sequence: sequences[ind],
 			}
-
 			var entailmentLogits []float32
 			var contradictionLogits []float32
-
 			var entailmentID int
 			var contradictionID int
 			switch p.EntailmentID {
@@ -184,12 +172,10 @@ func (p *ZeroShotClassificationPipeline) Postprocess(outputTensors [][][]float32
 					contradictionID = len(sequence[0]) - 1
 				}
 			}
-
 			for _, tensor := range sequence {
 				entailmentLogits = append(entailmentLogits, tensor[entailmentID])
 				contradictionLogits = append(contradictionLogits, tensor[contradictionID])
 			}
-
 			for i := range entailmentLogits {
 				logits := []float64{float64(contradictionLogits[i]), float64(entailmentLogits[i])}
 				expLogits := []float64{math.Exp(logits[0]), math.Exp(logits[1])}
@@ -197,7 +183,6 @@ func (p *ZeroShotClassificationPipeline) Postprocess(outputTensors [][][]float32
 				score := expLogits[1] / sumExpLogits
 				LabelLikelihood[labels[i]] = score
 			}
-
 			// Define ss as a slice of anonymous structs
 			var ss []struct {
 				Key   string
@@ -209,12 +194,10 @@ func (p *ZeroShotClassificationPipeline) Postprocess(outputTensors [][][]float32
 					Value float64
 				}{k, v})
 			}
-
 			// Sort the slice by the value field
 			sort.Slice(ss, func(i, j int) bool {
 				return ss[i].Value > ss[j].Value
 			})
-
 			output.SortedValues = ss
 			classificationOutputs = append(classificationOutputs, output)
 		}
@@ -222,10 +205,8 @@ func (p *ZeroShotClassificationPipeline) Postprocess(outputTensors [][][]float32
 			ClassificationOutputs: classificationOutputs,
 		}, nil
 	}
-
 	for ind, sequence := range outputTensors {
 		output := ZeroShotClassificationOutput{}
-
 		var entailmentLogits []float32
 		var entailmentID int
 		switch p.EntailmentID {
@@ -237,7 +218,6 @@ func (p *ZeroShotClassificationPipeline) Postprocess(outputTensors [][][]float32
 		for _, tensor := range sequence {
 			entailmentLogits = append(entailmentLogits, tensor[entailmentID])
 		}
-
 		var numerator []float64
 		var logitSum float64
 		for _, logit := range entailmentLogits {
@@ -245,16 +225,12 @@ func (p *ZeroShotClassificationPipeline) Postprocess(outputTensors [][][]float32
 			numerator = append(numerator, exp)
 			logitSum += exp
 		}
-
 		var quotient []float64
-
 		for ind, i := range numerator {
 			quotient = append(quotient, i/logitSum)
 			LabelLikelihood[labels[ind]] = quotient[ind]
 		}
-
 		output.Sequence = sequences[ind]
-
 		// Define ss as a slice of anonymous structs
 		var ss []struct {
 			Key   string
@@ -266,12 +242,10 @@ func (p *ZeroShotClassificationPipeline) Postprocess(outputTensors [][][]float32
 				Value float64
 			}{k, v})
 		}
-
 		// Sort the slice by the value field
 		sort.Slice(ss, func(i, j int) bool {
 			return ss[i].Value > ss[j].Value
 		})
-
 		output.SortedValues = ss
 		classificationOutputs = append(classificationOutputs, output)
 	}
@@ -283,18 +257,14 @@ func (p *ZeroShotClassificationPipeline) Postprocess(outputTensors [][][]float32
 func (p *ZeroShotClassificationPipeline) RunPipeline(inputs []string) (*ZeroShotOutput, error) {
 	var outputTensors [][][]float32
 	var runErrors []error
-
 	sequencePairs, _, err := createSequencePairs(inputs, p.Labels, p.HypothesisTemplate)
 	if err != nil {
 		return nil, err
 	}
-
 	for _, sequence := range sequencePairs {
 		var sequenceTensors [][]float32
 		for _, pair := range sequence {
-
-			batch := pipelineBackends.NewBatch(len(inputs))
-
+			batch := backends.NewBatch(len(inputs))
 			// have to do this because python inserts a separator token in between the two clauses when tokenizing
 			// separator token isn't universal and depends on its value in special_tokens_map.json of model
 			// still isn't perfect because some models (protectai/MoritzLaurer-roberta-base-zeroshot-v2.0-c-onnx for example)
@@ -312,7 +282,6 @@ func (p *ZeroShotClassificationPipeline) RunPipeline(inputs []string) (*ZeroShot
 				return nil, errors.Join(e, batch.Destroy())
 			}
 			sequenceTensors = append(sequenceTensors, batch.OutputValues[0].([][]float32)[0])
-
 			runErrors = append(runErrors, batch.Destroy())
 			if e := errors.Join(runErrors...); e != nil {
 				return nil, e
@@ -320,7 +289,6 @@ func (p *ZeroShotClassificationPipeline) RunPipeline(inputs []string) (*ZeroShot
 		}
 		outputTensors = append(outputTensors, sequenceTensors)
 	}
-
 	outputs, err := p.Postprocess(outputTensors, p.Labels, inputs)
 	runErrors = append(runErrors, err)
 	return outputs, errors.Join(runErrors...)
@@ -328,13 +296,13 @@ func (p *ZeroShotClassificationPipeline) RunPipeline(inputs []string) (*ZeroShot
 
 // PIPELINE INTERFACE IMPLEMENTATION
 
-func (p *ZeroShotClassificationPipeline) GetModel() *pipelineBackends.Model {
-	return p.BasePipeline.Model
+func (p *ZeroShotClassificationPipeline) GetModel() *backends.Model {
+	return p.Model
 }
 
-func (p *ZeroShotClassificationPipeline) GetMetadata() pipelineBackends.PipelineMetadata {
-	return pipelineBackends.PipelineMetadata{
-		OutputsInfo: []pipelineBackends.OutputInfo{
+func (p *ZeroShotClassificationPipeline) GetMetadata() backends.PipelineMetadata {
+	return backends.PipelineMetadata{
+		OutputsInfo: []backends.OutputInfo{
 			{
 				Name:       p.Model.OutputsMeta[0].Name,
 				Dimensions: p.Model.OutputsMeta[0].Dimensions,
@@ -347,36 +315,32 @@ func (p *ZeroShotClassificationPipeline) GetStats() []string {
 	return []string{
 		fmt.Sprintf("Statistics for pipeline: %s", p.PipelineName),
 		fmt.Sprintf("Tokenizer: Total time=%s, Execution count=%d, Average query time=%s",
-			time.Duration(p.Model.Tokenizer.TokenizerTimings.TotalNS),
+			safeconv.U64ToDuration(p.Model.Tokenizer.TokenizerTimings.TotalNS),
 			p.Model.Tokenizer.TokenizerTimings.NumCalls,
 			time.Duration(float64(p.Model.Tokenizer.TokenizerTimings.TotalNS)/math.Max(1, float64(p.Model.Tokenizer.TokenizerTimings.NumCalls)))),
 		fmt.Sprintf("ONNX: Total time=%s, Execution count=%d, Average query time=%s",
-			time.Duration(p.PipelineTimings.TotalNS),
+			safeconv.U64ToDuration(p.PipelineTimings.TotalNS),
 			p.PipelineTimings.NumCalls,
 			time.Duration(float64(p.PipelineTimings.TotalNS)/math.Max(1, float64(p.PipelineTimings.NumCalls)))),
 	}
 }
 
-func (p *ZeroShotClassificationPipeline) Run(inputs []string) (pipelineBackends.PipelineBatchOutput, error) {
+func (p *ZeroShotClassificationPipeline) Run(inputs []string) (backends.PipelineBatchOutput, error) {
 	return p.RunPipeline(inputs)
 }
 
 func (p *ZeroShotClassificationPipeline) Validate() error {
 	var validationErrors []error
-
 	if p.Model.Tokenizer == nil {
 		validationErrors = append(validationErrors, fmt.Errorf("zero shot classification pipeline requires a tokenizer"))
 	}
-
 	if len(p.Model.IDLabelMap) <= 0 {
 		validationErrors = append(validationErrors, fmt.Errorf("pipeline configuration invalid: length of id2label map for zero shot classification pipeline must be greater than zero"))
 	}
-
 	outDims := p.Model.OutputsMeta[0].Dimensions
 	if len(outDims) != 2 {
 		validationErrors = append(validationErrors, fmt.Errorf("pipeline configuration invalid: zero shot classification must have 2 dimensional output"))
 	}
-
 	dynamicBatch := false
 	for _, d := range outDims {
 		if d == -1 {

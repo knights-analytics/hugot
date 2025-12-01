@@ -1,15 +1,17 @@
-package util
+package imageutil
 
 import (
 	"bytes"
 	"image"
+
+	"github.com/knights-analytics/hugot/util/fileutil"
 )
 
 func LoadImagesFromPaths(paths []string) ([]image.Image, error) {
 	images := make([]image.Image, 0, len(paths))
 
 	for _, path := range paths {
-		b, err := ReadFileBytes(path)
+		b, err := fileutil.ReadFileBytes(path)
 		if err != nil {
 			return nil, err
 		}
@@ -109,7 +111,7 @@ func RescaleStep() *RescalePreprocessor {
 	return &RescalePreprocessor{}
 }
 
-// resizeImage resizes an image to the given width and height using nearest neighbor (simple, replace with better if needed)
+// resizeImage resizes an image to the given width and height using nearest neighbor (simple, replace with better if needed).
 func resizeImage(img image.Image, newW, newH int) image.Image {
 	dst := image.NewRGBA(image.Rect(0, 0, newW, newH))
 	srcBounds := img.Bounds()

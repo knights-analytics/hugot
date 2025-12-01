@@ -1,11 +1,10 @@
 //go:build !ORT && !XLA && !ALL
 
-package pipelineBackends
+package backends
 
 import "errors"
 
-type RustTokenizer struct {
-}
+type RustTokenizer struct{}
 
 func loadRustTokenizer(_ []byte, _ *Model) error {
 	return errors.New("rust Tokenizer is not enabled")
