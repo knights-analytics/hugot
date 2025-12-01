@@ -1,6 +1,6 @@
 //go:build ORT || ALL
 
-package pipelineBackends
+package backends
 
 import (
 	"errors"
@@ -61,7 +61,6 @@ func argmax3D(logits [][][]float32) []int64 {
 }
 
 func createORTModelBackend(model *Model, options *options.Options) error {
-
 	// TODO: currently models with external data can only load from regular filesystems
 	cwd, err := os.Getwd()
 	if err != nil {
@@ -250,7 +249,7 @@ func createInputTensorsORT(batch *PipelineBatch, model *Model) error {
 	return nil
 }
 
-// createSingleCacheTensorORT creates a single cache tensor
+// createSingleCacheTensorORT creates a single cache tensor.
 func createSingleCacheTensorORT(batchSize, numKeyValueHeads, maxSeqLen, headDim int) (ort.Value, error) {
 	tensorSize := batchSize * numKeyValueHeads * maxSeqLen * headDim
 	slice := make([]float32, tensorSize)

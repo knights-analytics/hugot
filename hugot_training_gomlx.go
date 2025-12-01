@@ -11,14 +11,14 @@ import (
 
 	"github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/pkg/core/graph"
+	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/gomlx/pkg/ml/train"
 	"github.com/gomlx/gomlx/pkg/ml/train/losses"
 	"github.com/gomlx/gomlx/pkg/ml/train/optimizers"
-	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gopjrt/dtypes"
 
-	"github.com/knights-analytics/hugot/pipelineBackends"
+	"github.com/knights-analytics/hugot/backends"
 	"github.com/knights-analytics/hugot/pipelines"
 )
 
@@ -33,7 +33,7 @@ func (e stoppingError) Error() string {
 	return "stopping error"
 }
 
-func NewGoTrainingSession[T pipelineBackends.Pipeline](config TrainingConfig) (*TrainingSession, error) {
+func NewGoTrainingSession[T backends.Pipeline](config TrainingConfig) (*TrainingSession, error) {
 	s, err := newTrainingSession[T]("GO", config)
 	if err != nil {
 		return nil, err
@@ -42,7 +42,7 @@ func NewGoTrainingSession[T pipelineBackends.Pipeline](config TrainingConfig) (*
 	return newGoMLXTrainingSession(s)
 }
 
-func NewXLATrainingSession[T pipelineBackends.Pipeline](config TrainingConfig) (*TrainingSession, error) {
+func NewXLATrainingSession[T backends.Pipeline](config TrainingConfig) (*TrainingSession, error) {
 	s, err := newTrainingSession[T]("XLA", config)
 	if err != nil {
 		return nil, err
@@ -101,27 +101,27 @@ func TrainGoMLX(s *TrainingSession) error {
 			}
 		}
 
-		modelFn := func(ctx *context.Context, spec any, inputs []*context.Node) []*context.Node {
-			inputsLhs := inputs[:3] // inputIDs, attentionMask, tokenTypeIDs if present
-			inputsRhs := inputs[3:]
+		modelFn := func(ctx *context.Context, _ any, inputs []*context.Node) []*context.Node {
+			inputsLHS := inputs[:3] // inputIDs, attentionMask, tokenTypeIDs if present
+			inputsRHS := inputs[3:]
 
-			embeddingLhs := GoMLXModel.Call(ctx.Reuse(), inputsLhs)[0]
-			embeddingRhs := GoMLXModel.Call(ctx.Reuse(), inputsRhs)[0]
+			embeddingLHS := GoMLXModel.Call(ctx.Reuse(), inputsLHS)[0]
+			embeddingRHS := GoMLXModel.Call(ctx.Reuse(), inputsRHS)[0]
 
 			// we mean pool the results if needed e.g. if dimensions are [batch, seq, hidden]
-			if len(embeddingLhs.Shape().Dimensions) > 2 {
-				batchSize := embeddingLhs.Shape().Dim(0)
-				embeddingSize := embeddingLhs.Shape().Dim(-1)
-				embeddingLhs = graph.Reshape(embeddingLhs, batchSize, -1, embeddingSize)
-				embeddingRhs = graph.Reshape(embeddingRhs, batchSize, -1, embeddingSize)
+			if len(embeddingLHS.Shape().Dimensions) > 2 {
+				batchSize := embeddingLHS.Shape().Dim(0)
+				embeddingSize := embeddingLHS.Shape().Dim(-1)
+				embeddingLHS = graph.Reshape(embeddingLHS, batchSize, -1, embeddingSize)
+				embeddingRHS = graph.Reshape(embeddingRHS, batchSize, -1, embeddingSize)
 
-				maskLhs := graph.ConvertDType(graph.BroadcastToShape(graph.Reshape(inputsLhs[1], batchSize, -1, 1), embeddingLhs.Shape()), dtypes.Bool)
-				maskRhs := graph.ConvertDType(graph.BroadcastToShape(graph.Reshape(inputsRhs[1], batchSize, -1, 1), embeddingRhs.Shape()), dtypes.Bool)
+				maskLHS := graph.ConvertDType(graph.BroadcastToShape(graph.Reshape(inputsLHS[1], batchSize, -1, 1), embeddingLHS.Shape()), dtypes.Bool)
+				maskRHS := graph.ConvertDType(graph.BroadcastToShape(graph.Reshape(inputsRHS[1], batchSize, -1, 1), embeddingRHS.Shape()), dtypes.Bool)
 
-				embeddingLhs = graph.MaskedReduceMean(embeddingLhs, maskLhs, 1)
-				embeddingRhs = graph.MaskedReduceMean(embeddingRhs, maskRhs, 1)
+				embeddingLHS = graph.MaskedReduceMean(embeddingLHS, maskLHS, 1)
+				embeddingRHS = graph.MaskedReduceMean(embeddingRHS, maskRHS, 1)
 			}
-			cosineSimilarity := graph.CosineSimilarity(embeddingLhs, embeddingRhs, -1)
+			cosineSimilarity := graph.CosineSimilarity(embeddingLHS, embeddingRHS, -1)
 			return []*context.Node{cosineSimilarity}
 		}
 
@@ -151,7 +151,7 @@ func TrainGoMLX(s *TrainingSession) error {
 		var bestLoss float32 = math.MaxFloat32
 		epochsWithoutImprovement := 0
 
-		var evaluateEpoch train.OnStepFn = func(loop *train.Loop, metrics []*tensors.Tensor) error {
+		var evaluateEpoch train.OnStepFn = func(loop *train.Loop, _ []*tensors.Tensor) error {
 			if loop.Epoch != currentEpoch {
 				if s.config.TrainEvalDataset != nil {
 					if s.config.Verbose {

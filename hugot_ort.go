@@ -10,7 +10,7 @@ import (
 	ort "github.com/yalue/onnxruntime_go"
 
 	"github.com/knights-analytics/hugot/options"
-	"github.com/knights-analytics/hugot/util"
+	"github.com/knights-analytics/hugot/util/fileutil"
 )
 
 func NewORTSession(opts ...options.WithOption) (*Session, error) {
@@ -44,11 +44,10 @@ func NewORTSession(opts ...options.WithOption) (*Session, error) {
 }
 
 func (s *Session) initialiseORT() (bool, error) {
-
 	o := s.options.ORTOptions
 	// Set pre-initialisation options
 	if o.LibraryPath != nil {
-		ortPathExists, err := util.FileExists(*o.LibraryPath)
+		ortPathExists, err := fileutil.FileExists(*o.LibraryPath)
 		if err != nil {
 			return false, err
 		}

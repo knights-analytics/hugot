@@ -1,4 +1,4 @@
-package pipelineBackends
+package backends
 
 import (
 	"fmt"

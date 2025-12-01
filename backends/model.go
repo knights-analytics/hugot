@@ -1,4 +1,4 @@
-package pipelineBackends
+package backends
 
 import (
 	"context"
@@ -11,32 +11,32 @@ import (
 	"strings"
 
 	"github.com/knights-analytics/hugot/options"
-	"github.com/knights-analytics/hugot/util"
+	"github.com/knights-analytics/hugot/util/fileutil"
 )
 
 type Model struct {
-	Path                  string
-	OnnxFilename          string
-	OnnxBytes             []byte
 	ORTModel              *ORTModel
 	GoMLXModel            *GoMLXModel
 	Tokenizer             *Tokenizer
-	InputsMeta            []InputOutputInfo
-	OutputsMeta           []InputOutputInfo
 	Destroy               func() error
 	Pipelines             map[string]Pipeline
-	IsGenerative          bool
-	MaxPositionEmbeddings int
 	IDLabelMap            map[int]string
-	SeparatorToken        string
-	NumHiddenLayers       int // Number of key value heads, used for text generation
 	EosTokenIDs           map[int64]bool
+	Path                  string
+	OnnxFilename          string
+	SeparatorToken        string
+	OnnxBytes             []byte
+	InputsMeta            []InputOutputInfo
+	OutputsMeta           []InputOutputInfo
+	MaxPositionEmbeddings int
+	NumHiddenLayers       int // Number of key value heads, used for text generation
 	NumKeyValueHeads      int
 	HeadDim               int
-	FirstIteration        bool
 	FixedCacheSize        int
 	VocabSize             int
 	PadToken              int64
+	IsGenerative          bool
+	FirstIteration        bool
 }
 
 func LoadModel(path string, onnxFilename string, options *options.Options) (*Model, error) {
@@ -45,22 +45,18 @@ func LoadModel(path string, onnxFilename string, options *options.Options) (*Mod
 		OnnxFilename: onnxFilename,
 		Pipelines:    make(map[string]Pipeline),
 	}
-
 	err := LoadOnnxModelBytes(model)
 	if err != nil {
 		return nil, err
 	}
-
 	err = loadModelConfig(model)
 	if err != nil {
 		return nil, err
 	}
-
 	err = CreateModelBackend(model, options)
 	if err != nil {
 		return nil, err
 	}
-
 	// for generative models that don't have head dim defined in config (example Phi)
 	// infer from cache entries, only if HeadDim hasn't been initialized yet
 	if model.HeadDim == 0 {
@@ -72,16 +68,13 @@ func LoadModel(path string, onnxFilename string, options *options.Options) (*Mod
 			}
 		}
 	}
-
 	if model.HeadDim > 0 {
 		model.IsGenerative = true
 	}
-
 	tkErr := LoadTokenizer(model, options)
 	if tkErr != nil {
 		return nil, tkErr
 	}
-
 	model.Destroy = func() error {
 		var destroyErr error
 		if model.Tokenizer != nil {
@@ -115,21 +108,19 @@ func LoadOnnxModelBytes(model *Model) error {
 		for i := range onnxFiles {
 			if onnxFiles[i][1] == model.OnnxFilename {
 				modelNameFound = true
-				modelOnnxFile = util.PathJoinSafe(onnxFiles[i]...)
+				modelOnnxFile = fileutil.PathJoinSafe(onnxFiles[i]...)
 			}
 		}
 		if !modelNameFound {
 			return fmt.Errorf("file %s not found at %s", model.OnnxFilename, model.Path)
 		}
 	} else {
-		modelOnnxFile = util.PathJoinSafe(onnxFiles[0]...)
+		modelOnnxFile = fileutil.PathJoinSafe(onnxFiles[0]...)
 	}
-
-	onnxBytes, err := util.ReadFileBytes(modelOnnxFile)
+	onnxBytes, err := fileutil.ReadFileBytes(modelOnnxFile)
 	if err != nil {
 		return err
 	}
-
 	model.OnnxBytes = onnxBytes
 	return err
 }
@@ -138,47 +129,41 @@ func getOnnxFiles(path string) ([][]string, error) {
 	var onnxFiles [][]string
 	walker := func(_ context.Context, _ string, parent string, info os.FileInfo, _ io.Reader) (toContinue bool, err error) {
 		if strings.HasSuffix(info.Name(), ".onnx") {
-			onnxFiles = append(onnxFiles, []string{util.PathJoinSafe(path, parent), info.Name()})
+			onnxFiles = append(onnxFiles, []string{fileutil.PathJoinSafe(path, parent), info.Name()})
 		}
 		return true, nil
 	}
-	err := util.WalkDir()(context.Background(), path, walker)
+	err := fileutil.WalkDir()(context.Background(), path, walker)
 	return onnxFiles, err
 }
 
 func loadModelConfig(model *Model) error {
-
 	// load config.json if it exists, to determine max_position_embeddings
-	configPath := util.PathJoinSafe(model.Path, "config.json")
-
-	exists, err := util.FileExists(configPath)
+	configPath := fileutil.PathJoinSafe(model.Path, "config.json")
+	exists, err := fileutil.FileExists(configPath)
 	if err != nil {
 		return err
 	}
 	if exists {
-		configBytes, readErr := util.ReadFileBytes(configPath)
+		configBytes, readErr := fileutil.ReadFileBytes(configPath)
 		if readErr != nil {
 			return readErr
 		}
-
 		configMap := map[string]any{}
 		readErr = json.Unmarshal(configBytes, &configMap)
 		if readErr != nil {
 			return readErr
 		}
-
 		if maxPositionEmbeddingsRaw, existsOk := configMap["max_position_embeddings"]; existsOk {
 			if maxPositionEmbeddings, castOk := maxPositionEmbeddingsRaw.(float64); castOk {
 				model.MaxPositionEmbeddings = int(maxPositionEmbeddings)
 			}
 		}
-
 		if padTokenRaw, existsOk := configMap["pad_token_id"]; existsOk {
 			if padToken, castOk := padTokenRaw.(float64); castOk {
 				model.PadToken = int64(padToken)
 			}
 		}
-
 		if id2LabelRaw, existsOk := configMap["id2label"]; existsOk {
 			if id2Label, castOk := id2LabelRaw.(map[string]any); castOk {
 				id2labelCast := map[int]string{}
@@ -194,10 +179,8 @@ func loadModelConfig(model *Model) error {
 				return fmt.Errorf("id2label is not a map")
 			}
 		}
-
 		if eosRaw, exists := configMap["eos_token_id"]; exists {
 			model.EosTokenIDs = map[int64]bool{}
-
 			switch v := eosRaw.(type) {
 			case []any:
 				for i, item := range v {
@@ -213,7 +196,6 @@ func loadModelConfig(model *Model) error {
 				return errors.New("eos_token_id must be either a number or an array of numbers")
 			}
 		}
-
 		if numHiddenLayersRaw, exists := configMap["num_hidden_layers"]; exists {
 			if numHiddenLayersFloat, ok := numHiddenLayersRaw.(float64); ok {
 				model.NumHiddenLayers = int(numHiddenLayersFloat)
@@ -221,7 +203,6 @@ func loadModelConfig(model *Model) error {
 				return errors.New("num_hidden_layers is not a number")
 			}
 		}
-
 		if numKeyValueHeads, exists := configMap["num_key_value_heads"]; exists {
 			if numKeyValueHeadsValue, ok := numKeyValueHeads.(float64); ok {
 				model.NumKeyValueHeads = int(numKeyValueHeadsValue)
@@ -229,7 +210,6 @@ func loadModelConfig(model *Model) error {
 				return errors.New("num_key_value_heads is not a number")
 			}
 		}
-
 		if headDim, exists := configMap["head_dim"]; exists {
 			if headDimValue, ok := headDim.(float64); ok {
 				model.HeadDim = int(headDimValue)
@@ -237,7 +217,6 @@ func loadModelConfig(model *Model) error {
 				return errors.New("num_key_value_heads is not a number")
 			}
 		}
-
 		if vocabSize, exists := configMap["vocab_size"]; exists {
 			if vocabSizeValue, ok := vocabSize.(float64); ok {
 				model.VocabSize = int(vocabSizeValue)
@@ -245,27 +224,22 @@ func loadModelConfig(model *Model) error {
 				return errors.New("vocab_size is not a number")
 			}
 		}
-
 	}
-
-	specialTokensPath := util.PathJoinSafe(model.Path, "special_tokens_map.json")
-
-	exists, err = util.FileExists(specialTokensPath)
+	specialTokensPath := fileutil.PathJoinSafe(model.Path, "special_tokens_map.json")
+	exists, err = fileutil.FileExists(specialTokensPath)
 	if err != nil {
 		return err
 	}
 	if exists {
-		configBytes, readErr := util.ReadFileBytes(specialTokensPath)
+		configBytes, readErr := fileutil.ReadFileBytes(specialTokensPath)
 		if readErr != nil {
 			return readErr
 		}
-
 		var configMap map[string]interface{}
 		readErr = json.Unmarshal(configBytes, &configMap)
 		if readErr != nil {
 			return readErr
 		}
-
 		if sepToken, exists := configMap["sep_token"]; exists {
 			switch v := sepToken.(type) {
 			case map[string]interface{}:
@@ -285,7 +259,6 @@ func loadModelConfig(model *Model) error {
 			}
 		}
 	}
-
 	return nil
 }
 
@@ -309,58 +282,45 @@ func ReshapeOutput[T float32 | int64 | int32](input []T, meta InputOutputInfo, b
 func flatDataTo2D[T float32 | int64 | int32](input []T, batchSize int, dimension int) [][]T {
 	// Input string, token, dimension
 	output := make([][]T, batchSize)
-
 	if dimension == -1 {
 		// it can happen in principle that the embedding dimension is -1 if it was so exported from onnx even though there
 		// is a fixed out dimension so we do this.
 		dimension = len(input) / batchSize
 	}
-
 	counter := 0
 	for batchIndex := range batchSize {
 		inputEmbedding := make([]T, dimension)
-
 		for i := 0; i < dimension; i++ {
 			inputEmbedding[i] = input[counter]
 			counter++
 		}
-
 		output[batchIndex] = inputEmbedding
 	}
-
 	return output
 }
 
 func flatDataTo3D[T float32 | int64 | int32](input []T, paddingMask [][]bool, sequenceLength int, dimension int) [][][]T {
 	// Input string, token, dimension
 	output := make([][][]T, len(paddingMask))
-
 	counter := 0
-
 	for batchIndex, mask := range paddingMask {
 		tokenEmbeddings := make([][]T, 0, sequenceLength)
-
 		for _, isValid := range mask {
 			if !isValid {
 				// skip whole token
 				counter = counter + dimension
 				continue
 			}
-
 			// valid token, create embedding
 			embedding := make([]T, dimension)
-
 			for i := 0; i < dimension; i++ {
 				embedding[i] = input[counter]
 				counter++
 			}
-
 			tokenEmbeddings = append(tokenEmbeddings, embedding)
 		}
-
 		output[batchIndex] = tokenEmbeddings
 	}
-
 	return output
 }
 
@@ -378,7 +338,6 @@ func flatDataTo4D[T float32 | int64 | int32](input []T, paddingMask [][]bool, gr
 	sequenceLength := len(paddingMask[0]) // S
 	output := make([][][][]T, batchSize)
 	counter := 0
-
 	for b := 0; b < batchSize; b++ {
 		group := make([][][]T, groupSize) // A
 		for a := 0; a < groupSize; a++ {

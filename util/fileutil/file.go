@@ -1,4 +1,4 @@
-package util
+package fileutil
 
 import (
 	"bufio"
@@ -56,11 +56,11 @@ func OpenFile(filename string) (io.ReadCloser, error) {
 // from the input buffered reader.
 // An error is returned if there is an error with the
 // buffered reader.
-// This function is needed to avoid the 65K char line limit
+// This function is needed to avoid the 65K char line limit.
 func ReadLine(r *bufio.Reader) ([]byte, error) {
 	var (
-		isPrefix       = true
-		err      error = nil
+		isPrefix = true
+		err      error
 		line, ln []byte
 	)
 	for isPrefix && err == nil {
@@ -87,8 +87,8 @@ func PathJoinSafe(elem ...string) string {
 	return path
 }
 
-func CopyFile(from string, to string) error {
-	return fileSystem.Copy(context.Background(), from, to, option.NewSource(option.NewStream(partSize, 0)), option.NewDest(option.NewSkipChecksum(true)))
+func CopyFile(ctx context.Context, from string, to string) error {
+	return fileSystem.Copy(ctx, from, to, option.NewSource(option.NewStream(partSize, 0)), option.NewDest(option.NewSkipChecksum(true)))
 }
 
 func WalkDir() func(ctx context.Context, URL string, handler storage.OnVisit, options ...storage.Option) error {
@@ -119,7 +119,7 @@ func NewFileWriter(filename string, contentType string) (io.WriteCloser, error) 
 		}
 	}
 	if contentType != "" {
-		return fileSystem.NewWriter(context.Background(), filename, 0644, content.NewMeta(content.Type, contentType), option.NewSkipChecksum(true))
+		return fileSystem.NewWriter(context.Background(), filename, 0o644, content.NewMeta(content.Type, contentType), option.NewSkipChecksum(true))
 	}
-	return fileSystem.NewWriter(context.Background(), filename, 0644, option.NewSkipChecksum(true))
+	return fileSystem.NewWriter(context.Background(), filename, 0o644, option.NewSkipChecksum(true))
 }

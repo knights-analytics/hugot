@@ -1,4 +1,4 @@
-package pipelineBackends
+package backends
 
 import (
 	"errors"
@@ -9,12 +9,11 @@ import (
 
 // BasePipeline can be embedded by a pipeline.
 type BasePipeline struct {
-	PipelineName    string
-	Runtime         string
 	Model           *Model
 	PipelineTimings *timings
+	PipelineName    string
+	Runtime         string
 }
-
 type InputOutputInfo struct {
 	// The name of the input or output
 	Name string
@@ -22,7 +21,6 @@ type InputOutputInfo struct {
 	// ignored for non-tensor types.
 	Dimensions Shape
 }
-
 type Shape []int64
 
 func (s Shape) String() string {
@@ -46,11 +44,9 @@ type OutputInfo struct {
 	Name       string
 	Dimensions []int64
 }
-
 type PipelineMetadata struct {
 	OutputsInfo []OutputInfo
 }
-
 type PipelineBatchOutput interface {
 	GetOutput() []any
 }
@@ -75,7 +71,6 @@ type PipelineConfig[T Pipeline] struct {
 	OnnxFilename string
 	Options      []PipelineOption[T]
 }
-
 type timings struct {
 	NumCalls uint64
 	TotalNS  uint64
@@ -89,19 +84,19 @@ type TokenizedInput struct {
 	TypeIDs           []uint32
 	AttentionMask     []uint32
 	SpecialTokensMask []uint32
-	MaxAttentionIndex int
 	Offsets           [][2]uint
+	MaxAttentionIndex int
 }
 
 // PipelineBatch represents a batch of inputs that runs through the pipeline.
 type PipelineBatch struct {
-	Size              int
-	Input             []TokenizedInput
-	MaxSequenceLength int
 	InputValues       any
-	PaddingMask       [][]bool
 	DestroyInputs     func() error
+	Input             []TokenizedInput
+	PaddingMask       [][]bool
 	OutputValues      []any
+	Size              int
+	MaxSequenceLength int
 	MaxNewTokens      int
 }
 
@@ -111,9 +106,10 @@ func (b *PipelineBatch) Destroy() error {
 
 // NewBatch initializes a new batch for inference.
 func NewBatch(size int) *PipelineBatch {
-	return &PipelineBatch{DestroyInputs: func() error {
-		return nil
-	},
+	return &PipelineBatch{
+		DestroyInputs: func() error {
+			return nil
+		},
 		Size: size,
 	}
 }

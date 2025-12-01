@@ -6,7 +6,7 @@ folder=/test/unit
 
 cd /build && \
 mkdir -p $folder && \
-go run ./testData/downloadModels.go
+go run ./testcases/downloadModels.go
 
 echo "Running ORT tests..."
 

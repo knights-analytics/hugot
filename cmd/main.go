@@ -16,22 +16,24 @@ import (
 	"sync"
 
 	"github.com/knights-analytics/hugot/options"
-	"github.com/knights-analytics/hugot/pipelineBackends"
 
 	"github.com/urfave/cli/v3"
 
 	"github.com/knights-analytics/hugot"
-	"github.com/knights-analytics/hugot/util"
+	"github.com/knights-analytics/hugot/backends"
+	"github.com/knights-analytics/hugot/util/fileutil"
 )
 
-var modelPath string
-var onnxFilename string
-var inputPath string
-var outputPath string
-var pipelineType string
-var sharedLibraryPath string
-var batchSize int
-var modelsDir string
+var (
+	modelPath         string
+	onnxFilename      string
+	inputPath         string
+	outputPath        string
+	pipelineType      string
+	sharedLibraryPath string
+	batchSize         int
+	modelsDir         string
+)
 
 var runCommand = &cli.Command{
 	Name:  "run",
@@ -104,14 +106,14 @@ var runCommand = &cli.Command{
 			Value:       "",
 		},
 	},
-	Action: func(ctx context.Context, cmd *cli.Command) error {
+	Action: func(ctx context.Context, _ *cli.Command) error {
 		var opts []options.WithOption
 		if modelsDir == "" {
 			userDir, err := os.UserHomeDir()
 			if err != nil {
 				return err
 			}
-			modelsDir = util.PathJoinSafe(userDir, "hugot", "models")
+			modelsDir = fileutil.PathJoinSafe(userDir, "hugot", "models")
 		}
 
 		if sharedLibraryPath != "" {
@@ -119,7 +121,7 @@ var runCommand = &cli.Command{
 		} else {
 			homeDir, err := os.UserHomeDir()
 			if err != nil {
-				if exists, err := util.FileExists(path.Join(homeDir, "lib", "hugot", "onnxruntime.so")); err != nil && exists {
+				if exists, err := fileutil.FileExists(path.Join(homeDir, "lib", "hugot", "onnxruntime.so")); err != nil && exists {
 					opts = append(opts, options.WithOnnxLibraryPath(path.Join(homeDir, "lib", "hugot", "onnxruntime.so")))
 				}
 			}
@@ -138,25 +140,25 @@ var runCommand = &cli.Command{
 		}()
 
 		// is the model a full path to a model
-		ok, err := util.FileExists(modelPath)
+		ok, err := fileutil.FileExists(modelPath)
 		if err != nil {
 			return err
 		}
 		if !ok {
 			// is the model the name of a model previously downloaded
-			downloadedModelName := strings.Replace(modelPath, "/", "_", -1)
-			ok, err = util.FileExists(util.PathJoinSafe(modelsDir, downloadedModelName))
+			downloadedModelName := strings.ReplaceAll(modelPath, "/", "_")
+			ok, err = fileutil.FileExists(fileutil.PathJoinSafe(modelsDir, downloadedModelName))
 			if err != nil {
 				return err
 			}
 			if ok {
-				modelPath = util.PathJoinSafe(modelsDir, downloadedModelName)
+				modelPath = fileutil.PathJoinSafe(modelsDir, downloadedModelName)
 			} else {
 				// is the model the name of a model to download
 				if strings.Contains(modelPath, ":") {
 					return fmt.Errorf("filters with : are currently not supported")
 				}
-				err = util.CreateFile(modelsDir, true)
+				err = fileutil.CreateFile(modelsDir, true)
 				if err != nil {
 					return err
 				}
@@ -167,7 +169,7 @@ var runCommand = &cli.Command{
 			}
 		}
 
-		var pipe pipelineBackends.Pipeline
+		var pipe backends.Pipeline
 		switch pipelineType {
 		case "tokenClassification":
 			config := hugot.TokenClassificationConfig{
@@ -229,8 +231,8 @@ var runCommand = &cli.Command{
 			var writer io.WriteCloser
 
 			if outputPath != "" {
-				dest := util.PathJoinSafe(outputPath, fmt.Sprintf("result-%d.jsonl", i))
-				writer, err = util.NewFileWriter(dest, "application/json")
+				dest := fileutil.PathJoinSafe(outputPath, fmt.Sprintf("result-%d.jsonl", i))
+				writer, err = fileutil.NewFileWriter(dest, "application/json")
 				if err != nil {
 					return err
 				}
@@ -259,7 +261,7 @@ var runCommand = &cli.Command{
 
 		// read inputs
 
-		exists, err := util.FileExists(inputPath)
+		exists, err := fileutil.FileExists(inputPath)
 		if err != nil {
 			return err
 		}
@@ -277,7 +279,7 @@ var runCommand = &cli.Command{
 				return true, nil
 			}
 
-			err := util.WalkDir()(ctx, inputPath, fileWalker)
+			err := fileutil.WalkDir()(ctx, inputPath, fileWalker)
 			if err != nil {
 				return err
 			}
@@ -345,7 +347,7 @@ func writeOutputs(wg *sync.WaitGroup, processedChannel chan []byte, errorChannel
 	wg.Done()
 }
 
-func processWithPipeline(wg *sync.WaitGroup, inputChannel chan []input, processedChannel chan []byte, errorsChannel chan error, p pipelineBackends.Pipeline) {
+func processWithPipeline(wg *sync.WaitGroup, inputChannel chan []input, processedChannel chan []byte, errorsChannel chan error, p backends.Pipeline) {
 	for inputBatch := range inputChannel {
 		inputStrings := make([]string, len(inputBatch))
 		for i := 0; i < len(inputBatch); i++ {

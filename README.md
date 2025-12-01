@@ -217,7 +217,7 @@ following models:
 - **Gemma Family**: `onnx-community/gemma-3-1b-it-ONNX`, `onnx-community/gemma-3-270m-it-ONNX`
 - **Phi Family**: `microsoft/Phi-3-mini-4k-instruct-onnx`, `microsoft/Phi-3.5-mini-instruct-onnx`
 
-Generative models typically use external weights, so use the downloadOptions.ExternalDataPath option when downloading the model. See the [example](./testData/downloadModels.go ) here.
+Generative models typically use external weights, so use the downloadOptions.ExternalDataPath option when downloading the model. See the [example](testcases/downloadModels.go ) here.
  
 ### Example Usage
 ````go
@@ -233,7 +233,7 @@ config := TextGenerationConfig{
     ModelPath:    "./models/KnightsAnalytics_Phi-3.5-mini-instruct-onnx",
     Name:         "testPipeline",
     OnnxFilename: "model.onnx",
-    Options: []pipelineBackends.PipelineOption[*pipelines.TextGenerationPipeline]{
+    Options: []backends.PipelineOption[*pipelines.TextGenerationPipeline]{
         pipelines.WithMaxTokens(200),
         pipelines.WithPhiTemplate(),
     },
@@ -316,7 +316,7 @@ We is currently supported only for the **FeatureExtractionPipeline**. This can b
 {"sentence1": "The quick brown fox jumps over the lazy dog", "sentence2": "A quick brown cow jumps over a lazy caterpillar", "score": 0.5}
 ```
 
-See the [example](./testData/semanticSimilarityTest.jsonl) for a sample dataset.
+See the [example](testcases/semanticSimilarityTest.jsonl) for a sample dataset.
 
 The score is assumed to be a float between 0 and 1 that encodes the semantic similarity between the sentences, and by default a cosine similarity loss is used (see [sentence transformers](https://sbert.net/docs/package_reference/sentence_transformer/losses.html#cosinesimilarityloss)). However, you can also specify a different loss function from `goMLX` using the `XLATrainingOptions` field in the `TrainingConfig` struct. See [the training tests](./hugot_training_test.go) for examples on how to train or fine-tune feature extraction pipelines.
 

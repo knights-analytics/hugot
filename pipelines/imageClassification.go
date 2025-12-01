@@ -4,38 +4,37 @@ import (
 	"errors"
 	"fmt"
 	"image"
-	_ "image/jpeg"
-	_ "image/png"
+	_ "image/jpeg" // adds jpeg support to image
+	_ "image/png"  // adds png support to image
 	"math"
 	"sort"
 	"strings"
 	"sync/atomic"
 	"time"
 
+	"github.com/knights-analytics/hugot/backends"
 	"github.com/knights-analytics/hugot/options"
-	"github.com/knights-analytics/hugot/pipelineBackends"
-	"github.com/knights-analytics/hugot/util"
+	"github.com/knights-analytics/hugot/util/imageutil"
+	"github.com/knights-analytics/hugot/util/safeconv"
 )
 
 // ImageClassificationPipeline is a go version of
 // https://github.com/huggingface/transformers/blob/main/src/transformers/pipelines/image_classification.py
 // It takes images (as file paths or image.Image) and returns top-k class predictions.
 type ImageClassificationPipeline struct {
-	*pipelineBackends.BasePipeline
-	Output             pipelineBackends.InputOutputInfo
-	TopK               int
+	*backends.BasePipeline
 	IDLabelMap         map[int]string
-	preprocessSteps    []util.PreprocessStep
-	normalizationSteps []util.NormalizationStep
 	format             string
+	Output             backends.InputOutputInfo
+	preprocessSteps    []imageutil.PreprocessStep
+	normalizationSteps []imageutil.NormalizationStep
+	TopK               int
 }
-
 type ImageClassificationResult struct {
 	Label      string
 	Score      float32
 	ClassIndex int
 }
-
 type ImageClassificationOutput struct {
 	Predictions [][]ImageClassificationResult // batch of results
 }
@@ -48,32 +47,28 @@ func (o *ImageClassificationOutput) GetOutput() []any {
 	return out
 }
 
-func WithPreprocessSteps(steps ...util.PreprocessStep) pipelineBackends.PipelineOption[*ImageClassificationPipeline] {
+func WithPreprocessSteps(steps ...imageutil.PreprocessStep) backends.PipelineOption[*ImageClassificationPipeline] {
 	return func(p *ImageClassificationPipeline) error {
-		for _, step := range steps {
-			p.preprocessSteps = append(p.preprocessSteps, step)
-		}
+		p.preprocessSteps = append(p.preprocessSteps, steps...)
 		return nil
 	}
 }
 
-func WithNormalizationSteps(steps ...util.NormalizationStep) pipelineBackends.PipelineOption[*ImageClassificationPipeline] {
+func WithNormalizationSteps(steps ...imageutil.NormalizationStep) backends.PipelineOption[*ImageClassificationPipeline] {
 	return func(p *ImageClassificationPipeline) error {
-		for _, step := range steps {
-			p.normalizationSteps = append(p.normalizationSteps, step)
-		}
+		p.normalizationSteps = append(p.normalizationSteps, steps...)
 		return nil
 	}
 }
 
-func WithNHWCFormat() pipelineBackends.PipelineOption[*ImageClassificationPipeline] {
+func WithNHWCFormat() backends.PipelineOption[*ImageClassificationPipeline] {
 	return func(pipeline *ImageClassificationPipeline) error {
 		pipeline.format = "NHWC"
 		return nil
 	}
 }
 
-func WithNCHWFormat() pipelineBackends.PipelineOption[*ImageClassificationPipeline] {
+func WithNCHWFormat() backends.PipelineOption[*ImageClassificationPipeline] {
 	return func(pipeline *ImageClassificationPipeline) error {
 		pipeline.format = "NCHW"
 		return nil
@@ -81,14 +76,14 @@ func WithNCHWFormat() pipelineBackends.PipelineOption[*ImageClassificationPipeli
 }
 
 // WithTopK sets the number of top classifications to return.
-func WithTopK(topK int) pipelineBackends.PipelineOption[*ImageClassificationPipeline] {
+func WithTopK(topK int) backends.PipelineOption[*ImageClassificationPipeline] {
 	return func(pipeline *ImageClassificationPipeline) error {
 		pipeline.TopK = topK
 		return nil
 	}
 }
 
-func detectInputFormat(model *pipelineBackends.Model) (string, error) {
+func detectInputFormat(model *backends.Model) (string, error) {
 	inputInfo := model.InputsMeta
 	if len(inputInfo) == 0 {
 		return "", fmt.Errorf("no inputs found in model")
@@ -107,12 +102,11 @@ func detectInputFormat(model *pipelineBackends.Model) (string, error) {
 }
 
 // NewImageClassificationPipeline initializes an image classification pipeline.
-func NewImageClassificationPipeline(config pipelineBackends.PipelineConfig[*ImageClassificationPipeline], s *options.Options, model *pipelineBackends.Model) (*ImageClassificationPipeline, error) {
-	defaultPipeline, err := pipelineBackends.NewBasePipeline(config, s, model)
+func NewImageClassificationPipeline(config backends.PipelineConfig[*ImageClassificationPipeline], s *options.Options, model *backends.Model) (*ImageClassificationPipeline, error) {
+	defaultPipeline, err := backends.NewBasePipeline(config, s, model)
 	if err != nil {
 		return nil, err
 	}
-
 	pipeline := &ImageClassificationPipeline{BasePipeline: defaultPipeline, TopK: 5} // default topK=5
 	for _, o := range config.Options {
 		err = o(pipeline)
@@ -120,9 +114,7 @@ func NewImageClassificationPipeline(config pipelineBackends.PipelineConfig[*Imag
 			return nil, err
 		}
 	}
-
 	pipeline.IDLabelMap = model.IDLabelMap
-
 	if pipeline.format == "" {
 		detectedFormat, err := detectInputFormat(model)
 		if err != nil {
@@ -130,7 +122,6 @@ func NewImageClassificationPipeline(config pipelineBackends.PipelineConfig[*Imag
 		}
 		pipeline.format = detectedFormat
 	}
-
 	// validate pipeline
 	err = pipeline.Validate()
 	if err != nil {
@@ -141,13 +132,13 @@ func NewImageClassificationPipeline(config pipelineBackends.PipelineConfig[*Imag
 
 // INTERFACE IMPLEMENTATIONS
 
-func (p *ImageClassificationPipeline) GetModel() *pipelineBackends.Model {
-	return p.BasePipeline.Model
+func (p *ImageClassificationPipeline) GetModel() *backends.Model {
+	return p.Model
 }
 
-func (p *ImageClassificationPipeline) GetMetadata() pipelineBackends.PipelineMetadata {
-	return pipelineBackends.PipelineMetadata{
-		OutputsInfo: []pipelineBackends.OutputInfo{
+func (p *ImageClassificationPipeline) GetMetadata() backends.PipelineMetadata {
+	return backends.PipelineMetadata{
+		OutputsInfo: []backends.OutputInfo{
 			{
 				Name:       p.Model.OutputsMeta[0].Name,
 				Dimensions: p.Model.OutputsMeta[0].Dimensions,
@@ -160,7 +151,7 @@ func (p *ImageClassificationPipeline) GetStats() []string {
 	return []string{
 		fmt.Sprintf("Statistics for pipeline: %s", p.PipelineName),
 		fmt.Sprintf("ONNX: Total time=%s, Execution count=%d, Average query time=%s",
-			time.Duration(p.PipelineTimings.TotalNS),
+			safeconv.U64ToDuration(p.PipelineTimings.TotalNS),
 			p.PipelineTimings.NumCalls,
 			time.Duration(float64(p.PipelineTimings.TotalNS)/math.Max(1, float64(p.PipelineTimings.NumCalls)))),
 	}
@@ -179,18 +170,17 @@ func (p *ImageClassificationPipeline) Validate() error {
 
 // Preprocess decodes images from file paths or image.Image and creates input tensors.
 // Preprocess loads images from file paths and creates input tensors.
-func (p *ImageClassificationPipeline) Preprocess(batch *pipelineBackends.PipelineBatch, inputs []image.Image) error {
+func (p *ImageClassificationPipeline) Preprocess(batch *backends.PipelineBatch, inputs []image.Image) error {
 	preprocessed, err := p.preprocessImages(inputs)
 	if err != nil {
 		return fmt.Errorf("failed to preprocess images: %w", err)
 	}
-	return pipelineBackends.CreateImageTensors(batch, preprocessed, p.Runtime)
+	return backends.CreateImageTensors(batch, preprocessed, p.Runtime)
 }
 
 func (p *ImageClassificationPipeline) preprocessImages(images []image.Image) ([][][][]float32, error) {
 	batchSize := len(images)
 	out := make([][][][]float32, batchSize)
-
 	for i, img := range images {
 		processed := img
 		for _, step := range p.preprocessSteps {
@@ -200,11 +190,9 @@ func (p *ImageClassificationPipeline) preprocessImages(images []image.Image) ([]
 				return nil, fmt.Errorf("failed to apply preprocessing step: %w", err)
 			}
 		}
-
 		hh := processed.Bounds().Dy()
 		ww := processed.Bounds().Dx()
 		c := 3
-
 		switch strings.ToUpper(p.format) {
 		case "NHWC":
 			// Height × Width × Channels
@@ -215,7 +203,6 @@ func (p *ImageClassificationPipeline) preprocessImages(images []image.Image) ([]
 					tensor[y][x] = make([]float32, c)
 				}
 			}
-
 			for y := range hh {
 				for x := range ww {
 					r, g, b, _ := processed.At(x, y).RGBA()
@@ -240,7 +227,6 @@ func (p *ImageClassificationPipeline) preprocessImages(images []image.Image) ([]
 					tensor[ch][y] = make([]float32, ww)
 				}
 			}
-
 			for y := range hh {
 				for x := range ww {
 					r, g, b, _ := processed.At(x, y).RGBA()
@@ -264,26 +250,24 @@ func (p *ImageClassificationPipeline) preprocessImages(images []image.Image) ([]
 }
 
 // Forward runs inference.
-func (p *ImageClassificationPipeline) Forward(batch *pipelineBackends.PipelineBatch) error {
+func (p *ImageClassificationPipeline) Forward(batch *backends.PipelineBatch) error {
 	start := time.Now()
-	if err := pipelineBackends.RunSessionOnBatch(batch, p.BasePipeline); err != nil {
+	if err := backends.RunSessionOnBatch(batch, p.BasePipeline); err != nil {
 		return err
 	}
 	atomic.AddUint64(&p.PipelineTimings.NumCalls, 1)
-	atomic.AddUint64(&p.PipelineTimings.TotalNS, uint64(time.Since(start)))
+	atomic.AddUint64(&p.PipelineTimings.TotalNS, safeconv.DurationToU64(time.Since(start)))
 	return nil
 }
 
 // Postprocess parses logits and returns top-k predictions for each image.
-func (p *ImageClassificationPipeline) Postprocess(batch *pipelineBackends.PipelineBatch) (*ImageClassificationOutput, error) {
+func (p *ImageClassificationPipeline) Postprocess(batch *backends.PipelineBatch) (*ImageClassificationOutput, error) {
 	output := batch.OutputValues[0]
 	var batchPreds [][]ImageClassificationResult
-
 	logits, ok := output.([][]float32)
 	if !ok {
 		return nil, fmt.Errorf("output type %T is not supported", output)
 	}
-
 	for _, logit := range logits {
 		preds := getTopK(logit, p.TopK, p.IDLabelMap)
 		batchPreds = append(batchPreds, preds)
@@ -322,33 +306,29 @@ func getTopK(logits []float32, k int, labels map[int]string) []ImageClassificati
 }
 
 // Run runs the pipeline on a batch of image file paths.
-func (p *ImageClassificationPipeline) Run(inputs []string) (pipelineBackends.PipelineBatchOutput, error) {
+func (p *ImageClassificationPipeline) Run(inputs []string) (backends.PipelineBatchOutput, error) {
 	return p.RunPipeline(inputs)
 }
 
 // RunPipeline returns the concrete output type.
 func (p *ImageClassificationPipeline) RunPipeline(inputs []string) (*ImageClassificationOutput, error) {
 	var runErrors []error
-	batch := pipelineBackends.NewBatch(len(inputs))
-	defer func(*pipelineBackends.PipelineBatch) {
+	batch := backends.NewBatch(len(inputs))
+	defer func(*backends.PipelineBatch) {
 		runErrors = append(runErrors, batch.Destroy())
 	}(batch)
-
-	images, err := util.LoadImagesFromPaths(inputs)
+	images, err := imageutil.LoadImagesFromPaths(inputs)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load images: %w", err)
 	}
-
 	runErrors = append(runErrors, p.Preprocess(batch, images))
 	if e := errors.Join(runErrors...); e != nil {
 		return nil, e
 	}
-
 	runErrors = append(runErrors, p.Forward(batch))
 	if e := errors.Join(runErrors...); e != nil {
 		return nil, e
 	}
-
 	result, postErr := p.Postprocess(batch)
 	runErrors = append(runErrors, postErr)
 	return result, errors.Join(runErrors...)
@@ -356,23 +336,19 @@ func (p *ImageClassificationPipeline) RunPipeline(inputs []string) (*ImageClassi
 
 func (p *ImageClassificationPipeline) RunWithImages(inputs []image.Image) (*ImageClassificationOutput, error) {
 	var runErrors []error
-	batch := pipelineBackends.NewBatch(len(inputs))
-	defer func(*pipelineBackends.PipelineBatch) {
+	batch := backends.NewBatch(len(inputs))
+	defer func(*backends.PipelineBatch) {
 		runErrors = append(runErrors, batch.Destroy())
 	}(batch)
-
 	runErrors = append(runErrors, p.Preprocess(batch, inputs))
 	if e := errors.Join(runErrors...); e != nil {
 		return nil, e
 	}
-
 	runErrors = append(runErrors, p.Forward(batch))
 	if e := errors.Join(runErrors...); e != nil {
 		return nil, e
 	}
-
 	result, postErr := p.Postprocess(batch)
 	runErrors = append(runErrors, postErr)
 	return result, errors.Join(runErrors...)
-
 }

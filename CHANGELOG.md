@@ -23,7 +23,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 ### Changed
 
 - Update to new goMLX project structure (0.24.0+)
-- remove the depency on python when installing goMLX libraries
+- remove the dependency on python when installing goMLX libraries
 
 ## [0.5.5] - 2025-09-30
 

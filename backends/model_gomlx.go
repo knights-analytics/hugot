@@ -1,4 +1,4 @@
-package pipelineBackends
+package backends
 
 import (
 	"errors"
@@ -11,15 +11,14 @@ import (
 
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/pkg/core/graph"
-	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
+	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/gomlx/onnx-gomlx/onnx"
 
+	_ "github.com/gomlx/gomlx/backends/simplego" // Import simplego backend
 	"github.com/knights-analytics/hugot/options"
-	"github.com/knights-analytics/hugot/util"
-
-	_ "github.com/gomlx/gomlx/backends/simplego"
+	"github.com/knights-analytics/hugot/util/fileutil"
 )
 
 type GoMLXModel struct {
@@ -60,10 +59,10 @@ func loadExternalData(path string, model *onnx.Model) error {
 				}
 			}
 
-			weightsPath := util.PathJoinSafe(path, externalPath)
+			weightsPath := fileutil.PathJoinSafe(path, externalPath)
 
 			if _, ok := externalMap[externalPath]; !ok {
-				bytes, err := util.ReadFileBytes(weightsPath)
+				bytes, err := fileutil.ReadFileBytes(weightsPath)
 				if err != nil {
 					return err
 				}
@@ -83,7 +82,6 @@ func loadExternalData(path string, model *onnx.Model) error {
 }
 
 func createGoMLXModelBackend(model *Model, options *options.Options) error {
-
 	modelParsed, err := onnx.Parse(model.OnnxBytes)
 	if err != nil {
 		return err
@@ -161,7 +159,6 @@ func createGoMLXModelBackend(model *Model, options *options.Options) error {
 }
 
 func loadInputOutputMetaGoMLX(model *onnx.Model) ([]InputOutputInfo, []InputOutputInfo) {
-
 	var inputs, outputs []InputOutputInfo
 
 	for i, name := range model.InputsNames {
@@ -317,7 +314,7 @@ func createInputTensorsGoMLX(batch *PipelineBatch, model *Model, padBatchDimensi
 	return nil
 }
 
-// createSingleCacheTensorGoMLX creates a single cache tensor (either key or value)
+// createSingleCacheTensorGoMLX creates a single cache tensor (either key or value).
 func createSingleCacheTensorGoMLX(batchSize, numKeyValueHeads, maxSeqLen, headDim int) *tensors.Tensor {
 	return tensors.FromScalarAndDimensions(
 		float32(0), batchSize, numKeyValueHeads, maxSeqLen, headDim)

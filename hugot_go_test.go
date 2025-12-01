@@ -212,6 +212,7 @@ func TestThreadSafetyGo(t *testing.T) {
 // README: test the readme examples
 
 func TestReadmeExample(t *testing.T) {
+	t.Helper()
 	check := func(err error) {
 		if err != nil {
 			panic(err.Error())

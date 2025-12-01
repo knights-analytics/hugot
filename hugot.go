@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"slices"
 
+	"github.com/knights-analytics/hugot/backends"
 	"github.com/knights-analytics/hugot/options"
-	"github.com/knights-analytics/hugot/pipelineBackends"
 	"github.com/knights-analytics/hugot/pipelines"
 )
 
@@ -19,7 +19,7 @@ type Session struct {
 	crossEncoderPipelines           pipelineMap[*pipelines.CrossEncoderPipeline]
 	imageClassificationPipelines    pipelineMap[*pipelines.ImageClassificationPipeline]
 	textGenerationPipelines         pipelineMap[*pipelines.TextGenerationPipeline]
-	models                          map[string]*pipelineBackends.Model
+	models                          map[string]*backends.Model
 	options                         *options.Options
 	environmentDestroy              func() error
 }
@@ -46,7 +46,7 @@ func newSession(backend string, opts ...options.WithOption) (*Session, error) {
 		crossEncoderPipelines:           map[string]*pipelines.CrossEncoderPipeline{},
 		imageClassificationPipelines:    map[string]*pipelines.ImageClassificationPipeline{},
 		textGenerationPipelines:         map[string]*pipelines.TextGenerationPipeline{},
-		models:                          map[string]*pipelineBackends.Model{},
+		models:                          map[string]*backends.Model{},
 		options:                         parsedOptions,
 		environmentDestroy: func() error {
 			return nil
@@ -56,7 +56,7 @@ func newSession(backend string, opts ...options.WithOption) (*Session, error) {
 	return session, nil
 }
 
-type pipelineMap[T pipelineBackends.Pipeline] map[string]T
+type pipelineMap[T backends.Pipeline] map[string]T
 
 func (m pipelineMap[T]) GetStats() []string {
 	var stats []string
@@ -66,52 +66,52 @@ func (m pipelineMap[T]) GetStats() []string {
 	return stats
 }
 
-// FeatureExtractionConfig is the configuration for a feature extraction pipeline
-type FeatureExtractionConfig = pipelineBackends.PipelineConfig[*pipelines.FeatureExtractionPipeline]
+// FeatureExtractionConfig is the configuration for a feature extraction pipeline.
+type FeatureExtractionConfig = backends.PipelineConfig[*pipelines.FeatureExtractionPipeline]
 
-// FeatureExtractionOption is an option for a feature extraction pipeline
-type FeatureExtractionOption = pipelineBackends.PipelineOption[*pipelines.FeatureExtractionPipeline]
+// FeatureExtractionOption is an option for a feature extraction pipeline.
+type FeatureExtractionOption = backends.PipelineOption[*pipelines.FeatureExtractionPipeline]
 
-// TextClassificationConfig is the configuration for a text classification pipeline
-type TextClassificationConfig = pipelineBackends.PipelineConfig[*pipelines.TextClassificationPipeline]
+// TextClassificationConfig is the configuration for a text classification pipeline.
+type TextClassificationConfig = backends.PipelineConfig[*pipelines.TextClassificationPipeline]
 
-// TextClassificationOption is an option for a text classification pipeline
-type TextClassificationOption = pipelineBackends.PipelineOption[*pipelines.TextClassificationPipeline]
+// TextClassificationOption is an option for a text classification pipeline.
+type TextClassificationOption = backends.PipelineOption[*pipelines.TextClassificationPipeline]
 
-// ZeroShotClassificationConfig is the configuration for a zero shot classification pipeline
-type ZeroShotClassificationConfig = pipelineBackends.PipelineConfig[*pipelines.ZeroShotClassificationPipeline]
+// ZeroShotClassificationConfig is the configuration for a zero shot classification pipeline.
+type ZeroShotClassificationConfig = backends.PipelineConfig[*pipelines.ZeroShotClassificationPipeline]
 
-// ZeroShotClassificationOption is an option for a zero shot classification pipeline
-type ZeroShotClassificationOption = pipelineBackends.PipelineOption[*pipelines.ZeroShotClassificationPipeline]
+// ZeroShotClassificationOption is an option for a zero shot classification pipeline.
+type ZeroShotClassificationOption = backends.PipelineOption[*pipelines.ZeroShotClassificationPipeline]
 
-// TokenClassificationConfig is the configuration for a token classification pipeline
-type TokenClassificationConfig = pipelineBackends.PipelineConfig[*pipelines.TokenClassificationPipeline]
+// TokenClassificationConfig is the configuration for a token classification pipeline.
+type TokenClassificationConfig = backends.PipelineConfig[*pipelines.TokenClassificationPipeline]
 
-// TokenClassificationOption is an option for a token classification pipeline
-type TokenClassificationOption = pipelineBackends.PipelineOption[*pipelines.TokenClassificationPipeline]
+// TokenClassificationOption is an option for a token classification pipeline.
+type TokenClassificationOption = backends.PipelineOption[*pipelines.TokenClassificationPipeline]
 
-// CrossEncoderConfig is the configuration for a cross encoder pipeline
-type CrossEncoderConfig = pipelineBackends.PipelineConfig[*pipelines.CrossEncoderPipeline]
+// CrossEncoderConfig is the configuration for a cross encoder pipeline.
+type CrossEncoderConfig = backends.PipelineConfig[*pipelines.CrossEncoderPipeline]
 
-// CrossEncoderOption is an option for a cross encoder pipeline
-type CrossEncoderOption = pipelineBackends.PipelineOption[*pipelines.CrossEncoderPipeline]
+// CrossEncoderOption is an option for a cross encoder pipeline.
+type CrossEncoderOption = backends.PipelineOption[*pipelines.CrossEncoderPipeline]
 
-// ImageClassificationConfig is the configuration for an image classification pipeline
-type ImageClassificationConfig = pipelineBackends.PipelineConfig[*pipelines.ImageClassificationPipeline]
+// ImageClassificationConfig is the configuration for an image classification pipeline.
+type ImageClassificationConfig = backends.PipelineConfig[*pipelines.ImageClassificationPipeline]
 
-// ImageClassificationOption is an option for an image classification pipeline
-type ImageClassificationOption = pipelineBackends.PipelineOption[*pipelines.ImageClassificationPipeline]
+// ImageClassificationOption is an option for an image classification pipeline.
+type ImageClassificationOption = backends.PipelineOption[*pipelines.ImageClassificationPipeline]
 
-// TextGenerationConfig is the configuration for a text generation pipeline
-type TextGenerationConfig = pipelineBackends.PipelineConfig[*pipelines.TextGenerationPipeline]
+// TextGenerationConfig is the configuration for a text generation pipeline.
+type TextGenerationConfig = backends.PipelineConfig[*pipelines.TextGenerationPipeline]
 
-// TextGenerationOption is an option for a text generation pipeline
-type TextGenerationOption = pipelineBackends.PipelineOption[*pipelines.TextGenerationPipeline]
+// TextGenerationOption is an option for a text generation pipeline.
+type TextGenerationOption = backends.PipelineOption[*pipelines.TextGenerationPipeline]
 
 // NewPipeline can be used to create a new pipeline of type T. The initialised pipeline will be returned and it
 // will also be stored in the session object so that all created pipelines can be destroyed with session.Destroy()
 // at once.
-func NewPipeline[T pipelineBackends.Pipeline](s *Session, pipelineConfig pipelineBackends.PipelineConfig[T]) (T, error) {
+func NewPipeline[T backends.Pipeline](s *Session, pipelineConfig backends.PipelineConfig[T]) (T, error) {
 	var pipeline T
 	if pipelineConfig.Name == "" {
 		return pipeline, errors.New("a name for the pipeline is required")
@@ -132,7 +132,7 @@ func NewPipeline[T pipelineBackends.Pipeline](s *Session, pipelineConfig pipelin
 	var name string
 
 	if !ok {
-		model, err = pipelineBackends.LoadModel(pipelineConfig.ModelPath, pipelineConfig.OnnxFilename, s.options)
+		model, err = backends.LoadModel(pipelineConfig.ModelPath, pipelineConfig.OnnxFilename, s.options)
 		if err != nil {
 			return pipeline, err
 		}
@@ -165,13 +165,13 @@ func NewPipeline[T pipelineBackends.Pipeline](s *Session, pipelineConfig pipelin
 	return pipeline, nil
 }
 
-func InitializePipeline[T pipelineBackends.Pipeline](p T, pipelineConfig pipelineBackends.PipelineConfig[T], options *options.Options, model *pipelineBackends.Model) (T, string, error) {
+func InitializePipeline[T backends.Pipeline](p T, pipelineConfig backends.PipelineConfig[T], options *options.Options, model *backends.Model) (T, string, error) {
 	var pipeline T
 	var name string
 
 	switch any(p).(type) {
 	case *pipelines.TokenClassificationPipeline:
-		config := any(pipelineConfig).(pipelineBackends.PipelineConfig[*pipelines.TokenClassificationPipeline])
+		config := any(pipelineConfig).(backends.PipelineConfig[*pipelines.TokenClassificationPipeline])
 		pipelineInitialised, err := pipelines.NewTokenClassificationPipeline(config, options, model)
 		if err != nil {
 			return pipeline, name, err
@@ -179,7 +179,7 @@ func InitializePipeline[T pipelineBackends.Pipeline](p T, pipelineConfig pipelin
 		pipeline = any(pipelineInitialised).(T)
 		name = config.Name
 	case *pipelines.TextClassificationPipeline:
-		config := any(pipelineConfig).(pipelineBackends.PipelineConfig[*pipelines.TextClassificationPipeline])
+		config := any(pipelineConfig).(backends.PipelineConfig[*pipelines.TextClassificationPipeline])
 		pipelineInitialised, err := pipelines.NewTextClassificationPipeline(config, options, model)
 		if err != nil {
 			return pipeline, name, err
@@ -187,7 +187,7 @@ func InitializePipeline[T pipelineBackends.Pipeline](p T, pipelineConfig pipelin
 		pipeline = any(pipelineInitialised).(T)
 		name = config.Name
 	case *pipelines.FeatureExtractionPipeline:
-		config := any(pipelineConfig).(pipelineBackends.PipelineConfig[*pipelines.FeatureExtractionPipeline])
+		config := any(pipelineConfig).(backends.PipelineConfig[*pipelines.FeatureExtractionPipeline])
 		pipelineInitialised, err := pipelines.NewFeatureExtractionPipeline(config, options, model)
 		if err != nil {
 			return pipeline, name, err
@@ -195,7 +195,7 @@ func InitializePipeline[T pipelineBackends.Pipeline](p T, pipelineConfig pipelin
 		pipeline = any(pipelineInitialised).(T)
 		name = config.Name
 	case *pipelines.ZeroShotClassificationPipeline:
-		config := any(pipelineConfig).(pipelineBackends.PipelineConfig[*pipelines.ZeroShotClassificationPipeline])
+		config := any(pipelineConfig).(backends.PipelineConfig[*pipelines.ZeroShotClassificationPipeline])
 		pipelineInitialised, err := pipelines.NewZeroShotClassificationPipeline(config, options, model)
 		if err != nil {
 			return pipeline, name, err
@@ -203,7 +203,7 @@ func InitializePipeline[T pipelineBackends.Pipeline](p T, pipelineConfig pipelin
 		pipeline = any(pipelineInitialised).(T)
 		name = config.Name
 	case *pipelines.CrossEncoderPipeline:
-		config := any(pipelineConfig).(pipelineBackends.PipelineConfig[*pipelines.CrossEncoderPipeline])
+		config := any(pipelineConfig).(backends.PipelineConfig[*pipelines.CrossEncoderPipeline])
 		pipelineInitialised, err := pipelines.NewCrossEncoderPipeline(config, options, model)
 		if err != nil {
 			return pipeline, name, err
@@ -211,7 +211,7 @@ func InitializePipeline[T pipelineBackends.Pipeline](p T, pipelineConfig pipelin
 		pipeline = any(pipelineInitialised).(T)
 		name = config.Name
 	case *pipelines.ImageClassificationPipeline:
-		config := any(pipelineConfig).(pipelineBackends.PipelineConfig[*pipelines.ImageClassificationPipeline])
+		config := any(pipelineConfig).(backends.PipelineConfig[*pipelines.ImageClassificationPipeline])
 		pipelineInitialised, err := pipelines.NewImageClassificationPipeline(config, options, model)
 		if err != nil {
 			return pipeline, name, err
@@ -219,7 +219,7 @@ func InitializePipeline[T pipelineBackends.Pipeline](p T, pipelineConfig pipelin
 		pipeline = any(pipelineInitialised).(T)
 		name = config.Name
 	case *pipelines.TextGenerationPipeline:
-		config := any(pipelineConfig).(pipelineBackends.PipelineConfig[*pipelines.TextGenerationPipeline])
+		config := any(pipelineConfig).(backends.PipelineConfig[*pipelines.TextGenerationPipeline])
 		pipelineInitialised, err := pipelines.NewTextGenerationPipeline(config, options, model)
 		if err != nil {
 			return pipeline, name, err
@@ -234,8 +234,8 @@ func InitializePipeline[T pipelineBackends.Pipeline](p T, pipelineConfig pipelin
 	return pipeline, name, nil
 }
 
-// GetPipeline can be used to retrieve a pipeline of type T with the given name from the session
-func GetPipeline[T pipelineBackends.Pipeline](s *Session, name string) (T, error) {
+// GetPipeline can be used to retrieve a pipeline of type T with the given name from the session.
+func GetPipeline[T backends.Pipeline](s *Session, name string) (T, error) {
 	var pipeline T
 	switch any(pipeline).(type) {
 	case *pipelines.TokenClassificationPipeline:
@@ -285,7 +285,7 @@ func GetPipeline[T pipelineBackends.Pipeline](s *Session, name string) (T, error
 	}
 }
 
-func ClosePipeline[T pipelineBackends.Pipeline](s *Session, name string) error {
+func ClosePipeline[T backends.Pipeline](s *Session, name string) error {
 	var pipeline T
 	switch any(pipeline).(type) {
 	case *pipelines.TokenClassificationPipeline:
@@ -385,7 +385,7 @@ func (e *pipelineNotFoundError) Error() string {
 // the average time per tokenization batch call
 // the total runtime of the inference (i.e. onnxruntime) step
 // the number of batch calls to the onnxruntime inference
-// the average time per onnxruntime inference batch call
+// the average time per onnxruntime inference batch call.
 func (s *Session) GetStats() []string {
 	return slices.Concat(
 		s.tokenClassificationPipelines.GetStats(),

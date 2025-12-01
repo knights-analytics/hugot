@@ -59,7 +59,7 @@ func TestTextClassificationPipelineORT(t *testing.T) {
 	opts := []options.WithOption{
 		options.WithOnnxLibraryPath(onnxRuntimeSharedLibrary),
 		options.WithTelemetry(),
-		options.WithCpuMemArena(true),
+		options.WithCPUMemArena(true),
 		options.WithMemPattern(true),
 		options.WithIntraOpNumThreads(1),
 		options.WithInterOpNumThreads(1),
@@ -96,7 +96,7 @@ func TestTextClassificationPipelineMultiORT(t *testing.T) {
 	opts := []options.WithOption{
 		options.WithOnnxLibraryPath(onnxRuntimeSharedLibrary),
 		options.WithTelemetry(),
-		options.WithCpuMemArena(true),
+		options.WithCPUMemArena(true),
 		options.WithMemPattern(true),
 		options.WithIntraOpNumThreads(1),
 		options.WithInterOpNumThreads(1),
@@ -226,7 +226,7 @@ func TestZeroShotClassificationPipelineValidationORT(t *testing.T) {
 	zeroShotClassificationPipelineValidation(t, session)
 }
 
-// Cross Encoder
+// Cross Encoder.
 func TestCrossEncoderPipelineORT(t *testing.T) {
 	opts := []options.WithOption{options.WithOnnxLibraryPath(onnxRuntimeSharedLibrary)}
 	session, err := NewORTSession(opts...)
@@ -268,7 +268,7 @@ func TestCrossEncoderPipelineValidationORT(t *testing.T) {
 	crossEncoderPipelineValidation(t, session)
 }
 
-// Image classification
+// Image classification.
 func TestImageClassificationPipelineORT(t *testing.T) {
 	opts := []options.WithOption{options.WithOnnxLibraryPath(onnxRuntimeSharedLibrary)}
 	session, err := NewORTSession(opts...)
