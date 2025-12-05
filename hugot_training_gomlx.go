@@ -157,7 +157,10 @@ func TrainGoMLX(s *TrainingSession) error {
 					if s.config.Verbose {
 						fmt.Printf("Running evaluation for epoch %d\n on trainEvalDataset", loop.Epoch)
 					}
-					lossAndMetrics := gomlxTrainer.Eval(s.config.TrainEvalDataset)
+					lossAndMetrics, err := gomlxTrainer.Eval(s.config.TrainEvalDataset)
+					if err != nil {
+						return err
+					}
 					meanTrainLoss := lossAndMetrics[1].Value().(float32)
 					trainLosses = append(trainLosses, meanTrainLoss)
 				}
@@ -166,7 +169,10 @@ func TrainGoMLX(s *TrainingSession) error {
 					if s.config.Verbose {
 						fmt.Printf("Running evaluation for epoch %d\n on evalDataset", loop.Epoch)
 					}
-					lossAndMetrics := gomlxTrainer.Eval(s.config.EvalDataset)
+					lossAndMetrics, err := gomlxTrainer.Eval(s.config.EvalDataset)
+					if err != nil {
+						return err
+					}
 					meanLoss := lossAndMetrics[1].Value().(float32)
 					evalLosses = append(evalLosses, meanLoss)
 
