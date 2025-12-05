@@ -82,8 +82,10 @@ func round3decimals(x float64) float64 {
 
 func trainSimilarity(t *testing.T,
 	config TrainingConfig,
-	examplesLhs,
-	examplesRhs []string) []float64 {
+	examplesLHS,
+	examplesRHS []string,
+) []float64 {
+	t.Helper()
 	// Create a new GoMLX training session. Currently, training is only possible by loading an onnx model
 	// into GoMLX, fine-tuning it, and then writing it back to onnx. Hugot deals with the details
 	// for you here.
@@ -118,7 +120,7 @@ func trainSimilarity(t *testing.T,
 	}()
 
 	// we now load the newly trained onnx model and generate the predictions with onnxruntime backend
-	return runModel(t, "ORT", examplesLhs, examplesRhs, "./models/testTrain")
+	return runModel(t, "ORT", examplesLHS, examplesRHS, "./models/testTrain")
 }
 
 func TestTrainSemanticSimilarity(t *testing.T) {
@@ -130,8 +132,8 @@ func TestTrainSemanticSimilarity(t *testing.T) {
 	checkT(t, err)
 	lines := bytes.Split(data, []byte("\n"))
 
-	var examplesLhs []string
-	var examplesRhs []string
+	var examplesLHS []string
+	var examplesRHS []string
 	var scores []float64
 
 	for _, line := range lines {
@@ -140,16 +142,16 @@ func TestTrainSemanticSimilarity(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		examplesLhs = append(examplesLhs, example["sentence1"].(string))
-		examplesRhs = append(examplesRhs, example["sentence2"].(string))
+		examplesLHS = append(examplesLHS, example["sentence1"].(string))
+		examplesRHS = append(examplesRHS, example["sentence2"].(string))
 		scores = append(scores, example["score"].(float64))
 	}
 
 	// first we run the untrained onnx model with onnxruntime backend
-	similaritiesOnnxruntime := runModel(t, "ORT", examplesLhs, examplesRhs, modelPath)
+	similaritiesOnnxruntime := runModel(t, "ORT", examplesLHS, examplesRHS, modelPath)
 
 	// we do the same for GoMLX and check the forward pass results match
-	similaritiesGoMLX := runModel(t, "XLA", examplesLhs, examplesRhs, modelPath)
+	similaritiesGoMLX := runModel(t, "XLA", examplesLHS, examplesRHS, modelPath)
 
 	for i := range similaritiesOnnxruntime {
 		assert.Equal(t, round3decimals(similaritiesOnnxruntime[i]), round3decimals(similaritiesGoMLX[i]))
@@ -185,7 +187,7 @@ func TestTrainSemanticSimilarity(t *testing.T) {
 		},
 		Verbose: true,
 	}
-	similaritiesGoMLXTrained := trainSimilarity(t, trainingConfig, examplesLhs, examplesRhs)
+	similaritiesGoMLXTrained := trainSimilarity(t, trainingConfig, examplesLHS, examplesRHS)
 
 	fmt.Println("GoMLX trained model predictions:")
 	for i := range similaritiesGoMLXTrained {
@@ -202,24 +204,24 @@ func TestTrainSemanticSimilarity(t *testing.T) {
 
 	// we can also train a model using an in memory dataset. For this we create the slice of examples manually.
 	var examples []datasets.SemanticSimilarityExample
-	for i := 0; i < len(examplesLhs); i++ {
+	for i := 0; i < len(examplesLHS); i++ {
 		examples = append(examples, datasets.SemanticSimilarityExample{
-			Sentence1: examplesLhs[i],
-			Sentence2: examplesRhs[i],
+			Sentence1: examplesLHS[i],
+			Sentence2: examplesRHS[i],
 			Score:     float32(scores[i]),
 		})
 	}
 	inMemoryDataset, err := datasets.NewInMemorySemanticSimilarityDataset(examples, 1, nil)
 	checkT(t, err)
 	trainingConfig.TrainDataset = inMemoryDataset
-	similaritiesGoMLXTrainedInMemory := trainSimilarity(t, trainingConfig, examplesLhs, examplesRhs)
+	similaritiesGoMLXTrainedInMemory := trainSimilarity(t, trainingConfig, examplesLHS, examplesRHS)
 	for i := range similaritiesGoMLXTrainedInMemory {
 		assert.Equal(t, round3decimals(similaritiesGoMLXTrained[i]), round3decimals(similaritiesGoMLXTrainedInMemory[i]))
 	}
 
 	// we can also freeze layers
 	trainingConfig.Options = append(trainingConfig.Options, WithFreezeLayers([]int{-1})) // freeze all layers but the last one
-	similaritiesGoMLXTrainedFrozen := trainSimilarity(t, trainingConfig, examplesLhs, examplesRhs)
+	similaritiesGoMLXTrainedFrozen := trainSimilarity(t, trainingConfig, examplesLHS, examplesRHS)
 
 	fmt.Println("GoMLX trained model predictions freezing all layers but the last one:")
 	for i := range similaritiesGoMLXTrainedFrozen {
@@ -230,7 +232,7 @@ func TestTrainSemanticSimilarity(t *testing.T) {
 func rmse(predictions []float64, labels []float64) float64 {
 	var sum float64
 	for i := 0; i < len(predictions); i++ {
-		sum += math.Pow(predictions[i]-labels[i], 2)
+		sum += (predictions[i] - labels[i]) * (predictions[i] - labels[i])
 	}
 	return math.Sqrt(sum / float64(len(predictions)))
 }

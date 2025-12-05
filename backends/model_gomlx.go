@@ -306,10 +306,14 @@ func createInputTensorsGoMLX(batch *PipelineBatch, model *Model, padBatchDimensi
 	batch.InputValues = inputTensors
 	batch.PaddingMask = paddingMasks
 	batch.DestroyInputs = func() error {
+		var err error
 		for _, t := range inputTensors {
-			t.FinalizeAll()
+			tensorErr := t.FinalizeAll()
+			if err == nil {
+				err = tensorErr
+			}
 		}
-		return nil
+		return err
 	}
 	return nil
 }
@@ -523,76 +527,6 @@ func createGenerativeCallFunc(model *Model, modelParsed *onnx.Model, outputNames
 	}
 }
 
-func RunGenerativeGoMLXSessionOnBatch(batch *PipelineBatch, p *BasePipeline) error {
-	// Generative models
-	batchSize := len(batch.Input)
-	finished := make([]bool, batchSize)
-	generatedTokens := make([][]int64, batchSize)
-
-	var outputTensors []*tensors.Tensor
-	var err error
-	defer func() {
-		for _, t := range outputTensors {
-			t.FinalizeAll()
-		}
-	}()
-
-	for step := 0; step < batch.MaxNewTokens; step++ {
-		if step == 0 {
-			p.Model.FirstIteration = true
-		} else {
-			p.Model.FirstIteration = false
-		}
-		modelInputs := batch.InputValues.([]*tensors.Tensor)
-
-		outputTensors, err = p.Model.GoMLXModel.Exec.Exec(modelInputs)
-		if err != nil {
-			return err
-		}
-
-		genTensor := outputTensors[0]
-		var flatTokens []int64
-		tensors.ConstFlatData(genTensor, func(flat []int64) {
-			flatTokens = flat
-		})
-		for i := range batchSize {
-			if !finished[i] {
-				generatedTokens[i] = append(generatedTokens[i], flatTokens[i])
-			}
-		}
-
-		eosMatchTensor := outputTensors[len(outputTensors)-1]
-		var doneFlags []bool
-		tensors.ConstFlatData(eosMatchTensor, func(flat []bool) {
-			doneFlags = flat
-		})
-		for i, flag := range doneFlags {
-			if flag {
-				finished[i] = true
-			}
-		}
-
-		allDone := true
-		for _, isDone := range finished {
-			if !isDone {
-				allDone = false
-				break
-			}
-		}
-		if allDone {
-			break
-		}
-		batch.InputValues = outputTensors
-	}
-
-	batch.OutputValues = make([]any, batchSize)
-	for i := range generatedTokens {
-		batch.OutputValues[i] = generatedTokens[i]
-	}
-
-	return nil
-}
-
 func runGoMLXSessionOnBatch(batch *PipelineBatch, p *BasePipeline) error {
 	// Non-generative models
 	outputTensors, err := p.Model.GoMLXModel.Exec.Exec(batch.InputValues.([]*tensors.Tensor))
@@ -601,21 +535,24 @@ func runGoMLXSessionOnBatch(batch *PipelineBatch, p *BasePipeline) error {
 	}
 	defer func() {
 		for _, t := range outputTensors {
-			t.FinalizeAll()
+			err = errors.Join(t.FinalizeAll())
 		}
 	}()
 
 	convertedOutput := make([]any, len(outputTensors))
 	for i, t := range outputTensors {
 		var rawOutput []float32
-		tensors.ConstFlatData(t, func(flat []float32) {
+		err = tensors.ConstFlatData(t, func(flat []float32) {
 			rawOutput = flat
 		})
+		if err != nil {
+			return err
+		}
 		convertedOutput[i] = ReshapeOutput(rawOutput, p.Model.OutputsMeta[i], batch.Size, batch.PaddingMask, batch.MaxSequenceLength)
 	}
 
 	batch.OutputValues = convertedOutput
-	return nil
+	return err
 }
 
 func nextPowerOf2(n int) int {
@@ -669,10 +606,14 @@ func createImageTensorsGoXLA(batch *PipelineBatch, preprocessed [][][][]float32)
 	inputTensors := []*tensors.Tensor{tensors.FromFlatDataAndDimensions(backing, n, c, h, w)}
 	batch.InputValues = inputTensors
 	batch.DestroyInputs = func() error {
+		var err error
 		for _, input := range inputTensors {
-			input.FinalizeAll()
+			tensorErr := input.FinalizeAll()
+			if tensorErr != nil {
+				err = tensorErr
+			}
 		}
-		return nil
+		return err
 	}
 	return nil
 }
