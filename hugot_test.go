@@ -237,7 +237,11 @@ func textClassificationPipeline(t *testing.T, session *Session) {
 	})
 
 	// check get stats
-	session.GetStats()
+	stats := session.GetStatistics()
+	for _, v := range stats {
+		jsonData, _ := json.MarshalIndent(v, "", "  ")
+		fmt.Println(string(jsonData))
+	}
 }
 
 func textClassificationPipelineMulti(t *testing.T, session *Session) {
@@ -396,7 +400,11 @@ func textClassificationPipelineMulti(t *testing.T, session *Session) {
 	})
 
 	// check get stats
-	session.GetStats()
+	stats := session.GetStatistics()
+	for _, v := range stats {
+		jsonData, _ := json.MarshalIndent(v, "", "  ")
+		fmt.Println(string(jsonData))
+	}
 }
 
 func textClassificationPipelineValidation(t *testing.T, session *Session) {

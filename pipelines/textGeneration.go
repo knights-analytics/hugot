@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"math"
 	"sync/atomic"
 	"text/template"
 	"time"
@@ -167,18 +166,12 @@ func (p *TextGenerationPipeline) GetModel() *backends.Model {
 	return p.Model
 }
 
-func (p *TextGenerationPipeline) GetStats() []string {
-	return []string{
-		fmt.Sprintf("Statistics for pipeline: %s", p.PipelineName),
-		fmt.Sprintf("Tokenizer: Total time=%s, Execution count=%d, Average query time=%s",
-			safeconv.U64ToDuration(p.Model.Tokenizer.TokenizerTimings.TotalNS),
-			p.Model.Tokenizer.TokenizerTimings.NumCalls,
-			time.Duration(float64(p.Model.Tokenizer.TokenizerTimings.TotalNS)/math.Max(1, float64(p.Model.Tokenizer.TokenizerTimings.NumCalls)))),
-		fmt.Sprintf("ONNX: Total time=%s, Execution count=%d, Average query time=%s",
-			safeconv.U64ToDuration(p.PipelineTimings.TotalNS),
-			p.PipelineTimings.NumCalls,
-			time.Duration(float64(p.PipelineTimings.TotalNS)/math.Max(1, float64(p.PipelineTimings.NumCalls)))),
-	}
+// GetStatistics returns the runtime statistics for the pipeline.
+func (p *TextGenerationPipeline) GetStatistics() backends.PipelineStatistics {
+	statistics := backends.PipelineStatistics{}
+	backends.ComputeTokenizerStatistics(&statistics, p.Model.Tokenizer.TokenizerTimings)
+	backends.ComputeOnnxStatistics(&statistics, p.PipelineTimings)
+	return statistics
 }
 
 func (p *TextGenerationPipeline) Validate() error {
