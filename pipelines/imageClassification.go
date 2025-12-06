@@ -7,7 +7,6 @@ import (
 	_ "image/jpeg" // adds jpeg support to image
 	_ "image/png"  // adds png support to image
 	"sort"
-	"strings"
 	"sync/atomic"
 	"time"
 
@@ -82,24 +81,6 @@ func WithTopK(topK int) backends.PipelineOption[*ImageClassificationPipeline] {
 	}
 }
 
-func detectInputFormat(model *backends.Model) (string, error) {
-	inputInfo := model.InputsMeta
-	if len(inputInfo) == 0 {
-		return "", fmt.Errorf("no inputs found in model")
-	}
-	info := inputInfo[0]
-	shape := info.Dimensions
-	if len(shape) != 4 {
-		return "", fmt.Errorf("expected 4D input, got %dD", len(shape))
-	}
-	if shape[1] == 3 && shape[3] != 3 {
-		return "NCHW", nil
-	} else if shape[3] == 3 {
-		return "NHWC", nil
-	}
-	return "", fmt.Errorf("unable to infer format from shape %v", shape)
-}
-
 // NewImageClassificationPipeline initializes an image classification pipeline.
 func NewImageClassificationPipeline(config backends.PipelineConfig[*ImageClassificationPipeline], s *options.Options, model *backends.Model) (*ImageClassificationPipeline, error) {
 	defaultPipeline, err := backends.NewBasePipeline(config, s, model)
@@ -115,7 +96,7 @@ func NewImageClassificationPipeline(config backends.PipelineConfig[*ImageClassif
 	}
 	pipeline.IDLabelMap = model.IDLabelMap
 	if pipeline.format == "" {
-		detectedFormat, err := detectInputFormat(model)
+		detectedFormat, err := backends.DetectImageTensorFormat(model)
 		if err != nil {
 			return nil, err
 		}
@@ -166,82 +147,11 @@ func (p *ImageClassificationPipeline) Validate() error {
 // Preprocess decodes images from file paths or image.Image and creates input tensors.
 // Preprocess loads images from file paths and creates input tensors.
 func (p *ImageClassificationPipeline) Preprocess(batch *backends.PipelineBatch, inputs []image.Image) error {
-	preprocessed, err := p.preprocessImages(inputs)
+	preprocessed, err := backends.PreprocessImages(p.format, inputs, p.preprocessSteps, p.normalizationSteps)
 	if err != nil {
 		return fmt.Errorf("failed to preprocess images: %w", err)
 	}
-	return backends.CreateImageTensors(batch, preprocessed, p.Runtime)
-}
-
-func (p *ImageClassificationPipeline) preprocessImages(images []image.Image) ([][][][]float32, error) {
-	batchSize := len(images)
-	out := make([][][][]float32, batchSize)
-	for i, img := range images {
-		processed := img
-		for _, step := range p.preprocessSteps {
-			var err error
-			processed, err = step.Apply(processed)
-			if err != nil {
-				return nil, fmt.Errorf("failed to apply preprocessing step: %w", err)
-			}
-		}
-		hh := processed.Bounds().Dy()
-		ww := processed.Bounds().Dx()
-		c := 3
-		switch strings.ToUpper(p.format) {
-		case "NHWC":
-			// Height × Width × Channels
-			tensor := make([][][]float32, hh)
-			for y := range hh {
-				tensor[y] = make([][]float32, ww)
-				for x := range ww {
-					tensor[y][x] = make([]float32, c)
-				}
-			}
-			for y := range hh {
-				for x := range ww {
-					r, g, b, _ := processed.At(x, y).RGBA()
-					rf := float32(r >> 8)
-					gf := float32(g >> 8)
-					bf := float32(b >> 8)
-					for _, step := range p.normalizationSteps {
-						rf, gf, bf = step.Apply(rf, gf, bf)
-					}
-					tensor[y][x][0] = rf
-					tensor[y][x][1] = gf
-					tensor[y][x][2] = bf
-				}
-			}
-			out[i] = tensor
-		case "NCHW":
-			// Channels × Height × Width
-			tensor := make([][][]float32, c)
-			for ch := range c {
-				tensor[ch] = make([][]float32, hh)
-				for y := range hh {
-					tensor[ch][y] = make([]float32, ww)
-				}
-			}
-			for y := range hh {
-				for x := range ww {
-					r, g, b, _ := processed.At(x, y).RGBA()
-					rf := float32(r >> 8)
-					gf := float32(g >> 8)
-					bf := float32(b >> 8)
-					for _, step := range p.normalizationSteps {
-						rf, gf, bf = step.Apply(rf, gf, bf)
-					}
-					tensor[0][y][x] = rf
-					tensor[1][y][x] = gf
-					tensor[2][y][x] = bf
-				}
-			}
-			out[i] = tensor
-		default:
-			return nil, fmt.Errorf("unsupported format: %s", p.format)
-		}
-	}
-	return out, nil
+	return backends.CreateImageTensors(batch, p.Model, preprocessed, p.Runtime)
 }
 
 // Forward runs inference.

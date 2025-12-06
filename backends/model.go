@@ -270,7 +270,12 @@ func ReshapeOutput[T float32 | int64 | int32](input []T, meta InputOutputInfo, b
 	case 2:
 		outArray = flatDataTo2D(input, batchSize, dimensions[lenDimensions-1])
 	case 3:
-		outArray = flatDataTo3D(input, paddingMask, sequenceLength, dimensions[lenDimensions-1])
+		// If no padding mask is provided (vision models), infer middle dim.
+		if len(paddingMask) == 0 || sequenceLength == 0 {
+			outArray = flatDataTo3DGeneric(input, batchSize, dimensions[lenDimensions-1])
+		} else {
+			outArray = flatDataTo3D(input, paddingMask, sequenceLength, dimensions[lenDimensions-1])
+		}
 	case 4:
 		dimension := dimensions[3]
 		groupSize := dimensions[1]
@@ -331,6 +336,39 @@ func flatDataTo3DGenerativeLoop[T float32 | int64 | int32](input []T, batchSize 
 		result[i] = [][]T{input[start : start+vocabSize]}
 	}
 	return result
+}
+
+// flatDataTo3DGeneric reshapes flat data into [batchSize][N][dimension] inferring N.
+func flatDataTo3DGeneric[T float32 | int64 | int32](input []T, batchSize int, dimension int) [][][]T {
+	if dimension == -1 {
+		// cannot infer without last dimension; return empty
+		return make([][][]T, batchSize)
+	}
+	total := len(input)
+	if batchSize <= 0 || dimension <= 0 || total == 0 {
+		return make([][][]T, batchSize)
+	}
+	perBatch := total / batchSize
+	if perBatch%dimension != 0 {
+		// fallback: best-effort
+		perBatch = (perBatch / dimension) * dimension
+	}
+	n := perBatch / dimension
+	output := make([][][]T, batchSize)
+	idx := 0
+	for b := 0; b < batchSize; b++ {
+		seq := make([][]T, n)
+		for i := 0; i < n; i++ {
+			vec := make([]T, dimension)
+			for d := 0; d < dimension; d++ {
+				vec[d] = input[idx]
+				idx++
+			}
+			seq[i] = vec
+		}
+		output[b] = seq
+	}
+	return output
 }
 
 func flatDataTo4D[T float32 | int64 | int32](input []T, paddingMask [][]bool, groupSize int, dimension int) [][][][]T {

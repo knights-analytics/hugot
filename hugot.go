@@ -18,6 +18,7 @@ type Session struct {
 	zeroShotClassificationPipelines pipelineMap[*pipelines.ZeroShotClassificationPipeline]
 	crossEncoderPipelines           pipelineMap[*pipelines.CrossEncoderPipeline]
 	imageClassificationPipelines    pipelineMap[*pipelines.ImageClassificationPipeline]
+	objectDetectionPipelines        pipelineMap[*pipelines.ObjectDetectionPipeline]
 	textGenerationPipelines         pipelineMap[*pipelines.TextGenerationPipeline]
 	models                          map[string]*backends.Model
 	options                         *options.Options
@@ -45,6 +46,7 @@ func newSession(backend string, opts ...options.WithOption) (*Session, error) {
 		zeroShotClassificationPipelines: map[string]*pipelines.ZeroShotClassificationPipeline{},
 		crossEncoderPipelines:           map[string]*pipelines.CrossEncoderPipeline{},
 		imageClassificationPipelines:    map[string]*pipelines.ImageClassificationPipeline{},
+		objectDetectionPipelines:        map[string]*pipelines.ObjectDetectionPipeline{},
 		textGenerationPipelines:         map[string]*pipelines.TextGenerationPipeline{},
 		models:                          map[string]*backends.Model{},
 		options:                         parsedOptions,
@@ -102,6 +104,12 @@ type ImageClassificationConfig = backends.PipelineConfig[*pipelines.ImageClassif
 // ImageClassificationOption is an option for an image classification pipeline.
 type ImageClassificationOption = backends.PipelineOption[*pipelines.ImageClassificationPipeline]
 
+// ObjectDetectionConfig is the configuration for an object detection pipeline.
+type ObjectDetectionConfig = backends.PipelineConfig[*pipelines.ObjectDetectionPipeline]
+
+// ObjectDetectionOption is an option for an object detection pipeline.
+type ObjectDetectionOption = backends.PipelineOption[*pipelines.ObjectDetectionPipeline]
+
 // TextGenerationConfig is the configuration for a text generation pipeline.
 type TextGenerationConfig = backends.PipelineConfig[*pipelines.TextGenerationPipeline]
 
@@ -157,6 +165,8 @@ func NewPipeline[T backends.Pipeline](s *Session, pipelineConfig backends.Pipeli
 		s.crossEncoderPipelines[name] = typedPipeline
 	case *pipelines.ImageClassificationPipeline:
 		s.imageClassificationPipelines[name] = typedPipeline
+	case *pipelines.ObjectDetectionPipeline:
+		s.objectDetectionPipelines[name] = typedPipeline
 	case *pipelines.TextGenerationPipeline:
 		s.textGenerationPipelines[name] = typedPipeline
 	default:
@@ -218,6 +228,14 @@ func InitializePipeline[T backends.Pipeline](p T, pipelineConfig backends.Pipeli
 		}
 		pipeline = any(pipelineInitialised).(T)
 		name = config.Name
+	case *pipelines.ObjectDetectionPipeline:
+		config := any(pipelineConfig).(backends.PipelineConfig[*pipelines.ObjectDetectionPipeline])
+		pipelineInitialised, err := pipelines.NewObjectDetectionPipeline(config, options, model)
+		if err != nil {
+			return pipeline, name, err
+		}
+		pipeline = any(pipelineInitialised).(T)
+		name = config.Name
 	case *pipelines.TextGenerationPipeline:
 		config := any(pipelineConfig).(backends.PipelineConfig[*pipelines.TextGenerationPipeline])
 		pipelineInitialised, err := pipelines.NewTextGenerationPipeline(config, options, model)
@@ -270,6 +288,12 @@ func GetPipeline[T backends.Pipeline](s *Session, name string) (T, error) {
 		return any(p).(T), nil
 	case *pipelines.ImageClassificationPipeline:
 		p, ok := s.imageClassificationPipelines[name]
+		if !ok {
+			return pipeline, &pipelineNotFoundError{pipelineName: name}
+		}
+		return any(p).(T), nil
+	case *pipelines.ObjectDetectionPipeline:
+		p, ok := s.objectDetectionPipelines[name]
 		if !ok {
 			return pipeline, &pipelineNotFoundError{pipelineName: name}
 		}
@@ -348,6 +372,17 @@ func ClosePipeline[T backends.Pipeline](s *Session, name string) error {
 		if ok {
 			model := p.Model
 			delete(s.imageClassificationPipelines, name)
+			delete(model.Pipelines, name)
+			if len(model.Pipelines) == 0 {
+				delete(s.models, model.Path)
+				return model.Destroy()
+			}
+		}
+	case *pipelines.ObjectDetectionPipeline:
+		p, ok := s.objectDetectionPipelines[name]
+		if ok {
+			model := p.Model
+			delete(s.objectDetectionPipelines, name)
 			delete(model.Pipelines, name)
 			if len(model.Pipelines) == 0 {
 				delete(s.models, model.Path)

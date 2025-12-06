@@ -29,6 +29,7 @@ var models = []downloadModel{
 	{name: "KnightsAnalytics/roberta-base-go_emotions"},
 	{name: "KnightsAnalytics/jina-reranker-v1-tiny-en", onnxFilePath: "model.onnx"},
 	{name: "KnightsAnalytics/resnet50"},
+	{name: "Xenova/detr-resnet-50", onnxFilePath: "onnx/model.onnx"},
 	{name: "KnightsAnalytics/Phi-3.5-mini-instruct-onnx", onnxFilePath: "phi-3.5-mini-instruct-cpu-int4-awq-block-128-acc-level-4.onnx", externalDataPath: "phi-3.5-mini-instruct-cpu-int4-awq-block-128-acc-level-4.onnx.data"},
 }
 

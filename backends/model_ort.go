@@ -260,45 +260,9 @@ func createSingleCacheTensorORT(batchSize, numKeyValueHeads, maxSeqLen, headDim 
 }
 
 func runORTSessionOnBatch(batch *PipelineBatch, p *BasePipeline) error {
-	actualBatchSize := int64(batch.Size)
-	maxSequenceLength := int64(batch.MaxSequenceLength)
 	var err error
 
-	// allocate vectors with right dimensions for the output
 	outputTensors := make([]ort.Value, len(p.Model.OutputsMeta))
-	defer func() {
-		for _, output := range outputTensors {
-			err = errors.Join(err, output.Destroy())
-		}
-	}()
-
-	for outputIndex, meta := range p.Model.OutputsMeta {
-		var batchDimSet bool
-		var tokenDimSet bool
-		actualDims := make([]int64, 0, len(meta.Dimensions))
-
-		for _, dim := range meta.Dimensions {
-			if dim == -1 {
-				if !batchDimSet {
-					actualDims = append(actualDims, actualBatchSize)
-					batchDimSet = true
-				} else if !tokenDimSet {
-					actualDims = append(actualDims, maxSequenceLength)
-					tokenDimSet = true
-				} else {
-					return fmt.Errorf("only two axis can be dynamic (batch size and number of tokens)")
-				}
-			} else {
-				actualDims = append(actualDims, dim)
-			}
-		}
-		outputShape := ort.NewShape(actualDims...)
-		outputTensors[outputIndex], err = ort.NewEmptyTensor[float32](outputShape)
-		if err != nil {
-			return err
-		}
-	}
-
 	errOnnx := p.Model.ORTModel.Session.Run(batch.InputValues.([]ort.Value), outputTensors)
 	if errOnnx != nil {
 		return errOnnx
@@ -461,30 +425,109 @@ func convertORTInputOutputs(inputOutputs []ort.InputOutputInfo) []InputOutputInf
 	return inputOutputsStandardised
 }
 
-func createImageTensorsORT(batch *PipelineBatch, preprocessed [][][][]float32) error {
+func createImageTensorsORT(batch *PipelineBatch, model *Model, preprocessed [][][][]float32) error {
 	if len(preprocessed) == 0 {
 		return errors.New("no preprocessed images provided")
 	}
+
 	n, c, h, w := len(preprocessed), len(preprocessed[0]), len(preprocessed[0][0]), len(preprocessed[0][0][0])
-	backing := make([]float32, n*c*h*w)
+	imgBacking := make([]float32, n*c*h*w)
 	idx := 0
 	for i := range n {
 		for ch := range c {
 			for y := range h {
 				for x := range w {
-					backing[idx] = preprocessed[i][ch][y][x]
+					imgBacking[idx] = preprocessed[i][ch][y][x]
 					idx++
 				}
 			}
 		}
 	}
-	tensor, err := ort.NewTensor(ort.NewShape(int64(n), int64(c), int64(h), int64(w)), backing)
+	imgTensor, err := ort.NewTensor(ort.NewShape(int64(n), int64(c), int64(h), int64(w)), imgBacking)
 	if err != nil {
 		return err
 	}
-	batch.InputValues = []ort.Value{tensor}
+
+	// Prepare inputs slice according to model input metadata order.
+	values := make([]ort.Value, len(model.InputsMeta))
+	destroyers := make([]func() error, 0, len(values))
+
+	// Helper to infer mask dims
+	inferMaskDims := func(s Shape) (int64, int64) {
+		// Try to find known H and W; fallback to image h,w
+		var mh, mw int64
+		if len(s) >= 2 {
+			for _, d := range s {
+				if d > 1 && mh == 0 {
+					mh = d
+					continue
+				}
+				if d > 1 && mh != 0 && mw == 0 {
+					mw = d
+					break
+				}
+			}
+		}
+		if mh == 0 || mw == 0 {
+			mh, mw = int64(h), int64(w)
+		}
+		return mh, mw
+	}
+
+	for i, meta := range model.InputsMeta {
+		lower := strings.ToLower(meta.Name)
+		if strings.Contains(lower, "mask") {
+			// Build pixel_mask tensor of ones using int64 dtype, shape [n, H, W] or [n,1,H,W] depending on meta.
+			mh, mw := inferMaskDims(meta.Dimensions)
+			// Default to 3D [n,H,W]
+			shape := []int64{int64(n), mh, mw}
+			if len(meta.Dimensions) == 4 {
+				// Some models expect [n,1,H,W]
+				shape = []int64{int64(n), 1, mh, mw}
+			}
+			maskSize := 1
+			for _, d := range shape {
+				maskSize *= int(d)
+			}
+			maskBacking := make([]int64, maskSize)
+			for j := range maskBacking {
+				maskBacking[j] = 1
+			}
+			maskTensor, mErr := ort.NewTensor(ort.NewShape(shape...), maskBacking)
+			if mErr != nil {
+				// If creating 4D fails, try 3D fallback
+				if len(shape) == 4 {
+					shape = []int64{int64(n), mh, mw}
+					maskSize = int(shape[0] * shape[1] * shape[2])
+					maskBacking = make([]int64, maskSize)
+					for j := range maskBacking {
+						maskBacking[j] = 1
+					}
+					maskTensor, mErr = ort.NewTensor(ort.NewShape(shape...), maskBacking)
+				}
+				if mErr != nil {
+					return mErr
+				}
+			}
+			values[i] = maskTensor
+			destroyers = append(destroyers, maskTensor.Destroy)
+		} else {
+			values[i] = imgTensor
+			// Only destroy once; avoid double-destroy if multiple inputs map to same tensor
+		}
+	}
+	// If only one input, just that tensor
+	if len(values) == 1 {
+		values[0] = imgTensor
+	}
+	batch.InputValues = values
 	batch.DestroyInputs = func() error {
-		return tensor.Destroy()
+		var agg error
+		agg = errors.Join(agg, imgTensor.Destroy())
+		for _, d := range destroyers {
+			agg = errors.Join(agg, d())
+		}
+		return agg
 	}
 	return nil
 }
