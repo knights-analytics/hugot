@@ -391,6 +391,7 @@ func (s *Session) GetStatistics() []backends.PipelineStatistics {
 		s.tokenClassificationPipelines.GetStatistics(),
 		s.textClassificationPipelines.GetStatistics(),
 		s.featureExtractionPipelines.GetStatistics(),
+		s.imageClassificationPipelines.GetStatistics(),
 		s.zeroShotClassificationPipelines.GetStatistics(),
 		s.crossEncoderPipelines.GetStatistics(),
 		s.textGenerationPipelines.GetStatistics(),
@@ -408,6 +409,7 @@ func (s *Session) Destroy() error {
 	s.featureExtractionPipelines = nil
 	s.tokenClassificationPipelines = nil
 	s.textClassificationPipelines = nil
+	s.imageClassificationPipelines = nil
 	s.zeroShotClassificationPipelines = nil
 	s.textGenerationPipelines = nil
 	s.crossEncoderPipelines = nil
