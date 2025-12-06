@@ -5,6 +5,7 @@ import (
 	"image/color"
 	"testing"
 
+	"github.com/knights-analytics/hugot/backends"
 	"github.com/knights-analytics/hugot/util/imageutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -14,15 +15,14 @@ func TestImagePreprocessing(t *testing.T) {
 	// Create a simple test image (10x10 red image)
 	img := image.NewRGBA(image.Rect(0, 0, 10, 10))
 	red := color.RGBA{R: 255, A: 255}
-	for y := 0; y < 10; y++ {
-		for x := 0; x < 10; x++ {
+	for y := range 10 {
+		for x := range 10 {
 			img.Set(x, y, red)
 		}
 	}
 
 	// Create a pipeline with image mode (without a model, just for preprocessing test)
 	pipeline := &FeatureExtractionPipeline{
-		ImageMode:   true,
 		imageFormat: "NCHW",
 		preprocessSteps: []imageutil.PreprocessStep{
 			imageutil.ResizeStep(5), // resize to 5x5
@@ -35,7 +35,7 @@ func TestImagePreprocessing(t *testing.T) {
 
 	// Test preprocessing
 	images := []image.Image{img}
-	tensors, err := pipeline.preprocessImages(images)
+	tensors, err := backends.PreprocessImages(pipeline.imageFormat, images, pipeline.preprocessSteps, pipeline.normalizationSteps)
 	require.NoError(t, err)
 	require.Len(t, tensors, 1)
 
@@ -55,14 +55,13 @@ func TestImagePreprocessingNHWC(t *testing.T) {
 	// Create a simple test image (10x10 green image)
 	img := image.NewRGBA(image.Rect(0, 0, 10, 10))
 	green := color.RGBA{G: 255, A: 255}
-	for y := 0; y < 10; y++ {
-		for x := 0; x < 10; x++ {
+	for y := range 10 {
+		for x := range 10 {
 			img.Set(x, y, green)
 		}
 	}
 
 	pipeline := &FeatureExtractionPipeline{
-		ImageMode:   true,
 		imageFormat: "NHWC",
 		preprocessSteps: []imageutil.PreprocessStep{
 			imageutil.CenterCropStep(5, 5),
@@ -73,7 +72,7 @@ func TestImagePreprocessingNHWC(t *testing.T) {
 	}
 
 	images := []image.Image{img}
-	tensors, err := pipeline.preprocessImages(images)
+	tensors, err := backends.PreprocessImages(pipeline.imageFormat, images, pipeline.preprocessSteps, pipeline.normalizationSteps)
 	require.NoError(t, err)
 	require.Len(t, tensors, 1)
 
@@ -96,7 +95,6 @@ func TestCLIPNormalization(t *testing.T) {
 	img.Set(0, 0, white)
 
 	pipeline := &FeatureExtractionPipeline{
-		ImageMode:   true,
 		imageFormat: "NCHW",
 		normalizationSteps: []imageutil.NormalizationStep{
 			imageutil.RescaleStep(),                // 255 -> 1.0
@@ -105,7 +103,7 @@ func TestCLIPNormalization(t *testing.T) {
 	}
 
 	images := []image.Image{img}
-	tensors, err := pipeline.preprocessImages(images)
+	tensors, err := backends.PreprocessImages(pipeline.imageFormat, images, pipeline.preprocessSteps, pipeline.normalizationSteps)
 	require.NoError(t, err)
 
 	// After CLIP normalization of white (1.0, 1.0, 1.0):
@@ -121,7 +119,7 @@ func TestCLIPNormalization(t *testing.T) {
 func TestImageModeValidation(t *testing.T) {
 	// RunWithImages should fail if ImageMode is not enabled
 	pipeline := &FeatureExtractionPipeline{
-		ImageMode: false,
+		imageMode: false,
 	}
 
 	img := image.NewRGBA(image.Rect(0, 0, 10, 10))
@@ -135,21 +133,20 @@ func TestWithImageModeOption(t *testing.T) {
 
 	err := WithImageMode()(pipeline)
 	require.NoError(t, err)
-	assert.True(t, pipeline.ImageMode)
+	assert.True(t, pipeline.imageMode)
 }
 
 func TestWithImageFormatOption(t *testing.T) {
 	pipeline := &FeatureExtractionPipeline{}
 
-	err := WithImageFormat("NHWC")(pipeline)
+	err := WithNHWCFormat[*FeatureExtractionPipeline]()(pipeline)
 	require.NoError(t, err)
 	assert.Equal(t, "NHWC", pipeline.imageFormat)
 }
 
 func TestWithImagePreprocessStepsOption(t *testing.T) {
 	pipeline := &FeatureExtractionPipeline{}
-
-	err := WithImagePreprocessSteps(
+	err := WithPreprocessSteps[*FeatureExtractionPipeline](
 		imageutil.ResizeStep(224),
 		imageutil.CenterCropStep(224, 224),
 	)(pipeline)
@@ -159,8 +156,7 @@ func TestWithImagePreprocessStepsOption(t *testing.T) {
 
 func TestWithImageNormalizationStepsOption(t *testing.T) {
 	pipeline := &FeatureExtractionPipeline{}
-
-	err := WithImageNormalizationSteps(
+	err := WithNormalizationSteps[*FeatureExtractionPipeline](
 		imageutil.RescaleStep(),
 		imageutil.CLIPPixelNormalizationStep(),
 	)(pipeline)

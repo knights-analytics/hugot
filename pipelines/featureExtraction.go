@@ -4,9 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"image"
-	_ "image/gif"  // adds gif support
-	_ "image/jpeg" // adds jpeg support
-	_ "image/png"  // adds png support
 	"strings"
 	"sync/atomic"
 	"time"
@@ -16,7 +13,6 @@ import (
 	"github.com/knights-analytics/hugot/util/imageutil"
 	"github.com/knights-analytics/hugot/util/safeconv"
 	"github.com/knights-analytics/hugot/util/vectorutil"
-	_ "golang.org/x/image/webp" // adds webp support
 )
 
 // FeatureExtractionPipeline A feature extraction pipeline is a go version of
@@ -30,7 +26,7 @@ type FeatureExtractionPipeline struct {
 	Normalization bool
 
 	// Image mode fields (for vision encoders like CLIP visual)
-	ImageMode          bool // true if this is a vision model
+	imageMode          bool // true if this is a vision model
 	imageFormat        string
 	preprocessSteps    []imageutil.PreprocessStep
 	normalizationSteps []imageutil.NormalizationStep
@@ -45,6 +41,18 @@ func (t *FeatureExtractionOutput) GetOutput() []any {
 		out[i] = any(embedding)
 	}
 	return out
+}
+
+func (p *FeatureExtractionPipeline) addPreprocessSteps(steps ...imageutil.PreprocessStep) {
+	p.preprocessSteps = append(p.preprocessSteps, steps...)
+}
+
+func (p *FeatureExtractionPipeline) addNormalizationSteps(steps ...imageutil.NormalizationStep) {
+	p.normalizationSteps = append(p.normalizationSteps, steps...)
+}
+
+func (p *FeatureExtractionPipeline) setImageFormat(format string) {
+	p.imageFormat = format
 }
 
 // PIPELINE OPTIONS
@@ -70,32 +78,7 @@ func WithOutputName(outputName string) backends.PipelineOption[*FeatureExtractio
 // When enabled, the pipeline accepts images instead of text and skips tokenization.
 func WithImageMode() backends.PipelineOption[*FeatureExtractionPipeline] {
 	return func(pipeline *FeatureExtractionPipeline) error {
-		pipeline.ImageMode = true
-		return nil
-	}
-}
-
-// WithImagePreprocessSteps sets the image preprocessing steps (resize, crop, etc.).
-func WithImagePreprocessSteps(steps ...imageutil.PreprocessStep) backends.PipelineOption[*FeatureExtractionPipeline] {
-	return func(p *FeatureExtractionPipeline) error {
-		p.preprocessSteps = append(p.preprocessSteps, steps...)
-		return nil
-	}
-}
-
-// WithImageNormalizationSteps sets the pixel normalization steps (rescale, normalize).
-func WithImageNormalizationSteps(steps ...imageutil.NormalizationStep) backends.PipelineOption[*FeatureExtractionPipeline] {
-	return func(p *FeatureExtractionPipeline) error {
-		p.normalizationSteps = append(p.normalizationSteps, steps...)
-		return nil
-	}
-}
-
-// WithImageFormat sets the tensor format for image inputs.
-// Use "NCHW" (channels first, default) or "NHWC" (channels last).
-func WithImageFormat(format string) backends.PipelineOption[*FeatureExtractionPipeline] {
-	return func(pipeline *FeatureExtractionPipeline) error {
-		pipeline.imageFormat = format
+		pipeline.imageMode = true
 		return nil
 	}
 }
@@ -115,21 +98,12 @@ func NewFeatureExtractionPipeline(config backends.PipelineConfig[*FeatureExtract
 	}
 
 	// Set default image format if in image mode
-	if pipeline.ImageMode && pipeline.imageFormat == "" {
-		// Try to detect format from model inputs
-		if len(model.InputsMeta) > 0 {
-			shape := model.InputsMeta[0].Dimensions
-			if len(shape) == 4 {
-				if shape[1] == 3 && shape[3] != 3 {
-					pipeline.imageFormat = "NCHW"
-				} else if shape[3] == 3 {
-					pipeline.imageFormat = "NHWC"
-				}
-			}
+	if pipeline.imageMode && pipeline.imageFormat == "" {
+		detectedFormat, err := backends.DetectImageTensorFormat(model)
+		if err != nil {
+			return nil, err
 		}
-		if pipeline.imageFormat == "" {
-			pipeline.imageFormat = "NCHW" // default fallback
-		}
+		pipeline.imageFormat = detectedFormat
 	}
 
 	// filter outputs
@@ -192,14 +166,14 @@ func (p *FeatureExtractionPipeline) Validate() error {
 	var validationErrors []error
 
 	// Tokenizer is only required for text mode
-	if !p.ImageMode && p.Model.Tokenizer == nil {
+	if !p.imageMode && p.Model.Tokenizer == nil {
 		validationErrors = append(validationErrors, fmt.Errorf("feature extraction pipeline requires a tokenizer for text mode"))
 	}
 
 	for _, input := range p.Model.InputsMeta {
 		dims := []int64(input.Dimensions)
 		maxDims := 3
-		if p.ImageMode {
+		if p.imageMode {
 			maxDims = 4 // Image inputs are 4D: [batch, channels, height, width]
 		}
 		if len(dims) > maxDims {
@@ -275,7 +249,7 @@ func (p *FeatureExtractionPipeline) Postprocess(batch *backends.PipelineBatch) (
 func meanPooling(tokens [][]float32, input backends.TokenizedInput, maxSequence int, dimensions int) []float32 {
 	length := len(input.AttentionMask)
 	vector := make([]float32, dimensions)
-	for j := 0; j < maxSequence; j++ {
+	for j := range maxSequence {
 		// if there is no attention mask, take all tokens
 		if length == 0 || (j+1 <= length && input.AttentionMask[j] != 0) {
 			for k, vectorValue := range tokens[j] {
@@ -318,97 +292,18 @@ func (p *FeatureExtractionPipeline) RunPipeline(inputs []string) (*FeatureExtrac
 // IMAGE MODE METHODS
 
 // PreprocessImages converts images to input tensors for vision models.
-func (p *FeatureExtractionPipeline) PreprocessImages(batch *backends.PipelineBatch, images []image.Image) error {
-	preprocessed, err := p.preprocessImages(images)
+func (p *FeatureExtractionPipeline) PreprocessImages(batch *backends.PipelineBatch, inputs []image.Image) error {
+	preprocessed, err := backends.PreprocessImages(p.imageFormat, inputs, p.preprocessSteps, p.normalizationSteps)
 	if err != nil {
 		return fmt.Errorf("failed to preprocess images: %w", err)
 	}
-	return backends.CreateImageTensors(batch, preprocessed, p.Runtime)
-}
-
-// preprocessImages applies preprocessing steps and converts images to tensor format.
-func (p *FeatureExtractionPipeline) preprocessImages(images []image.Image) ([][][][]float32, error) {
-	batchSize := len(images)
-	out := make([][][][]float32, batchSize)
-
-	for i, img := range images {
-		processed := img
-
-		// Apply preprocessing steps (resize, crop, etc.)
-		for _, step := range p.preprocessSteps {
-			var err error
-			processed, err = step.Apply(processed)
-			if err != nil {
-				return nil, fmt.Errorf("failed to apply preprocessing step: %w", err)
-			}
-		}
-
-		hh := processed.Bounds().Dy()
-		ww := processed.Bounds().Dx()
-		c := 3
-
-		switch strings.ToUpper(p.imageFormat) {
-		case "NHWC":
-			// Height × Width × Channels
-			tensor := make([][][]float32, hh)
-			for y := range hh {
-				tensor[y] = make([][]float32, ww)
-				for x := range ww {
-					tensor[y][x] = make([]float32, c)
-				}
-			}
-			for y := range hh {
-				for x := range ww {
-					r, g, b, _ := processed.At(x, y).RGBA()
-					rf := float32(r >> 8)
-					gf := float32(g >> 8)
-					bf := float32(b >> 8)
-					for _, step := range p.normalizationSteps {
-						rf, gf, bf = step.Apply(rf, gf, bf)
-					}
-					tensor[y][x][0] = rf
-					tensor[y][x][1] = gf
-					tensor[y][x][2] = bf
-				}
-			}
-			out[i] = tensor
-
-		case "NCHW":
-			// Channels × Height × Width
-			tensor := make([][][]float32, c)
-			for ch := range c {
-				tensor[ch] = make([][]float32, hh)
-				for y := range hh {
-					tensor[ch][y] = make([]float32, ww)
-				}
-			}
-			for y := range hh {
-				for x := range ww {
-					r, g, b, _ := processed.At(x, y).RGBA()
-					rf := float32(r >> 8)
-					gf := float32(g >> 8)
-					bf := float32(b >> 8)
-					for _, step := range p.normalizationSteps {
-						rf, gf, bf = step.Apply(rf, gf, bf)
-					}
-					tensor[0][y][x] = rf
-					tensor[1][y][x] = gf
-					tensor[2][y][x] = bf
-				}
-			}
-			out[i] = tensor
-
-		default:
-			return nil, fmt.Errorf("unsupported image format: %s", p.imageFormat)
-		}
-	}
-	return out, nil
+	return backends.CreateImageTensors(batch, p.Model, preprocessed, p.Runtime)
 }
 
 // RunWithImages runs the pipeline on a batch of images (for vision models).
 // Use this method when ImageMode is enabled.
 func (p *FeatureExtractionPipeline) RunWithImages(images []image.Image) (*FeatureExtractionOutput, error) {
-	if !p.ImageMode {
+	if !p.imageMode {
 		return nil, fmt.Errorf("RunWithImages requires ImageMode to be enabled; use WithImageMode() option")
 	}
 

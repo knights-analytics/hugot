@@ -984,11 +984,11 @@ func imageClassificationPipeline(t *testing.T, session *Session) {
 		OnnxFilename: "squeezenet1.1.onnx",
 		Options: []ImageClassificationOption{
 			pipelines.WithTopK(3),
-			pipelines.WithPreprocessSteps(
+			pipelines.WithPreprocessSteps[*pipelines.ImageClassificationPipeline](
 				imageutil.ResizeStep(224),
 				imageutil.CenterCropStep(224, 224),
 			),
-			pipelines.WithNormalizationSteps(
+			pipelines.WithNormalizationSteps[*pipelines.ImageClassificationPipeline](
 				imageutil.ImagenetPixelNormalizationStep(),
 				imageutil.RescaleStep(),
 			),
@@ -1020,6 +1020,72 @@ func imageClassificationPipelineValidation(t *testing.T, session *Session) {
 	checkT(t, err)
 
 	pipeline.Model.InputsMeta[0].Dimensions = backends.NewShape(-1, -1, -1)
+
+	err = pipeline.Validate()
+	assert.Error(t, err)
+}
+
+// object detection
+
+func objectDetectionPipeline(t *testing.T, session *Session) {
+	t.Helper()
+
+	config := backends.PipelineConfig[*pipelines.ObjectDetectionPipeline]{
+		ModelPath: "./models/KnightsAnalytics_detr-resnet-50",
+		Name:      "testObjectDetection",
+		Options: []backends.PipelineOption[*pipelines.ObjectDetectionPipeline]{
+			pipelines.WithNCHWFormat[*pipelines.ObjectDetectionPipeline](),
+			pipelines.WithDetectionTopK(50),
+			pipelines.WithDetectionScoreThreshold(0.3),
+			pipelines.WithDetectionIouThreshold(0.5),
+		},
+	}
+
+	pipeline, err := NewPipeline(session, config)
+	checkT(t, err)
+
+	// Use a simple cat image similar to classification test style
+	inputs := []string{"models/imageData/cat.jpg"}
+	result, err := pipeline.RunPipeline(inputs)
+	checkT(t, err)
+
+	if len(result.Detections) == 0 || len(result.Detections[0]) == 0 {
+		t.Fatalf("no detections returned")
+	}
+	// Find a detection labeled cat (COCO index 15)
+	foundCat := false
+	for _, d := range result.Detections[0] {
+		if strings.EqualFold(d.Label, "cat") {
+			foundCat = true
+			// basic box sanity
+			if !(d.Box[0] >= 0 && d.Box[1] >= 0 && d.Box[2] > d.Box[0] && d.Box[3] > d.Box[1]) {
+				t.Fatalf("invalid box: %v", d.Box)
+			}
+			// score should be reasonable
+			if d.Score < 0.2 {
+				t.Fatalf("cat detection score too low: %.3f", d.Score)
+			}
+			break
+		}
+	}
+	if !foundCat {
+		// fall back to checking top detection label for debug
+		top := result.Detections[0][0]
+		t.Fatalf("expected a cat detection, top=%s score=%.3f", top.Label, top.Score)
+	}
+}
+
+func objectDetectionPipelineValidation(t *testing.T, session *Session) {
+	t.Helper()
+
+	config := backends.PipelineConfig[*pipelines.ObjectDetectionPipeline]{
+		ModelPath: "./models/KnightsAnalytics_detr-resnet-50",
+		Name:      "testObjectDetectionValidation",
+	}
+	pipeline, err := NewPipeline(session, config)
+	checkT(t, err)
+
+	pipeline.Model.OutputsMeta[0].Dimensions = backends.NewShape(-1, -1, -1)
 
 	err = pipeline.Validate()
 	assert.Error(t, err)
