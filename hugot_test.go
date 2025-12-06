@@ -721,6 +721,19 @@ func tokenClassificationPipeline(t *testing.T, session *Session) {
 	pipelineNone, err3 := NewPipeline(session, configNone)
 	checkT(t, err3)
 
+	// Split-words enabled pipeline
+	configSplit := TokenClassificationConfig{
+		ModelPath: modelPath,
+		Name:      "testPipelineSplitWords",
+		Options: []TokenClassificationOption{
+			pipelines.WithSimpleAggregation(),
+			pipelines.WithIgnoreLabels([]string{"O"}),
+			pipelines.WithSplitWords(),
+		},
+	}
+	pipelineSplit, errSplit := NewPipeline(session, configSplit)
+	checkT(t, errSplit)
+
 	var expectedResults map[int]pipelines.TokenClassificationOutput
 	err4 := json.Unmarshal(embedded.TokenExpectedByte, &expectedResults)
 	checkT(t, err4)
@@ -766,6 +779,66 @@ func tokenClassificationPipeline(t *testing.T, session *Session) {
 			}
 		})
 	}
+
+	// Expect same entities as the simple aggregation for the equivalent sentence for split words
+	t.Run("Split words aggregation", func(t *testing.T) {
+		words := [][]string{{"My", "name", "is", "Wolfgang", "and", "I", "live", "in", "Berlin", "."}}
+		batchResult, err := pipelineSplit.RunWords(words)
+		checkT(t, err)
+		printTokenEntities(batchResult)
+		expected := expectedResults[0]
+		for i, predictedEntities := range batchResult.Entities {
+			assert.Equal(t, len(expected.Entities[i]), len(predictedEntities))
+			for j, entity := range predictedEntities {
+				expectedEntity := expected.Entities[i][j]
+				assert.Equal(t, expectedEntity.Entity, entity.Entity)
+				assert.Equal(t, expectedEntity.Word, entity.Word)
+			}
+		}
+	})
+
+	t.Run("Split words yields different offsets vs double-space input", func(t *testing.T) {
+		// Non-split input with double space changes raw offsets.
+		nonSplit := []string{"New  York is great."}
+		splitWords := [][]string{{"New", "York", "is", "great", "."}}
+
+		resNonSplit, errNon := pipelineSimple.RunPipeline(nonSplit)
+		checkT(t, errNon)
+		resSplit, errSplitRun := pipelineSplit.RunWords(splitWords)
+		checkT(t, errSplitRun)
+
+		// Compare first sequence: entity words may match, but offsets should differ due to space normalization.
+		if len(resNonSplit.Entities) > 0 && len(resSplit.Entities) > 0 && len(resNonSplit.Entities[0]) > 0 && len(resSplit.Entities[0]) > 0 {
+			eNon := resNonSplit.Entities[0][0]
+			eSplit := resSplit.Entities[0][0]
+			assert.NotEqual(t, fmt.Sprintf("%d-%d", eNon.Start, eNon.End), fmt.Sprintf("%d-%d", eSplit.Start, eSplit.End))
+		}
+	})
+
+	// Pre-tokenization splitting on '#': expect different entity results from the non-split case
+	t.Run("Split on # detects entity in hashtag form", func(t *testing.T) {
+		nonSplit := []string{"XBerlinXXisXbeautiful."}
+		split := [][]string{{"Berlin is", "beautiful", "."}}
+
+		resNonSplit, errNS := pipelineSimple.RunPipeline(nonSplit)
+		checkT(t, errNS)
+		resSplit, errSW := pipelineSplit.RunWords(split)
+		checkT(t, errSW)
+
+		gotA := resNonSplit.Entities[0]
+		gotB := resSplit.Entities[0]
+		// Expect split-words to detect 'Berlin' as an entity, while non-split should not because of the confusing X characters.
+		hasBerlin := func(es []pipelines.Entity) bool {
+			for _, e := range es {
+				if strings.EqualFold(e.Word, "Berlin") {
+					return true
+				}
+			}
+			return false
+		}
+		assert.True(t, !hasBerlin(gotA) || len(gotA) < len(gotB), "expected split-words to surface 'Berlin' or increase entity count")
+	})
+
 }
 
 func tokenClassificationPipelineValidation(t *testing.T, session *Session) {

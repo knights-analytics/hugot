@@ -22,6 +22,7 @@ type TokenClassificationPipeline struct {
 	IDLabelMap          map[int]string
 	AggregationStrategy string
 	IgnoreLabels        []string
+	SplitWords          bool
 }
 type Entity struct {
 	Entity    string
@@ -95,6 +96,14 @@ func WithoutAggregation() backends.PipelineOption[*TokenClassificationPipeline] 
 func WithIgnoreLabels(ignoreLabels []string) backends.PipelineOption[*TokenClassificationPipeline] {
 	return func(pipeline *TokenClassificationPipeline) error {
 		pipeline.IgnoreLabels = ignoreLabels
+		return nil
+	}
+}
+
+// WithSplitWords enables word-level alignment like Hugging Face's is_split_into_words.
+func WithSplitWords() backends.PipelineOption[*TokenClassificationPipeline] {
+	return func(pipeline *TokenClassificationPipeline) error {
+		pipeline.SplitWords = true
 		return nil
 	}
 }
@@ -187,12 +196,88 @@ func (p *TokenClassificationPipeline) Validate() error {
 
 // Preprocess tokenizes the input strings.
 func (p *TokenClassificationPipeline) Preprocess(batch *backends.PipelineBatch, inputs []string) error {
+	if p.SplitWords {
+		return fmt.Errorf("split-words enabled: use RunWords/PreprocessWords for [][]string inputs")
+	}
 	start := time.Now()
 	backends.TokenizeInputs(batch, p.Model.Tokenizer, inputs)
 	atomic.AddUint64(&p.Model.Tokenizer.TokenizerTimings.NumCalls, 1)
 	atomic.AddUint64(&p.Model.Tokenizer.TokenizerTimings.TotalNS, safeconv.DurationToU64(time.Since(start)))
 	err := backends.CreateInputTensors(batch, p.Model, p.Runtime)
 	return err
+}
+
+// PreprocessWords tokenizes pre-split words and maps tokens to word IDs via offsets.
+func (p *TokenClassificationPipeline) PreprocessWords(batch *backends.PipelineBatch, inputs [][]string) error {
+	start := time.Now()
+	// Join words with single spaces to simulate pretokenized behavior
+	joined := make([]string, len(inputs))
+	wordBoundaries := make([][][2]uint, len(inputs))
+	// local helper to convert non-negative int to uint safely
+	toUintNonNeg := func(i int) uint {
+		if i < 0 {
+			return 0
+		}
+		return uint(i)
+	}
+	for i, words := range inputs {
+		joined[i] = strings.Join(words, " ")
+		// compute boundaries in joined string
+		var boundaries [][2]uint
+		pos := 0
+		for wIdx, w := range words {
+			startPos := pos
+			endPos := pos + len(w)
+			// clamp to non-negative and convert safely to uint
+			// ensure non-negative before converting to uint
+			if startPos < 0 {
+				startPos = 0
+			}
+			if endPos < 0 {
+				endPos = 0
+			}
+			boundaries = append(boundaries, [2]uint{toUintNonNeg(startPos), toUintNonNeg(endPos)})
+			// add one space after every word except last
+			if wIdx < len(words)-1 {
+				pos = endPos + 1
+			} else {
+				pos = endPos
+			}
+		}
+		wordBoundaries[i] = boundaries
+	}
+	backends.TokenizeInputs(batch, p.Model.Tokenizer, joined)
+	atomic.AddUint64(&p.Model.Tokenizer.TokenizerTimings.NumCalls, 1)
+	atomic.AddUint64(&p.Model.Tokenizer.TokenizerTimings.TotalNS, safeconv.DurationToU64(time.Since(start)))
+
+	// Map token offsets to word indices
+	for i := range batch.Input {
+		input := batch.Input[i]
+		boundaries := wordBoundaries[i]
+		wordIDs := make([]int, len(input.Offsets))
+		for t := range input.Offsets {
+			if input.SpecialTokensMask[t] > 0 {
+				wordIDs[t] = -1
+				continue
+			}
+			tokStart := input.Offsets[t][0]
+			tokEnd := input.Offsets[t][1]
+			id := -1
+			for w := range boundaries {
+				b := boundaries[w]
+				// assign if token lies within the word span
+				if tokStart >= b[0] && tokEnd <= b[1] {
+					id = w
+					break
+				}
+			}
+			wordIDs[t] = id
+		}
+		batch.Input[i].WordIDs = wordIDs
+		// also set raw to joined string for offsets consistency
+		batch.Input[i].Raw = joined[i]
+	}
+	return backends.CreateInputTensors(batch, p.Model, p.Runtime)
 }
 
 // Forward performs the forward inference of the pipeline.
@@ -265,6 +350,7 @@ func (p *TokenClassificationPipeline) GatherPreEntities(input backends.Tokenized
 		endInd := input.Offsets[j][1]
 		wordRef := sentence[startInd:endInd]
 		isSubword := len(word) != len(wordRef)
+		// In split-words mode, grouping will use offsets between tokens rather than IsSubword.
 		// TODO: check for unknown token here, it's in the config and can be loaded and compared with the token
 		// in that case set the subword as in the python code
 		preEntities = append(preEntities, Entity{
@@ -363,15 +449,29 @@ func (p *TokenClassificationPipeline) aggregateWords(entities []Entity) ([]Entit
 	for _, entity := range entities {
 		if len(wordGroup) == 0 {
 			wordGroup = []Entity{entity}
-		} else if entity.IsSubword {
-			wordGroup = append(wordGroup, entity)
-		} else {
+			continue
+		}
+		// Default behavior: group by IsSubword boundaries
+		groupBreak := !entity.IsSubword
+		if p.SplitWords {
+			// In split-words mode, we group by contiguous tokens of the same word boundary since we pretokenized.
+			// Since preEntities don’t carry word IDs directly, simulate grouping by contiguous offsets:
+			// break group if there is a gap between previous End and current Start (space) or heuristic non-subword.
+			// TODO: eventually we should export word IDs from the tokenizer to avoid this heuristic but the rust tokenizer bindings don't expose this yet
+			// and we also use other tokenizers in go backend.
+			prev := wordGroup[len(wordGroup)-1]
+			// if there is a gap in offsets consider it a new word
+			groupBreak = entity.Start > prev.End
+		}
+		if groupBreak {
 			aggregated, err := p.aggregateWord(wordGroup)
 			if err != nil {
 				return nil, err
 			}
 			wordEntities = append(wordEntities, aggregated)
 			wordGroup = []Entity{entity}
+		} else {
+			wordGroup = append(wordGroup, entity)
 		}
 	}
 	if len(wordGroup) > 0 {
@@ -513,6 +613,29 @@ func (p *TokenClassificationPipeline) RunPipeline(inputs []string) (*TokenClassi
 		runErrors = append(runErrors, batch.Destroy())
 	}(batch)
 	runErrors = append(runErrors, p.Preprocess(batch, inputs))
+	if e := errors.Join(runErrors...); e != nil {
+		return nil, e
+	}
+	runErrors = append(runErrors, p.Forward(batch))
+	if e := errors.Join(runErrors...); e != nil {
+		return nil, e
+	}
+	result, postErr := p.Postprocess(batch)
+	runErrors = append(runErrors, postErr)
+	return result, errors.Join(runErrors...)
+}
+
+// RunWords runs the pipeline for pre-split word inputs.
+// Each input is a slice of words representing a pretokenized sentence.
+// This is particularly useful when the user wants to control tokenization because of special tokens,
+// hashtags, or other domain-specific tokenization needs.
+func (p *TokenClassificationPipeline) RunWords(inputs [][]string) (*TokenClassificationOutput, error) {
+	var runErrors []error
+	batch := backends.NewBatch(len(inputs))
+	defer func(*backends.PipelineBatch) {
+		runErrors = append(runErrors, batch.Destroy())
+	}(batch)
+	runErrors = append(runErrors, p.PreprocessWords(batch, inputs))
 	if e := errors.Join(runErrors...); e != nil {
 		return nil, e
 	}
