@@ -3,7 +3,6 @@ package pipelines
 import (
 	"errors"
 	"fmt"
-	"math"
 	"sort"
 	"sync/atomic"
 	"time"
@@ -17,11 +16,11 @@ import (
 type CrossEncoderPipeline struct {
 	*backends.BasePipeline
 	scoreThreshold *float32
-	stats          CrossEncoderStats
+	statistics     CrossEncoderStatistics
 	batchSize      int
 	sortResults    bool
 }
-type CrossEncoderStats struct {
+type CrossEncoderStatistics struct {
 	TotalQueries     uint64
 	TotalDocuments   uint64
 	AverageLatency   time.Duration
@@ -104,27 +103,20 @@ func (p *CrossEncoderPipeline) GetMetadata() backends.PipelineMetadata {
 	}
 }
 
-func (p *CrossEncoderPipeline) GetStats() []string {
-	avgLatency := p.stats.AverageLatency
-	if p.stats.TotalQueries > 0 {
-		avgLatency = time.Duration(float64(p.stats.AverageLatency) / float64(p.stats.TotalQueries))
+func (p *CrossEncoderPipeline) GetStatistics() backends.PipelineStatistics {
+	avgLatency := p.statistics.AverageLatency
+	if p.statistics.TotalQueries > 0 {
+		avgLatency = time.Duration(float64(p.statistics.AverageLatency) / float64(p.statistics.TotalQueries))
 	}
-	return []string{
-		fmt.Sprintf("Statistics for pipeline: %s", p.PipelineName),
-		fmt.Sprintf("Total queries processed: %d", p.stats.TotalQueries),
-		fmt.Sprintf("Total documents scored: %d", p.stats.TotalDocuments),
-		fmt.Sprintf("Average latency per query: %s", avgLatency),
-		fmt.Sprintf("Average batch size: %.2f", p.stats.AverageBatchSize),
-		fmt.Sprintf("Filtered results: %d", p.stats.FilteredResults),
-		fmt.Sprintf("Tokenizer: Total time=%s, Execution count=%d, Average query time=%s",
-			safeconv.U64ToDuration(p.Model.Tokenizer.TokenizerTimings.TotalNS),
-			p.Model.Tokenizer.TokenizerTimings.NumCalls,
-			time.Duration(float64(p.Model.Tokenizer.TokenizerTimings.TotalNS)/math.Max(1, float64(p.Model.Tokenizer.TokenizerTimings.NumCalls)))),
-		fmt.Sprintf("ONNX: Total time=%s, Execution count=%d, Average query time=%s",
-			safeconv.U64ToDuration(p.PipelineTimings.TotalNS),
-			p.PipelineTimings.NumCalls,
-			time.Duration(float64(p.PipelineTimings.TotalNS)/math.Max(1, float64(p.PipelineTimings.NumCalls)))),
-	}
+	statistics := backends.PipelineStatistics{}
+	statistics.ComputeTokenizerStatistics(p.Model.Tokenizer.TokenizerTimings)
+	statistics.ComputeOnnxStatistics(p.PipelineTimings)
+	statistics.TotalQueries = p.statistics.TotalQueries
+	statistics.TotalDocuments = p.statistics.TotalDocuments
+	statistics.AverageLatency = avgLatency
+	statistics.AverageBatchSize = p.statistics.AverageBatchSize
+	statistics.FilteredResults = p.statistics.FilteredResults
+	return statistics
 }
 
 func (p *CrossEncoderPipeline) Validate() error {
@@ -237,7 +229,7 @@ func (p *CrossEncoderPipeline) Postprocess(batch *backends.PipelineBatch, docume
 	for i := range documents {
 		score := outputCast[i][0]
 		if p.scoreThreshold != nil && score < *p.scoreThreshold {
-			atomic.AddUint64(&p.stats.FilteredResults, 1)
+			atomic.AddUint64(&p.statistics.FilteredResults, 1)
 			continue
 		}
 		result := CrossEncoderResult{
@@ -263,9 +255,9 @@ func (p *CrossEncoderPipeline) RunPipeline(query string, documents []string) (*C
 	start := time.Now()
 	defer func() {
 		duration := time.Since(start)
-		p.stats.TotalQueries++
-		p.stats.TotalDocuments += uint64(len(documents))
-		p.stats.AverageLatency += duration
+		p.statistics.TotalQueries++
+		p.statistics.TotalDocuments += uint64(len(documents))
+		p.statistics.AverageLatency += duration
 	}()
 	var runErrors []error
 	allResults := make([]CrossEncoderResult, 0, len(documents))

@@ -58,12 +58,12 @@ func newSession(backend string, opts ...options.WithOption) (*Session, error) {
 
 type pipelineMap[T backends.Pipeline] map[string]T
 
-func (m pipelineMap[T]) GetStats() []string {
-	var stats []string
+func (m pipelineMap[T]) GetStatistics() []backends.PipelineStatistics {
+	var statistics []backends.PipelineStatistics
 	for _, p := range m {
-		stats = append(stats, p.GetStats()...)
+		statistics = append(statistics, p.GetStatistics())
 	}
-	return stats
+	return statistics
 }
 
 // FeatureExtractionConfig is the configuration for a feature extraction pipeline.
@@ -379,22 +379,31 @@ func (e *pipelineNotFoundError) Error() string {
 	return fmt.Sprintf("Pipeline with name %s not found", e.pipelineName)
 }
 
-// GetStats returns runtime statistics for all initialized pipelines for profiling purposes. We currently record for each pipeline:
+// GetStatistics returns runtime statistics for all initialized pipelines for profiling purposes. We currently record for each pipeline:
 // the total runtime of the tokenization step
 // the number of batch calls to the tokenization step
 // the average time per tokenization batch call
 // the total runtime of the inference (i.e. onnxruntime) step
 // the number of batch calls to the onnxruntime inference
 // the average time per onnxruntime inference batch call.
-func (s *Session) GetStats() []string {
+func (s *Session) GetStatistics() []backends.PipelineStatistics {
 	return slices.Concat(
-		s.tokenClassificationPipelines.GetStats(),
-		s.textClassificationPipelines.GetStats(),
-		s.featureExtractionPipelines.GetStats(),
-		s.zeroShotClassificationPipelines.GetStats(),
-		s.crossEncoderPipelines.GetStats(),
-		s.textGenerationPipelines.GetStats(),
+		s.tokenClassificationPipelines.GetStatistics(),
+		s.textClassificationPipelines.GetStatistics(),
+		s.featureExtractionPipelines.GetStatistics(),
+		s.imageClassificationPipelines.GetStatistics(),
+		s.zeroShotClassificationPipelines.GetStatistics(),
+		s.crossEncoderPipelines.GetStatistics(),
+		s.textGenerationPipelines.GetStatistics(),
 	)
+}
+
+// Print prints runtime statistics for all initialized pipelines to stdout.
+func (s *Session) PrintStatistics() {
+	statistics := s.GetStatistics()
+	for _, v := range statistics {
+		v.Print()
+	}
 }
 
 // Destroy deletes the hugot session and onnxruntime environment and all initialized pipelines, freeing memory.
@@ -408,6 +417,7 @@ func (s *Session) Destroy() error {
 	s.featureExtractionPipelines = nil
 	s.tokenClassificationPipelines = nil
 	s.textClassificationPipelines = nil
+	s.imageClassificationPipelines = nil
 	s.zeroShotClassificationPipelines = nil
 	s.textGenerationPipelines = nil
 	s.crossEncoderPipelines = nil

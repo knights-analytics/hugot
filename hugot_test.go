@@ -236,8 +236,8 @@ func textClassificationPipeline(t *testing.T, session *Session) {
 		}
 	})
 
-	// check get stats
-	session.GetStats()
+	// check PrintStatistics
+	session.PrintStatistics()
 }
 
 func textClassificationPipelineMulti(t *testing.T, session *Session) {
@@ -395,8 +395,11 @@ func textClassificationPipelineMulti(t *testing.T, session *Session) {
 		}
 	})
 
-	// check get stats
-	session.GetStats()
+	// check GetStatistics
+	statistics := session.GetStatistics()
+	for _, v := range statistics {
+		v.Print()
+	}
 }
 
 func textClassificationPipelineValidation(t *testing.T, session *Session) {

@@ -6,7 +6,6 @@ import (
 	"image"
 	_ "image/jpeg" // adds jpeg support to image
 	_ "image/png"  // adds png support to image
-	"math"
 	"sort"
 	"strings"
 	"sync/atomic"
@@ -147,14 +146,10 @@ func (p *ImageClassificationPipeline) GetMetadata() backends.PipelineMetadata {
 	}
 }
 
-func (p *ImageClassificationPipeline) GetStats() []string {
-	return []string{
-		fmt.Sprintf("Statistics for pipeline: %s", p.PipelineName),
-		fmt.Sprintf("ONNX: Total time=%s, Execution count=%d, Average query time=%s",
-			safeconv.U64ToDuration(p.PipelineTimings.TotalNS),
-			p.PipelineTimings.NumCalls,
-			time.Duration(float64(p.PipelineTimings.TotalNS)/math.Max(1, float64(p.PipelineTimings.NumCalls)))),
-	}
+func (p *ImageClassificationPipeline) GetStatistics() backends.PipelineStatistics {
+	statistics := backends.PipelineStatistics{}
+	statistics.ComputeOnnxStatistics(p.PipelineTimings)
+	return statistics
 }
 
 func (p *ImageClassificationPipeline) Validate() error {

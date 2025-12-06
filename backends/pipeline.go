@@ -1,10 +1,14 @@
 package backends
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
+	"time"
 
 	"github.com/knights-analytics/hugot/options"
+	"github.com/knights-analytics/hugot/util/safeconv"
 )
 
 // BasePipeline can be embedded by a pipeline.
@@ -53,11 +57,47 @@ type PipelineBatchOutput interface {
 
 // Pipeline is the interface that any pipeline must implement.
 type Pipeline interface {
-	GetStats() []string                        // Get the pipeline running stats
+	GetStatistics() PipelineStatistics         // Get the pipeline running statistics
 	Validate() error                           // Validate the pipeline for correctness
 	GetMetadata() PipelineMetadata             // Return metadata information for the pipeline
 	GetModel() *Model                          // Return the model used by the pipeline
 	Run([]string) (PipelineBatchOutput, error) // Run the pipeline on an input
+}
+
+type PipelineStatistics struct {
+	TokenizerTotalTime      time.Duration
+	TokenizerExecutionCount uint64
+	TokenizerAvgQueryTime   time.Duration
+	OnnxTotalTime           time.Duration
+	OnnxExecutionCount      uint64
+	OnnxAvgQueryTime        time.Duration
+	TotalQueries            uint64
+	TotalDocuments          uint64
+	AverageLatency          time.Duration
+	AverageBatchSize        float64
+	FilteredResults         uint64
+}
+
+func (p *PipelineStatistics) ComputeTokenizerStatistics(timings *timings) {
+	p.TokenizerTotalTime = safeconv.U64ToDuration(timings.TotalNS)
+	p.TokenizerExecutionCount = timings.NumCalls
+	p.TokenizerAvgQueryTime = time.Duration(float64(timings.TotalNS) /
+		math.Max(1, float64(timings.NumCalls)))
+}
+
+func (p *PipelineStatistics) ComputeOnnxStatistics(timings *timings) {
+	p.OnnxTotalTime = safeconv.U64ToDuration(timings.TotalNS)
+	p.OnnxExecutionCount = timings.NumCalls
+	p.OnnxAvgQueryTime = time.Duration(float64(timings.TotalNS) /
+		math.Max(1, float64(timings.NumCalls)))
+}
+
+func (p *PipelineStatistics) Print() {
+	jsonData, err := json.MarshalIndent(p, "", "  ")
+	if err != nil {
+		fmt.Println(err)
+	}
+	fmt.Println(string(jsonData))
 }
 
 // PipelineOption is an option for a pipeline type.
