@@ -3,7 +3,6 @@ package pipelines
 import (
 	"errors"
 	"fmt"
-	"math"
 	"sort"
 	"sync/atomic"
 	"time"
@@ -104,27 +103,20 @@ func (p *CrossEncoderPipeline) GetMetadata() backends.PipelineMetadata {
 	}
 }
 
-func (p *CrossEncoderPipeline) GetStats() []string {
+func (p *CrossEncoderPipeline) GetStatistics() backends.PipelineStatistics {
 	avgLatency := p.stats.AverageLatency
 	if p.stats.TotalQueries > 0 {
 		avgLatency = time.Duration(float64(p.stats.AverageLatency) / float64(p.stats.TotalQueries))
 	}
-	return []string{
-		fmt.Sprintf("Statistics for pipeline: %s", p.PipelineName),
-		fmt.Sprintf("Total queries processed: %d", p.stats.TotalQueries),
-		fmt.Sprintf("Total documents scored: %d", p.stats.TotalDocuments),
-		fmt.Sprintf("Average latency per query: %s", avgLatency),
-		fmt.Sprintf("Average batch size: %.2f", p.stats.AverageBatchSize),
-		fmt.Sprintf("Filtered results: %d", p.stats.FilteredResults),
-		fmt.Sprintf("Tokenizer: Total time=%s, Execution count=%d, Average query time=%s",
-			safeconv.U64ToDuration(p.Model.Tokenizer.TokenizerTimings.TotalNS),
-			p.Model.Tokenizer.TokenizerTimings.NumCalls,
-			time.Duration(float64(p.Model.Tokenizer.TokenizerTimings.TotalNS)/math.Max(1, float64(p.Model.Tokenizer.TokenizerTimings.NumCalls)))),
-		fmt.Sprintf("ONNX: Total time=%s, Execution count=%d, Average query time=%s",
-			safeconv.U64ToDuration(p.PipelineTimings.TotalNS),
-			p.PipelineTimings.NumCalls,
-			time.Duration(float64(p.PipelineTimings.TotalNS)/math.Max(1, float64(p.PipelineTimings.NumCalls)))),
-	}
+	statistics := backends.PipelineStatistics{}
+	backends.ComputeTokenizerStatistics(&statistics, p.Model.Tokenizer.TokenizerTimings)
+	backends.ComputeOnnxStatistics(&statistics, p.PipelineTimings)
+	statistics.TotalQueries = p.stats.TotalQueries
+	statistics.TotalDocuments = p.stats.TotalDocuments
+	statistics.AverageLatency = avgLatency
+	statistics.AverageBatchSize = p.stats.AverageBatchSize
+	statistics.FilteredResults = p.stats.FilteredResults
+	return statistics
 }
 
 func (p *CrossEncoderPipeline) Validate() error {
