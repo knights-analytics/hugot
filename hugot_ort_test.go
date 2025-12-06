@@ -310,6 +310,49 @@ func TestImageClassificationPipelineValidationORT(t *testing.T) {
 	imageClassificationPipelineValidation(t, session)
 }
 
+// Object detection
+
+func TestObjectDetectionPipelineORT(t *testing.T) {
+	opts := []options.WithOption{options.WithOnnxLibraryPath(onnxRuntimeSharedLibrary)}
+	session, err := NewORTSession(opts...)
+	checkT(t, err)
+	defer func(session *Session) {
+		destroyErr := session.Destroy()
+		checkT(t, destroyErr)
+	}(session)
+	objectDetectionPipeline(t, session)
+}
+
+func TestObjectDetectionPipelineORTCuda(t *testing.T) {
+	if os.Getenv("CI") != "" {
+		t.SkipNow()
+	}
+	opts := []options.WithOption{
+		options.WithOnnxLibraryPath("/usr/lib64/onnxruntime-gpu/libonnxruntime.so"),
+		options.WithCuda(map[string]string{
+			"device_id": "0",
+		}),
+	}
+	session, err := NewORTSession(opts...)
+	checkT(t, err)
+	defer func(session *Session) {
+		destroyErr := session.Destroy()
+		checkT(t, destroyErr)
+	}(session)
+	objectDetectionPipeline(t, session)
+}
+
+func TestObjectDetectionPipelineValidationORT(t *testing.T) {
+	opts := []options.WithOption{options.WithOnnxLibraryPath(onnxRuntimeSharedLibrary)}
+	session, err := NewORTSession(opts...)
+	checkT(t, err)
+	defer func(session *Session) {
+		destroyErr := session.Destroy()
+		checkT(t, destroyErr)
+	}(session)
+	objectDetectionPipelineValidation(t, session)
+}
+
 // Text generation
 
 func TestTextGenerationPipelineORT(t *testing.T) {

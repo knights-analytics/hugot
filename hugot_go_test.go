@@ -151,6 +151,30 @@ func TestImageClassificationPipelineValidationGo(t *testing.T) {
 	imageClassificationPipelineValidation(t, session)
 }
 
+// Object detection
+
+func TestObjectDetectionPipelineGo(t *testing.T) {
+	t.Skip("Currently fails due to unsupported constant in XLA backend")
+	session, err := NewGoSession()
+	checkT(t, err)
+	defer func(session *Session) {
+		destroyErr := session.Destroy()
+		checkT(t, destroyErr)
+	}(session)
+	objectDetectionPipeline(t, session)
+}
+
+func TestObjectDetectionPipelineValidationGo(t *testing.T) {
+	t.Skip("Currently fails due to unsupported constant in XLA backend")
+	session, err := NewGoSession()
+	checkT(t, err)
+	defer func(session *Session) {
+		destroyErr := session.Destroy()
+		checkT(t, destroyErr)
+	}(session)
+	objectDetectionPipelineValidation(t, session)
+}
+
 // text generation
 // func TestTextGenerationPipelineGo(t *testing.T) {
 // 	session, err := NewGoSession()

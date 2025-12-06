@@ -588,17 +588,17 @@ func (goMLXModel *GoMLXModel) Save(w io.Writer) error {
 	return nil
 }
 
-func createImageTensorsGoXLA(batch *PipelineBatch, preprocessed [][][][]float32) error {
+func createImageTensorsGoXLA(batch *PipelineBatch, model *Model, preprocessed [][][][]float32) error {
 	if len(preprocessed) == 0 {
 		return errors.New("no preprocessed images provided")
 	}
 	n, c, h, w := len(preprocessed), len(preprocessed[0]), len(preprocessed[0][0]), len(preprocessed[0][0][0])
 	backing := make([]float32, n*c*h*w)
 	idx := 0
-	for i := range preprocessed {
-		for ch := range preprocessed[i] {
-			for y := range preprocessed[i][ch] {
-				for x := range preprocessed[i][ch][y] {
+	for i := range n {
+		for ch := range c {
+			for y := range h {
+				for x := range w {
 					backing[idx] = preprocessed[i][ch][y][x]
 					idx++
 				}
@@ -606,6 +606,47 @@ func createImageTensorsGoXLA(batch *PipelineBatch, preprocessed [][][][]float32)
 		}
 	}
 	inputTensors := []*tensors.Tensor{tensors.FromFlatDataAndDimensions(backing, n, c, h, w)}
+
+	// Optionally add pixel_mask as ones if required by model.
+	if len(model.InputsMeta) > 1 {
+		for _, meta := range model.InputsMeta {
+			lower := strings.ToLower(meta.Name)
+			if strings.Contains(lower, "mask") {
+				// Infer mask dims
+				var mh, mw int
+				for _, d := range meta.Dimensions {
+					if d > 1 && mh == 0 {
+						mh = int(d)
+						continue
+					}
+					if d > 1 && mh != 0 && mw == 0 {
+						mw = int(d)
+						break
+					}
+				}
+				if mh == 0 || mw == 0 {
+					mh, mw = h, w
+				}
+				// Default to 3D [n,H,W]; if meta has 4 dims, use [n,1,H,W]
+				var maskTensor *tensors.Tensor
+				if len(meta.Dimensions) == 4 {
+					maskBacking := make([]int64, n*1*mh*mw)
+					for i := range maskBacking {
+						maskBacking[i] = 1
+					}
+					maskTensor = tensors.FromFlatDataAndDimensions(maskBacking, n, 1, mh, mw)
+				} else {
+					maskBacking := make([]int64, n*mh*mw)
+					for i := range maskBacking {
+						maskBacking[i] = 1
+					}
+					maskTensor = tensors.FromFlatDataAndDimensions(maskBacking, n, mh, mw)
+				}
+				inputTensors = append(inputTensors, maskTensor)
+				break
+			}
+		}
+	}
 	batch.InputValues = inputTensors
 	batch.DestroyInputs = func() error {
 		var err error

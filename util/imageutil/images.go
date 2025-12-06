@@ -4,7 +4,12 @@ import (
 	"bytes"
 	"image"
 
+	_ "image/gif"  // adds gif support
+	_ "image/jpeg" // adds jpeg support
+	_ "image/png"  // adds png support
+
 	"github.com/knights-analytics/hugot/util/fileutil"
+	_ "golang.org/x/image/webp" // adds webp support
 )
 
 func LoadImagesFromPaths(paths []string) ([]image.Image, error) {
@@ -124,8 +129,8 @@ func RescaleStep() *RescalePreprocessor {
 func resizeImage(img image.Image, newW, newH int) image.Image {
 	dst := image.NewRGBA(image.Rect(0, 0, newW, newH))
 	srcBounds := img.Bounds()
-	for y := 0; y < newH; y++ {
-		for x := 0; x < newW; x++ {
+	for y := range newH {
+		for x := range newW {
 			srcX := srcBounds.Min.X + x*srcBounds.Dx()/newW
 			srcY := srcBounds.Min.Y + y*srcBounds.Dy()/newH
 			dst.Set(x, y, img.At(srcX, srcY))
