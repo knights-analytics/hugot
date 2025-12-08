@@ -4,7 +4,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
-## [0.5.9] - 2025-11-22
+## [0.5.10] - 2025-12-08
+
+### Breaking changes
+
+- breaking: GetStatistics on a session returns a map of pipeline name to statistics object
+
+## [0.5.9] - 2025-12-08
 
 ### Breaking changes
 
