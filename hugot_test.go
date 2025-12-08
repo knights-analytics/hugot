@@ -397,7 +397,8 @@ func textClassificationPipelineMulti(t *testing.T, session *Session) {
 
 	// check GetStatistics
 	statistics := session.GetStatistics()
-	for _, v := range statistics {
+	for m, v := range statistics {
+		fmt.Printf("pipeline statistics for: %s\n", m)
 		v.Print()
 	}
 }

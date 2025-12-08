@@ -3,7 +3,7 @@ package hugot
 import (
 	"errors"
 	"fmt"
-	"slices"
+	"maps"
 
 	"github.com/knights-analytics/hugot/backends"
 	"github.com/knights-analytics/hugot/options"
@@ -58,10 +58,10 @@ func newSession(backend string, opts ...options.WithOption) (*Session, error) {
 
 type pipelineMap[T backends.Pipeline] map[string]T
 
-func (m pipelineMap[T]) GetStatistics() []backends.PipelineStatistics {
-	var statistics []backends.PipelineStatistics
-	for _, p := range m {
-		statistics = append(statistics, p.GetStatistics())
+func (m pipelineMap[T]) GetStatistics() map[string]backends.PipelineStatistics {
+	statistics := map[string]backends.PipelineStatistics{}
+	for pipelineName, p := range m {
+		statistics[pipelineName] = p.GetStatistics()
 	}
 	return statistics
 }
@@ -386,22 +386,23 @@ func (e *pipelineNotFoundError) Error() string {
 // the total runtime of the inference (i.e. onnxruntime) step
 // the number of batch calls to the onnxruntime inference
 // the average time per onnxruntime inference batch call.
-func (s *Session) GetStatistics() []backends.PipelineStatistics {
-	return slices.Concat(
-		s.tokenClassificationPipelines.GetStatistics(),
-		s.textClassificationPipelines.GetStatistics(),
-		s.featureExtractionPipelines.GetStatistics(),
-		s.imageClassificationPipelines.GetStatistics(),
-		s.zeroShotClassificationPipelines.GetStatistics(),
-		s.crossEncoderPipelines.GetStatistics(),
-		s.textGenerationPipelines.GetStatistics(),
-	)
+func (s *Session) GetStatistics() map[string]backends.PipelineStatistics {
+	statistics := map[string]backends.PipelineStatistics{}
+	maps.Copy(statistics, s.tokenClassificationPipelines.GetStatistics())
+	maps.Copy(statistics, s.textClassificationPipelines.GetStatistics())
+	maps.Copy(statistics, s.featureExtractionPipelines.GetStatistics())
+	maps.Copy(statistics, s.imageClassificationPipelines.GetStatistics())
+	maps.Copy(statistics, s.zeroShotClassificationPipelines.GetStatistics())
+	maps.Copy(statistics, s.crossEncoderPipelines.GetStatistics())
+	maps.Copy(statistics, s.textGenerationPipelines.GetStatistics())
+	return statistics
 }
 
 // Print prints runtime statistics for all initialized pipelines to stdout.
 func (s *Session) PrintStatistics() {
 	statistics := s.GetStatistics()
-	for _, v := range statistics {
+	for pipelineName, v := range statistics {
+		fmt.Printf("Statistics for pipeline %s:\n", pipelineName)
 		v.Print()
 	}
 }
