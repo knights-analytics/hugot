@@ -4,6 +4,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
+## [0.5.9] - 2025-11-22
+
+### Breaking changes
+
+- breaking: GetStatistics now returns a Statistics struct for the pipelines rather than a list of strings
+- breaking: pipelineBackends has been renamed to backends
+
+### Changes
+
+- update of onnxruntime_go, goMLX, gopjrt
+
+### Improvements
+
+- support splitIntoWords for tokenClassificationPipeline
+
 ## [0.5.8] - 2025-11-22
 
 ### Changed
