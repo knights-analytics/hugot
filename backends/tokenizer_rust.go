@@ -44,6 +44,9 @@ func getRustTokenizerOptions(inputs []InputOutputInfo) ([]tokenizers.EncodeOptio
 			encodeOptions = append(encodeOptions, tokenizers.WithReturnAttentionMask())
 		case "position_ids":
 			continue
+		// GLiNER-specific inputs - handled by the GLiNER pipeline
+		case "words_mask", "text_lengths", "span_idx", "span_mask":
+			continue
 		default:
 			if strings.HasPrefix(input.Name, "past_key_values") {
 				// handled at model level

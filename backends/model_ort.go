@@ -131,11 +131,30 @@ func createInputTensorsORT(batch *PipelineBatch, model *Model) error {
 	padLeft := len(model.EosTokenIDs) > 0
 	batchSize := batch.Size
 	maxSequenceLength := batch.MaxSequenceLength
+
+	// Check if model has fixed input shapes. Models exported with no_dynamic_axes=True
+	// (e.g., via Optimum) have positive dimension values and require inputs padded to
+	// exact dimensions. Dynamic models use -1 to indicate variable dimensions.
+	fixedShape := GetFixedShapeFromInputs(model.InputsMeta)
+	if fixedShape.HasFixedShape {
+		// Validate that input doesn't exceed fixed dimensions
+		if batch.Size > fixedShape.BatchSize {
+			return fmt.Errorf("batch size %d exceeds model's fixed batch size %d",
+				batch.Size, fixedShape.BatchSize)
+		}
+		if batch.MaxSequenceLength > fixedShape.SequenceLength {
+			return fmt.Errorf("input sequence length %d exceeds model's fixed sequence length %d",
+				batch.MaxSequenceLength, fixedShape.SequenceLength)
+		}
+		batchSize = fixedShape.BatchSize
+		maxSequenceLength = fixedShape.SequenceLength
+	}
+
 	total := batchSize * maxSequenceLength
 
 	// 1) prepare result containers - now we use all inputs, not filtering
 	inputVals := make([]ort.Value, len(model.InputsMeta))
-	masks := make([][]bool, batchSize)
+	masks := make([][]bool, batch.Size) // Use actual batch size for masks, not fixed batch size
 
 	// 2) build each tensor
 	for mi, meta := range model.InputsMeta {

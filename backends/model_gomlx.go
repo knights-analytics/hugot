@@ -195,12 +195,32 @@ func createInputTensorsGoMLX(batch *PipelineBatch, model *Model, padBatchDimensi
 	model.FixedCacheSize = 150
 
 	batchSize := batch.Size
-	if padBatchDimension {
-		batchSize = nextPowerOf2(batchSize)
-	}
 	maxSeqLength := batch.MaxSequenceLength
-	if padSequenceDimension && !leftPad {
-		maxSeqLength = nextPowerOf2(maxSeqLength)
+
+	// Check if model has fixed input shapes. Models exported with no_dynamic_axes=True
+	// (e.g., via Optimum) have positive dimension values and require inputs padded to
+	// exact dimensions. Dynamic models use -1 to indicate variable dimensions.
+	fixedShape := GetFixedShapeFromInputs(model.InputsMeta)
+	if fixedShape.HasFixedShape {
+		// Validate that input doesn't exceed fixed dimensions
+		if batch.Size > fixedShape.BatchSize {
+			return fmt.Errorf("batch size %d exceeds model's fixed batch size %d",
+				batch.Size, fixedShape.BatchSize)
+		}
+		if batch.MaxSequenceLength > fixedShape.SequenceLength {
+			return fmt.Errorf("input sequence length %d exceeds model's fixed sequence length %d",
+				batch.MaxSequenceLength, fixedShape.SequenceLength)
+		}
+		batchSize = fixedShape.BatchSize
+		maxSeqLength = fixedShape.SequenceLength
+	} else {
+		// Dynamic shape model: apply power-of-2 padding for efficiency
+		if padBatchDimension {
+			batchSize = nextPowerOf2(batchSize)
+		}
+		if padSequenceDimension && !leftPad {
+			maxSeqLength = nextPowerOf2(maxSeqLength)
+		}
 	}
 	total := batchSize * maxSeqLength
 

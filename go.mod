@@ -1,6 +1,10 @@
 module github.com/knights-analytics/hugot
 
-go 1.24.0
+go 1.24.3
+
+replace github.com/gomlx/gomlx => github.com/timkaye11/gomlx v0.0.0-20251203001453-fb44098d61ca
+
+replace github.com/gomlx/onnx-gomlx => github.com/timkaye11/onnx-gomlx v0.0.0-20251203001838-769159b6c736
 
 require (
 	github.com/daulet/tokenizers v1.24.0
@@ -35,7 +39,8 @@ require (
 	github.com/x448/float16 v0.8.4 // indirect
 	golang.org/x/crypto v0.45.0 // indirect
 	golang.org/x/exp v0.0.0-20251125195548-87e1e737ad39 // indirect
-	golang.org/x/sys v0.38.0 // indirect
+	golang.org/x/sys v0.39.0 // indirect
+	golang.org/x/term v0.38.0 // indirect
 	golang.org/x/text v0.31.0 // indirect
 	google.golang.org/protobuf v1.36.10 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
