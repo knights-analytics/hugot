@@ -108,7 +108,9 @@ func createGoMLXModelBackend(model *Model, options *options.Options) error {
 	}
 
 	config := "go"
-	if options.GoMLXOptions.Cuda {
+	if options.GoMLXOptions.TPU {
+		config = "xla:tpu"
+	} else if options.GoMLXOptions.Cuda {
 		config = "xla:cuda"
 	} else if options.GoMLXOptions.XLA {
 		config = "xla:cpu"
