@@ -41,6 +41,7 @@ type OrtOptions struct {
 type GoMLXOptions struct {
 	Cuda bool
 	XLA  bool
+	TPU  bool
 }
 
 // WithOption is the interface for all option functions.
@@ -168,6 +169,19 @@ func WithCuda(options map[string]string) WithOption {
 		default:
 			return fmt.Errorf("WithCuda is only supported for ORT or XLA backends")
 		}
+	}
+}
+
+// WithTPU (XLA only) Use this function to enable TPU acceleration for the XLA backend.
+// Requires libtpu.so to be available (pre-installed on GKE TPU nodes).
+// Set PJRT_PLUGIN_LIBRARY_PATH to the directory containing pjrt_plugin_tpu.so or libtpu.so.
+func WithTPU() WithOption {
+	return func(o *Options) error {
+		if o.Backend == "XLA" {
+			o.GoMLXOptions.TPU = true
+			return nil
+		}
+		return fmt.Errorf("WithTPU is only supported for XLA backend")
 	}
 }
 
