@@ -398,7 +398,7 @@ func (s *Session) GetStatistics() map[string]backends.PipelineStatistics {
 	return statistics
 }
 
-// Print prints runtime statistics for all initialized pipelines to stdout.
+// PrintStatistics prints runtime statistics for all initialized pipelines to stdout.
 func (s *Session) PrintStatistics() {
 	statistics := s.GetStatistics()
 	for pipelineName, v := range statistics {
