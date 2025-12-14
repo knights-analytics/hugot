@@ -14,6 +14,7 @@ require (
 	github.com/urfave/cli/v3 v3.6.1
 	github.com/viant/afs v1.29.0
 	github.com/yalue/onnxruntime_go v1.24.0
+	golang.org/x/image v0.34.0
 )
 
 require (
@@ -36,7 +37,7 @@ require (
 	golang.org/x/crypto v0.45.0 // indirect
 	golang.org/x/exp v0.0.0-20251125195548-87e1e737ad39 // indirect
 	golang.org/x/sys v0.38.0 // indirect
-	golang.org/x/text v0.31.0 // indirect
+	golang.org/x/text v0.32.0 // indirect
 	google.golang.org/protobuf v1.36.10 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	k8s.io/klog/v2 v2.130.1 // indirect
