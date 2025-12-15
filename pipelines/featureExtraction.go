@@ -20,16 +20,15 @@ import (
 // It supports both text and image inputs for embedding extraction.
 type FeatureExtractionPipeline struct {
 	*backends.BasePipeline
-	OutputName    string
-	Output        backends.InputOutputInfo
-	OutputIndex   int // Record the index of the output selected, defaults to first (0)
-	Normalization bool
-
-	// Image mode fields (for vision encoders like CLIP visual)
-	imageMode          bool // true if this is a vision model
+	OutputName         string
 	imageFormat        string
+	Output             backends.InputOutputInfo
 	preprocessSteps    []imageutil.PreprocessStep
 	normalizationSteps []imageutil.NormalizationStep
+	OutputIndex        int // Record the index of the output selected, defaults to first (0)
+	Normalization      bool
+	// Image mode fields (for vision encoders like CLIP visual)
+	imageMode bool // true if this is a vision model
 }
 type FeatureExtractionOutput struct {
 	Embeddings [][]float32
@@ -56,7 +55,6 @@ func (p *FeatureExtractionPipeline) setImageFormat(format string) {
 }
 
 // PIPELINE OPTIONS
-
 // WithNormalization applies normalization to the mean pooled output of the feature pipeline.
 func WithNormalization() backends.PipelineOption[*FeatureExtractionPipeline] {
 	return func(pipeline *FeatureExtractionPipeline) error {
@@ -96,7 +94,6 @@ func NewFeatureExtractionPipeline(config backends.PipelineConfig[*FeatureExtract
 			return nil, err
 		}
 	}
-
 	// Set default image format if in image mode
 	if pipeline.imageMode && pipeline.imageFormat == "" {
 		detectedFormat, err := backends.DetectImageTensorFormat(model)
@@ -105,7 +102,6 @@ func NewFeatureExtractionPipeline(config backends.PipelineConfig[*FeatureExtract
 		}
 		pipeline.imageFormat = detectedFormat
 	}
-
 	// filter outputs
 	if pipeline.OutputName != "" {
 		for index, output := range model.OutputsMeta {
@@ -132,8 +128,7 @@ func NewFeatureExtractionPipeline(config backends.PipelineConfig[*FeatureExtract
 	return pipeline, nil
 }
 
-// INTERFACE IMPLEMENTATIONS
-
+// INTERFACE IMPLEMENTATIONS.
 func (p *FeatureExtractionPipeline) GetModel() *backends.Model {
 	return p.Model
 }
@@ -164,12 +159,10 @@ func (p *FeatureExtractionPipeline) GetStatistics() backends.PipelineStatistics 
 // Validate checks that the pipeline is valid.
 func (p *FeatureExtractionPipeline) Validate() error {
 	var validationErrors []error
-
 	// Tokenizer is only required for text mode
 	if !p.imageMode && p.Model.Tokenizer == nil {
 		validationErrors = append(validationErrors, fmt.Errorf("feature extraction pipeline requires a tokenizer for text mode"))
 	}
-
 	for _, input := range p.Model.InputsMeta {
 		dims := []int64(input.Dimensions)
 		maxDims := 3
@@ -290,7 +283,6 @@ func (p *FeatureExtractionPipeline) RunPipeline(inputs []string) (*FeatureExtrac
 }
 
 // IMAGE MODE METHODS
-
 // PreprocessImages converts images to input tensors for vision models.
 func (p *FeatureExtractionPipeline) PreprocessImages(batch *backends.PipelineBatch, inputs []image.Image) error {
 	preprocessed, err := backends.PreprocessImages(p.imageFormat, inputs, p.preprocessSteps, p.normalizationSteps)
@@ -306,23 +298,19 @@ func (p *FeatureExtractionPipeline) RunWithImages(images []image.Image) (*Featur
 	if !p.imageMode {
 		return nil, fmt.Errorf("RunWithImages requires ImageMode to be enabled; use WithImageMode() option")
 	}
-
 	var runErrors []error
 	batch := backends.NewBatch(len(images))
 	defer func(*backends.PipelineBatch) {
 		runErrors = append(runErrors, batch.Destroy())
 	}(batch)
-
 	runErrors = append(runErrors, p.PreprocessImages(batch, images))
 	if e := errors.Join(runErrors...); e != nil {
 		return nil, e
 	}
-
 	runErrors = append(runErrors, p.Forward(batch))
 	if e := errors.Join(runErrors...); e != nil {
 		return nil, e
 	}
-
 	result, postErr := p.Postprocess(batch)
 	runErrors = append(runErrors, postErr)
 	return result, errors.Join(runErrors...)

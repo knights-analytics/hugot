@@ -480,10 +480,12 @@ func createImageTensorsORT(batch *PipelineBatch, model *Model, preprocessed [][]
 			// Build pixel_mask tensor of ones using int64 dtype, shape [n, H, W] or [n,1,H,W] depending on meta.
 			mh, mw := inferMaskDims(meta.Dimensions)
 			// Default to 3D [n,H,W]
-			shape := []int64{int64(n), mh, mw}
+			var shape []int64
 			if len(meta.Dimensions) == 4 {
 				// Some models expect [n,1,H,W]
 				shape = []int64{int64(n), 1, mh, mw}
+			} else {
+				shape = []int64{int64(n), mh, mw}
 			}
 			maskSize := 1
 			for _, d := range shape {
@@ -498,7 +500,7 @@ func createImageTensorsORT(batch *PipelineBatch, model *Model, preprocessed [][]
 				// If creating 4D fails, try 3D fallback
 				if len(shape) == 4 {
 					shape = []int64{int64(n), mh, mw}
-					maskSize = int(shape[0] * shape[1] * shape[2])
+					maskSize = n * int(mh) * int(mw)
 					maskBacking = make([]int64, maskSize)
 					for j := range maskBacking {
 						maskBacking[j] = 1

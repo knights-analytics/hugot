@@ -1,6 +1,8 @@
 package hugot
 
 import (
+	_ "github.com/gomlx/gomlx/backends/simplego" // Import simplego backend
+
 	"github.com/knights-analytics/hugot/options"
 )
 

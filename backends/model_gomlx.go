@@ -4,8 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"regexp"
-	"sort"
 	"strconv"
 	"strings"
 
@@ -13,10 +11,8 @@ import (
 	"github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/context"
-	"github.com/gomlx/gopjrt/dtypes"
 	"github.com/gomlx/onnx-gomlx/onnx"
 
-	_ "github.com/gomlx/gomlx/backends/simplego" // Import simplego backend
 	"github.com/knights-analytics/hugot/options"
 	"github.com/knights-analytics/hugot/util/fileutil"
 )
@@ -128,10 +124,6 @@ func createGoMLXModelBackend(model *Model, options *options.Options) error {
 			inputsMap[inputMeta.Name] = inputs[i]
 		}
 		return modelParsed.CallGraph(ctx, inputs[0].Graph(), inputsMap, outputNames...)
-	}
-
-	if model.IsGenerative {
-		callFunc = createGenerativeCallFunc(model, modelParsed, outputNames)
 	}
 
 	exec, contextErr := context.NewExec(backend, ctx, callFunc)
@@ -324,209 +316,6 @@ func createInputTensorsGoMLX(batch *PipelineBatch, model *Model, padBatchDimensi
 func createSingleCacheTensorGoMLX(batchSize, numKeyValueHeads, maxSeqLen, headDim int) *tensors.Tensor {
 	return tensors.FromScalarAndDimensions(
 		float32(0), batchSize, numKeyValueHeads, maxSeqLen, headDim)
-}
-
-func sortedKeys(m map[string]*graph.Node) []string {
-	type kv struct {
-		key   string
-		index int
-	}
-
-	re := regexp.MustCompile(`past_key_values\.(\d+)\.`)
-
-	kvs := make([]kv, 0, len(m))
-	for k := range m {
-		match := re.FindStringSubmatch(k)
-		if len(match) != 2 {
-			continue
-		}
-		num, err := strconv.Atoi(match[1])
-		if err != nil {
-			continue
-		}
-		kvs = append(kvs, kv{key: k, index: num})
-	}
-
-	sort.Slice(kvs, func(i, j int) bool {
-		if kvs[i].index == kvs[j].index {
-			return kvs[i].key < kvs[j].key
-		}
-		return kvs[i].index < kvs[j].index
-	})
-
-	sorted := make([]string, len(kvs))
-	for i, kv := range kvs {
-		sorted[i] = kv.key
-	}
-	return sorted
-}
-
-func createGenerativeCallFunc(model *Model, modelParsed *onnx.Model, outputNames []string) func(ctx *context.Context, inputs []*graph.Node) []*graph.Node {
-	return func(ctx *context.Context, inputs []*graph.Node) []*graph.Node {
-		inputsMap := map[string]*graph.Node{}
-		nonCacheValues := 0
-		for i, name := range model.InputsMeta {
-			switch name.Name {
-			case "input_ids":
-				inputsMap["input_ids"] = inputs[i]
-				nonCacheValues++
-			case "position_ids":
-				inputsMap["position_ids"] = inputs[i]
-				nonCacheValues++
-			case "attention_mask":
-				inputsMap["attention_mask"] = inputs[i]
-				nonCacheValues++
-			}
-		}
-		pastKeyValues := make(map[string]*graph.Node)
-		for i := range model.NumHiddenLayers {
-			key := fmt.Sprintf("past_key_values.%d.key", i)
-			value := fmt.Sprintf("past_key_values.%d.value", i)
-			inputsMap[key] = inputs[2*i+nonCacheValues]
-			inputsMap[value] = inputs[2*i+nonCacheValues+1]
-			pastKeyValues[key] = inputs[2*i+nonCacheValues]
-			pastKeyValues[value] = inputs[2*i+nonCacheValues+1]
-		}
-		g := inputs[0].Graph()
-		modelOutputs := modelParsed.CallGraph(ctx, g, inputsMap, outputNames...)
-		logits := modelOutputs[0]
-		presentKeyValues := modelOutputs[1:]
-
-		shape := logits.Shape().Dimensions
-		vocabSize := shape[2]
-		seqLen := shape[1]
-		lastIdx := graph.Scalar(g, dtypes.Int32, seqLen-1)
-
-		// greedily select next token
-		logitsLast := graph.DynamicSlice(
-			logits,
-			[]*graph.Node{graph.ScalarZero(g, dtypes.Int32), lastIdx, graph.ScalarZero(g, dtypes.Int32)},
-			[]int{shape[0], 1, vocabSize},
-		)
-		batchSize := shape[0]
-		logitsLast = graph.Reshape(logitsLast, batchSize, vocabSize)
-		nextPredictedToken := graph.ArgMax(logitsLast, 1, dtypes.Int64)
-		nextPredictedToken = graph.Reshape(nextPredictedToken, batchSize, 1)
-
-		// early stopping flags
-		var terminate *graph.Node
-		for eosID := range model.EosTokenIDs {
-			eosNode := graph.Squeeze(graph.Equal(nextPredictedToken, graph.Scalar(g, dtypes.Int64, eosID)))
-			if terminate == nil {
-				terminate = eosNode
-			} else {
-				terminate = graph.Or(terminate, eosNode)
-			}
-		}
-
-		// prepare new input and position IDs
-		inputIDs := nextPredictedToken
-		posShape := inputs[1].Shape().Dimensions
-		posLen := posShape[1]
-		lastIdxNode := graph.Scalar(g, dtypes.Int32, posLen-1)
-		prevPosLast := graph.DynamicSlice(
-			inputs[1],
-			[]*graph.Node{graph.ScalarZero(g, dtypes.Int32), lastIdxNode},
-			[]int{batchSize, 1},
-		)
-		positionIDs := graph.OnePlus(prevPosLast)
-		offset := posLen
-
-		currentPosValue := graph.Squeeze(prevPosLast)
-		var currentIteration *graph.Node
-
-		// attention mask:
-		var attentionMask *graph.Node
-		if inputsMap["attention_mask"] != nil {
-			newTokenMask := graph.OnesLike(nextPredictedToken)
-			attentionMask = graph.Concatenate([]*graph.Node{inputsMap["attention_mask"], newTokenMask}, 1)
-		}
-
-		if currentPosValue.Rank() == 0 {
-			currentIteration = graph.Sub(currentPosValue, graph.Scalar(g, dtypes.Int64, offset))
-		} else {
-			first := graph.Slice(currentPosValue, graph.AxisElem(0))
-			scalar := graph.Squeeze(first)
-			currentIteration = graph.Sub(scalar, graph.Scalar(g, dtypes.Int64, offset))
-		}
-
-		// deal with new cache
-		updatedKvCache := make([]*graph.Node, len(presentKeyValues))
-		keys := sortedKeys(pastKeyValues)
-		if model.FirstIteration {
-			// past_key_values[key][:, :, :offset, :] = present_key_values[j][:, :, fixed_cache_value:, :]
-			j := 0
-			for _, key := range keys {
-				fixedCacheValue := model.FixedCacheSize
-				update := graph.Slice(
-					presentKeyValues[j],
-					graph.AxisRange(),
-					graph.AxisRange(),
-					graph.AxisRange(fixedCacheValue),
-					graph.AxisRange(),
-				)
-
-				updatedKvCache[j] = graph.DynamicUpdateSlice(
-					pastKeyValues[key],
-					update,
-					[]*graph.Node{
-						graph.ScalarZero(g, dtypes.Int32),
-						graph.ScalarZero(g, dtypes.Int32),
-						graph.ScalarZero(g, dtypes.Int32),
-						graph.ScalarZero(g, dtypes.Int32),
-					},
-				)
-				j++
-			}
-		} else {
-			// past_key_values[key][:, :, offset+i:offset+i+1, :] = present_key_values[j][:, :, -1:, :]
-			j := 0
-			updatePos := graph.ConvertDType(graph.Add(graph.Scalar(g, dtypes.Int64, offset), currentIteration), dtypes.Int32)
-			for _, key := range keys {
-				update := graph.Slice(
-					presentKeyValues[j],
-					graph.AxisRange(),
-					graph.AxisRange(),
-					graph.AxisElem(-1),
-					graph.AxisRange(),
-				)
-
-				updatedKvCache[j] = graph.DynamicUpdateSlice(
-					pastKeyValues[key],
-					update,
-					[]*graph.Node{
-						graph.ScalarZero(g, dtypes.Int32),
-						graph.ScalarZero(g, dtypes.Int32),
-						updatePos,
-						graph.ScalarZero(g, dtypes.Int32),
-					},
-				)
-				j++
-			}
-		}
-
-		// make sure outputs are being loaded in correct order
-		newInputs := make([]*graph.Node, len(model.InputsMeta)+1)
-		cacheIdx := 0
-		for i, name := range model.InputsMeta {
-			switch name.Name {
-			case "input_ids":
-				newInputs[i] = inputIDs
-			case "position_ids":
-				newInputs[i] = positionIDs
-			case "attention_mask":
-				newInputs[i] = attentionMask
-			default:
-				// Handle past_key_values
-				if strings.HasPrefix(name.Name, "past_key") {
-					newInputs[i] = updatedKvCache[cacheIdx]
-					cacheIdx++
-				}
-			}
-		}
-		newInputs[len(model.InputsMeta)] = terminate
-		return newInputs
-	}
 }
 
 func runGoMLXSessionOnBatch(batch *PipelineBatch, p *BasePipeline) error {

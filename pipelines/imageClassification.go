@@ -4,8 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"image"
-	_ "image/jpeg" // adds jpeg support to image
-	_ "image/png"  // adds png support to image
 	"sort"
 	"sync/atomic"
 	"time"

@@ -2,7 +2,7 @@
 
 ARG GO_VERSION=1.25.5
 ARG ONNXRUNTIME_VERSION=1.22.0
-ARG GOPJRT_VERSION=0.10.0
+ARG GOPJRT_VERSION=0.83.1
 ARG BUILD_PLATFORM=linux/amd64
 
 #--- runtime layer with all hugot dependencies for cpu 
@@ -14,7 +14,8 @@ ARG ONNXRUNTIME_VERSION
 ARG GOPJRT_VERSION
 
 ENV PATH="$PATH:/usr/local/go/bin" \
-    GOPJRT_NOSUDO=1
+    GOPJRT_NOSUDO=1 \
+    PJRT_PLUGIN_LIBRARY_PATH="/usr/local"
 
 COPY ./scripts/download-onnxruntime.sh /download-onnxruntime.sh
 RUN --mount=src=./go.mod,dst=/go.mod \
@@ -36,7 +37,7 @@ RUN --mount=src=./go.mod,dst=/go.mod \
     sed -i 's/\r//g' /download-onnxruntime.sh && chmod +x /download-onnxruntime.sh && \
     /download-onnxruntime.sh ${ONNXRUNTIME_VERSION} && \
     # XLA/goMLX
-    GOPROXY=direct go run github.com/gomlx/gopjrt/cmd/gopjrt_installer@latest -plugin=amazonlinux -version=v${GOPJRT_VERSION} -path=/usr/local && \
+    GOPROXY=direct go run github.com/gomlx/go-xla/cmd/pjrt_installer@latest -plugin=amazonlinux -version=v${GOPJRT_VERSION} -path=/usr/local && \
     # NON-PRIVILEGED USER
     # create non-privileged testuser with id: 1000
     useradd -u 1000 -m testuser && usermod -a -G wheel testuser && \

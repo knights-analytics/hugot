@@ -4,8 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"image"
-	_ "image/jpeg" // add JPEG decoding support
-	_ "image/png"  // add PNG decoding support
 	"math"
 	"sort"
 	"strings"
@@ -25,13 +23,13 @@ type ObjectDetectionPipeline struct {
 	*backends.BasePipeline
 	IDLabelMap     map[int]string
 	imageFormat    string
-	preprocess     []imageutil.PreprocessStep
-	normalize      []imageutil.NormalizationStep
 	BoxesOutput    string
 	ScoresOutput   string
+	preprocess     []imageutil.PreprocessStep
+	normalize      []imageutil.NormalizationStep
+	TopK           int
 	ScoreThreshold float32
 	IouThreshold   float32
-	TopK           int
 }
 
 func (p *ObjectDetectionPipeline) addPreprocessSteps(steps ...imageutil.PreprocessStep) {
@@ -53,12 +51,11 @@ func (p *ObjectDetectionPipeline) GetStatistics() backends.PipelineStatistics {
 }
 
 type Detection struct {
-	Box   [4]float32 // [xmin, ymin, xmax, ymax] in pixels
 	Label string
-	Score float32
 	Class int
+	Box   [4]float32 // [xmin, ymin, xmax, ymax] in pixels
+	Score float32
 }
-
 type ObjectDetectionOutput struct {
 	Detections [][]Detection
 }
@@ -216,17 +213,14 @@ func (p *ObjectDetectionPipeline) Postprocess(batch *backends.PipelineBatch) (*O
 	if boxesIdx < 0 || scoresIdx < 0 {
 		return nil, fmt.Errorf("boxes/scores outputs not found")
 	}
-
 	boxesAny := batch.OutputValues[boxesIdx]
 	scoresAny := batch.OutputValues[scoresIdx]
-
 	// Expected shapes: boxes [batch][num][4], scores [batch][num][num_classes]
 	boxes, okB := boxesAny.([][][]float32)
 	scores, okS := scoresAny.([][][]float32)
 	if !okB || !okS {
 		return nil, fmt.Errorf("unexpected output types: boxes=%T scores=%T", boxesAny, scoresAny)
 	}
-
 	out := &ObjectDetectionOutput{Detections: make([][]Detection, len(boxes))}
 	for b := range boxes {
 		dets := decodeDetections(boxes[b], scores[b], p.IDLabelMap, p.ScoreThreshold, p.TopK)
