@@ -450,8 +450,9 @@ func (p *Seq2SeqPipeline) Postprocess(batch *Seq2SeqBatch) (*Seq2SeqOutput, erro
 	}
 
 	for i := 0; i < batch.Size; i++ {
-		// For now, single sequence per input (NumReturnSeqs=1)
-		// TODO: Support multiple return sequences
+		// Currently returns a single sequence per input. Multiple return sequences
+		// (e.g., beam search or multiple sampling runs) would require changes to
+		// the generation loop to maintain multiple candidate sequences per input.
 		tokens := batch.GeneratedTokens[i]
 		convertedTokens := make([]uint32, len(tokens))
 		for j, tok := range tokens {

@@ -5,7 +5,9 @@ package backends
 import (
 	"errors"
 	"fmt"
+	"math/rand"
 	"strings"
+	"time"
 
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gopjrt/dtypes"
@@ -332,6 +334,7 @@ func argmaxFromLogitsGoMLX(logits *tensors.Tensor) ([]int64, error) {
 }
 
 // sampleFromLogitsGoMLX samples token IDs from logits with temperature and top-p.
+// Creates a thread-local RNG seeded with current time for non-deterministic sampling.
 func sampleFromLogitsGoMLX(logits *tensors.Tensor, topP, temperature float32) ([]int64, error) {
 	shape := logits.Shape()
 	if shape.Rank() < 2 || shape.Rank() > 3 {
@@ -356,6 +359,9 @@ func sampleFromLogitsGoMLX(logits *tensors.Tensor, topP, temperature float32) ([
 		return nil, fmt.Errorf("unsupported dtype for logits: %s", shape.DType)
 	}
 
+	// Create a thread-local RNG for this sampling operation
+	rng := rand.New(rand.NewSource(time.Now().UnixNano())) // #nosec G404 -- not used for crypto
+
 	tokens := make([]int64, batchSize)
 	for batch := 0; batch < batchSize; batch++ {
 		var offset int
@@ -379,15 +385,16 @@ func sampleFromLogitsGoMLX(logits *tensors.Tensor, topP, temperature float32) ([
 		// Convert to probabilities with softmax
 		probs := vectorutil.SoftMax(batchLogits)
 
-		// Apply top-p (nucleus) sampling
-		tokens[batch] = int64(sampleTopPGoMLX(probs, topP))
+		// Apply top-p (nucleus) sampling with thread-safe RNG
+		tokens[batch] = int64(sampleTopPGoMLX(probs, topP, rng))
 	}
 
 	return tokens, nil
 }
 
 // sampleTopPGoMLX implements nucleus (top-p) sampling.
-func sampleTopPGoMLX(probs []float32, topP float32) int {
+// Uses the provided random source for thread-safe random number generation.
+func sampleTopPGoMLX(probs []float32, topP float32, rng *rand.Rand) int {
 	// Create indexed probabilities
 	type indexedProb struct {
 		index int
@@ -428,9 +435,8 @@ func sampleTopPGoMLX(probs []float32, topP float32) int {
 		nucSum += ip.prob
 	}
 
-	// Simple random sampling from nucleus
-	// Using a deterministic approach for reproducibility in tests
-	r := pseudoRandom() * nucSum
+	// Random sampling from nucleus using thread-safe random source
+	r := rng.Float32() * nucSum
 	var cumProb float32
 	for _, ip := range nucleus {
 		cumProb += ip.prob
@@ -442,18 +448,11 @@ func sampleTopPGoMLX(probs []float32, topP float32) int {
 	return nucleus[0].index
 }
 
-// pseudoRandom returns a pseudo-random float32 in [0, 1).
-// Simple LCG for reproducibility.
-var prngState uint32 = 12345
-
-func pseudoRandom() float32 {
-	prngState = prngState*1103515245 + 12345
-	return float32(prngState>>16) / 65536.0
-}
-
-// ResetPRNG resets the pseudo-random number generator seed.
-func ResetPRNG(seed uint32) {
-	prngState = seed
+// NewSeq2SeqRNG creates a new random number generator for seq2seq sampling.
+// Each generation call should create its own RNG for thread safety.
+// Use a fixed seed for reproducible results, or use time-based seed for variety.
+func NewSeq2SeqRNG(seed int64) *rand.Rand {
+	return rand.New(rand.NewSource(seed)) // #nosec G404 -- not used for crypto
 }
 
 // splitEncoderDecoderPKVGoMLX splits the PKV outputs from decoder-init into encoder and decoder PKV.

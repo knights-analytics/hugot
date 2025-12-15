@@ -102,16 +102,44 @@ func runSeq2SeqEncoderORT(batch Seq2SeqBatchInterface, model *Model) error {
 	return nil
 }
 
+// tokenSelector is a function type for selecting the next token from logits.
+// This allows the generation loop to be reused for both greedy and sampling strategies.
+type tokenSelector func(logits []float32, batchSize, vocabSize int) []int64
+
 // RunSeq2SeqGenerationGreedy performs greedy decoding.
 func RunSeq2SeqGenerationGreedy(batch Seq2SeqBatchInterface, pipeline Seq2SeqPipelineInterface) error {
 	if pipeline.GetRuntime() != "ORT" {
 		return fmt.Errorf("unsupported runtime: %s", pipeline.GetRuntime())
 	}
 
-	return runSeq2SeqGenerationGreedyORT(batch, pipeline)
+	// Greedy selection: argmax over vocabulary
+	selector := func(logits []float32, batchSize, vocabSize int) []int64 {
+		return argmaxSeq2Seq(logits, batchSize, vocabSize)
+	}
+
+	return runSeq2SeqGenerationORT(batch, pipeline, selector)
 }
 
-func runSeq2SeqGenerationGreedyORT(batch Seq2SeqBatchInterface, pipeline Seq2SeqPipelineInterface) error {
+// RunSeq2SeqGenerationSampling performs top-p sampling with temperature.
+func RunSeq2SeqGenerationSampling(batch Seq2SeqBatchInterface, pipeline Seq2SeqPipelineInterface) error {
+	if pipeline.GetRuntime() != "ORT" {
+		return fmt.Errorf("unsupported runtime: %s", pipeline.GetRuntime())
+	}
+
+	topP := pipeline.GetTopP()
+	temperature := pipeline.GetTemperature()
+
+	// Sampling selection: top-p with temperature
+	selector := func(logits []float32, batchSize, vocabSize int) []int64 {
+		return sampleTopP(logits, batchSize, vocabSize, topP, temperature)
+	}
+
+	return runSeq2SeqGenerationORT(batch, pipeline, selector)
+}
+
+// runSeq2SeqGenerationORT is the unified generation loop for ORT backend.
+// It uses the provided tokenSelector to choose the next token at each step.
+func runSeq2SeqGenerationORT(batch Seq2SeqBatchInterface, pipeline Seq2SeqPipelineInterface, selectTokens tokenSelector) error {
 	batchSize := batch.GetSize()
 	maxNewTokens := pipeline.GetMaxNewTokens()
 	eosTokenIDs := pipeline.GetEosTokenIDs()
@@ -158,7 +186,7 @@ func runSeq2SeqGenerationGreedyORT(batch Seq2SeqBatchInterface, pipeline Seq2Seq
 		var err error
 
 		if step == 0 {
-			// First step: use decoder-init, get all 32 PKV
+			// First step: use decoder-init, get all PKV
 			var allPKV []ort.Value
 			logits, allPKV, err = runDecoderInitStepORT(
 				decoderInputIDs, encoderHiddenStates, encoderAttentionMask,
@@ -169,13 +197,9 @@ func runSeq2SeqGenerationGreedyORT(batch Seq2SeqBatchInterface, pipeline Seq2Seq
 			}
 
 			// Split PKV: encoder PKV (constant) vs decoder PKV (will be updated)
-			// decoder-init outputs are ordered: present.0.decoder.key, present.0.decoder.value,
-			// present.0.encoder.key, present.0.encoder.value, present.1.decoder.key, ...
-			// So for each layer: decoder.key, decoder.value, encoder.key, encoder.value
 			encoderPKV, decoderPKV = splitEncoderDecoderPKV(allPKV, decoderInitModel)
 		} else {
 			// Subsequent steps: use decoder with past_key_values
-			// Combine encoder PKV (constant) + decoder PKV for input
 			combinedPKV := combineEncoderDecoderPKV(encoderPKV, decoderPKV, decoderModel)
 
 			var newDecoderPKV []ort.Value
@@ -184,7 +208,7 @@ func runSeq2SeqGenerationGreedyORT(batch Seq2SeqBatchInterface, pipeline Seq2Seq
 				combinedPKV, decoderModel, batchSize, vocabSize, step, encoderSeqLen,
 			)
 			if err != nil {
-				// Cleanup
+				// Cleanup on error
 				for _, pkv := range encoderPKV {
 					pkv.Destroy()
 				}
@@ -201,8 +225,8 @@ func runSeq2SeqGenerationGreedyORT(batch Seq2SeqBatchInterface, pipeline Seq2Seq
 			decoderPKV = newDecoderPKV
 		}
 
-		// Greedy decode: argmax over vocab
-		nextTokens := argmaxSeq2Seq(logits, batchSize, vocabSize)
+		// Select next tokens using the provided strategy (greedy or sampling)
+		nextTokens := selectTokens(logits, batchSize, vocabSize)
 
 		// Update decoder input for next step
 		decoderInputIDs = nextTokens
@@ -238,137 +262,6 @@ func runSeq2SeqGenerationGreedyORT(batch Seq2SeqBatchInterface, pipeline Seq2Seq
 			errs = append(errs, pkv.Destroy())
 		}
 		// Also destroy encoder outputs now
-		if hs, ok := batch.GetEncoderHiddenStates().(ort.Value); ok {
-			errs = append(errs, hs.Destroy())
-		}
-		if am, ok := batch.GetEncoderAttentionMask().(ort.Value); ok {
-			errs = append(errs, am.Destroy())
-		}
-		return errors.Join(errs...)
-	})
-
-	return nil
-}
-
-// RunSeq2SeqGenerationSampling performs top-p sampling with temperature.
-func RunSeq2SeqGenerationSampling(batch Seq2SeqBatchInterface, pipeline Seq2SeqPipelineInterface) error {
-	if pipeline.GetRuntime() != "ORT" {
-		return fmt.Errorf("unsupported runtime: %s", pipeline.GetRuntime())
-	}
-
-	return runSeq2SeqGenerationSamplingORT(batch, pipeline)
-}
-
-func runSeq2SeqGenerationSamplingORT(batch Seq2SeqBatchInterface, pipeline Seq2SeqPipelineInterface) error {
-	batchSize := batch.GetSize()
-	maxNewTokens := pipeline.GetMaxNewTokens()
-	eosTokenIDs := pipeline.GetEosTokenIDs()
-	decoderStartToken := pipeline.GetDecoderStartTokenID()
-	vocabSize := pipeline.GetVocabSize()
-	topP := pipeline.GetTopP()
-	temperature := pipeline.GetTemperature()
-
-	// Initialize generation state
-	generatedTokens := make([][]int64, batchSize)
-	finished := make([]bool, batchSize)
-	finishedCount := 0
-	for i := range generatedTokens {
-		generatedTokens[i] = []int64{}
-	}
-
-	// Get encoder outputs
-	encoderHiddenStates := batch.GetEncoderHiddenStates().(ort.Value)
-	encoderAttentionMask := batch.GetEncoderAttentionMask().(ort.Value)
-
-	// First step: use decoder-init
-	decoderInputIDs := make([]int64, batchSize)
-	for i := range decoderInputIDs {
-		decoderInputIDs[i] = decoderStartToken
-	}
-
-	decoderInitModel := pipeline.GetDecoderInitModel()
-	decoderModel := pipeline.GetDecoderModel()
-
-	// Encoder-decoder models have separate PKV for cross-attention (encoder) and self-attention (decoder).
-	var encoderPKV []ort.Value // Cross-attention KV (constant after decoder-init)
-	var decoderPKV []ort.Value // Self-attention KV (updated each step)
-
-	encoderSeqLen := batch.GetMaxInputLength()
-
-	for step := 0; step < maxNewTokens; step++ {
-		if finishedCount == batchSize {
-			break
-		}
-
-		var logits []float32
-		var err error
-
-		if step == 0 {
-			var allPKV []ort.Value
-			logits, allPKV, err = runDecoderInitStepORT(
-				decoderInputIDs, encoderHiddenStates, encoderAttentionMask,
-				decoderInitModel, batchSize, vocabSize, encoderSeqLen,
-			)
-			if err != nil {
-				return err
-			}
-			encoderPKV, decoderPKV = splitEncoderDecoderPKV(allPKV, decoderInitModel)
-		} else {
-			combinedPKV := combineEncoderDecoderPKV(encoderPKV, decoderPKV, decoderModel)
-
-			var newDecoderPKV []ort.Value
-			logits, newDecoderPKV, err = runDecoderStepORT(
-				decoderInputIDs, encoderAttentionMask,
-				combinedPKV, decoderModel, batchSize, vocabSize, step, encoderSeqLen,
-			)
-			if err != nil {
-				for _, pkv := range encoderPKV {
-					pkv.Destroy()
-				}
-				for _, pkv := range decoderPKV {
-					pkv.Destroy()
-				}
-				return err
-			}
-
-			for _, pkv := range decoderPKV {
-				pkv.Destroy()
-			}
-			decoderPKV = newDecoderPKV
-		}
-
-		// Sample with temperature and top-p
-		nextTokens := sampleTopP(logits, batchSize, vocabSize, topP, temperature)
-
-		decoderInputIDs = nextTokens
-
-		for i := 0; i < batchSize; i++ {
-			if finished[i] {
-				continue
-			}
-
-			tok := nextTokens[i]
-			generatedTokens[i] = append(generatedTokens[i], tok)
-
-			if eosTokenIDs[tok] {
-				finished[i] = true
-				finishedCount++
-			}
-		}
-	}
-
-	batch.SetGeneratedTokens(generatedTokens)
-	batch.SetFinished(finished)
-	batch.SetFinishedCount(finishedCount)
-
-	batch.SetDestroyDecoder(func() error {
-		var errs []error
-		for _, pkv := range encoderPKV {
-			errs = append(errs, pkv.Destroy())
-		}
-		for _, pkv := range decoderPKV {
-			errs = append(errs, pkv.Destroy())
-		}
 		if hs, ok := batch.GetEncoderHiddenStates().(ort.Value); ok {
 			errs = append(errs, hs.Destroy())
 		}
