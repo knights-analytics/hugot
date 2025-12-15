@@ -142,7 +142,7 @@ func newTrainingSession[T backends.Pipeline](backend string, config TrainingConf
 	if session.maxEpochs <= 0 {
 		session.maxEpochs = 100 // default to 100 epochs if not set
 	}
-	model, err = backends.LoadModel(config.ModelPath, config.OnnxFilename, opts)
+	model, err = backends.LoadModel(config.ModelPath, config.OnnxFilename, opts, false)
 	if err != nil {
 		return nil, err
 	}

@@ -107,6 +107,10 @@ func FileExists(filename string) (bool, error) {
 	return fileSystem.Exists(context.Background(), filename)
 }
 
+func FileStats(filename string) (storage.Object, error) {
+	return fileSystem.Object(context.Background(), filename)
+}
+
 func NewFileWriter(filename string, contentType string) (io.WriteCloser, error) {
 	exists, err := FileExists(filename)
 	if err != nil {

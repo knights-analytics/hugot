@@ -1,11 +1,11 @@
 package hugot
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"math"
 	"runtime"
-	"slices"
 	"strings"
 	"testing"
 
@@ -19,7 +19,7 @@ import (
 )
 
 // use the system library for the tests.
-const onnxRuntimeSharedLibrary = "/usr/lib64/onnxruntime.so"
+const onnxRuntimeSharedLibrary = "/usr/lib64"
 
 // test download validation
 
@@ -1160,13 +1160,10 @@ func textGenerationPipeline(t *testing.T, session *Session) {
 
 	// Configure the text generation pipeline
 	config := TextGenerationConfig{
-		ModelPath:    "./models/KnightsAnalytics_Phi-3.5-mini-instruct-onnx",
-		Name:         "testPipeline",
-		OnnxFilename: "model.onnx",
+		ModelPath: "./models/KnightsAnalytics_Phi-3.5-mini-instruct-onnx",
+		Name:      "testPipeline",
 		Options: []backends.PipelineOption[*pipelines.TextGenerationPipeline]{
-			pipelines.WithMaxTokens(200),
-			pipelines.WithPhiTemplate(),
-			pipelines.WithCustomStopTokens([]int64{32007}), // Phi appears to use a stop token that's different from the one defined in config.json
+			pipelines.WithMaxLength(200),
 		},
 	}
 
@@ -1176,12 +1173,12 @@ func textGenerationPipeline(t *testing.T, session *Session) {
 
 	tests := []struct {
 		name           string
-		input          [][]pipelines.Message
+		input          [][]backends.Message
 		expectedString []string
 	}{
 		{
 			name: "small test",
-			input: [][]pipelines.Message{
+			input: [][]backends.Message{
 				{
 					{Role: "system", Content: "you are a helpful assistant."},
 					{Role: "user", Content: "what is the capital of the Netherlands?"},
@@ -1193,7 +1190,7 @@ func textGenerationPipeline(t *testing.T, session *Session) {
 		},
 		{
 			name: "batched input, short sequence first, long sequence second",
-			input: [][]pipelines.Message{
+			input: [][]backends.Message{
 				{
 					{Role: "system", Content: "you are a helpful assistant."},
 					{Role: "user", Content: "what is the capital of the Netherlands?"},
@@ -1204,13 +1201,13 @@ func textGenerationPipeline(t *testing.T, session *Session) {
 				},
 			},
 			expectedString: []string{
-				"The capital of the Netherlands is Amsterdam. It is the largest city in the country and serves as the political, economic, and cultural center. Amsterdam is known for its historical significance, vibrant cultural scene, and iconic landmarks such as the Anne Frank House and the Van Gogh Museum. The city is also famous for its extensive canal system, which is a UNESCO World Heritage site. The Dutch government's administrative buildings, including the Royal Palace, are located in the historic center of the city. Amsterdam's port is one of the busiest in Europe, contributing to its status as a major global financial hub.",
-				"The first president of the United States was George Washington. He served as the president from April 30, 1789, to March 4, 1797. Washington is often referred to as the \"Father of His Country\" for his leadership in the founding of the United States. He was a central figure in the American Revolution and presided over the convention that established the new government, which resulted in the creation of the Constitution. Washington's presidency set many precedents, including the two-term limit, which was later codified in the 22nd Amendment. His leadership and the establishment of a strong federal government were crucial in the early years of the United States.",
+				"The capital of the Netherlands is Amsterdam. However, it's worth noting that the seat of government is actually located in The Hague, where the royal family and the supreme court are based. Amsterdam is the country's largest city and serves as the political, economic, and cultural center of the Netherlands.",
+				`The first president of the United States was George Washington. He served as the president from April 30, 1789, to March 4, 1797. Washington is often referred to as the "Father of His Country" for his leadership in the founding of the United States. He was a central figure in the American Revolution and presided over the convention that established the U.S. Constitution, which replaced the Articles of Confederation and created a new federal governmental structure. Washington's presidency set many precedents, including the two-term limit, which was later codified in the 22nd Amendment. His leadership and the establishment of a strong federal government were crucial in the early years of the United States.`,
 			},
 		},
 		{
 			name: "batched input, long sequence first, short sequence second",
-			input: [][]pipelines.Message{
+			input: [][]backends.Message{
 				{
 					{Role: "system", Content: "you are a helpful assistant."},
 					{Role: "user", Content: "Solve this equation: 2 + 2 = ? Be very brief in your explanation."},
@@ -1221,8 +1218,8 @@ func textGenerationPipeline(t *testing.T, session *Session) {
 				},
 			},
 			expectedString: []string{
-				"The sum of 2 and 2 is 4.\n\nExplanation: In arithmetic, when you add two identical positive numbers, you simply double the number. Here, doubling 2 gives you 4.",
-				"Steel is primarily made out of iron and carbon, with the addition of other elements such as manganese, chromium, nickel, and sometimes small amounts of other elements to enhance its properties.",
+				"The sum of 2 and 2 is 4.\n\nExplanation: In arithmetic, when you add two identical positive numbers, you simply double the value. Here, doubling 2 gives you 4.",
+				"Steel is primarily made out of iron and carbon, with additional elements such as manganese, chromium, and nickel for various alloying purposes.",
 			},
 		},
 	}
@@ -1230,31 +1227,54 @@ func textGenerationPipeline(t *testing.T, session *Session) {
 	// Execute tests
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			batchResult, err := textGenPipeline.RunWithTemplate(tt.input)
+			batchResult, err := textGenPipeline.RunMessages(context.Background(), tt.input)
 			checkT(t, err)
-			outputString := batchResult.GetOutput()
-			for i := range len(outputString) {
-				expectedString := tt.expectedString[i]
-				generatedString := outputString[i].(string)
-				// Generative models have variance with different architectures which builds up per generation, so check for min overlap instead in first 30 words
-				expectedWords := strings.Fields(expectedString)
-				if len(expectedWords) > 30 {
-					expectedWords = expectedWords[:30]
+			outputs := batchResult.GetOutput()
+			for i := range len(outputs) {
+				generatedString := outputs[i].(string)
+				fmt.Println(generatedString + "\n")
+				if generatedString != tt.expectedString[i] {
+					t.Fatalf("Test %s failed: expected '%s', got '%s'", tt.name, tt.expectedString[i], generatedString)
 				}
-				generatedWords := strings.Fields(generatedString)
-				if len(generatedWords) > 30 {
-					generatedWords = generatedWords[:30]
-				}
-				numMismatches := 0
-				for _, word := range generatedWords {
-					if !slices.Contains(expectedWords, word) {
-						numMismatches++
-					}
-				}
-				assert.LessOrEqual(t, numMismatches, len(expectedWords)/8, "Expected generated to have max %d mismatches with expected, but got %d mismatches (got %s wanted %s)", len(expectedWords)/8, numMismatches, expectedString, generatedString)
 			}
 		})
 	}
+
+	// streaming test
+	streamingConfig := TextGenerationConfig{
+		ModelPath: "./models/KnightsAnalytics_Phi-3.5-mini-instruct-onnx",
+		Name:      "testPipelineStreaming",
+		Options: []backends.PipelineOption[*pipelines.TextGenerationPipeline]{
+			pipelines.WithMaxLength(200),
+			pipelines.WithStreaming(),
+		},
+	}
+	streamingPipeline, err := NewPipeline(session, streamingConfig)
+	checkT(t, err)
+
+	t.Run("streaming test", func(t *testing.T) {
+		input := [][]backends.Message{
+			{
+				{Role: "system", Content: "you are a helpful assistant."},
+				{Role: "user", Content: "Solve this equation: 2 + 2 = ? Be very brief in your explanation."},
+			},
+		}
+		output, err := streamingPipeline.RunMessages(context.Background(), input)
+		firstThreeTokens := make([]string, 0, 3)
+		for token := range output.TokenStream {
+			firstThreeTokens = append(firstThreeTokens, token.Token)
+		}
+		if firstThreeTokens[0] != "The" {
+			t.Fatalf("Expected first token 'The', got '%s'", firstThreeTokens[0])
+		}
+		if firstThreeTokens[1] != " sum" {
+			t.Fatalf("Expected second token ' sum', got '%s'", firstThreeTokens[1])
+		}
+		if firstThreeTokens[2] != " of" {
+			t.Fatalf("Expected third token ' of', got '%s'", firstThreeTokens[2])
+		}
+		checkT(t, err)
+	})
 }
 
 func textGenerationPipelineValidation(t *testing.T, session *Session) {
@@ -1271,7 +1291,7 @@ func textGenerationPipelineValidation(t *testing.T, session *Session) {
 		Name:         "testPipeline",
 		OnnxFilename: "model.onnx",
 		Options: []backends.PipelineOption[*pipelines.TextGenerationPipeline]{
-			pipelines.WithMaxTokens(1),
+			pipelines.WithMaxLength(1),
 		},
 	}
 

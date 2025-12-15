@@ -30,6 +30,7 @@ type FeatureExtractionPipeline struct {
 	// Image mode fields (for vision encoders like CLIP visual)
 	imageMode bool // true if this is a vision model
 }
+
 type FeatureExtractionOutput struct {
 	Embeddings [][]float32
 }
@@ -129,6 +130,10 @@ func NewFeatureExtractionPipeline(config backends.PipelineConfig[*FeatureExtract
 }
 
 // INTERFACE IMPLEMENTATIONS.
+func (p *FeatureExtractionPipeline) IsGenerative() bool {
+	return false
+}
+
 func (p *FeatureExtractionPipeline) GetModel() *backends.Model {
 	return p.Model
 }

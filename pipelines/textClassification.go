@@ -111,6 +111,10 @@ func NewTextClassificationPipeline(config backends.PipelineConfig[*TextClassific
 
 // INTERFACE IMPLEMENTATION
 
+func (p *TextClassificationPipeline) IsGenerative() bool {
+	return false
+}
+
 func (p *TextClassificationPipeline) GetModel() *backends.Model {
 	return p.Model
 }

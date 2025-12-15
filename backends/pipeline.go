@@ -1,6 +1,7 @@
 package backends
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -18,6 +19,7 @@ type BasePipeline struct {
 	PipelineName    string
 	Runtime         string
 }
+
 type InputOutputInfo struct {
 	// The name of the input or output
 	Name string
@@ -61,6 +63,7 @@ type Pipeline interface {
 	Validate() error                           // Validate the pipeline for correctness
 	GetMetadata() PipelineMetadata             // Return metadata information for the pipeline
 	GetModel() *Model                          // Return the model used by the pipeline
+	IsGenerative() bool                        // Return whether the pipeline is generative
 	Run([]string) (PipelineBatchOutput, error) // Run the pipeline on an input
 }
 
@@ -173,17 +176,27 @@ func RunSessionOnBatch(batch *PipelineBatch, p *BasePipeline) error {
 	return nil
 }
 
-func RunGenerativeSessionOnBatch(batch *PipelineBatch, p *BasePipeline) error {
+func RunGenerativeSessionOnBatch(ctx context.Context, batch *PipelineBatch, p *BasePipeline, maxLength int) (chan SequenceDelta, chan error, error) {
 	switch p.Runtime {
 	case "ORT":
-		return runGenerativeORTSessionOnBatch(batch, p)
+		return runGenerativeORTSessionOnBatch(ctx, batch, p, maxLength)
 	case "GO":
-		return errors.New("GO backend is not yet implemented for generative models")
+		return nil, nil, errors.New("GO backend is not yet implemented for generative models")
 	case "XLA":
-		return errors.New("XLA backend is not yet implemented for generative models")
+		return nil, nil, errors.New("XLA backend is not yet implemented for generative models")
 	default:
-		return errors.New("invalid backend")
+		return nil, nil, errors.New("invalid backend")
 	}
+}
+
+func CreateMessages(batch *PipelineBatch, p *BasePipeline, inputs any) error {
+	switch p.Runtime {
+	case "ORT":
+		return CreateMessagesORT(batch, inputs)
+	case "GO", "XLA":
+		return fmt.Errorf("not implemented")
+	}
+	return nil
 }
 
 // CreateInputTensorsTraining creates input tensors for training. Same as CreateInputTensors but
@@ -222,7 +235,6 @@ func NewBasePipeline[T Pipeline](config PipelineConfig[T], s *options.Options, m
 }
 
 func CreateModelBackend(model *Model, s *options.Options) error {
-	// creation of the session. Only one output (either token or sentence embedding).
 	var err error
 	switch s.Backend {
 	case "ORT":

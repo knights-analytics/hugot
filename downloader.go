@@ -133,6 +133,7 @@ func validateDownloadHfModel(repo *hub.Repo, options DownloadOptions) ([]string,
 		} else if baseFileName == "special_tokens_map.json" ||
 			baseFileName == "tokenizer_config.json" ||
 			baseFileName == "config.json" ||
+			baseFileName == "genai_config.json" ||
 			baseFileName == "vocab.txt" {
 			toDownload = append(toDownload, fileName)
 		} else if filepath.Ext(baseFileName) == ".onnx" {

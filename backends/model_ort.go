@@ -3,61 +3,178 @@
 package backends
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
+	"runtime"
+	"strconv"
 	"strings"
 
 	ort "github.com/yalue/onnxruntime_go"
 
 	"github.com/knights-analytics/hugot/options"
+	"github.com/knights-analytics/hugot/util/fileutil"
+	"github.com/knights-analytics/ortgenai"
 )
 
 type ORTModel struct {
-	Session        *ort.DynamicAdvancedSession
-	SessionOptions *ort.SessionOptions
-	Options        *options.OrtOptions
-	Destroy        func() error
+	Session           *ort.DynamicAdvancedSession
+	GenerativeSession *ortgenai.Session
+	SessionOptions    *ort.SessionOptions
+	Options           *options.OrtOptions
+	Destroy           func() error
 }
 
-func argmax3D(logits [][][]float32) []int64 {
-	batchSize := len(logits)
-	if batchSize == 0 {
-		return nil
+func mapORTOptions(options *options.Options) ([]string, map[string]map[string]string, error) {
+	if options == nil || options.ORTOptions == nil {
+		return []string{}, map[string]map[string]string{}, nil // let default EPs be used
+	}
+	ortOptions := options.ORTOptions
+
+	var providers []string
+	providerOptions := map[string]map[string]string{}
+
+	// CUDA
+	if ortOptions.CudaOptions != nil {
+		providers = append(providers, "NvTensorRtRtxExecutionProvider")
+		providerOptions["NvTensorRtRtxExecutionProvider"] = ortOptions.CudaOptions
 	}
 
-	output := make([]int64, batchSize)
-	for i := 0; i < batchSize; i++ {
-		seq := logits[i]
-		if len(seq) == 0 {
-			output[i] = 0
-			continue
+	// CoreML
+	if ortOptions.CoreMLOptions != nil {
+		providers = append(providers, "CoreMLExecutionProvider")
+		providerOptions["CoreMLExecutionProvider"] = ortOptions.CoreMLOptions
+	}
+
+	// DirectML
+	if ortOptions.DirectMLOptions != nil {
+		providers = append(providers, "DirectMLExecutionProvider")
+		// Map device id to string map expected by advanced session
+		providerOptions["DirectMLExecutionProvider"] = map[string]string{
+			"device_id": strconv.Itoa(*ortOptions.DirectMLOptions),
+		}
+	}
+
+	// OpenVINO
+	if ortOptions.OpenVINOOptions != nil {
+		providers = append(providers, "OpenVINOExecutionProvider")
+		providerOptions["OpenVINOExecutionProvider"] = ortOptions.OpenVINOOptions
+	}
+
+	// TensorRT
+	if ortOptions.TensorRTOptions != nil {
+		providers = append(providers, "TensorRTExecutionProvider")
+		providerOptions["TensorRTExecutionProvider"] = ortOptions.TensorRTOptions
+	}
+	return providers, providerOptions, nil
+}
+
+func createORTGenerativeSession(model *Model, options *options.Options) error {
+	if !ortgenai.IsInitialized() {
+		if options == nil || options.ORTOptions == nil {
+			return fmt.Errorf("ORT options must be provided to initialize ortgenai")
+		}
+		LibraryDir := options.ORTOptions.LibraryDir
+		if LibraryDir == nil || *LibraryDir == "" {
+			return fmt.Errorf("ORT library path must be provided to initialize ortgenai")
 		}
 
-		last := seq[len(seq)-1]
-		if len(last) == 0 {
-			output[i] = 0
-			continue
+		var libraryFileName string
+		switch runtime.GOOS {
+		case "windows":
+			libraryFileName = "libonnxruntime-genai.dll"
+		case "darwin":
+			libraryFileName = "libonnxruntime-genai.dylib"
+		case "linux":
+			libraryFileName = "libonnxruntime-genai.so"
 		}
+		libraryPath := fileutil.PathJoinSafe(*LibraryDir, libraryFileName)
+		exists, err := fileutil.FileExists(libraryPath)
+		if err != nil {
+			return fmt.Errorf("error checking ortgenai library path: %w", err)
+		}
+		if !exists {
+			return fmt.Errorf("cannot find the ortgenai library at: %s", libraryPath)
+		}
+		ortgenai.SetSharedLibraryPath(libraryPath)
+		err = ortgenai.InitializeEnvironment()
+		if err != nil {
+			return fmt.Errorf("error initializing the ort genai environment: %w", err)
+		}
+	}
+	providers, providerOptions, err := mapORTOptions(options)
+	if err != nil {
+		return fmt.Errorf("error mapping ORT options for generative session: %w", err)
+	}
+	ortGenAiSession, err := ortgenai.CreateGenerativeSessionAdvanced(model.Path, providers, providerOptions)
+	if err != nil {
+		return fmt.Errorf("error creating ortgenai session: %w", err)
+	}
+	model.ORTModel = &ORTModel{
+		GenerativeSession: ortGenAiSession,
+		Options:           options.ORTOptions,
+		Destroy: func() error {
+			ortGenAiSession.Destroy()
+			return nil
+		},
+	}
+	return nil
+}
 
-		maxIdx := -1
-		var maxVal float32
-		for j := 0; j < len(last); j++ {
-			v := last[j]
-			if maxIdx == -1 || v > maxVal {
-				maxVal = v
-				maxIdx = j
+func runGenerativeORTSessionOnBatch(ctx context.Context, batch *PipelineBatch, p *BasePipeline, maxLength int) (chan SequenceDelta, chan error, error) {
+	session := p.Model.ORTModel.GenerativeSession
+	if session == nil {
+		return nil, nil, errors.New("ORT generative session is not initialized")
+	}
+
+	inputs, ok := batch.InputValues.([][]ortgenai.Message)
+	if !ok {
+		return nil, nil, fmt.Errorf("invalid input type %T for generative ORT session", batch.InputValues)
+	}
+
+	ortTokenStream, ortErrorStream, err := session.Generate(ctx, inputs, &ortgenai.GenerationOptions{MaxLength: maxLength})
+	if err != nil {
+		return nil, nil, fmt.Errorf("error during generation start: %w", err)
+	}
+
+	tokenStream := make(chan SequenceDelta, 10)
+	errorStream := make(chan error, 1)
+
+	go func() {
+		defer close(tokenStream)
+		defer close(errorStream)
+
+		for {
+			// If both upstream channels are closed, finish and close our outputs.
+			if ortTokenStream == nil && ortErrorStream == nil {
+				return
+			}
+			select {
+			case <-ctx.Done():
+				return
+			case err, ok := <-ortErrorStream:
+				if !ok {
+					ortErrorStream = nil
+					continue
+				}
+				select {
+				case errorStream <- fmt.Errorf("error during generation: %w", err):
+				default:
+				}
+			case tokenDelta, ok := <-ortTokenStream:
+				if !ok {
+					ortTokenStream = nil
+					continue
+				}
+				tokenStream <- SequenceDelta{
+					Token: tokenDelta.Tokens, // TODO rename to token in ortgenai?
+					Index: tokenDelta.Sequence,
+				}
 			}
 		}
-
-		if maxIdx == -1 {
-			output[i] = 0
-		} else {
-			output[i] = int64(maxIdx)
-		}
-	}
-
-	return output
+	}()
+	return tokenStream, errorStream, nil
 }
 
 func createORTModelBackend(model *Model, options *options.Options) error {
@@ -282,138 +399,6 @@ func runORTSessionOnBatch(batch *PipelineBatch, p *BasePipeline) error {
 	return err
 }
 
-func runGenerativeORTSessionOnBatch(batch *PipelineBatch, p *BasePipeline) error {
-	batchSize := batch.Size
-	batchSize64 := int64(batchSize)
-	generatedTokens := make([][]int64, batchSize)
-	eosTokenIDs := p.Model.EosTokenIDs
-
-	// Map input metadata for intelligent ordering
-	inputMetaMap := make(map[string]int)
-	for i, inputMeta := range p.Model.InputsMeta {
-		inputMetaMap[inputMeta.Name] = i
-	}
-
-	finish := make([]bool, batchSize)
-	finishCount := 0
-
-iterations:
-	for step := 0; step < batch.MaxNewTokens; step++ {
-		inputTensors := batch.InputValues.([]ort.Value)
-		outputTensors := make([]ort.Value, len(p.Model.OutputsMeta))
-		err := p.Model.ORTModel.Session.Run(inputTensors, outputTensors)
-		if err != nil {
-			return err
-		}
-		logits := outputTensors[0].(*ort.Tensor[float32]).GetData()
-		var logitsReshaped [][][]float32
-		if step == 0 {
-			dimensions := p.Model.OutputsMeta[0].Dimensions.ValuesInt()
-			logitsReshaped = flatDataTo3D(logits, batch.PaddingMask, batch.MaxSequenceLength, dimensions[len(dimensions)-1])
-		} else {
-			// after the first iteration, the shape of the logits is (batchSize, 1, vocabSize) so this is handled differently
-			logitsReshaped = flatDataTo3DGenerativeLoop(logits, batchSize64, int64(p.Model.VocabSize))
-		}
-		// this matches the python implementation where it will continue to alternate between newline and
-		// EOS until the longest output sequence terminates
-		// should give an array of batchSize amount of tokens
-		greedyTokens := argmax3D(logitsReshaped)
-		for i, greedyToken := range greedyTokens {
-			if !finish[i] {
-				generatedTokens[i] = append(generatedTokens[i], greedyToken)
-				if eosTokenIDs[greedyToken] {
-					finish[i] = true
-					finishCount++
-				}
-			}
-		}
-		if finishCount == batchSize {
-			break iterations
-		}
-
-		// initialize next loop in correct order of the input metadata
-		newModelInputs := make([]ort.Value, len(p.Model.InputsMeta))
-		for i, inputMeta := range p.Model.InputsMeta {
-			switch inputMeta.Name {
-			case "input_ids":
-				generatedTokenTensor, inputErr := ort.NewTensor(
-					ort.NewShape(batchSize64, 1),
-					greedyTokens,
-				)
-				if inputErr != nil {
-					return inputErr
-				}
-				newModelInputs[i] = generatedTokenTensor
-			case "position_ids":
-				// Compute next position ids without 2D reshaping: take last column per row and add 1
-				positionIDs := inputTensors[inputMetaMap["position_ids"]].(*ort.Tensor[int64]).GetData()
-				seqLen := len(positionIDs) / batchSize
-				lastIdx := seqLen - 1
-				newPositionIDs := make([]int64, batchSize)
-				for j := 0; j < batchSize; j++ {
-					newPositionIDs[j] = positionIDs[j*seqLen+lastIdx] + 1
-				}
-				newPositionIDsTensor, positionErr := ort.NewTensor(
-					ort.NewShape(batchSize64, 1),
-					newPositionIDs,
-				)
-				if positionErr != nil {
-					return positionErr
-				}
-				newModelInputs[i] = newPositionIDsTensor
-			case "attention_mask":
-				// Extend each row by one "1" without reshaping to 2D
-				attentionMask := inputTensors[inputMetaMap["attention_mask"]].(*ort.Tensor[int64]).GetData()
-				seqLen := len(attentionMask) / batchSize
-				newAttentionMask := make([]int64, batchSize*(seqLen+1))
-				for j := 0; j < batchSize; j++ {
-					srcBase := j * seqLen
-					dstBase := j * (seqLen + 1)
-					copy(newAttentionMask[dstBase:dstBase+seqLen], attentionMask[srcBase:srcBase+seqLen])
-					newAttentionMask[dstBase+seqLen] = 1
-				}
-				newAttentionMaskTensor, attentionErr := ort.NewTensor(
-					ort.NewShape(batchSize64, int64(seqLen+1)),
-					newAttentionMask,
-				)
-				if attentionErr != nil {
-					return attentionErr
-				}
-				newModelInputs[i] = newAttentionMaskTensor
-
-			default:
-				// handle cache inputs (past_key_values, etc.)
-				if strings.HasPrefix(inputMeta.Name, "past_key") {
-					cacheInputIndex := 0
-					for j, meta := range p.Model.InputsMeta {
-						if j < i && strings.HasPrefix(meta.Name, "past_key") {
-							cacheInputIndex++
-						}
-					}
-					newModelInputs[i] = outputTensors[1+cacheInputIndex]
-				} else {
-					return fmt.Errorf("unhandled input type: %s", inputMeta.Name)
-				}
-			}
-		}
-
-		for _, val := range batch.InputValues.([]ort.Value) {
-			err = errors.Join(err, val.Destroy())
-		}
-		if err != nil {
-			return err
-		}
-
-		batch.InputValues = newModelInputs
-	}
-
-	batch.OutputValues = make([]any, batchSize)
-	for i := range generatedTokens {
-		batch.OutputValues[i] = generatedTokens[i]
-	}
-	return nil
-}
-
 func convertORTInputOutputs(inputOutputs []ort.InputOutputInfo) []InputOutputInfo {
 	inputOutputsStandardised := make([]InputOutputInfo, len(inputOutputs))
 	for i, inputOutput := range inputOutputs {
@@ -530,6 +515,38 @@ func createImageTensorsORT(batch *PipelineBatch, model *Model, preprocessed [][]
 			agg = errors.Join(agg, d())
 		}
 		return agg
+	}
+	return nil
+}
+
+func CreateMessagesORT(batch *PipelineBatch, inputs any) error {
+	switch inputs := inputs.(type) {
+	case []string:
+		messages := make([][]ortgenai.Message, len(inputs))
+		for i, input := range inputs {
+			messages[i] = []ortgenai.Message{ // TODO could interpolate system prompt here
+				{
+					Role:    "user",
+					Content: input,
+				},
+			}
+		}
+		batch.InputValues = messages
+	case [][]Message:
+		ortMessages := make([][]ortgenai.Message, len(inputs))
+		for i, msgList := range inputs {
+			ortMsgList := make([]ortgenai.Message, len(msgList))
+			for j, msg := range msgList {
+				ortMsgList[j] = ortgenai.Message{
+					Role:    msg.Role,
+					Content: msg.Content,
+				}
+			}
+			ortMessages[i] = ortMsgList
+		}
+		batch.InputValues = ortMessages
+	default:
+		return fmt.Errorf("invalid input type %T for CreateMessagesORT", inputs)
 	}
 	return nil
 }

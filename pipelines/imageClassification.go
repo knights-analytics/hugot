@@ -31,8 +31,13 @@ type ImageClassificationResult struct {
 	Score      float32
 	ClassIndex int
 }
+
 type ImageClassificationOutput struct {
 	Predictions [][]ImageClassificationResult // batch of results
+}
+
+func (p *ImageClassificationPipeline) IsGenerative() bool {
+	return false
 }
 
 func (o *ImageClassificationOutput) GetOutput() []any {

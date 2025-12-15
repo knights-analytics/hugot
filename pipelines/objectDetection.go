@@ -123,6 +123,8 @@ func NewObjectDetectionPipeline(config backends.PipelineConfig[*ObjectDetectionP
 }
 
 // Interface implementations.
+func (p *ObjectDetectionPipeline) IsGenerative() bool { return false }
+
 func (p *ObjectDetectionPipeline) GetModel() *backends.Model { return p.Model }
 
 func (p *ObjectDetectionPipeline) GetMetadata() backends.PipelineMetadata {

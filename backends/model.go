@@ -39,42 +39,45 @@ type Model struct {
 	FirstIteration        bool
 }
 
-func LoadModel(path string, onnxFilename string, options *options.Options) (*Model, error) {
+func LoadModel(path string, onnxFilename string, options *options.Options, isGenerative bool) (*Model, error) {
 	model := &Model{
 		Path:         path,
 		OnnxFilename: onnxFilename,
 		Pipelines:    make(map[string]Pipeline),
+		IsGenerative: isGenerative,
 	}
-	err := LoadOnnxModelBytes(model)
-	if err != nil {
-		return nil, err
-	}
-	err = loadModelConfig(model)
-	if err != nil {
-		return nil, err
-	}
-	err = CreateModelBackend(model, options)
-	if err != nil {
-		return nil, err
-	}
-	// for generative models that don't have head dim defined in config (example Phi)
-	// infer from cache entries, only if HeadDim hasn't been initialized yet
-	if model.HeadDim == 0 {
-		for _, inputMeta := range model.InputsMeta {
-			if strings.HasPrefix(inputMeta.Name, "past_key") {
-				dims := inputMeta.Dimensions.ValuesInt()
-				model.HeadDim = dims[len(dims)-1]
-				break
-			}
+
+	if !isGenerative {
+		err := LoadOnnxModelBytes(model)
+		if err != nil {
+			return nil, err
+		}
+		err = loadModelConfig(model)
+		if err != nil {
+			return nil, err
+		}
+		err = CreateModelBackend(model, options)
+		if err != nil {
+			return nil, err
+		}
+		tkErr := LoadTokenizer(model, options)
+		if tkErr != nil {
+			return nil, tkErr
+		}
+	} else {
+		// creation of the session. Only one output (either token or sentence embedding).
+		if options.Backend != "ORT" {
+			return nil, fmt.Errorf("generative models are only supported with ORT backend currently")
+		}
+		if onnxFilename != "" {
+			return nil, fmt.Errorf("onnx filename should not be provided for generative models as we currently rely on genai_config for the onnx backend")
+		}
+		err := createORTGenerativeSession(model, options)
+		if err != nil {
+			return nil, err
 		}
 	}
-	if model.HeadDim > 0 {
-		model.IsGenerative = true
-	}
-	tkErr := LoadTokenizer(model, options)
-	if tkErr != nil {
-		return nil, tkErr
-	}
+
 	model.Destroy = func() error {
 		var destroyErr error
 		if model.Tokenizer != nil {
@@ -83,8 +86,10 @@ func LoadModel(path string, onnxFilename string, options *options.Options) (*Mod
 		switch options.Backend {
 		case "ORT":
 			destroyErr = errors.Join(destroyErr, model.ORTModel.Destroy())
+			model.ORTModel = nil
 		case "GO", "XLA":
 			model.GoMLXModel.Destroy()
+			model.GoMLXModel = nil
 		}
 		return destroyErr
 	}
@@ -330,15 +335,6 @@ func flatDataTo3D[T float32 | int64 | int32](input []T, paddingMask [][]bool, se
 		output[batchIndex] = tokenEmbeddings
 	}
 	return output
-}
-
-func flatDataTo3DGenerativeLoop[T float32 | int64 | int32](input []T, batchSize int64, vocabSize int64) [][][]T {
-	result := make([][][]T, batchSize)
-	for i := range batchSize {
-		start := i * vocabSize
-		result[i] = [][]T{input[start : start+vocabSize]}
-	}
-	return result
 }
 
 // flatDataTo3DGeneric reshapes flat data into [batchSize][N][dimension] inferring N.

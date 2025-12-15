@@ -2,6 +2,9 @@ package options
 
 import (
 	"fmt"
+	"runtime"
+
+	"github.com/knights-analytics/hugot/util/fileutil"
 )
 
 type Options struct {
@@ -13,8 +16,14 @@ type Options struct {
 }
 
 func Defaults() *Options {
+	libraryDirDefault := "/usr/lib"
+	libraryNameDefault := "libonnxruntime.so"
+	libraryPathDefault := fileutil.PathJoinSafe(libraryDirDefault, libraryNameDefault)
 	return &Options{
-		ORTOptions:   &OrtOptions{},
+		ORTOptions: &OrtOptions{
+			LibraryDir:  &libraryDirDefault,
+			LibraryPath: &libraryPathDefault,
+		},
 		GoMLXOptions: &GoMLXOptions{},
 		Destroy: func() error {
 			return nil
@@ -24,6 +33,7 @@ func Defaults() *Options {
 
 type OrtOptions struct {
 	LibraryPath           *string
+	LibraryDir            *string
 	Telemetry             *bool
 	IntraOpNumThreads     *int
 	InterOpNumThreads     *int
@@ -52,7 +62,34 @@ type WithOption func(o *Options) error
 func WithOnnxLibraryPath(ortLibraryPath string) WithOption {
 	return func(o *Options) error {
 		if o.Backend == "ORT" {
-			o.ORTOptions.LibraryPath = &ortLibraryPath
+			object, err := fileutil.FileStats(ortLibraryPath)
+			if err != nil {
+				return fmt.Errorf("failed to access ONNX Runtime library path %q: %w", ortLibraryPath, err)
+			}
+			if !object.IsDir() {
+				return fmt.Errorf("%s is not a directory", ortLibraryPath)
+			}
+
+			var libraryFileName string
+			switch runtime.GOOS {
+			case "windows":
+				libraryFileName = "onnxruntime.dll"
+			case "darwin":
+				libraryFileName = "libonnxruntime.dylib"
+			case "linux":
+				libraryFileName = "libonnxruntime.so"
+			}
+
+			ortLibraryFullPath := fileutil.PathJoinSafe(ortLibraryPath, libraryFileName)
+			exists, err := fileutil.FileExists(ortLibraryPath)
+			if err != nil {
+				return fmt.Errorf("error checking for existence of ONNX Runtime library file: %w", err)
+			}
+			if !exists {
+				return fmt.Errorf("ONNX Runtime library does not exist at %q", ortLibraryPath)
+			}
+			o.ORTOptions.LibraryPath = &ortLibraryFullPath
+			o.ORTOptions.LibraryDir = &ortLibraryPath
 			return nil
 		}
 		return fmt.Errorf("WithOnnxLibraryPath is only supported for ORT backend")
