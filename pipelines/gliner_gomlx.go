@@ -8,7 +8,7 @@ import (
 
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 
-	"github.com/knights-analytics/hugot/pipelineBackends"
+	"github.com/knights-analytics/hugot/backends"
 )
 
 // Note: GLiNER GoMLX implementation exists but is not fully functional due to

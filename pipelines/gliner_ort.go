@@ -8,7 +8,7 @@ import (
 
 	ort "github.com/yalue/onnxruntime_go"
 
-	"github.com/knights-analytics/hugot/pipelineBackends"
+	"github.com/knights-analytics/hugot/backends"
 )
 
 // createGLiNERTensorsORT creates ALL tensors needed for GLiNER inference

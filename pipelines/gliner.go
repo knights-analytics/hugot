@@ -11,7 +11,7 @@ import (
 
 	"github.com/knights-analytics/hugot/backends"
 	"github.com/knights-analytics/hugot/options"
-	"github.com/knights-analytics/hugot/pipelineBackends"
+	"github.com/knights-analytics/hugot/backends"
 )
 
 // GLiNERPipeline implements zero-shot Named Entity Recognition using GLiNER models.

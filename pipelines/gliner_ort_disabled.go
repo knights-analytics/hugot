@@ -3,7 +3,7 @@
 package pipelines
 
 import (
-	"github.com/knights-analytics/hugot/pipelineBackends"
+	"github.com/knights-analytics/hugot/backends"
 )
 
 func createGLiNERTensorsORT(batch *GLiNERBatch, model *pipelineBackends.Model) error {
