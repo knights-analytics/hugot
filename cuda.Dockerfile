@@ -15,8 +15,7 @@ ARG GOPJRT_VERSION
 ARG JAX_CUDA_VERSION
 
 ENV PATH="$PATH:/usr/local/go/bin" \
-    GOPJRT_NOSUDO=1 \
-    PJRT_PLUGIN_LIBRARY_PATH="/usr/local"
+    GOPJRT_NOSUDO=1
 
 COPY ./scripts/download-onnxruntime-gpu.sh /download-onnxruntime-gpu.sh
 RUN --mount=src=./go.mod,dst=/go.mod \
@@ -42,8 +41,8 @@ RUN --mount=src=./go.mod,dst=/go.mod \
     sed -i 's/\r//g' /download-onnxruntime-gpu.sh && chmod +x /download-onnxruntime-gpu.sh && \
     /download-onnxruntime-gpu.sh ${ONNXRUNTIME_VERSION} && \
     # XLA/goMLX
-    GOPROXY=direct go run github.com/gomlx/go-xla/cmd/pjrt_installer@latest -plugin=amazonlinux -version=v${GOPJRT_VERSION} -path=/usr/local && \
-    GOPROXY=direct go run github.com/gomlx/go-xla/cmd/pjrt_installer@latest -plugin=cuda13 -version=${JAX_CUDA_VERSION} -path=/usr/local && \
+    GOPROXY=direct go run github.com/gomlx/go-xla/cmd/pjrt_installer@latest -plugin=amazonlinux -version=v${GOPJRT_VERSION} -path=/usr/local/lib/go-xla && \
+    GOPROXY=direct go run github.com/gomlx/go-xla/cmd/pjrt_installer@latest -plugin=cuda13 -version=${JAX_CUDA_VERSION} -path=/usr/local/lib/go-xla && \
     # NON-PRIVILEGED USER
     # create non-privileged testuser with id: 1000
     useradd -u 1000 -m testuser && usermod -a -G wheel testuser && \
