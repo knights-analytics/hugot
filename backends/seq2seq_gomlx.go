@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/gomlx/gomlx/pkg/core/tensors"
-	"github.com/gomlx/gopjrt/dtypes"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 
 	"github.com/knights-analytics/hugot/util/vectorutil"
 )

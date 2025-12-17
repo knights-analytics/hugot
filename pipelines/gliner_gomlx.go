@@ -17,7 +17,7 @@ import (
 // gains dynamic shape support. For production use, use ORT backend.
 
 // createGLiNERTensorsGoMLX creates ALL tensors needed for GLiNER inference using GoMLX
-func createGLiNERTensorsGoMLX(batch *GLiNERBatch, model *pipelineBackends.Model) error {
+func createGLiNERTensorsGoMLX(batch *GLiNERBatch, model *backends.Model) error {
 	batchSize := batch.Size
 	maxSeqLen := batch.MaxSequenceLength
 	numSpans := batch.NumSpans
@@ -128,7 +128,7 @@ func createGLiNERTensorsGoMLX(batch *GLiNERBatch, model *pipelineBackends.Model)
 }
 
 // runGLiNERSessionOnBatchGoMLX runs the GLiNER model on a batch using GoMLX (pure Go)
-func runGLiNERSessionOnBatchGoMLX(batch *GLiNERBatch, p *pipelineBackends.BasePipeline) error {
+func runGLiNERSessionOnBatchGoMLX(batch *GLiNERBatch, p *backends.BasePipeline) error {
 	if p.Model.GoMLXModel == nil || p.Model.GoMLXModel.Exec == nil {
 		return errors.New("GoMLX model not initialized")
 	}

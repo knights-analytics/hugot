@@ -13,7 +13,7 @@ import (
 	"github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/context"
-	"github.com/gomlx/gopjrt/dtypes"
+	"github.com/gomlx/gomlx/pkg/core/dtypes"
 	"github.com/gomlx/onnx-gomlx/onnx"
 
 	_ "github.com/gomlx/gomlx/backends/simplego" // Import simplego backend

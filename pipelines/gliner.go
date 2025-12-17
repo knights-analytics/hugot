@@ -11,14 +11,13 @@ import (
 
 	"github.com/knights-analytics/hugot/backends"
 	"github.com/knights-analytics/hugot/options"
-	"github.com/knights-analytics/hugot/backends"
 )
 
 // GLiNERPipeline implements zero-shot Named Entity Recognition using GLiNER models.
 // GLiNER (Generalist and Lightweight model for Named Entity Recognition) can extract
 // any entity types without retraining - just specify the entity labels at inference time.
 type GLiNERPipeline struct {
-	*pipelineBackends.BasePipeline
+	*backends.BasePipeline
 	MaxWidth   int      // Maximum span width in words
 	Labels     []string // Entity labels to recognize
 	Threshold  float32  // Score threshold for entity detection
@@ -76,7 +75,7 @@ func (o *GLiNEROutput) HasRelations() bool {
 
 // GLiNERBatch extends PipelineBatch with GLiNER-specific data
 type GLiNERBatch struct {
-	*pipelineBackends.PipelineBatch
+	*backends.PipelineBatch
 	WordsMask    [][]int64   // Word boundary mask for each input
 	TextLengths  [][]int64   // Number of words in each input
 	SpanIdx      [][][]int64 // Span indices [batch][num_spans][2]
@@ -90,7 +89,7 @@ type GLiNERBatch struct {
 // Pipeline options
 
 // WithGLiNERLabels sets the entity labels to recognize
-func WithGLiNERLabels(labels []string) pipelineBackends.PipelineOption[*GLiNERPipeline] {
+func WithGLiNERLabels(labels []string) backends.PipelineOption[*GLiNERPipeline] {
 	return func(p *GLiNERPipeline) error {
 		p.Labels = labels
 		return nil
@@ -98,7 +97,7 @@ func WithGLiNERLabels(labels []string) pipelineBackends.PipelineOption[*GLiNERPi
 }
 
 // WithGLiNERMaxWidth sets the maximum span width in words
-func WithGLiNERMaxWidth(maxWidth int) pipelineBackends.PipelineOption[*GLiNERPipeline] {
+func WithGLiNERMaxWidth(maxWidth int) backends.PipelineOption[*GLiNERPipeline] {
 	return func(p *GLiNERPipeline) error {
 		if maxWidth <= 0 {
 			return errors.New("maxWidth must be positive")
@@ -109,7 +108,7 @@ func WithGLiNERMaxWidth(maxWidth int) pipelineBackends.PipelineOption[*GLiNERPip
 }
 
 // WithGLiNERThreshold sets the score threshold for entity detection
-func WithGLiNERThreshold(threshold float32) pipelineBackends.PipelineOption[*GLiNERPipeline] {
+func WithGLiNERThreshold(threshold float32) backends.PipelineOption[*GLiNERPipeline] {
 	return func(p *GLiNERPipeline) error {
 		if threshold < 0 || threshold > 1 {
 			return errors.New("threshold must be between 0 and 1")
@@ -120,7 +119,7 @@ func WithGLiNERThreshold(threshold float32) pipelineBackends.PipelineOption[*GLi
 }
 
 // WithGLiNERFlatNER enables flat NER mode (no nested entities)
-func WithGLiNERFlatNER() pipelineBackends.PipelineOption[*GLiNERPipeline] {
+func WithGLiNERFlatNER() backends.PipelineOption[*GLiNERPipeline] {
 	return func(p *GLiNERPipeline) error {
 		p.FlatNER = true
 		return nil
@@ -128,7 +127,7 @@ func WithGLiNERFlatNER() pipelineBackends.PipelineOption[*GLiNERPipeline] {
 }
 
 // WithGLiNERMultiLabel enables multi-label mode
-func WithGLiNERMultiLabel() pipelineBackends.PipelineOption[*GLiNERPipeline] {
+func WithGLiNERMultiLabel() backends.PipelineOption[*GLiNERPipeline] {
 	return func(p *GLiNERPipeline) error {
 		p.MultiLabel = true
 		return nil
@@ -136,7 +135,7 @@ func WithGLiNERMultiLabel() pipelineBackends.PipelineOption[*GLiNERPipeline] {
 }
 
 // WithGLiNERRelationLabels sets the relation labels for relationship extraction
-func WithGLiNERRelationLabels(labels []string) pipelineBackends.PipelineOption[*GLiNERPipeline] {
+func WithGLiNERRelationLabels(labels []string) backends.PipelineOption[*GLiNERPipeline] {
 	return func(p *GLiNERPipeline) error {
 		p.RelationLabels = labels
 		return nil
@@ -144,7 +143,7 @@ func WithGLiNERRelationLabels(labels []string) pipelineBackends.PipelineOption[*
 }
 
 // WithGLiNERRelationThreshold sets the threshold for relation detection
-func WithGLiNERRelationThreshold(threshold float32) pipelineBackends.PipelineOption[*GLiNERPipeline] {
+func WithGLiNERRelationThreshold(threshold float32) backends.PipelineOption[*GLiNERPipeline] {
 	return func(p *GLiNERPipeline) error {
 		if threshold < 0 || threshold > 1 {
 			return errors.New("relation threshold must be between 0 and 1")
@@ -156,7 +155,7 @@ func WithGLiNERRelationThreshold(threshold float32) pipelineBackends.PipelineOpt
 
 // WithGLiNERSequencePacking enables sequence packing for batch optimization
 // This combines multiple short sequences into a single transformer pass with a block-diagonal attention mask
-func WithGLiNERSequencePacking(maxPackedLen int) pipelineBackends.PipelineOption[*GLiNERPipeline] {
+func WithGLiNERSequencePacking(maxPackedLen int) backends.PipelineOption[*GLiNERPipeline] {
 	return func(p *GLiNERPipeline) error {
 		if maxPackedLen <= 0 {
 			maxPackedLen = 512
@@ -168,8 +167,8 @@ func WithGLiNERSequencePacking(maxPackedLen int) pipelineBackends.PipelineOption
 }
 
 // NewGLiNERPipeline creates a new GLiNER pipeline
-func NewGLiNERPipeline(config pipelineBackends.PipelineConfig[*GLiNERPipeline], s *options.Options, model *pipelineBackends.Model) (*GLiNERPipeline, error) {
-	basePipeline, err := pipelineBackends.NewBasePipeline(config, s, model)
+func NewGLiNERPipeline(config backends.PipelineConfig[*GLiNERPipeline], s *options.Options, model *backends.Model) (*GLiNERPipeline, error) {
+	basePipeline, err := backends.NewBasePipeline(config, s, model)
 	if err != nil {
 		return nil, err
 	}
@@ -194,7 +193,7 @@ func NewGLiNERPipeline(config pipelineBackends.PipelineConfig[*GLiNERPipeline], 
 	}
 
 	// GLiNER needs offsets and special token masks to detect word boundaries
-	pipelineBackends.AllInputTokens(pipeline.BasePipeline)
+	backends.AllInputTokens(pipeline.BasePipeline)
 
 	// Validate the pipeline
 	if err := pipeline.Validate(); err != nil {
@@ -205,20 +204,28 @@ func NewGLiNERPipeline(config pipelineBackends.PipelineConfig[*GLiNERPipeline], 
 }
 
 // GetModel returns the underlying model
-func (p *GLiNERPipeline) GetModel() *pipelineBackends.Model {
+func (p *GLiNERPipeline) GetModel() *backends.Model {
 	return p.Model
 }
 
 // GetMetadata returns pipeline metadata
-func (p *GLiNERPipeline) GetMetadata() pipelineBackends.PipelineMetadata {
-	return pipelineBackends.PipelineMetadata{
-		OutputsInfo: []pipelineBackends.OutputInfo{
+func (p *GLiNERPipeline) GetMetadata() backends.PipelineMetadata {
+	return backends.PipelineMetadata{
+		OutputsInfo: []backends.OutputInfo{
 			{
 				Name:       p.Model.OutputsMeta[0].Name,
 				Dimensions: p.Model.OutputsMeta[0].Dimensions,
 			},
 		},
 	}
+}
+
+// GetStatistics returns the pipeline statistics.
+func (p *GLiNERPipeline) GetStatistics() backends.PipelineStatistics {
+	statistics := backends.PipelineStatistics{}
+	statistics.ComputeTokenizerStatistics(p.Model.Tokenizer.TokenizerTimings)
+	statistics.ComputeOnnxStatistics(p.PipelineTimings)
+	return statistics
 }
 
 // GetStats returns runtime statistics
@@ -281,7 +288,7 @@ func (p *GLiNERPipeline) Validate() error {
 }
 
 // Run executes the pipeline on input texts
-func (p *GLiNERPipeline) Run(inputs []string) (pipelineBackends.PipelineBatchOutput, error) {
+func (p *GLiNERPipeline) Run(inputs []string) (backends.PipelineBatchOutput, error) {
 	return p.RunPipeline(inputs)
 }
 
@@ -325,7 +332,7 @@ func (p *GLiNERPipeline) RunPipelineWithLabels(inputs []string, labels []string)
 
 func (p *GLiNERPipeline) prepareGLiNERBatch(size int) *GLiNERBatch {
 	return &GLiNERBatch{
-		PipelineBatch: pipelineBackends.NewBatch(size),
+		PipelineBatch: backends.NewBatch(size),
 		OriginalText:  make([]string, size),
 	}
 }
@@ -344,7 +351,7 @@ func (p *GLiNERPipeline) Preprocess(batch *GLiNERBatch, inputs []string, labels 
 	}
 
 	// Tokenize the prefixed texts
-	pipelineBackends.TokenizeInputs(batch.PipelineBatch, p.Model.Tokenizer, prefixedTexts)
+	backends.TokenizeInputs(batch.PipelineBatch, p.Model.Tokenizer, prefixedTexts)
 
 	atomic.AddUint64(&p.Model.Tokenizer.TokenizerTimings.NumCalls, 1)
 	atomic.AddUint64(&p.Model.Tokenizer.TokenizerTimings.TotalNS, uint64(time.Since(start)))
@@ -866,10 +873,10 @@ func (p *GLiNERPipeline) computeLabelEmbeddings(labels []string) ([]float32, int
 	labelPrefix := buildGLiNERLabelPrefix(labels)
 
 	// Tokenize just the label prefix
-	batch := pipelineBackends.NewBatch(1)
+	batch := backends.NewBatch(1)
 	defer batch.Destroy()
 
-	pipelineBackends.TokenizeInputs(batch, p.Model.Tokenizer, []string{labelPrefix})
+	backends.TokenizeInputs(batch, p.Model.Tokenizer, []string{labelPrefix})
 
 	// Create minimal input tensors for label encoding
 	// BiEncoder models accept a "labels_only" flag or separate label input
@@ -923,17 +930,17 @@ func (p *GLiNERPipeline) computeLabelEmbeddings(labels []string) ([]float32, int
 }
 
 // createLabelOnlyTensorsORT creates tensors for label-only forward pass
-func (p *GLiNERPipeline) createLabelOnlyTensorsORT(batch *pipelineBackends.PipelineBatch) error {
+func (p *GLiNERPipeline) createLabelOnlyTensorsORT(batch *backends.PipelineBatch) error {
 	// This creates input tensors with just the tokenized labels
 	// For standard token classification, we use the base pipeline's tensor creation
 	// BiEncoder models may need specialized handling
-	return pipelineBackends.CreateInputTensors(batch, p.Model, p.Runtime)
+	return backends.CreateInputTensors(batch, p.Model, p.Runtime)
 }
 
 // forwardLabelEmbeddings runs inference for label embedding extraction
-func (p *GLiNERPipeline) forwardLabelEmbeddings(batch *pipelineBackends.PipelineBatch) error {
+func (p *GLiNERPipeline) forwardLabelEmbeddings(batch *backends.PipelineBatch) error {
 	// Use the base pipeline's run method which handles runtime dispatch
-	return pipelineBackends.RunSessionOnBatch(batch, p.BasePipeline)
+	return backends.RunSessionOnBatch(batch, p.BasePipeline)
 }
 
 // HasCachedLabelEmbeddings returns true if label embeddings are cached
@@ -1044,7 +1051,7 @@ func (p *GLiNERPipeline) preprocessWithCachedEmbeddings(batch *GLiNERBatch, inpu
 	}
 
 	// Tokenize texts (without label prefix since embeddings are cached)
-	pipelineBackends.TokenizeInputs(batch.PipelineBatch, p.Model.Tokenizer, inputs)
+	backends.TokenizeInputs(batch.PipelineBatch, p.Model.Tokenizer, inputs)
 
 	atomic.AddUint64(&p.Model.Tokenizer.TokenizerTimings.NumCalls, 1)
 	atomic.AddUint64(&p.Model.Tokenizer.TokenizerTimings.TotalNS, uint64(time.Since(start)))
@@ -1214,7 +1221,7 @@ func (p *GLiNERPipeline) createPackingPlan(tokenLengths []int) *PackingPlan {
 }
 
 // packSequences combines multiple sequences according to a packing plan
-func (p *GLiNERPipeline) packSequences(batch *pipelineBackends.PipelineBatch, plan *PackingPlan) ([]*PackedSequence, error) {
+func (p *GLiNERPipeline) packSequences(batch *backends.PipelineBatch, plan *PackingPlan) ([]*PackedSequence, error) {
 	packed := make([]*PackedSequence, len(plan.Groups))
 
 	for groupIdx, group := range plan.Groups {
@@ -1305,8 +1312,8 @@ func (p *GLiNERPipeline) RunPipelineWithPacking(inputs []string, labels []string
 	}
 
 	// Quick tokenization pass to get lengths
-	tempBatch := pipelineBackends.NewBatch(len(inputs))
-	pipelineBackends.TokenizeInputs(tempBatch, p.Model.Tokenizer, prefixedTexts)
+	tempBatch := backends.NewBatch(len(inputs))
+	backends.TokenizeInputs(tempBatch, p.Model.Tokenizer, prefixedTexts)
 
 	tokenLengths := make([]int, len(inputs))
 	for i, input := range tempBatch.Input {
@@ -1410,7 +1417,7 @@ func DefaultFlashDeBERTaConfig() FlashDeBERTaConfig {
 
 // WithFlashDeBERTa enables FlashDeBERTa optimization
 // This requires the model to be exported with flash attention support
-func WithFlashDeBERTa(config FlashDeBERTaConfig) pipelineBackends.PipelineOption[*GLiNERPipeline] {
+func WithFlashDeBERTa(config FlashDeBERTaConfig) backends.PipelineOption[*GLiNERPipeline] {
 	return func(p *GLiNERPipeline) error {
 		// FlashDeBERTa is configured via ONNX Runtime execution providers
 		// The actual implementation depends on:
@@ -1576,7 +1583,7 @@ func (p *GLiNERPipeline) PreprocessWithRelations(
 	}
 
 	// Standard preprocessing
-	pipelineBackends.TokenizeInputs(batch.PipelineBatch, p.Model.Tokenizer, prefixedTexts)
+	backends.TokenizeInputs(batch.PipelineBatch, p.Model.Tokenizer, prefixedTexts)
 
 	// Build GLiNER-specific inputs with adjusted prefix length
 	combinedPrefixLen := uint(len(prefix) + 1) // +1 for space

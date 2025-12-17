@@ -6,12 +6,12 @@ import (
 	"github.com/knights-analytics/hugot/backends"
 )
 
-func createGLiNERTensorsORT(batch *GLiNERBatch, model *pipelineBackends.Model) error {
+func createGLiNERTensorsORT(batch *GLiNERBatch, model *backends.Model) error {
 	// ORT not available - this will never be called when using GO/XLA runtime
 	return nil
 }
 
-func runGLiNERSessionOnBatchORT(batch *GLiNERBatch, p *pipelineBackends.BasePipeline) error {
+func runGLiNERSessionOnBatchORT(batch *GLiNERBatch, p *backends.BasePipeline) error {
 	// ORT not available - this will never be called when using GO/XLA runtime
 	return nil
 }

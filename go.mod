@@ -1,14 +1,13 @@
 module github.com/knights-analytics/hugot
 
-go 1.24.0
+go 1.24.3
 
 require (
 	github.com/daulet/tokenizers v1.24.0
 	github.com/gomlx/exceptions v0.0.3
 	github.com/gomlx/go-huggingface v0.3.1
-	github.com/gomlx/gomlx v0.24.1
-	github.com/gomlx/gopjrt v0.9.1
-	github.com/gomlx/onnx-gomlx v0.3.2
+	github.com/gomlx/gomlx v0.26.0
+	github.com/gomlx/onnx-gomlx v0.3.4
 	github.com/stretchr/testify v1.11.1
 	github.com/sugarme/tokenizer v0.3.0
 	github.com/urfave/cli/v3 v3.6.1
@@ -23,7 +22,7 @@ require (
 	github.com/go-errors/errors v1.5.1 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/gofrs/flock v0.13.0 // indirect
-	github.com/gomlx/stablehlo v0.1.0 // indirect
+	github.com/gomlx/go-xla v0.1.4 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/mitchellh/colorstring v0.0.0-20190213212951-d06e56a500db // indirect
 	github.com/patrickmn/go-cache v2.1.0+incompatible // indirect
@@ -35,7 +34,8 @@ require (
 	github.com/x448/float16 v0.8.4 // indirect
 	golang.org/x/crypto v0.45.0 // indirect
 	golang.org/x/exp v0.0.0-20251113190631-e25ba8c21ef6 // indirect
-	golang.org/x/sys v0.38.0 // indirect
+	golang.org/x/sys v0.39.0 // indirect
+	golang.org/x/term v0.38.0 // indirect
 	golang.org/x/text v0.31.0 // indirect
 	google.golang.org/protobuf v1.36.10 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect

@@ -12,7 +12,7 @@ import (
 )
 
 // createGLiNERTensorsORT creates ALL tensors needed for GLiNER inference
-func createGLiNERTensorsORT(batch *GLiNERBatch, model *pipelineBackends.Model) error {
+func createGLiNERTensorsORT(batch *GLiNERBatch, model *backends.Model) error {
 	batchSize := int64(batch.Size)
 	maxSeqLen := int64(batch.MaxSequenceLength)
 	numSpans := int64(batch.NumSpans)
@@ -154,7 +154,7 @@ func createGLiNERTensorsORT(batch *GLiNERBatch, model *pipelineBackends.Model) e
 }
 
 // runGLiNERSessionOnBatchORT runs the GLiNER model on a batch using ORT
-func runGLiNERSessionOnBatchORT(batch *GLiNERBatch, p *pipelineBackends.BasePipeline) error {
+func runGLiNERSessionOnBatchORT(batch *GLiNERBatch, p *backends.BasePipeline) error {
 	inputTensors, ok := batch.InputValues.([]ort.Value)
 	if !ok {
 		return errors.New("expected []ort.Value for input tensors")
