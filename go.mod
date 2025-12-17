@@ -12,19 +12,18 @@ require (
 	github.com/sugarme/tokenizer v0.3.0
 	github.com/urfave/cli/v3 v3.6.1
 	github.com/viant/afs v1.29.0
-	github.com/yalue/onnxruntime_go v1.24.0
+	github.com/yalue/onnxruntime_go v1.25.0
 	golang.org/x/image v0.34.0
 )
 
 require (
-	github.com/AlexsanderHamir/GenPool v1.6.6 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/emirpasic/gods v1.18.1 // indirect
 	github.com/go-errors/errors v1.5.1 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/gofrs/flock v0.13.0 // indirect
-	github.com/gomlx/go-xla v0.1.2 // indirect
+	github.com/gomlx/go-xla v0.1.3 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/mitchellh/colorstring v0.0.0-20190213212951-d06e56a500db // indirect
 	github.com/patrickmn/go-cache v2.1.0+incompatible // indirect
