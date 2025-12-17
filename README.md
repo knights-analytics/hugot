@@ -82,7 +82,7 @@ To use Hugot as a library in your application, you can directly import it and fo
 
 #### Backends
 
-- if using Onnx Runtime, the onnxruntime.so file should be obtained from the releases section of this page. If you want to use alternative architectures from `linux/amd64` you will have to download it from [the ONNX Runtime releases page](https://github.com/microsoft/onnxruntime/releases/), see the [dockerfile](./Dockerfile) as an example. Hugot looks for this file at /usr/lib/onnxruntime.so or /usr/lib64/onnxruntime.so by default. A different location can be specified by passing the `WithOnnxLibraryPath()` option to `NewORTSession()`, e.g:
+- if using Onnx Runtime, the onnxruntime.so file should be obtained from the releases section of this page. If you want to use alternative architectures from `linux/amd64` you will have to download it from [the ONNX Runtime releases page](https://github.com/microsoft/onnxruntime/releases/), see the [dockerfile](./Dockerfile) as an example. Hugot looks for this file at /usr/lib/libonnxruntime.so by default. A different location can be specified by passing the `WithOnnxLibraryPath()` option to `NewORTSession()`, e.g:
 
 ```
 session, err := NewORTSession(
@@ -274,12 +274,11 @@ To use Hugot with Nvidia gpu acceleration, you need to have the following:
 
 - The Nvidia driver for your graphics card (if running in Docker and WSL2, starting with --gpus all should inherit the drivers from the host OS)
 - ONNX Runtime:
-    - The cuda gpu version of ONNX Runtime on the machine/docker container. You can see how we get that by looking at the [Dockerfile](./Dockerfile). You can also get the ONNX Runtime libraries that we use for testing from the release. Just download the gpu .so libraries and put them in /usr/lib64.
+    - The cuda gpu version of ONNX Runtime on the machine/docker container. You can see how we get that by looking at the [Dockerfile](./Dockerfile). You can also get the ONNX Runtime libraries that we use for testing from the release. Just download the gpu .so libraries and put them in /usr/lib.
     - The required CUDA libraries installed on your system that are compatible with the ONNX Runtime gpu version you use. See [here](https://onnxruntime.ai/docs/execution-providers/CUDA-ExecutionProvider.html). For instance, for onnxruntime-gpu 19.0, we need CUDA 12.x (any minor version should be compatible) and cuDNN 9.x.
     - Start a session with the following:
       ```
       opts := []options.WithOption{
-        options.WithOnnxLibraryPath("/usr/lib64/onnxruntime-gpu/libonnxruntime.so"),
         options.WithCuda(map[string]string{
           "device_id": "0",
         }),

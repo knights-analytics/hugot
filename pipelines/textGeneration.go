@@ -59,7 +59,7 @@ func NewTextGenerationPipeline(config backends.PipelineConfig[*TextGenerationPip
 			return nil, err
 		}
 	}
-	if pipeline.MaxLength <= 0 {
+	if pipeline.MaxLength == 0 {
 		pipeline.MaxLength = 1028 // Default value if not set as per Python
 	}
 	err = pipeline.Validate()
@@ -96,6 +96,11 @@ func (p *TextGenerationPipeline) Validate() error {
 	if !p.Model.IsGenerative {
 		validationErrors = append(validationErrors, errors.New("model is not generative"))
 	}
+
+	if p.MaxLength <= 0 {
+		validationErrors = append(validationErrors, errors.New("max length must be greater than zero"))
+	}
+
 	return errors.Join(validationErrors...)
 }
 

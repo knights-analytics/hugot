@@ -2,7 +2,7 @@
 
 ARG GO_VERSION=1.25.5
 ARG ONNXRUNTIME_VERSION=1.23.2
-ARG ONNXRUNTIME_GENAI_VERSION=0.11.14
+ARG ONNXRUNTIME_GENAI_VERSION=0.11.4
 ARG GOPJRT_VERSION=0.83.1
 ARG BUILD_PLATFORM=linux/amd64
 
@@ -12,12 +12,14 @@ ARG BUILD_PLATFORM=linux/amd64
 FROM --platform=$BUILD_PLATFORM public.ecr.aws/amazonlinux/amazonlinux:2023 AS hugot-runtime
 ARG GO_VERSION
 ARG ONNXRUNTIME_VERSION
+ARG ONNXRUNTIME_GENAI_VERSION
 ARG GOPJRT_VERSION
 
 ENV PATH="$PATH:/usr/local/go/bin" \
     GOPJRT_NOSUDO=1
 
 COPY ./scripts/download-onnxruntime.sh /download-onnxruntime.sh
+COPY ./scripts/download-onnxruntime-genai.sh /download-onnxruntime-genai.sh
 RUN --mount=src=./go.mod,dst=/go.mod \
     dnf --allowerasing -y install gcc jq bash tar xz gzip glibc-static libstdc++ wget zip git dirmngr sudo which && \
     ln -s /usr/lib64/libstdc++.so.6 /usr/lib64/libstdc++.so && \

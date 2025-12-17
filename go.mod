@@ -8,7 +8,7 @@ require (
 	github.com/gomlx/go-huggingface v0.3.1
 	github.com/gomlx/gomlx v0.26.0-rc2
 	github.com/gomlx/onnx-gomlx v0.3.4-rc0.0.20251216070438-403f89ce7f75
-	github.com/knights-analytics/ortgenai v0.0.0-20251215144038-8c17ce42e8d5
+	github.com/knights-analytics/ortgenai v0.0.0-20251217113036-5abc6d6b37b1
 	github.com/stretchr/testify v1.11.1
 	github.com/sugarme/tokenizer v0.3.0
 	github.com/urfave/cli/v3 v3.6.1
@@ -16,8 +16,6 @@ require (
 	github.com/yalue/onnxruntime_go v1.25.0
 	golang.org/x/image v0.34.0
 )
-
-replace github.com/knights-analytics/ortgenai => /home/rpinosio/repositories/knights/ortgenai
 
 require (
 	github.com/davecgh/go-spew v1.1.1 // indirect

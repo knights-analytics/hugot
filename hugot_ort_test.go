@@ -13,8 +13,7 @@ import (
 // FEATURE EXTRACTION
 
 func TestFeatureExtractionPipelineORT(t *testing.T) {
-	opts := []options.WithOption{options.WithOnnxLibraryPath(onnxRuntimeSharedLibrary)}
-	session, err := NewORTSession(opts...)
+	session, err := NewORTSession()
 	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
@@ -27,13 +26,9 @@ func TestFeatureExtractionPipelineORTCuda(t *testing.T) {
 	if os.Getenv("CI") != "" {
 		t.SkipNow()
 	}
-	opts := []options.WithOption{
-		options.WithOnnxLibraryPath("/usr/lib64/onnxruntime-gpu/libonnxruntime.so"),
-		options.WithCuda(map[string]string{
-			"device_id": "0",
-		}),
-	}
-	session, err := NewORTSession(opts...)
+	session, err := NewORTSession(options.WithCuda(map[string]string{
+		"device_id": "0",
+	}))
 	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
@@ -43,8 +38,7 @@ func TestFeatureExtractionPipelineORTCuda(t *testing.T) {
 }
 
 func TestFeatureExtractionPipelineValidationORT(t *testing.T) {
-	opts := []options.WithOption{options.WithOnnxLibraryPath(onnxRuntimeSharedLibrary)}
-	session, err := NewORTSession(opts...)
+	session, err := NewORTSession()
 	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
@@ -57,7 +51,7 @@ func TestFeatureExtractionPipelineValidationORT(t *testing.T) {
 
 func TestTextClassificationPipelineORT(t *testing.T) {
 	opts := []options.WithOption{
-		options.WithOnnxLibraryPath(onnxRuntimeSharedLibrary),
+		options.WithOnnxLibraryPath("/usr/lib"),
 		options.WithTelemetry(),
 		options.WithCPUMemArena(true),
 		options.WithMemPattern(true),
@@ -77,13 +71,9 @@ func TestTextClassificationPipelineORTCuda(t *testing.T) {
 	if os.Getenv("CI") != "" {
 		t.SkipNow()
 	}
-	opts := []options.WithOption{
-		options.WithOnnxLibraryPath("/usr/lib64/onnxruntime-gpu/libonnxruntime.so"),
-		options.WithCuda(map[string]string{
-			"device_id": "0",
-		}),
-	}
-	session, err := NewORTSession(opts...)
+	session, err := NewORTSession(options.WithCuda(map[string]string{
+		"device_id": "0",
+	}))
 	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
@@ -94,7 +84,7 @@ func TestTextClassificationPipelineORTCuda(t *testing.T) {
 
 func TestTextClassificationPipelineMultiORT(t *testing.T) {
 	opts := []options.WithOption{
-		options.WithOnnxLibraryPath(onnxRuntimeSharedLibrary),
+		options.WithOnnxLibraryPath("/usr/lib"),
 		options.WithTelemetry(),
 		options.WithCPUMemArena(true),
 		options.WithMemPattern(true),
@@ -114,13 +104,9 @@ func TestTextClassificationPipelineORTMultiCuda(t *testing.T) {
 	if os.Getenv("CI") != "" {
 		t.SkipNow()
 	}
-	opts := []options.WithOption{
-		options.WithOnnxLibraryPath("/usr/lib64/onnxruntime-gpu/libonnxruntime.so"),
-		options.WithCuda(map[string]string{
-			"device_id": "0",
-		}),
-	}
-	session, err := NewORTSession(opts...)
+	session, err := NewORTSession(options.WithCuda(map[string]string{
+		"device_id": "0",
+	}))
 	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
@@ -130,8 +116,7 @@ func TestTextClassificationPipelineORTMultiCuda(t *testing.T) {
 }
 
 func TestTextClassificationPipelineValidationORT(t *testing.T) {
-	opts := []options.WithOption{options.WithOnnxLibraryPath(onnxRuntimeSharedLibrary)}
-	session, err := NewORTSession(opts...)
+	session, err := NewORTSession()
 	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
@@ -143,8 +128,7 @@ func TestTextClassificationPipelineValidationORT(t *testing.T) {
 // Token classification
 
 func TestTokenClassificationPipelineORT(t *testing.T) {
-	opts := []options.WithOption{options.WithOnnxLibraryPath(onnxRuntimeSharedLibrary)}
-	session, err := NewORTSession(opts...)
+	session, err := NewORTSession()
 	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
@@ -157,13 +141,9 @@ func TestTokenClassificationPipelineORTCuda(t *testing.T) {
 	if os.Getenv("CI") != "" {
 		t.SkipNow()
 	}
-	opts := []options.WithOption{
-		options.WithOnnxLibraryPath("/usr/lib64/onnxruntime-gpu/libonnxruntime.so"),
-		options.WithCuda(map[string]string{
-			"device_id": "0",
-		}),
-	}
-	session, err := NewORTSession(opts...)
+	session, err := NewORTSession(options.WithCuda(map[string]string{
+		"device_id": "0",
+	}))
 	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
@@ -173,8 +153,7 @@ func TestTokenClassificationPipelineORTCuda(t *testing.T) {
 }
 
 func TestTokenClassificationPipelineValidationORT(t *testing.T) {
-	opts := []options.WithOption{options.WithOnnxLibraryPath(onnxRuntimeSharedLibrary)}
-	session, err := NewORTSession(opts...)
+	session, err := NewORTSession()
 	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
@@ -186,8 +165,7 @@ func TestTokenClassificationPipelineValidationORT(t *testing.T) {
 // Zero shot
 
 func TestZeroShotClassificationPipelineORT(t *testing.T) {
-	opts := []options.WithOption{options.WithOnnxLibraryPath(onnxRuntimeSharedLibrary)}
-	session, err := NewORTSession(opts...)
+	session, err := NewORTSession()
 	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
@@ -200,13 +178,9 @@ func TestZeroShotClassificationPipelineORTCuda(t *testing.T) {
 	if os.Getenv("CI") != "" {
 		t.SkipNow()
 	}
-	opts := []options.WithOption{
-		options.WithOnnxLibraryPath("/usr/lib64/onnxruntime-gpu/libonnxruntime.so"),
-		options.WithCuda(map[string]string{
-			"device_id": "0",
-		}),
-	}
-	session, err := NewORTSession(opts...)
+	session, err := NewORTSession(options.WithCuda(map[string]string{
+		"device_id": "0",
+	}))
 	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
@@ -216,8 +190,7 @@ func TestZeroShotClassificationPipelineORTCuda(t *testing.T) {
 }
 
 func TestZeroShotClassificationPipelineValidationORT(t *testing.T) {
-	opts := []options.WithOption{options.WithOnnxLibraryPath(onnxRuntimeSharedLibrary)}
-	session, err := NewORTSession(opts...)
+	session, err := NewORTSession()
 	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
@@ -226,10 +199,10 @@ func TestZeroShotClassificationPipelineValidationORT(t *testing.T) {
 	zeroShotClassificationPipelineValidation(t, session)
 }
 
-// Cross Encoder.
+// Cross Encoder
+
 func TestCrossEncoderPipelineORT(t *testing.T) {
-	opts := []options.WithOption{options.WithOnnxLibraryPath(onnxRuntimeSharedLibrary)}
-	session, err := NewORTSession(opts...)
+	session, err := NewORTSession()
 	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
@@ -242,13 +215,9 @@ func TestCrossEncoderPipelineORTCuda(t *testing.T) {
 	if os.Getenv("CI") != "" {
 		t.SkipNow()
 	}
-	opts := []options.WithOption{
-		options.WithOnnxLibraryPath("/usr/lib64/onnxruntime-gpu/libonnxruntime.so"),
-		options.WithCuda(map[string]string{
-			"device_id": "0",
-		}),
-	}
-	session, err := NewORTSession(opts...)
+	session, err := NewORTSession(options.WithCuda(map[string]string{
+		"device_id": "0",
+	}))
 	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
@@ -258,8 +227,7 @@ func TestCrossEncoderPipelineORTCuda(t *testing.T) {
 }
 
 func TestCrossEncoderPipelineValidationORT(t *testing.T) {
-	opts := []options.WithOption{options.WithOnnxLibraryPath(onnxRuntimeSharedLibrary)}
-	session, err := NewORTSession(opts...)
+	session, err := NewORTSession()
 	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
@@ -268,10 +236,10 @@ func TestCrossEncoderPipelineValidationORT(t *testing.T) {
 	crossEncoderPipelineValidation(t, session)
 }
 
-// Image classification.
+// Image classification
+
 func TestImageClassificationPipelineORT(t *testing.T) {
-	opts := []options.WithOption{options.WithOnnxLibraryPath(onnxRuntimeSharedLibrary)}
-	session, err := NewORTSession(opts...)
+	session, err := NewORTSession()
 	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
@@ -284,13 +252,9 @@ func TestImageClassificationPipelineORTCuda(t *testing.T) {
 	if os.Getenv("CI") != "" {
 		t.SkipNow()
 	}
-	opts := []options.WithOption{
-		options.WithOnnxLibraryPath("/usr/lib64/onnxruntime-gpu/libonnxruntime.so"),
-		options.WithCuda(map[string]string{
-			"device_id": "0",
-		}),
-	}
-	session, err := NewORTSession(opts...)
+	session, err := NewORTSession(options.WithCuda(map[string]string{
+		"device_id": "0",
+	}))
 	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
@@ -300,8 +264,7 @@ func TestImageClassificationPipelineORTCuda(t *testing.T) {
 }
 
 func TestImageClassificationPipelineValidationORT(t *testing.T) {
-	opts := []options.WithOption{options.WithOnnxLibraryPath(onnxRuntimeSharedLibrary)}
-	session, err := NewORTSession(opts...)
+	session, err := NewORTSession()
 	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
@@ -313,8 +276,7 @@ func TestImageClassificationPipelineValidationORT(t *testing.T) {
 // Object detection
 
 func TestObjectDetectionPipelineORT(t *testing.T) {
-	opts := []options.WithOption{options.WithOnnxLibraryPath(onnxRuntimeSharedLibrary)}
-	session, err := NewORTSession(opts...)
+	session, err := NewORTSession()
 	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
@@ -327,13 +289,9 @@ func TestObjectDetectionPipelineORTCuda(t *testing.T) {
 	if os.Getenv("CI") != "" {
 		t.SkipNow()
 	}
-	opts := []options.WithOption{
-		options.WithOnnxLibraryPath("/usr/lib64/onnxruntime-gpu/libonnxruntime.so"),
-		options.WithCuda(map[string]string{
-			"device_id": "0",
-		}),
-	}
-	session, err := NewORTSession(opts...)
+	session, err := NewORTSession(options.WithCuda(map[string]string{
+		"device_id": "0",
+	}))
 	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
@@ -343,8 +301,7 @@ func TestObjectDetectionPipelineORTCuda(t *testing.T) {
 }
 
 func TestObjectDetectionPipelineValidationORT(t *testing.T) {
-	opts := []options.WithOption{options.WithOnnxLibraryPath(onnxRuntimeSharedLibrary)}
-	session, err := NewORTSession(opts...)
+	session, err := NewORTSession()
 	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
@@ -356,8 +313,7 @@ func TestObjectDetectionPipelineValidationORT(t *testing.T) {
 // Text generation
 
 func TestTextGenerationPipelineORT(t *testing.T) {
-	opts := []options.WithOption{options.WithOnnxLibraryPath(onnxRuntimeSharedLibrary)}
-	session, err := NewORTSession(opts...)
+	session, err := NewORTSession()
 	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
@@ -370,13 +326,9 @@ func TestTextGenerationPipelineORTCuda(t *testing.T) {
 	if os.Getenv("CI") != "" {
 		t.SkipNow()
 	}
-	opts := []options.WithOption{
-		options.WithOnnxLibraryPath("/usr/lib64/onnxruntime-gpu/libonnxruntime.so"),
-		options.WithCuda(map[string]string{
-			"device_id": "0",
-		}),
-	}
-	session, err := NewORTSession(opts...)
+	session, err := NewORTSession(options.WithCuda(map[string]string{
+		"device_id": "0",
+	}))
 	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
@@ -386,11 +338,7 @@ func TestTextGenerationPipelineORTCuda(t *testing.T) {
 }
 
 func TestTextGenerationPipelineValidationORT(t *testing.T) {
-	if os.Getenv("CI") != "" {
-		t.SkipNow()
-	}
-	opts := []options.WithOption{options.WithOnnxLibraryPath(onnxRuntimeSharedLibrary)}
-	session, err := NewORTSession(opts...)
+	session, err := NewORTSession()
 	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
@@ -399,11 +347,10 @@ func TestTextGenerationPipelineValidationORT(t *testing.T) {
 	textGenerationPipelineValidation(t, session)
 }
 
-// No Same Name
+// No same name
 
 func TestNoSameNamePipelineORT(t *testing.T) {
-	opts := []options.WithOption{options.WithOnnxLibraryPath(onnxRuntimeSharedLibrary)}
-	session, err := NewORTSession(opts...)
+	session, err := NewORTSession()
 	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
@@ -413,8 +360,7 @@ func TestNoSameNamePipelineORT(t *testing.T) {
 }
 
 func TestClosePipelineORT(t *testing.T) {
-	opts := []options.WithOption{options.WithOnnxLibraryPath(onnxRuntimeSharedLibrary)}
-	session, err := NewORTSession(opts...)
+	session, err := NewORTSession()
 	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
@@ -426,8 +372,7 @@ func TestClosePipelineORT(t *testing.T) {
 // Thread safety
 
 func TestThreadSafetyORT(t *testing.T) {
-	opts := []options.WithOption{options.WithOnnxLibraryPath(onnxRuntimeSharedLibrary)}
-	session, err := NewORTSession(opts...)
+	session, err := NewORTSession()
 	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
@@ -440,13 +385,9 @@ func TestThreadSafetyORTCuda(t *testing.T) {
 	if os.Getenv("CI") != "" {
 		t.SkipNow()
 	}
-	opts := []options.WithOption{
-		options.WithOnnxLibraryPath("/usr/lib64/onnxruntime-gpu/libonnxruntime.so"),
-		options.WithCuda(map[string]string{
-			"device_id": "0",
-		}),
-	}
-	session, err := NewORTSession(opts...)
+	session, err := NewORTSession(options.WithCuda(map[string]string{
+		"device_id": "0",
+	}))
 	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
@@ -462,13 +403,12 @@ func runBenchmarkEmbedding(strings *[]string, cuda bool) {
 	switch cuda {
 	case true:
 		opts = []options.WithOption{
-			options.WithOnnxLibraryPath("/usr/lib64/onnxruntime-gpu/libonnxruntime.so"),
 			options.WithCuda(map[string]string{
 				"device_id": "0",
 			}),
 		}
 	default:
-		opts = []options.WithOption{options.WithOnnxLibraryPath("/usr/lib64/onnxruntime.so")}
+		opts = []options.WithOption{}
 	}
 	session, err := NewORTSession(opts...)
 	if err != nil {

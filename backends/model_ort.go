@@ -37,35 +37,35 @@ func mapORTOptions(options *options.Options) ([]string, map[string]map[string]st
 
 	// CUDA
 	if ortOptions.CudaOptions != nil {
-		providers = append(providers, "NvTensorRtRtxExecutionProvider")
-		providerOptions["NvTensorRtRtxExecutionProvider"] = ortOptions.CudaOptions
+		providers = append(providers, "cuda")
+		providerOptions["cuda"] = ortOptions.CudaOptions
 	}
 
 	// CoreML
 	if ortOptions.CoreMLOptions != nil {
-		providers = append(providers, "CoreMLExecutionProvider")
-		providerOptions["CoreMLExecutionProvider"] = ortOptions.CoreMLOptions
+		providers = append(providers, "CoreML")
+		providerOptions["CoreML"] = ortOptions.CoreMLOptions
 	}
 
 	// DirectML
 	if ortOptions.DirectMLOptions != nil {
-		providers = append(providers, "DirectMLExecutionProvider")
+		providers = append(providers, "DML")
 		// Map device id to string map expected by advanced session
-		providerOptions["DirectMLExecutionProvider"] = map[string]string{
+		providerOptions["DML"] = map[string]string{
 			"device_id": strconv.Itoa(*ortOptions.DirectMLOptions),
 		}
 	}
 
 	// OpenVINO
 	if ortOptions.OpenVINOOptions != nil {
-		providers = append(providers, "OpenVINOExecutionProvider")
-		providerOptions["OpenVINOExecutionProvider"] = ortOptions.OpenVINOOptions
+		providers = append(providers, "OpenVINO")
+		providerOptions["OpenVINO"] = ortOptions.OpenVINOOptions
 	}
 
 	// TensorRT
 	if ortOptions.TensorRTOptions != nil {
-		providers = append(providers, "TensorRTExecutionProvider")
-		providerOptions["TensorRTExecutionProvider"] = ortOptions.TensorRTOptions
+		providers = append(providers, "NvTensorRtRtx")
+		providerOptions["NvTensorRtRtx"] = ortOptions.TensorRTOptions
 	}
 	return providers, providerOptions, nil
 }

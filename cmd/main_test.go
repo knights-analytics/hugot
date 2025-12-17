@@ -15,8 +15,6 @@ import (
 	"github.com/knights-analytics/hugot/util/fileutil"
 )
 
-const onnxRuntimeSharedLibrary = "/usr/lib64/onnxruntime.so"
-
 func TestTextClassificationCli(t *testing.T) {
 	app := &cli.Command{
 		Name:     "hugot",
@@ -43,7 +41,6 @@ func TestTextClassificationCli(t *testing.T) {
 
 	args := append(baseArgs, "run",
 		fmt.Sprintf("--input=%s", testDataDir),
-		fmt.Sprintf("--s=%s", onnxRuntimeSharedLibrary),
 		fmt.Sprintf("--model=%s", testModel),
 		"--type=textClassification")
 	if err := app.Run(context.Background(), args); err != nil {
@@ -73,7 +70,6 @@ func TestTokenClassificationCli(t *testing.T) {
 
 	args := append(baseArgs, "run",
 		fmt.Sprintf("--input=%s", path.Join(testDataDir, "test-token-classification.jsonl")),
-		fmt.Sprintf("--s=%s", onnxRuntimeSharedLibrary),
 		fmt.Sprintf("--model=%s", testModel),
 		"--type=tokenClassification",
 		fmt.Sprintf("--output=%s", testDataDir))
@@ -105,7 +101,6 @@ func TestFeatureExtractionCli(t *testing.T) {
 
 	args := append(baseArgs, "run",
 		fmt.Sprintf("--input=%s", path.Join(testDataDir, "test-feature-extraction.jsonl")),
-		fmt.Sprintf("--s=%s", onnxRuntimeSharedLibrary),
 		fmt.Sprintf("--model=%s", testModel),
 		fmt.Sprintf("--onnxFilename=%s", "model.onnx"),
 		"--type=featureExtraction",
@@ -146,7 +141,6 @@ func TestModelChain(t *testing.T) {
 	// try to download the model to hugo folder and run it
 	args := append(baseArgs, "run",
 		fmt.Sprintf("--input=%s", testDataDir),
-		fmt.Sprintf("--s=%s", onnxRuntimeSharedLibrary),
 		fmt.Sprintf("--model=%s", "KnightsAnalytics/distilbert-base-uncased-finetuned-sst-2-english"),
 		"--type=textClassification")
 	if err := app.Run(context.Background(), args); err != nil {
@@ -156,7 +150,6 @@ func TestModelChain(t *testing.T) {
 	// run it again. This time the model should be read from the hugot folder without re-downloading it.
 	args = append(baseArgs, "run", fmt.Sprintf("--input=%s", testDataDir),
 		fmt.Sprintf("--model=%s", "KnightsAnalytics/distilbert-base-uncased-finetuned-sst-2-english"),
-		fmt.Sprintf("--s=%s", onnxRuntimeSharedLibrary),
 		"--type=textClassification")
 	if err := app.Run(context.Background(), args); err != nil {
 		check(t, err)

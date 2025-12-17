@@ -13,7 +13,6 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/knights-analytics/hugot/datasets"
-	"github.com/knights-analytics/hugot/options"
 	"github.com/knights-analytics/hugot/pipelines"
 	"github.com/knights-analytics/hugot/util/fileutil"
 )
@@ -38,7 +37,7 @@ func runModel(t *testing.T, runtime string, examplesLeft, examplesRight []string
 
 	switch runtime {
 	case "ORT":
-		session, err = NewORTSession(options.WithOnnxLibraryPath(onnxRuntimeSharedLibrary))
+		session, err = NewORTSession()
 		checkT(t, err)
 	case "GO":
 		session, err = NewGoSession()

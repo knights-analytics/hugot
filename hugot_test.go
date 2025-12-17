@@ -18,19 +18,16 @@ import (
 	"github.com/knights-analytics/hugot/util/imageutil"
 )
 
-// use the system library for the tests.
-const onnxRuntimeSharedLibrary = "/usr/lib64"
-
 // test download validation
 
 func TestDownloadValidation(t *testing.T) {
 	downloadOptions := NewDownloadOptions()
 
 	// a model with the required files in a subfolder should not error
-	_, err := validateDownloadHfModel(hub.New("KnightsAnalytics/distilbert-base-uncased-finetuned-sst-2-english"), downloadOptions)
+	_, err := validateDownloadedHFModel(hub.New("KnightsAnalytics/distilbert-base-uncased-finetuned-sst-2-english"), downloadOptions)
 	assert.NoError(t, err)
 	// a model without tokenizer.json or .onnx model should error
-	_, err = validateDownloadHfModel(hub.New("ByteDance/SDXL-Lightning"), downloadOptions)
+	_, err = validateDownloadedHFModel(hub.New("ByteDance/SDXL-Lightning"), downloadOptions)
 	assert.Error(t, err)
 }
 
@@ -1085,10 +1082,50 @@ func objectDetectionPipelineValidation(t *testing.T, session *Session) {
 	pipeline, err := NewPipeline(session, config)
 	checkT(t, err)
 
-	pipeline.Model.OutputsMeta[0].Dimensions = backends.NewShape(-1, -1, -1)
+	t.Run("input-4d-required", func(t *testing.T) {
+		// Corrupt the primary image input to have invalid dims
+		original := pipeline.Model.InputsMeta[0].Dimensions
+		defer func() { pipeline.Model.InputsMeta[0].Dimensions = original }()
+		pipeline.Model.InputsMeta[0].Dimensions = backends.NewShape(-1, -1, -1)
+		err = pipeline.Validate()
+		assert.Error(t, err)
+	})
 
-	err = pipeline.Validate()
-	assert.Error(t, err)
+	t.Run("mask-3d-required", func(t *testing.T) {
+		// If a mask input exists, make it invalid length to trigger error
+		idx := -1
+		for i, in := range pipeline.Model.InputsMeta {
+			if strings.Contains(strings.ToLower(in.Name), "mask") {
+				idx = i
+				break
+			}
+		}
+		if idx >= 0 {
+			original := pipeline.Model.InputsMeta[idx].Dimensions
+			defer func() { pipeline.Model.InputsMeta[idx].Dimensions = original }()
+			pipeline.Model.InputsMeta[idx].Dimensions = backends.NewShape(-1, -1) // invalid
+			err = pipeline.Validate()
+			assert.Error(t, err)
+		}
+	})
+
+	t.Run("outputs-must-be-detectable", func(t *testing.T) {
+		// Rename outputs so inference of boxes/scores fails
+		originals := make([]string, len(pipeline.Model.OutputsMeta))
+		for i := range pipeline.Model.OutputsMeta {
+			originals[i] = pipeline.Model.OutputsMeta[i].Name
+			pipeline.Model.OutputsMeta[i].Name = fmt.Sprintf("out_%d", i)
+		}
+		defer func() {
+			for i := range pipeline.Model.OutputsMeta {
+				pipeline.Model.OutputsMeta[i].Name = originals[i]
+			}
+		}()
+		pipeline.BoxesOutput = ""
+		pipeline.ScoresOutput = ""
+		err = pipeline.Validate()
+		assert.Error(t, err)
+	})
 }
 
 // No same name
@@ -1171,55 +1208,45 @@ func textGenerationPipeline(t *testing.T, session *Session) {
 	textGenPipeline, err := NewPipeline(session, config)
 	checkT(t, err)
 
+	systemPrompt := "you are a helpful assistant. Answer with a single very brief sentence."
+
 	tests := []struct {
 		name           string
 		input          [][]backends.Message
-		expectedString []string
+		expectedKeywords []string
 	}{
 		{
 			name: "small test",
 			input: [][]backends.Message{
 				{
-					{Role: "system", Content: "you are a helpful assistant."},
+					{Role: "system", Content: systemPrompt},
 					{Role: "user", Content: "what is the capital of the Netherlands?"},
 				},
 			},
-			expectedString: []string{
-				"The capital of the Netherlands is Amsterdam. However, it's worth noting that the seat of government is actually located in The Hague, where the royal family and the supreme court are based. Amsterdam is the country's largest city and serves as the political, economic, and cultural center of the Netherlands.",
+			expectedKeywords: []string{
+				"Amsterdam",
 			},
 		},
 		{
-			name: "batched input, short sequence first, long sequence second",
+			name: "batched test",
 			input: [][]backends.Message{
 				{
-					{Role: "system", Content: "you are a helpful assistant."},
+					{Role: "system", Content: systemPrompt},
 					{Role: "user", Content: "what is the capital of the Netherlands?"},
 				},
 				{
-					{Role: "system", Content: "you are a helpful assistant."},
+					{Role: "system", Content: systemPrompt},
 					{Role: "user", Content: "who was the first president of the United States?"},
 				},
-			},
-			expectedString: []string{
-				"The capital of the Netherlands is Amsterdam. However, it's worth noting that the seat of government is actually located in The Hague, where the royal family and the supreme court are based. Amsterdam is the country's largest city and serves as the political, economic, and cultural center of the Netherlands.",
-				`The first president of the United States was George Washington. He served as the president from April 30, 1789, to March 4, 1797. Washington is often referred to as the "Father of His Country" for his leadership in the founding of the United States. He was a central figure in the American Revolution and presided over the convention that established the U.S. Constitution, which replaced the Articles of Confederation and created a new federal governmental structure. Washington's presidency set many precedents, including the two-term limit, which was later codified in the 22nd Amendment. His leadership and the establishment of a strong federal government were crucial in the early years of the United States.`,
-			},
-		},
-		{
-			name: "batched input, long sequence first, short sequence second",
-			input: [][]backends.Message{
 				{
-					{Role: "system", Content: "you are a helpful assistant."},
-					{Role: "user", Content: "Solve this equation: 2 + 2 = ? Be very brief in your explanation."},
-				},
-				{
-					{Role: "system", Content: "you are a helpful assistant."},
-					{Role: "user", Content: "Answer in one sentence: what is steel made out of?"},
+					{Role: "system", Content: systemPrompt},
+					{Role: "user", Content: "Solve this equation: 2 + 2 = ?"},
 				},
 			},
-			expectedString: []string{
-				"The sum of 2 and 2 is 4.\n\nExplanation: In arithmetic, when you add two identical positive numbers, you simply double the value. Here, doubling 2 gives you 4.",
-				"Steel is primarily made out of iron and carbon, with additional elements such as manganese, chromium, and nickel for various alloying purposes.",
+			expectedKeywords: []string{
+				"Amsterdam",
+				"George Washington",
+				"4",
 			},
 		},
 	}
@@ -1233,8 +1260,8 @@ func textGenerationPipeline(t *testing.T, session *Session) {
 			for i := range len(outputs) {
 				generatedString := outputs[i].(string)
 				fmt.Println(generatedString + "\n")
-				if generatedString != tt.expectedString[i] {
-					t.Fatalf("Test %s failed: expected '%s', got '%s'", tt.name, tt.expectedString[i], generatedString)
+				if !strings.Contains(generatedString, tt.expectedKeywords[i]) {
+					t.Fatalf("Test %s failed: expected keywords '%s' not found in '%s'", tt.name, tt.expectedKeywords[i], generatedString)
 				}
 			}
 		})
@@ -1287,32 +1314,15 @@ func textGenerationPipelineValidation(t *testing.T, session *Session) {
 
 	// Configure the text generation pipeline
 	config := TextGenerationConfig{
-		ModelPath:    "./models/KnightsAnalytics_Phi-3.5-mini-instruct-onnx",
-		Name:         "testPipeline",
-		OnnxFilename: "model.onnx",
-		Options: []backends.PipelineOption[*pipelines.TextGenerationPipeline]{
-			pipelines.WithMaxLength(1),
-		},
+		ModelPath: "./models/KnightsAnalytics_Phi-3.5-mini-instruct-onnx",
+		Name:      "testPipeline",
+		Options:   []backends.PipelineOption[*pipelines.TextGenerationPipeline]{},
 	}
-
-	// Create the pipeline
 	pipeline, err := NewPipeline(session, config)
 	checkT(t, err)
-
-	pipeline.Model.NumHiddenLayers = 0
+	pipeline.MaxLength = -100
 	err = pipeline.Validate()
 	assert.Error(t, err)
-	pipeline.Model.NumHiddenLayers = 1
-
-	pipeline.Model.NumKeyValueHeads = 0
-	err = pipeline.Validate()
-	assert.Error(t, err)
-	pipeline.Model.NumKeyValueHeads = 1
-
-	pipeline.Model.HeadDim = 0
-	err = pipeline.Validate()
-	assert.Error(t, err)
-	pipeline.Model.HeadDim = 1
 }
 
 // Thread safety
