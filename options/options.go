@@ -16,9 +16,7 @@ type Options struct {
 }
 
 func Defaults() *Options {
-	libraryDirDefault := "/usr/lib"
-	libraryNameDefault := "libonnxruntime.so"
-	libraryPathDefault := fileutil.PathJoinSafe(libraryDirDefault, libraryNameDefault)
+	_, libraryDirDefault, libraryPathDefault := getDefaultLibraryPaths()
 	return &Options{
 		ORTOptions: &OrtOptions{
 			LibraryDir:  &libraryDirDefault,
@@ -28,6 +26,17 @@ func Defaults() *Options {
 		Destroy: func() error {
 			return nil
 		},
+	}
+}
+
+func getDefaultLibraryPaths() (string, string, string) {
+	switch runtime.GOOS {
+	case "windows":
+		return `onnxruntime.dll`, `.\`, `.\onnxuntime.dll`
+	case "darwin":
+		return "libonnxruntime.dylib", "/usr/local/lib", "/usr/local/lib/libonnxruntime.dylib"
+	default:
+		return "libonnxruntime.so", "/usr/lib", "/usr/lib/libonnxruntime.so"
 	}
 }
 
@@ -70,23 +79,14 @@ func WithOnnxLibraryPath(ortLibraryPath string) WithOption {
 				return fmt.Errorf("%s is not a directory", ortLibraryPath)
 			}
 
-			var libraryFileName string
-			switch runtime.GOOS {
-			case "windows":
-				libraryFileName = "onnxruntime.dll"
-			case "darwin":
-				libraryFileName = "libonnxruntime.dylib"
-			case "linux":
-				libraryFileName = "libonnxruntime.so"
-			}
-
-			ortLibraryFullPath := fileutil.PathJoinSafe(ortLibraryPath, libraryFileName)
+			libraryName, _, _ := getDefaultLibraryPaths()
+			ortLibraryFullPath := fileutil.PathJoinSafe(ortLibraryPath, libraryName)
 			exists, err := fileutil.FileExists(ortLibraryPath)
 			if err != nil {
 				return fmt.Errorf("error checking for existence of ONNX Runtime library file: %w", err)
 			}
 			if !exists {
-				return fmt.Errorf("ONNX Runtime library does not exist at %q", ortLibraryPath)
+				return fmt.Errorf("ONNX Runtime library %s does not exist at %q", libraryName, ortLibraryPath)
 			}
 			o.ORTOptions.LibraryPath = &ortLibraryFullPath
 			o.ORTOptions.LibraryDir = &ortLibraryPath
