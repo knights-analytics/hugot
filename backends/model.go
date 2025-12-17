@@ -129,7 +129,9 @@ func getOnnxFiles(path string) ([][]string, error) {
 	var onnxFiles [][]string
 	walker := func(_ context.Context, _ string, parent string, info os.FileInfo, _ io.Reader) (toContinue bool, err error) {
 		if strings.HasSuffix(info.Name(), ".onnx") {
-			// parent is already the full directory path from afs.Walk, don't join with path
+			if parent == "" {
+				parent = path
+			}
 			onnxFiles = append(onnxFiles, []string{parent, info.Name()})
 		}
 		return true, nil
