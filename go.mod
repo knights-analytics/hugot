@@ -6,9 +6,9 @@ require (
 	github.com/daulet/tokenizers v1.24.0
 	github.com/gomlx/exceptions v0.0.3
 	github.com/gomlx/go-huggingface v0.3.1
-	github.com/gomlx/gomlx v0.26.0-rc2
-	github.com/gomlx/onnx-gomlx v0.3.4-rc0.0.20251216070438-403f89ce7f75
-	github.com/knights-analytics/ortgenai v0.0.0-20251217113036-5abc6d6b37b1
+	github.com/gomlx/gomlx v0.26.0
+	github.com/gomlx/onnx-gomlx v0.3.4
+	github.com/knights-analytics/ortgenai v0.0.1
 	github.com/stretchr/testify v1.11.1
 	github.com/sugarme/tokenizer v0.3.0
 	github.com/urfave/cli/v3 v3.6.1
@@ -24,7 +24,7 @@ require (
 	github.com/go-errors/errors v1.5.1 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/gofrs/flock v0.13.0 // indirect
-	github.com/gomlx/go-xla v0.1.3 // indirect
+	github.com/gomlx/go-xla v0.1.4 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/mitchellh/colorstring v0.0.0-20190213212951-d06e56a500db // indirect
 	github.com/patrickmn/go-cache v2.1.0+incompatible // indirect

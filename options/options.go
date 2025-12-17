@@ -66,8 +66,7 @@ type GoMLXOptions struct {
 // WithOption is the interface for all option functions.
 type WithOption func(o *Options) error
 
-// WithOnnxLibraryPath (ORT only) Use this function to set the path to the "onnxbackend.so" or "onnxbackend.dll" function.
-// By default, it will be set to "onnxbackend.so" on non-Windows systems, and "onnxbackend.dll" on Windows.
+// WithOnnxLibraryPath (ORT only) Use this function to set the path to the "libonnxuntime.so", "libonnxuntime.dylib" or "onnxruntime.dll" files.
 func WithOnnxLibraryPath(ortLibraryPath string) WithOption {
 	return func(o *Options) error {
 		if o.Backend == "ORT" {

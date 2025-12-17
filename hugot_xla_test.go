@@ -195,6 +195,9 @@ func TestCrossEncoderPipelineXLA(t *testing.T) {
 }
 
 func TestCrossEncoderPipelineXLACuda(t *testing.T) {
+	if os.Getenv("CI") != "" {
+		t.SkipNow()
+	}
 	session, err := NewXLASession(options.WithCuda(map[string]string{
 		"device_id": "0",
 	}))
@@ -229,6 +232,9 @@ func TestImageClassificationPipelineXLA(t *testing.T) {
 }
 
 func TestImageClassificationPipelineXLACuda(t *testing.T) {
+	if os.Getenv("CI") != "" {
+		t.SkipNow()
+	}
 	session, err := NewXLASession(options.WithCuda(map[string]string{
 		"device_id": "0",
 	}))
@@ -264,6 +270,9 @@ func TestObjectDetectionPipelineXLA(t *testing.T) {
 }
 
 func TestObjectDetectionPipelineXLACuda(t *testing.T) {
+	if os.Getenv("CI") != "" {
+		t.SkipNow()
+	}
 	t.Skip("Currently fails due to unsupported constant in XLA backend")
 	session, err := NewXLASession(options.WithCuda(map[string]string{
 		"device_id": "0",
@@ -301,6 +310,9 @@ func TestTextGenerationPipelineXLA(t *testing.T) {
 }
 
 func TestTextGenerationPipelineXLACuda(t *testing.T) {
+	if os.Getenv("CI") != "" {
+		t.SkipNow()
+	}
 	t.Skip("Generative models are not supported yet for XLA")
 	session, err := NewXLASession(options.WithCuda(map[string]string{
 		"device_id": "0",

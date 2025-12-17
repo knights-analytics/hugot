@@ -311,8 +311,12 @@ func TestObjectDetectionPipelineValidationORT(t *testing.T) {
 }
 
 // Text generation
+// These currently only run locally due to resource constraints in CI/CD
 
 func TestTextGenerationPipelineORT(t *testing.T) {
+	if os.Getenv("CI") != "" {
+		t.SkipNow()
+	}
 	session, err := NewORTSession()
 	checkT(t, err)
 	defer func(session *Session) {
@@ -338,6 +342,9 @@ func TestTextGenerationPipelineORTCuda(t *testing.T) {
 }
 
 func TestTextGenerationPipelineValidationORT(t *testing.T) {
+	if os.Getenv("CI") != "" {
+		t.SkipNow()
+	}
 	session, err := NewORTSession()
 	checkT(t, err)
 	defer func(session *Session) {
