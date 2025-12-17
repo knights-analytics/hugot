@@ -8,21 +8,27 @@ src_dir="$(realpath "${this_dir}/..")"
 export src_dir
 
 onnxruntime_version="$1"
+gpu="$2"
 
 if [[ -z $onnxruntime_version ]]; then
     echo version is required
     exit 1
 fi
 
-name="onnxruntime-linux-x64-${onnxruntime_version}"
-url="https://github.com/microsoft/onnxruntime/releases/download/v${onnxruntime_version}/$name.tgz"
+version=""
+if [[ -n $gpu ]]; then
+    version="-gpu"
+fi
 
-echo Downloading version "$onnxruntime_version" \(cpu\) from "${url} into $(pwd)"
+url="https://github.com/microsoft/onnxruntime/releases/download/v${onnxruntime_version}/onnxruntime-linux-x64${version}-${onnxruntime_version}.tgz"
+
+echo Downloading version "$onnxruntime_version${version}" from "${url} into $(pwd)"
 
 function cleanup() {
-    rm -r "$name.tgz" "$name" || true
+    rm -r "onnxruntime-linux-x64${version}-${onnxruntime_version}.tgz" "onnxruntime-linux-x64${version}-${onnxruntime_version}" || true
 }
 
 trap cleanup EXIT
 
-curl -LO "$url" && tar -xzf "./$name.tgz" && mv "./$name/lib/libonnxruntime.so.${onnxruntime_version}" /usr/lib64/onnxruntime.so
+curl -LO "$url" && tar -xzf "./onnxruntime-linux-x64${version}-${onnxruntime_version}.tgz" && \
+    cp onnxruntime-linux-x64"${version}-${onnxruntime_version}"/lib/libonnxruntime* /usr/lib

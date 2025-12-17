@@ -2,6 +2,7 @@
 
 ARG GO_VERSION=1.25.5
 ARG ONNXRUNTIME_VERSION=1.23.2
+ARG ONNXRUNTIME_GENAI_VERSION=0.11.14
 ARG GOPJRT_VERSION=0.83.1
 ARG BUILD_PLATFORM=linux/amd64
 
@@ -35,6 +36,9 @@ RUN --mount=src=./go.mod,dst=/go.mod \
     # onnxruntime cpu
     sed -i 's/\r//g' /download-onnxruntime.sh && chmod +x /download-onnxruntime.sh && \
     /download-onnxruntime.sh ${ONNXRUNTIME_VERSION} && \
+    # onnxruntime genai
+    sed -i 's/\r//g' /download-onnxruntime-genai.sh && chmod +x /download-onnxruntime-genai.sh && \
+    /download-onnxruntime-genai.sh ${ONNXRUNTIME_GENAI_VERSION} && \
     # XLA/goMLX
     GOPROXY=direct go run github.com/gomlx/go-xla/cmd/pjrt_installer@latest -plugin=amazonlinux -version=v${GOPJRT_VERSION} -path=/usr/local/lib/go-xla && \
     # NON-PRIVILEGED USER

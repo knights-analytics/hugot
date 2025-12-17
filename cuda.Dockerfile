@@ -38,8 +38,10 @@ RUN --mount=src=./go.mod,dst=/go.mod \
     tar -C /usr/lib -xzf libtokenizers.linux-amd64.tar.gz && \
     rm libtokenizers.linux-amd64.tar.gz && \
     # onnxruntime cpu and gpu
-    sed -i 's/\r//g' /download-onnxruntime-gpu.sh && chmod +x /download-onnxruntime-gpu.sh && \
-    /download-onnxruntime-gpu.sh ${ONNXRUNTIME_VERSION} && \
+    sed -i 's/\r//g' /download-onnxruntime.sh && chmod +x /download-onnxruntime.sh && \
+    /download-onnxruntime.sh ${ONNXRUNTIME_VERSION} gpu && \
+    sed -i 's/\r//g' /download-onnxruntime-genai.sh && chmod +x /download-onnxruntime-genai.sh && \
+    /download-onnxruntime-genai.sh ${ONNXRUNTIME_GENAI_VERSION} gpu && \
     # XLA/goMLX
     GOPROXY=direct go run github.com/gomlx/go-xla/cmd/pjrt_installer@latest -plugin=amazonlinux -version=v${GOPJRT_VERSION} -path=/usr/local/lib/go-xla && \
     GOPROXY=direct go run github.com/gomlx/go-xla/cmd/pjrt_installer@latest -plugin=cuda13 -version=${JAX_CUDA_VERSION} -path=/usr/local/lib/go-xla && \
