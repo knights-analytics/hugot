@@ -10,6 +10,10 @@ import (
 
 func NewXLASession(opts ...options.WithOption) (*Session, error) {
 	// Disabled for now until we have auto installs globally
-	xla.EnableAutoInstall(false)
+	xlaDisableAutoInstall()
 	return newSession("XLA", opts...)
+}
+
+func xlaDisableAutoInstall() {
+	xla.EnableAutoInstall(false)
 }

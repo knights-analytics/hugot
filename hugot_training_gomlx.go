@@ -43,6 +43,9 @@ func NewGoTrainingSession[T backends.Pipeline](config TrainingConfig) (*Training
 }
 
 func NewXLATrainingSession[T backends.Pipeline](config TrainingConfig) (*TrainingSession, error) {
+	// Disabled for now until we have auto installs globally
+	xlaDisableAutoInstall()
+
 	s, err := newTrainingSession[T]("XLA", config)
 	if err != nil {
 		return nil, err
