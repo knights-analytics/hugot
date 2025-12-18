@@ -160,46 +160,69 @@ func runGLiNERSessionOnBatchORT(batch *GLiNERBatch, p *backends.BasePipeline) er
 		return errors.New("expected []ort.Value for input tensors")
 	}
 
-	// Get max words for calculating output shape
-	maxWords := int64(0)
-	for _, tl := range batch.TextLengths {
-		if len(tl) > 0 && tl[0] > maxWords {
-			maxWords = tl[0]
+	// Find logits output index
+	var logitsIndex int = -1
+	for i, meta := range p.Model.OutputsMeta {
+		if meta.Name == "logits" {
+			logitsIndex = i
+			break
 		}
 	}
-	if maxWords == 0 {
-		maxWords = 1
+	if logitsIndex < 0 {
+		return errors.New("logits output not found in model outputs")
 	}
 
-	// GLiNER output shape: [batch_size, num_words, max_width, num_classes]
-	maxWidth := int64(GLiNERDefaultMaxWidth)
+	// Create output tensor slice - DynamicAdvancedSession will allocate tensors
+	outputTensors := make([]ort.Value, len(p.Model.OutputsMeta))
 
-	// Use the number of labels stored during preprocessing
-	numClasses := int64(batch.NumLabels)
-	if numClasses == 0 {
-		numClasses = 1
-	}
-
-	// Create output tensor with correct shape
-	outputShape := ort.NewShape(int64(batch.Size), maxWords, maxWidth, numClasses)
-	outputTensor, err := ort.NewEmptyTensor[float32](outputShape)
-	if err != nil {
-		return fmt.Errorf("creating output tensor: %w", err)
-	}
-	outputTensors := []ort.Value{outputTensor}
-
-	// Run inference
+	// Run inference - the dynamic session allocates output tensors automatically
 	if err := p.Model.ORTModel.Session.Run(inputTensors, outputTensors); err != nil {
-		outputTensor.Destroy()
+		for _, t := range outputTensors {
+			if t != nil {
+				t.Destroy()
+			}
+		}
 		return fmt.Errorf("running GLiNER session: %w", err)
 	}
 
-	// Convert output to Go slices using shared reshape function
-	data := outputTensor.GetData()
-	batch.OutputValues = []any{reshapeGLiNEROutput(data, int(batch.Size), int(maxWords), int(maxWidth), int(numClasses))}
+	// Extract logits data - it's the tensor at logitsIndex
+	logitsTensor, ok := outputTensors[logitsIndex].(*ort.Tensor[float32])
+	if !ok {
+		for _, t := range outputTensors {
+			if t != nil {
+				t.Destroy()
+			}
+		}
+		return errors.New("logits tensor has unexpected type")
+	}
 
-	// Clean up output tensor
-	outputTensor.Destroy()
+	// Get the actual shape from the output tensor
+	shape := logitsTensor.GetShape()
+	actualMaxWords := int(shape[1])
+	maxWidth := int(shape[2])
+	actualNumClasses := int(shape[3])
+
+	// Convert output to Go slices using shared reshape function
+	data := logitsTensor.GetData()
+	batch.OutputValues = []any{reshapeGLiNEROutput(data, int(batch.Size), actualMaxWords, maxWidth, actualNumClasses)}
+
+	// Clean up all output tensors
+	for _, t := range outputTensors {
+		if t != nil {
+			t.Destroy()
+		}
+	}
 
 	return nil
+}
+
+// Stub functions for GoMLX - these are only called if the wrong runtime is configured,
+// which should be caught earlier, but the compiler needs them defined.
+
+func createGLiNERTensorsGoMLX(batch *GLiNERBatch, model *backends.Model) error {
+	return errors.New("GoMLX runtime not available: build with GO or XLA tags instead of ORT")
+}
+
+func runGLiNERSessionOnBatchGoMLX(batch *GLiNERBatch, p *backends.BasePipeline) error {
+	return errors.New("GoMLX runtime not available: build with GO or XLA tags instead of ORT")
 }

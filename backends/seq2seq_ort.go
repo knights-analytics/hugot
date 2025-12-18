@@ -8,6 +8,7 @@ import (
 	"math/rand"
 	"sort"
 	"strings"
+	"time"
 
 	ort "github.com/yalue/onnxruntime_go"
 
@@ -577,8 +578,12 @@ func argmaxSeq2Seq(logits []float32, batchSize, vocabSize int) []int64 {
 }
 
 // sampleTopP performs nucleus (top-p) sampling with temperature.
+// Creates a thread-local RNG seeded with current time for non-deterministic sampling.
 func sampleTopP(logits []float32, batchSize, vocabSize int, topP, temperature float32) []int64 {
 	tokens := make([]int64, batchSize)
+
+	// Create a thread-local RNG for this sampling operation
+	rng := rand.New(rand.NewSource(time.Now().UnixNano())) // #nosec G404 -- not used for crypto
 
 	for b := 0; b < batchSize; b++ {
 		offset := b * vocabSize
@@ -627,8 +632,8 @@ func sampleTopP(logits []float32, batchSize, vocabSize int, topP, temperature fl
 			totalProb += tp.prob
 		}
 
-		// Sample
-		r := rand.Float32() * totalProb
+		// Sample using thread-safe random source
+		r := rng.Float32() * totalProb
 		cumSum = 0
 		selectedIdx := topTokens[0].idx
 		for _, tp := range topTokens {

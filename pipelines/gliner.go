@@ -613,15 +613,17 @@ func (p *GLiNERPipeline) extractEntities(
 		startWord := int(spanIdx[spanI][0])
 		endWord := int(spanIdx[spanI][1])
 
-		// Get character offsets
-		if startWord >= numWords || endWord >= numWords {
+		// Validate word indices
+		if startWord < 0 || endWord < 0 || startWord >= numWords || endWord >= numWords {
 			continue
 		}
 
+		// Get character offsets
 		charStart := wordsToChars[startWord][0]
 		charEnd := wordsToChars[endWord][1]
 
-		if charStart >= len(text) || charEnd > len(text) || charStart >= charEnd {
+		// Validate character offsets - they must be non-negative and within text bounds
+		if charStart < 0 || charEnd < 0 || charStart >= len(text) || charEnd > len(text) || charStart >= charEnd {
 			continue
 		}
 

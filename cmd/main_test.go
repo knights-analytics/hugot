@@ -15,7 +15,7 @@ import (
 	"github.com/knights-analytics/hugot/util/fileutil"
 )
 
-const onnxRuntimeSharedLibrary = "/usr/lib64/onnxruntime.so"
+// onnxRuntimeSharedLibrary is defined in platform-specific files
 
 func TestTextClassificationCli(t *testing.T) {
 	app := &cli.Command{

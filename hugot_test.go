@@ -18,8 +18,9 @@ import (
 	"github.com/knights-analytics/hugot/util/imageutil"
 )
 
-// use the system library for the tests.
-const onnxRuntimeSharedLibrary = "/usr/lib64/onnxruntime.so"
+// onnxRuntimeSharedLibrary is defined in platform-specific files:
+// - hugot_test_linux.go for Linux
+// - hugot_test_darwin.go for macOS
 
 // test download validation
 

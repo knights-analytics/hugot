@@ -6,11 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
+	"sort"
 	"strings"
 	"time"
 
-	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/core/dtypes"
+	"github.com/gomlx/gomlx/pkg/core/tensors"
 
 	"github.com/knights-analytics/hugot/util/vectorutil"
 )
@@ -319,6 +320,11 @@ func argmaxFromLogitsGoMLX(logits *tensors.Tensor) ([]int64, error) {
 			offset = batch * vocabSize
 		}
 
+		// Bounds check to prevent panic
+		if offset+vocabSize > len(logitsData) {
+			return nil, fmt.Errorf("logits buffer too small: need %d elements, have %d", offset+vocabSize, len(logitsData))
+		}
+
 		maxIdx := 0
 		maxVal := logitsData[offset]
 		for v := 1; v < vocabSize; v++ {
@@ -372,6 +378,11 @@ func sampleFromLogitsGoMLX(logits *tensors.Tensor, topP, temperature float32) ([
 			offset = batch * vocabSize
 		}
 
+		// Bounds check to prevent panic
+		if offset+vocabSize > len(logitsData) {
+			return nil, fmt.Errorf("logits buffer too small: need %d elements, have %d", offset+vocabSize, len(logitsData))
+		}
+
 		batchLogits := make([]float32, vocabSize)
 		copy(batchLogits, logitsData[offset:offset+vocabSize])
 
@@ -405,14 +416,10 @@ func sampleTopPGoMLX(probs []float32, topP float32, rng *rand.Rand) int {
 		indexed[i] = indexedProb{i, p}
 	}
 
-	// Sort by probability descending (simple bubble sort for small vocabs)
-	for i := 0; i < len(indexed)-1; i++ {
-		for j := i + 1; j < len(indexed); j++ {
-			if indexed[j].prob > indexed[i].prob {
-				indexed[i], indexed[j] = indexed[j], indexed[i]
-			}
-		}
-	}
+	// Sort by probability descending using O(n log n) sort
+	sort.Slice(indexed, func(i, j int) bool {
+		return indexed[i].prob > indexed[j].prob
+	})
 
 	// Find the smallest set of tokens with cumulative probability >= topP
 	var cumSum float32
