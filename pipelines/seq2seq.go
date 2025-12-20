@@ -356,6 +356,11 @@ func (p *Seq2SeqPipeline) GetStatistics() backends.PipelineStatistics {
 	return stats
 }
 
+// IsGenerative returns true as Seq2Seq is a generative model.
+func (p *Seq2SeqPipeline) IsGenerative() bool {
+	return true
+}
+
 // Run generates sequences for the given input texts.
 func (p *Seq2SeqPipeline) Run(inputs []string) (backends.PipelineBatchOutput, error) {
 	return p.RunPipeline(inputs)

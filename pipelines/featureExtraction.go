@@ -3,25 +3,34 @@ package pipelines
 import (
 	"errors"
 	"fmt"
+	"image"
 	"strings"
 	"sync/atomic"
 	"time"
 
 	"github.com/knights-analytics/hugot/backends"
 	"github.com/knights-analytics/hugot/options"
+	"github.com/knights-analytics/hugot/util/imageutil"
 	"github.com/knights-analytics/hugot/util/safeconv"
 	"github.com/knights-analytics/hugot/util/vectorutil"
 )
 
 // FeatureExtractionPipeline A feature extraction pipeline is a go version of
 // https://github.com/huggingface/transformers/blob/main/src/transformers/pipelines/feature_extraction.py
+// It supports both text and image inputs for embedding extraction.
 type FeatureExtractionPipeline struct {
 	*backends.BasePipeline
-	OutputName    string
-	Output        backends.InputOutputInfo
-	OutputIndex   int // Record the index of the output selected, defaults to first (0)
-	Normalization bool
+	OutputName         string
+	imageFormat        string
+	Output             backends.InputOutputInfo
+	preprocessSteps    []imageutil.PreprocessStep
+	normalizationSteps []imageutil.NormalizationStep
+	OutputIndex        int // Record the index of the output selected, defaults to first (0)
+	Normalization      bool
+	// Image mode fields (for vision encoders like CLIP visual)
+	imageMode bool // true if this is a vision model
 }
+
 type FeatureExtractionOutput struct {
 	Embeddings [][]float32
 }
@@ -34,8 +43,19 @@ func (t *FeatureExtractionOutput) GetOutput() []any {
 	return out
 }
 
-// PIPELINE OPTIONS
+func (p *FeatureExtractionPipeline) addPreprocessSteps(steps ...imageutil.PreprocessStep) {
+	p.preprocessSteps = append(p.preprocessSteps, steps...)
+}
 
+func (p *FeatureExtractionPipeline) addNormalizationSteps(steps ...imageutil.NormalizationStep) {
+	p.normalizationSteps = append(p.normalizationSteps, steps...)
+}
+
+func (p *FeatureExtractionPipeline) setImageFormat(format string) {
+	p.imageFormat = format
+}
+
+// PIPELINE OPTIONS
 // WithNormalization applies normalization to the mean pooled output of the feature pipeline.
 func WithNormalization() backends.PipelineOption[*FeatureExtractionPipeline] {
 	return func(pipeline *FeatureExtractionPipeline) error {
@@ -53,6 +73,15 @@ func WithOutputName(outputName string) backends.PipelineOption[*FeatureExtractio
 	}
 }
 
+// WithImageMode enables image feature extraction mode for vision encoders (e.g., CLIP visual encoder).
+// When enabled, the pipeline accepts images instead of text and skips tokenization.
+func WithImageMode() backends.PipelineOption[*FeatureExtractionPipeline] {
+	return func(pipeline *FeatureExtractionPipeline) error {
+		pipeline.imageMode = true
+		return nil
+	}
+}
+
 // NewFeatureExtractionPipeline init a feature extraction pipeline.
 func NewFeatureExtractionPipeline(config backends.PipelineConfig[*FeatureExtractionPipeline], s *options.Options, model *backends.Model) (*FeatureExtractionPipeline, error) {
 	defaultPipeline, err := backends.NewBasePipeline(config, s, model)
@@ -65,6 +94,14 @@ func NewFeatureExtractionPipeline(config backends.PipelineConfig[*FeatureExtract
 		if err != nil {
 			return nil, err
 		}
+	}
+	// Set default image format if in image mode
+	if pipeline.imageMode && pipeline.imageFormat == "" {
+		detectedFormat, err := backends.DetectImageTensorFormat(model)
+		if err != nil {
+			return nil, err
+		}
+		pipeline.imageFormat = detectedFormat
 	}
 	// filter outputs
 	if pipeline.OutputName != "" {
@@ -92,7 +129,10 @@ func NewFeatureExtractionPipeline(config backends.PipelineConfig[*FeatureExtract
 	return pipeline, nil
 }
 
-// INTERFACE IMPLEMENTATIONS
+// INTERFACE IMPLEMENTATIONS.
+func (p *FeatureExtractionPipeline) IsGenerative() bool {
+	return false
+}
 
 func (p *FeatureExtractionPipeline) GetModel() *backends.Model {
 	return p.Model
@@ -114,7 +154,9 @@ func (p *FeatureExtractionPipeline) GetMetadata() backends.PipelineMetadata {
 // GetStatistics returns the runtime statistics for the pipeline.
 func (p *FeatureExtractionPipeline) GetStatistics() backends.PipelineStatistics {
 	statistics := backends.PipelineStatistics{}
-	statistics.ComputeTokenizerStatistics(p.Model.Tokenizer.TokenizerTimings)
+	if p.Model.Tokenizer != nil && p.Model.Tokenizer.TokenizerTimings != nil {
+		statistics.ComputeTokenizerStatistics(p.Model.Tokenizer.TokenizerTimings)
+	}
 	statistics.ComputeOnnxStatistics(p.PipelineTimings)
 	return statistics
 }
@@ -122,13 +164,18 @@ func (p *FeatureExtractionPipeline) GetStatistics() backends.PipelineStatistics 
 // Validate checks that the pipeline is valid.
 func (p *FeatureExtractionPipeline) Validate() error {
 	var validationErrors []error
-	if p.Model.Tokenizer == nil {
-		validationErrors = append(validationErrors, fmt.Errorf("feature extraction pipeline requires a tokenizer"))
+	// Tokenizer is only required for text mode
+	if !p.imageMode && p.Model.Tokenizer == nil {
+		validationErrors = append(validationErrors, fmt.Errorf("feature extraction pipeline requires a tokenizer for text mode"))
 	}
 	for _, input := range p.Model.InputsMeta {
 		dims := []int64(input.Dimensions)
-		if len(dims) > 3 {
-			validationErrors = append(validationErrors, fmt.Errorf("inputs and outputs currently can have at most 3 dimensions"))
+		maxDims := 3
+		if p.imageMode {
+			maxDims = 4 // Image inputs are 4D: [batch, channels, height, width]
+		}
+		if len(dims) > maxDims {
+			validationErrors = append(validationErrors, fmt.Errorf("inputs and outputs currently can have at most %d dimensions", maxDims))
 		}
 		nDynamicDimensions := 0
 		for _, d := range dims {
@@ -200,7 +247,7 @@ func (p *FeatureExtractionPipeline) Postprocess(batch *backends.PipelineBatch) (
 func meanPooling(tokens [][]float32, input backends.TokenizedInput, maxSequence int, dimensions int) []float32 {
 	length := len(input.AttentionMask)
 	vector := make([]float32, dimensions)
-	for j := 0; j < maxSequence; j++ {
+	for j := range maxSequence {
 		// if there is no attention mask, take all tokens
 		if length == 0 || (j+1 <= length && input.AttentionMask[j] != 0) {
 			for k, vectorValue := range tokens[j] {
@@ -238,4 +285,48 @@ func (p *FeatureExtractionPipeline) RunPipeline(inputs []string) (*FeatureExtrac
 	result, postErr := p.Postprocess(batch)
 	runErrors = append(runErrors, postErr)
 	return result, errors.Join(runErrors...)
+}
+
+// IMAGE MODE METHODS
+// PreprocessImages converts images to input tensors for vision models.
+func (p *FeatureExtractionPipeline) PreprocessImages(batch *backends.PipelineBatch, inputs []image.Image) error {
+	preprocessed, err := backends.PreprocessImages(p.imageFormat, inputs, p.preprocessSteps, p.normalizationSteps)
+	if err != nil {
+		return fmt.Errorf("failed to preprocess images: %w", err)
+	}
+	return backends.CreateImageTensors(batch, p.Model, preprocessed, p.Runtime)
+}
+
+// RunWithImages runs the pipeline on a batch of images (for vision models).
+// Use this method when ImageMode is enabled.
+func (p *FeatureExtractionPipeline) RunWithImages(images []image.Image) (*FeatureExtractionOutput, error) {
+	if !p.imageMode {
+		return nil, fmt.Errorf("RunWithImages requires ImageMode to be enabled; use WithImageMode() option")
+	}
+	var runErrors []error
+	batch := backends.NewBatch(len(images))
+	defer func(*backends.PipelineBatch) {
+		runErrors = append(runErrors, batch.Destroy())
+	}(batch)
+	runErrors = append(runErrors, p.PreprocessImages(batch, images))
+	if e := errors.Join(runErrors...); e != nil {
+		return nil, e
+	}
+	runErrors = append(runErrors, p.Forward(batch))
+	if e := errors.Join(runErrors...); e != nil {
+		return nil, e
+	}
+	result, postErr := p.Postprocess(batch)
+	runErrors = append(runErrors, postErr)
+	return result, errors.Join(runErrors...)
+}
+
+// RunWithImagePaths loads images from file paths and runs the pipeline.
+// Convenience method that combines image loading with RunWithImages.
+func (p *FeatureExtractionPipeline) RunWithImagePaths(paths []string) (*FeatureExtractionOutput, error) {
+	images, err := imageutil.LoadImagesFromPaths(paths)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load images: %w", err)
+	}
+	return p.RunWithImages(images)
 }

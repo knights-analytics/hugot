@@ -88,6 +88,11 @@ func NewCrossEncoderPipeline(config backends.PipelineConfig[*CrossEncoderPipelin
 	return pipeline, nil
 }
 
+// INTERFACE IMPLEMENTATIONS.
+func (p *CrossEncoderPipeline) IsGenerative() bool {
+	return false
+}
+
 func (p *CrossEncoderPipeline) GetModel() *backends.Model {
 	return p.Model
 }

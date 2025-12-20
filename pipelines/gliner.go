@@ -243,6 +243,11 @@ func (p *GLiNERPipeline) GetStats() []string {
 	}
 }
 
+// IsGenerative returns false as GLiNER is not a generative model.
+func (p *GLiNERPipeline) IsGenerative() bool {
+	return false
+}
+
 // Validate checks that the pipeline configuration is valid
 func (p *GLiNERPipeline) Validate() error {
 	var validationErrors []error

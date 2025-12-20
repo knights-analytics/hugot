@@ -2,6 +2,9 @@ package options
 
 import (
 	"fmt"
+	"runtime"
+
+	"github.com/knights-analytics/hugot/util/fileutil"
 )
 
 type Options struct {
@@ -13,8 +16,12 @@ type Options struct {
 }
 
 func Defaults() *Options {
+	_, libraryDirDefault, libraryPathDefault := getDefaultLibraryPaths()
 	return &Options{
-		ORTOptions:   &OrtOptions{},
+		ORTOptions: &OrtOptions{
+			LibraryDir:  &libraryDirDefault,
+			LibraryPath: &libraryPathDefault,
+		},
 		GoMLXOptions: &GoMLXOptions{},
 		Destroy: func() error {
 			return nil
@@ -22,8 +29,20 @@ func Defaults() *Options {
 	}
 }
 
+func getDefaultLibraryPaths() (string, string, string) {
+	switch runtime.GOOS {
+	case "windows":
+		return `onnxruntime.dll`, `.\`, `.\onnxuntime.dll`
+	case "darwin":
+		return "libonnxruntime.dylib", "/usr/local/lib", "/usr/local/lib/libonnxruntime.dylib"
+	default:
+		return "libonnxruntime.so", "/usr/lib", "/usr/lib/libonnxruntime.so"
+	}
+}
+
 type OrtOptions struct {
 	LibraryPath           *string
+	LibraryDir            *string
 	Telemetry             *bool
 	IntraOpNumThreads     *int
 	InterOpNumThreads     *int
@@ -47,12 +66,29 @@ type GoMLXOptions struct {
 // WithOption is the interface for all option functions.
 type WithOption func(o *Options) error
 
-// WithOnnxLibraryPath (ORT only) Use this function to set the path to the "onnxbackend.so" or "onnxbackend.dll" function.
-// By default, it will be set to "onnxbackend.so" on non-Windows systems, and "onnxbackend.dll" on Windows.
+// WithOnnxLibraryPath (ORT only) Use this function to set the path to the "libonnxuntime.so", "libonnxuntime.dylib" or "onnxruntime.dll" files.
 func WithOnnxLibraryPath(ortLibraryPath string) WithOption {
 	return func(o *Options) error {
 		if o.Backend == "ORT" {
-			o.ORTOptions.LibraryPath = &ortLibraryPath
+			object, err := fileutil.FileStats(ortLibraryPath)
+			if err != nil {
+				return fmt.Errorf("failed to access ONNX Runtime library path %q: %w", ortLibraryPath, err)
+			}
+			if !object.IsDir() {
+				return fmt.Errorf("%s is not a directory", ortLibraryPath)
+			}
+
+			libraryName, _, _ := getDefaultLibraryPaths()
+			ortLibraryFullPath := fileutil.PathJoinSafe(ortLibraryPath, libraryName)
+			exists, err := fileutil.FileExists(ortLibraryPath)
+			if err != nil {
+				return fmt.Errorf("error checking for existence of ONNX Runtime library file: %w", err)
+			}
+			if !exists {
+				return fmt.Errorf("ONNX Runtime library %s does not exist at %q", libraryName, ortLibraryPath)
+			}
+			o.ORTOptions.LibraryPath = &ortLibraryFullPath
+			o.ORTOptions.LibraryDir = &ortLibraryPath
 			return nil
 		}
 		return fmt.Errorf("WithOnnxLibraryPath is only supported for ORT backend")

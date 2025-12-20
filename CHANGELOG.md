@@ -4,6 +4,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
+## [0.6.0] 🌲❄️🎄🎁 - 2025-12-18
+
+### Changed
+
+- Integrated [ONNX Runtime GenAI](https://github.com/microsoft/onnxruntime-genai) backend for significantly faster generative inference and broad model support.
+- Added ObjectDetection pipeline
+- Added WithTPU option to NewXLASession
+- FeatureExtractionPipeline now supports image inputs, enabling vision models like CLIP
+- Updated Onnx Runtime to 1.23.2, and GoMLX to 0.26.0
+
+### Breaking changes
+
+- ORT Gen AI has strong requirements on the name of the base ORT library. It should not be renamed from the release zip (e.g. libonnxruntime.so)
+- WithOnnxLibraryPath should now be the folder contining the ORT library. The library name is now inferred from the current operating system.
+- XLA now uses go-xla to manage PJRT dependencies, see our [Dockerfile](./Dockerfile) for details 
+
+### Fixed
+
+- Model loading path could potentially duplicate paths (thanks @ajroetker)
+
 ## [0.5.10] - 2025-12-08
 
 ### Breaking changes
@@ -17,7 +37,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 - breaking: GetStatistics now returns a Statistics struct for the pipelines rather than a list of strings
 - breaking: pipelineBackends has been renamed to backends
 
-### Changes
+### Changed
 
 - update of onnxruntime_go, goMLX, gopjrt
 

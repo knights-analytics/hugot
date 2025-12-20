@@ -182,10 +182,25 @@ func TestZeroShotClassificationPipelineValidationXLA(t *testing.T) {
 	zeroShotClassificationPipelineValidation(t, session)
 }
 
-// Cross encoder
+// Cross Encoder
 
 func TestCrossEncoderPipelineXLA(t *testing.T) {
 	session, err := NewXLASession()
+	checkT(t, err)
+	defer func(session *Session) {
+		destroyErr := session.Destroy()
+		checkT(t, destroyErr)
+	}(session)
+	crossEncoderPipeline(t, session)
+}
+
+func TestCrossEncoderPipelineXLACuda(t *testing.T) {
+	if os.Getenv("CI") != "" {
+		t.SkipNow()
+	}
+	session, err := NewXLASession(options.WithCuda(map[string]string{
+		"device_id": "0",
+	}))
 	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
@@ -216,6 +231,21 @@ func TestImageClassificationPipelineXLA(t *testing.T) {
 	imageClassificationPipeline(t, session)
 }
 
+func TestImageClassificationPipelineXLACuda(t *testing.T) {
+	if os.Getenv("CI") != "" {
+		t.SkipNow()
+	}
+	session, err := NewXLASession(options.WithCuda(map[string]string{
+		"device_id": "0",
+	}))
+	checkT(t, err)
+	defer func(session *Session) {
+		destroyErr := session.Destroy()
+		checkT(t, destroyErr)
+	}(session)
+	imageClassificationPipeline(t, session)
+}
+
 func TestImageClassificationPipelineValidationXLA(t *testing.T) {
 	session, err := NewXLASession()
 	checkT(t, err)
@@ -226,26 +256,85 @@ func TestImageClassificationPipelineValidationXLA(t *testing.T) {
 	imageClassificationPipelineValidation(t, session)
 }
 
+// Object detection
+
+func TestObjectDetectionPipelineXLA(t *testing.T) {
+	t.Skip("Currently fails due to unsupported constant in XLA backend")
+	session, err := NewXLASession()
+	checkT(t, err)
+	defer func(session *Session) {
+		destroyErr := session.Destroy()
+		checkT(t, destroyErr)
+	}(session)
+	objectDetectionPipeline(t, session)
+}
+
+func TestObjectDetectionPipelineXLACuda(t *testing.T) {
+	if os.Getenv("CI") != "" {
+		t.SkipNow()
+	}
+	t.Skip("Currently fails due to unsupported constant in XLA backend")
+	session, err := NewXLASession(options.WithCuda(map[string]string{
+		"device_id": "0",
+	}))
+	checkT(t, err)
+	defer func(session *Session) {
+		destroyErr := session.Destroy()
+		checkT(t, destroyErr)
+	}(session)
+	objectDetectionPipeline(t, session)
+}
+
+func TestObjectDetectionPipelineValidationXLA(t *testing.T) {
+	t.Skip("Currently fails due to unsupported constant in XLA backend")
+	session, err := NewXLASession()
+	checkT(t, err)
+	defer func(session *Session) {
+		destroyErr := session.Destroy()
+		checkT(t, destroyErr)
+	}(session)
+	objectDetectionPipelineValidation(t, session)
+}
+
 // text generation
-// func TestTextGenerationPipelineXLA(t *testing.T) {
-// 	session, err := NewXLASession()
-// 	checkT(t, err)
-// 	defer func(session *Session) {
-// 		destroyErr := session.Destroy()
-// 		checkT(t, destroyErr)
-// 	}(session)
-// 	textGenerationPipeline(t, session)
-// }
-//
-// func TestTextGenerationPipelineValidationXLA(t *testing.T) {
-// 	session, err := NewXLASession()
-// 	checkT(t, err)
-// 	defer func(session *Session) {
-// 		destroyErr := session.Destroy()
-// 		checkT(t, destroyErr)
-// 	}(session)
-// 	textGenerationPipelineValidation(t, session)
-// }
+
+func TestTextGenerationPipelineXLA(t *testing.T) {
+	t.Skip("Generative models are not supported yet for XLA")
+	session, err := NewXLASession()
+	checkT(t, err)
+	defer func(session *Session) {
+		destroyErr := session.Destroy()
+		checkT(t, destroyErr)
+	}(session)
+	textGenerationPipeline(t, session)
+}
+
+func TestTextGenerationPipelineXLACuda(t *testing.T) {
+	if os.Getenv("CI") != "" {
+		t.SkipNow()
+	}
+	t.Skip("Generative models are not supported yet for XLA")
+	session, err := NewXLASession(options.WithCuda(map[string]string{
+		"device_id": "0",
+	}))
+	checkT(t, err)
+	defer func(session *Session) {
+		destroyErr := session.Destroy()
+		checkT(t, destroyErr)
+	}(session)
+	textGenerationPipeline(t, session)
+}
+
+func TestTextGenerationPipelineValidationXLA(t *testing.T) {
+	t.Skip("Generative models are not supported yet for XLA")
+	session, err := NewXLASession()
+	checkT(t, err)
+	defer func(session *Session) {
+		destroyErr := session.Destroy()
+		checkT(t, destroyErr)
+	}(session)
+	textGenerationPipelineValidation(t, session)
+}
 
 // No same name
 

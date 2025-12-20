@@ -2,21 +2,19 @@ module github.com/knights-analytics/hugot
 
 go 1.25.0
 
-replace github.com/gomlx/gomlx => github.com/timkaye11/gomlx v0.0.0-20251217194311-d3b7c50c8459
-
-replace github.com/gomlx/onnx-gomlx => github.com/timkaye11/onnx-gomlx v0.0.0-20251217194823-a871bb8cc687
-
 require (
 	github.com/daulet/tokenizers v1.24.0
 	github.com/gomlx/exceptions v0.0.3
 	github.com/gomlx/go-huggingface v0.3.1
 	github.com/gomlx/gomlx v0.26.0
 	github.com/gomlx/onnx-gomlx v0.3.4
+	github.com/knights-analytics/ortgenai v0.0.1
 	github.com/stretchr/testify v1.11.1
 	github.com/sugarme/tokenizer v0.3.0
 	github.com/urfave/cli/v3 v3.6.1
 	github.com/viant/afs v1.29.0
 	github.com/yalue/onnxruntime_go v1.25.0
+	golang.org/x/image v0.34.0
 )
 
 require (

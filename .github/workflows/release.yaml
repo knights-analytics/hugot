@@ -52,8 +52,12 @@ jobs:
           path: ./artifacts/libtokenizers.a
       - uses: actions/upload-artifact@v4
         with:
-          name: onnxruntime-linux-x64.so
-          path: ./artifacts/onnxruntime-linux-x64.so
+          name: libonnxruntime-linux-x64.so
+          path: ./artifacts/libonnxruntime-linux-x64.so
+      - uses: actions/upload-artifact@v4
+        with:
+          name: libonnxruntime-genai-linux-x64.so
+          path: ./artifacts/libonnxruntime-genai-linux-x64.so
       - uses: actions/upload-artifact@v4
         with:
           name: hugot-cli-linux-x64
@@ -115,7 +119,11 @@ jobs:
           path: .
       - uses: actions/download-artifact@v4
         with:
-          name: onnxruntime-linux-x64.so
+          name: libonnxruntime-linux-x64.so
+          path: .
+      - uses: actions/download-artifact@v4
+        with:
+          name: libonnxruntime-genai-linux-x64.so
           path: .
       - uses: actions/download-artifact@v4
         with:
@@ -125,6 +133,6 @@ jobs:
         run: ls -R
       - uses: ncipollo/release-action@v1
         with:
-          artifacts: "libtokenizers.a, onnxruntime-linux-x64.so, hugot-cli-linux-x64"
+          artifacts: "libtokenizers.a, libonnxruntime-linux-x64.so, libonnxruntime-genai-linux-x64.so, hugot-cli-linux-x64"
           generateReleaseNotes: true
           skipIfReleaseExists: true

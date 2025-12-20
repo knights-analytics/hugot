@@ -19,6 +19,7 @@ ENTRYPOINT ["/entrypoint.sh"]
 #--- artifacts layer ---
 FROM --platform=$BUILD_PLATFORM scratch AS artifacts
 
-COPY --from=hugot-test /usr/lib64/onnxruntime.so onnxruntime-linux-x64.so
+COPY --from=hugot-test /usr/lib/libonnxruntime.so libonnxruntime-linux-x64.so
+COPY --from=hugot-test /usr/lib/libonnxruntime-genai.so libonnxruntime-genai-linux-x64.so
 COPY --from=hugot-test /usr/lib/libtokenizers.a libtokenizers.a
 COPY --from=hugot-test /cli /hugot-cli-linux-x64

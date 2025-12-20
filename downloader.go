@@ -68,7 +68,7 @@ func DownloadModel(modelName string, destination string, options DownloadOptions
 	}
 
 	// make sure it's an onnx model with tokenizer
-	downloadFiles, err := validateDownloadHfModel(repo, options)
+	downloadFiles, err := validateDownloadedHFModel(repo, options)
 	if err != nil {
 		return "", err
 	}
@@ -104,7 +104,7 @@ func DownloadModel(modelName string, destination string, options DownloadOptions
 	return "", fmt.Errorf("failed to download %s after %d attempts", modelName, options.MaxRetries)
 }
 
-func validateDownloadHfModel(repo *hub.Repo, options DownloadOptions) ([]string, error) {
+func validateDownloadedHFModel(repo *hub.Repo, options DownloadOptions) ([]string, error) {
 	for i := 0; i < options.MaxRetries; i++ {
 		err := repo.DownloadInfo(false)
 		if err != nil {
@@ -133,6 +133,7 @@ func validateDownloadHfModel(repo *hub.Repo, options DownloadOptions) ([]string,
 		} else if baseFileName == "special_tokens_map.json" ||
 			baseFileName == "tokenizer_config.json" ||
 			baseFileName == "config.json" ||
+			baseFileName == "genai_config.json" ||
 			baseFileName == "vocab.txt" {
 			toDownload = append(toDownload, fileName)
 		} else if filepath.Ext(baseFileName) == ".onnx" {

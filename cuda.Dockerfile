@@ -1,8 +1,9 @@
 #--- dockerfile to test hugot  ---
 
 ARG GO_VERSION=1.25.5
-ARG ONNXRUNTIME_VERSION=1.22.0
-ARG GOPJRT_VERSION=0.10.0
+ARG ONNXRUNTIME_VERSION=1.23.2
+ARG ONNXRUNTIME_GENAI_VERSION=0.11.4
+ARG GOPJRT_VERSION=0.83.3
 ARG JAX_CUDA_VERSION=0.8.1
 ARG BUILD_PLATFORM=linux/amd64
 
@@ -11,13 +12,15 @@ ARG BUILD_PLATFORM=linux/amd64
 FROM --platform=$BUILD_PLATFORM public.ecr.aws/amazonlinux/amazonlinux:2023 AS hugot-runtime
 ARG GO_VERSION
 ARG ONNXRUNTIME_VERSION
+ARG ONNXRUNTIME_GENAI_VERSION
 ARG GOPJRT_VERSION
 ARG JAX_CUDA_VERSION
 
 ENV PATH="$PATH:/usr/local/go/bin" \
     GOPJRT_NOSUDO=1
 
-COPY ./scripts/download-onnxruntime-gpu.sh /download-onnxruntime-gpu.sh
+COPY ./scripts/download-onnxruntime.sh /download-onnxruntime.sh
+COPY ./scripts/download-onnxruntime-genai.sh /download-onnxruntime-genai.sh
 RUN --mount=src=./go.mod,dst=/go.mod \
     dnf --allowerasing -y install gcc jq bash tar xz gzip glibc-static libstdc++ wget zip git dirmngr sudo which && \
     ln -s /usr/lib64/libstdc++.so.6 /usr/lib64/libstdc++.so && \
@@ -25,6 +28,9 @@ RUN --mount=src=./go.mod,dst=/go.mod \
     # from rhel
     dnf config-manager --add-repo https://developer.download.nvidia.com/compute/cuda/repos/rhel9/x86_64/cuda-rhel9.repo && \
     dnf install -y cuda-cudart-12-9 cuda-nvrtc-12-9 libcublas-12-9 libcurand-12-9 libcufft-12-9 libcudnn9-cuda-12 && \
+    curl -LO https://download.fedoraproject.org/pub/fedora/linux/releases/43/Everything/x86_64/os/Packages/g/glibc-2.42-4.fc43.x86_64.rpm && \
+    rpm -Uvh --nodeps --force glibc-2.42-4.fc43.x86_64.rpm && \
+    rm glibc-2.42-4.fc43.x86_64.rpm && \
     dnf clean all && \
    # go
     curl -LO https://golang.org/dl/go${GO_VERSION}.linux-amd64.tar.gz && \
@@ -38,11 +44,13 @@ RUN --mount=src=./go.mod,dst=/go.mod \
     tar -C /usr/lib -xzf libtokenizers.linux-amd64.tar.gz && \
     rm libtokenizers.linux-amd64.tar.gz && \
     # onnxruntime cpu and gpu
-    sed -i 's/\r//g' /download-onnxruntime-gpu.sh && chmod +x /download-onnxruntime-gpu.sh && \
-    /download-onnxruntime-gpu.sh ${ONNXRUNTIME_VERSION} && \
+    sed -i 's/\r//g' /download-onnxruntime.sh && chmod +x /download-onnxruntime.sh && \
+    /download-onnxruntime.sh ${ONNXRUNTIME_VERSION} gpu && \
+    sed -i 's/\r//g' /download-onnxruntime-genai.sh && chmod +x /download-onnxruntime-genai.sh && \
+    /download-onnxruntime-genai.sh ${ONNXRUNTIME_GENAI_VERSION} gpu && \
     # XLA/goMLX
-    GOPROXY=direct go run github.com/gomlx/gopjrt/cmd/gopjrt_installer@latest -plugin=amazonlinux -version=v${GOPJRT_VERSION} -path=/usr/local && \
-    GOPROXY=direct go run github.com/gomlx/gopjrt/cmd/gopjrt_installer@latest -plugin=cuda13 -version=${JAX_CUDA_VERSION} -path=/usr/local && \
+    GOPROXY=direct go run github.com/gomlx/go-xla/cmd/pjrt_installer@latest -plugin=linux -version=v${GOPJRT_VERSION} -path=/usr/local/lib/go-xla && \
+    GOPROXY=direct go run github.com/gomlx/go-xla/cmd/pjrt_installer@latest -plugin=cuda13 -version=${JAX_CUDA_VERSION} -path=/usr/local/lib/go-xla && \
     # NON-PRIVILEGED USER
     # create non-privileged testuser with id: 1000
     useradd -u 1000 -m testuser && usermod -a -G wheel testuser && \

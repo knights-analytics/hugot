@@ -157,26 +157,53 @@ func TestImageClassificationPipelineValidationGo(t *testing.T) {
 	imageClassificationPipelineValidation(t, session)
 }
 
+// Object detection
+
+func TestObjectDetectionPipelineGo(t *testing.T) {
+	t.Skip("Currently fails due to unsupported constant in XLA backend")
+	session, err := NewGoSession()
+	checkT(t, err)
+	defer func(session *Session) {
+		destroyErr := session.Destroy()
+		checkT(t, destroyErr)
+	}(session)
+	objectDetectionPipeline(t, session)
+}
+
+func TestObjectDetectionPipelineValidationGo(t *testing.T) {
+	t.Skip("Currently fails due to unsupported constant in XLA backend")
+	session, err := NewGoSession()
+	checkT(t, err)
+	defer func(session *Session) {
+		destroyErr := session.Destroy()
+		checkT(t, destroyErr)
+	}(session)
+	objectDetectionPipelineValidation(t, session)
+}
+
 // text generation
-// func TestTextGenerationPipelineGo(t *testing.T) {
-// 	session, err := NewGoSession()
-// 	checkT(t, err)
-// 	defer func(session *Session) {
-// 		destroyErr := session.Destroy()
-// 		checkT(t, destroyErr)
-// 	}(session)
-// 	textGenerationPipeline(t, session)
-// }
-//
-// func TestTextGenerationPipelineValidationGo(t *testing.T) {
-// 	session, err := NewGoSession()
-// 	checkT(t, err)
-// 	defer func(session *Session) {
-// 		destroyErr := session.Destroy()
-// 		checkT(t, destroyErr)
-// 	}(session)
-// 	textGenerationPipelineValidation(t, session)
-// }
+
+func TestTextGenerationPipelineGo(t *testing.T) {
+	t.Skip("Generative models are not supported yet for Go")
+	session, err := NewGoSession()
+	checkT(t, err)
+	defer func(session *Session) {
+		destroyErr := session.Destroy()
+		checkT(t, destroyErr)
+	}(session)
+	textGenerationPipeline(t, session)
+}
+
+func TestTextGenerationPipelineValidationGo(t *testing.T) {
+	t.Skip("Generative models are not supported yet for Go")
+	session, err := NewGoSession()
+	checkT(t, err)
+	defer func(session *Session) {
+		destroyErr := session.Destroy()
+		checkT(t, destroyErr)
+	}(session)
+	textGenerationPipelineValidation(t, session)
+}
 
 // No same name
 

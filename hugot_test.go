@@ -1,11 +1,11 @@
 package hugot
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"math"
 	"runtime"
-	"slices"
 	"strings"
 	"testing"
 
@@ -18,20 +18,16 @@ import (
 	"github.com/knights-analytics/hugot/util/imageutil"
 )
 
-// onnxRuntimeSharedLibrary is defined in platform-specific files:
-// - hugot_test_linux.go for Linux
-// - hugot_test_darwin.go for macOS
-
 // test download validation
 
 func TestDownloadValidation(t *testing.T) {
 	downloadOptions := NewDownloadOptions()
 
 	// a model with the required files in a subfolder should not error
-	_, err := validateDownloadHfModel(hub.New("KnightsAnalytics/distilbert-base-uncased-finetuned-sst-2-english"), downloadOptions)
+	_, err := validateDownloadedHFModel(hub.New("KnightsAnalytics/distilbert-base-uncased-finetuned-sst-2-english"), downloadOptions)
 	assert.NoError(t, err)
 	// a model without tokenizer.json or .onnx model should error
-	_, err = validateDownloadHfModel(hub.New("ByteDance/SDXL-Lightning"), downloadOptions)
+	_, err = validateDownloadedHFModel(hub.New("ByteDance/SDXL-Lightning"), downloadOptions)
 	assert.Error(t, err)
 }
 
@@ -985,11 +981,11 @@ func imageClassificationPipeline(t *testing.T, session *Session) {
 		OnnxFilename: "squeezenet1.1.onnx",
 		Options: []ImageClassificationOption{
 			pipelines.WithTopK(3),
-			pipelines.WithPreprocessSteps(
+			pipelines.WithPreprocessSteps[*pipelines.ImageClassificationPipeline](
 				imageutil.ResizeStep(224),
 				imageutil.CenterCropStep(224, 224),
 			),
-			pipelines.WithNormalizationSteps(
+			pipelines.WithNormalizationSteps[*pipelines.ImageClassificationPipeline](
 				imageutil.ImagenetPixelNormalizationStep(),
 				imageutil.RescaleStep(),
 			),
@@ -1024,6 +1020,112 @@ func imageClassificationPipelineValidation(t *testing.T, session *Session) {
 
 	err = pipeline.Validate()
 	assert.Error(t, err)
+}
+
+// object detection
+
+func objectDetectionPipeline(t *testing.T, session *Session) {
+	t.Helper()
+
+	config := backends.PipelineConfig[*pipelines.ObjectDetectionPipeline]{
+		ModelPath: "./models/KnightsAnalytics_detr-resnet-50",
+		Name:      "testObjectDetection",
+		Options: []backends.PipelineOption[*pipelines.ObjectDetectionPipeline]{
+			pipelines.WithNCHWFormat[*pipelines.ObjectDetectionPipeline](),
+			pipelines.WithDetectionTopK(50),
+			pipelines.WithDetectionScoreThreshold(0.3),
+			pipelines.WithDetectionIouThreshold(0.5),
+		},
+	}
+
+	pipeline, err := NewPipeline(session, config)
+	checkT(t, err)
+
+	// Use a simple cat image similar to classification test style
+	inputs := []string{"models/imageData/cat.jpg"}
+	result, err := pipeline.RunPipeline(inputs)
+	checkT(t, err)
+
+	if len(result.Detections) == 0 || len(result.Detections[0]) == 0 {
+		t.Fatalf("no detections returned")
+	}
+	// Find a detection labeled cat (COCO index 15)
+	foundCat := false
+	for _, d := range result.Detections[0] {
+		if strings.EqualFold(d.Label, "cat") {
+			foundCat = true
+			// basic box sanity
+			if !(d.Box[0] >= 0 && d.Box[1] >= 0 && d.Box[2] > d.Box[0] && d.Box[3] > d.Box[1]) {
+				t.Fatalf("invalid box: %v", d.Box)
+			}
+			// score should be reasonable
+			if d.Score < 0.2 {
+				t.Fatalf("cat detection score too low: %.3f", d.Score)
+			}
+			break
+		}
+	}
+	if !foundCat {
+		// fall back to checking top detection label for debug
+		top := result.Detections[0][0]
+		t.Fatalf("expected a cat detection, top=%s score=%.3f", top.Label, top.Score)
+	}
+}
+
+func objectDetectionPipelineValidation(t *testing.T, session *Session) {
+	t.Helper()
+
+	config := backends.PipelineConfig[*pipelines.ObjectDetectionPipeline]{
+		ModelPath: "./models/KnightsAnalytics_detr-resnet-50",
+		Name:      "testObjectDetectionValidation",
+	}
+	pipeline, err := NewPipeline(session, config)
+	checkT(t, err)
+
+	t.Run("input-4d-required", func(t *testing.T) {
+		// Corrupt the primary image input to have invalid dims
+		original := pipeline.Model.InputsMeta[0].Dimensions
+		defer func() { pipeline.Model.InputsMeta[0].Dimensions = original }()
+		pipeline.Model.InputsMeta[0].Dimensions = backends.NewShape(-1, -1, -1)
+		err = pipeline.Validate()
+		assert.Error(t, err)
+	})
+
+	t.Run("mask-3d-required", func(t *testing.T) {
+		// If a mask input exists, make it invalid length to trigger error
+		idx := -1
+		for i, in := range pipeline.Model.InputsMeta {
+			if strings.Contains(strings.ToLower(in.Name), "mask") {
+				idx = i
+				break
+			}
+		}
+		if idx >= 0 {
+			original := pipeline.Model.InputsMeta[idx].Dimensions
+			defer func() { pipeline.Model.InputsMeta[idx].Dimensions = original }()
+			pipeline.Model.InputsMeta[idx].Dimensions = backends.NewShape(-1, -1) // invalid
+			err = pipeline.Validate()
+			assert.Error(t, err)
+		}
+	})
+
+	t.Run("outputs-must-be-detectable", func(t *testing.T) {
+		// Rename outputs so inference of boxes/scores fails
+		originals := make([]string, len(pipeline.Model.OutputsMeta))
+		for i := range pipeline.Model.OutputsMeta {
+			originals[i] = pipeline.Model.OutputsMeta[i].Name
+			pipeline.Model.OutputsMeta[i].Name = fmt.Sprintf("out_%d", i)
+		}
+		defer func() {
+			for i := range pipeline.Model.OutputsMeta {
+				pipeline.Model.OutputsMeta[i].Name = originals[i]
+			}
+		}()
+		pipeline.BoxesOutput = ""
+		pipeline.ScoresOutput = ""
+		err = pipeline.Validate()
+		assert.Error(t, err)
+	})
 }
 
 // No same name
@@ -1095,13 +1197,10 @@ func textGenerationPipeline(t *testing.T, session *Session) {
 
 	// Configure the text generation pipeline
 	config := TextGenerationConfig{
-		ModelPath:    "./models/KnightsAnalytics_Phi-3.5-mini-instruct-onnx",
-		Name:         "testPipeline",
-		OnnxFilename: "model.onnx",
+		ModelPath: "./models/KnightsAnalytics_Phi-3.5-mini-instruct-onnx",
+		Name:      "testPipeline",
 		Options: []backends.PipelineOption[*pipelines.TextGenerationPipeline]{
-			pipelines.WithMaxTokens(200),
-			pipelines.WithPhiTemplate(),
-			pipelines.WithCustomStopTokens([]int64{32007}), // Phi appears to use a stop token that's different from the one defined in config.json
+			pipelines.WithMaxLength(200),
 		},
 	}
 
@@ -1109,55 +1208,45 @@ func textGenerationPipeline(t *testing.T, session *Session) {
 	textGenPipeline, err := NewPipeline(session, config)
 	checkT(t, err)
 
+	systemPrompt := "you are a helpful assistant. Answer with a single very brief sentence."
+
 	tests := []struct {
 		name           string
-		input          [][]pipelines.Message
-		expectedString []string
+		input          [][]backends.Message
+		expectedKeywords []string
 	}{
 		{
 			name: "small test",
-			input: [][]pipelines.Message{
+			input: [][]backends.Message{
 				{
-					{Role: "system", Content: "you are a helpful assistant."},
+					{Role: "system", Content: systemPrompt},
 					{Role: "user", Content: "what is the capital of the Netherlands?"},
 				},
 			},
-			expectedString: []string{
-				"The capital of the Netherlands is Amsterdam. However, it's worth noting that the seat of government is actually located in The Hague, where the royal family and the supreme court are based. Amsterdam is the country's largest city and serves as the political, economic, and cultural center of the Netherlands.",
+			expectedKeywords: []string{
+				"Amsterdam",
 			},
 		},
 		{
-			name: "batched input, short sequence first, long sequence second",
-			input: [][]pipelines.Message{
+			name: "batched test",
+			input: [][]backends.Message{
 				{
-					{Role: "system", Content: "you are a helpful assistant."},
+					{Role: "system", Content: systemPrompt},
 					{Role: "user", Content: "what is the capital of the Netherlands?"},
 				},
 				{
-					{Role: "system", Content: "you are a helpful assistant."},
+					{Role: "system", Content: systemPrompt},
 					{Role: "user", Content: "who was the first president of the United States?"},
 				},
-			},
-			expectedString: []string{
-				"The capital of the Netherlands is Amsterdam. It is the largest city in the country and serves as the political, economic, and cultural center. Amsterdam is known for its historical significance, vibrant cultural scene, and iconic landmarks such as the Anne Frank House and the Van Gogh Museum. The city is also famous for its extensive canal system, which is a UNESCO World Heritage site. The Dutch government's administrative buildings, including the Royal Palace, are located in the historic center of the city. Amsterdam's port is one of the busiest in Europe, contributing to its status as a major global financial hub.",
-				"The first president of the United States was George Washington. He served as the president from April 30, 1789, to March 4, 1797. Washington is often referred to as the \"Father of His Country\" for his leadership in the founding of the United States. He was a central figure in the American Revolution and presided over the convention that established the new government, which resulted in the creation of the Constitution. Washington's presidency set many precedents, including the two-term limit, which was later codified in the 22nd Amendment. His leadership and the establishment of a strong federal government were crucial in the early years of the United States.",
-			},
-		},
-		{
-			name: "batched input, long sequence first, short sequence second",
-			input: [][]pipelines.Message{
 				{
-					{Role: "system", Content: "you are a helpful assistant."},
-					{Role: "user", Content: "Solve this equation: 2 + 2 = ? Be very brief in your explanation."},
-				},
-				{
-					{Role: "system", Content: "you are a helpful assistant."},
-					{Role: "user", Content: "Answer in one sentence: what is steel made out of?"},
+					{Role: "system", Content: systemPrompt},
+					{Role: "user", Content: "Solve this equation: 2 + 2 = ?"},
 				},
 			},
-			expectedString: []string{
-				"The sum of 2 and 2 is 4.\n\nExplanation: In arithmetic, when you add two identical positive numbers, you simply double the number. Here, doubling 2 gives you 4.",
-				"Steel is primarily made out of iron and carbon, with the addition of other elements such as manganese, chromium, nickel, and sometimes small amounts of other elements to enhance its properties.",
+			expectedKeywords: []string{
+				"Amsterdam",
+				"George Washington",
+				"4",
 			},
 		},
 	}
@@ -1165,31 +1254,54 @@ func textGenerationPipeline(t *testing.T, session *Session) {
 	// Execute tests
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			batchResult, err := textGenPipeline.RunWithTemplate(tt.input)
+			batchResult, err := textGenPipeline.RunMessages(context.Background(), tt.input)
 			checkT(t, err)
-			outputString := batchResult.GetOutput()
-			for i := range len(outputString) {
-				expectedString := tt.expectedString[i]
-				generatedString := outputString[i].(string)
-				// Generative models have variance with different architectures which builds up per generation, so check for min overlap instead in first 30 words
-				expectedWords := strings.Fields(expectedString)
-				if len(expectedWords) > 30 {
-					expectedWords = expectedWords[:30]
+			outputs := batchResult.GetOutput()
+			for i := range len(outputs) {
+				generatedString := outputs[i].(string)
+				fmt.Println(generatedString + "\n")
+				if !strings.Contains(generatedString, tt.expectedKeywords[i]) {
+					t.Fatalf("Test %s failed: expected keywords '%s' not found in '%s'", tt.name, tt.expectedKeywords[i], generatedString)
 				}
-				generatedWords := strings.Fields(generatedString)
-				if len(generatedWords) > 30 {
-					generatedWords = generatedWords[:30]
-				}
-				numMismatches := 0
-				for _, word := range generatedWords {
-					if !slices.Contains(expectedWords, word) {
-						numMismatches++
-					}
-				}
-				assert.LessOrEqual(t, numMismatches, len(expectedWords)/8, "Expected generated to have max %d mismatches with expected, but got %d mismatches (got %s wanted %s)", len(expectedWords)/8, numMismatches, expectedString, generatedString)
 			}
 		})
 	}
+
+	// streaming test
+	streamingConfig := TextGenerationConfig{
+		ModelPath: "./models/KnightsAnalytics_Phi-3.5-mini-instruct-onnx",
+		Name:      "testPipelineStreaming",
+		Options: []backends.PipelineOption[*pipelines.TextGenerationPipeline]{
+			pipelines.WithMaxLength(200),
+			pipelines.WithStreaming(),
+		},
+	}
+	streamingPipeline, err := NewPipeline(session, streamingConfig)
+	checkT(t, err)
+
+	t.Run("streaming test", func(t *testing.T) {
+		input := [][]backends.Message{
+			{
+				{Role: "system", Content: "you are a helpful assistant."},
+				{Role: "user", Content: "Solve this equation: 2 + 2 = ? Be very brief in your explanation."},
+			},
+		}
+		output, err := streamingPipeline.RunMessages(context.Background(), input)
+		firstThreeTokens := make([]string, 0, 3)
+		for token := range output.TokenStream {
+			firstThreeTokens = append(firstThreeTokens, token.Token)
+		}
+		if firstThreeTokens[0] != "The" {
+			t.Fatalf("Expected first token 'The', got '%s'", firstThreeTokens[0])
+		}
+		if firstThreeTokens[1] != " sum" {
+			t.Fatalf("Expected second token ' sum', got '%s'", firstThreeTokens[1])
+		}
+		if firstThreeTokens[2] != " of" {
+			t.Fatalf("Expected third token ' of', got '%s'", firstThreeTokens[2])
+		}
+		checkT(t, err)
+	})
 }
 
 func textGenerationPipelineValidation(t *testing.T, session *Session) {
@@ -1202,32 +1314,15 @@ func textGenerationPipelineValidation(t *testing.T, session *Session) {
 
 	// Configure the text generation pipeline
 	config := TextGenerationConfig{
-		ModelPath:    "./models/KnightsAnalytics_Phi-3.5-mini-instruct-onnx",
-		Name:         "testPipeline",
-		OnnxFilename: "model.onnx",
-		Options: []backends.PipelineOption[*pipelines.TextGenerationPipeline]{
-			pipelines.WithMaxTokens(1),
-		},
+		ModelPath: "./models/KnightsAnalytics_Phi-3.5-mini-instruct-onnx",
+		Name:      "testPipeline",
+		Options:   []backends.PipelineOption[*pipelines.TextGenerationPipeline]{},
 	}
-
-	// Create the pipeline
 	pipeline, err := NewPipeline(session, config)
 	checkT(t, err)
-
-	pipeline.Model.NumHiddenLayers = 0
+	pipeline.MaxLength = -100
 	err = pipeline.Validate()
 	assert.Error(t, err)
-	pipeline.Model.NumHiddenLayers = 1
-
-	pipeline.Model.NumKeyValueHeads = 0
-	err = pipeline.Validate()
-	assert.Error(t, err)
-	pipeline.Model.NumKeyValueHeads = 1
-
-	pipeline.Model.HeadDim = 0
-	err = pipeline.Validate()
-	assert.Error(t, err)
-	pipeline.Model.HeadDim = 1
 }
 
 // Thread safety

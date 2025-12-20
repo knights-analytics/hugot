@@ -4,7 +4,12 @@ import (
 	"bytes"
 	"image"
 
+	_ "image/gif"  // adds gif support
+	_ "image/jpeg" // adds jpeg support
+	_ "image/png"  // adds png support
+
 	"github.com/knights-analytics/hugot/util/fileutil"
+	_ "golang.org/x/image/webp" // adds webp support
 )
 
 func LoadImagesFromPaths(paths []string) ([]image.Image, error) {
@@ -100,6 +105,15 @@ func ImagenetPixelNormalizationStep() *PixelNormalizationPreprocessor {
 	}
 }
 
+// CLIPPixelNormalizationStep returns CLIP's normalization values.
+// Use after RescaleStep() to normalize to 0-1 range first.
+func CLIPPixelNormalizationStep() *PixelNormalizationPreprocessor {
+	return &PixelNormalizationPreprocessor{
+		mean: [3]float32{0.48145466, 0.4578275, 0.40821073},
+		std:  [3]float32{0.26862954, 0.26130258, 0.27577711},
+	}
+}
+
 type RescalePreprocessor struct{}
 
 func (s *RescalePreprocessor) Apply(r, g, b float32) (float32, float32, float32) {
@@ -115,8 +129,8 @@ func RescaleStep() *RescalePreprocessor {
 func resizeImage(img image.Image, newW, newH int) image.Image {
 	dst := image.NewRGBA(image.Rect(0, 0, newW, newH))
 	srcBounds := img.Bounds()
-	for y := 0; y < newH; y++ {
-		for x := 0; x < newW; x++ {
+	for y := range newH {
+		for x := range newW {
 			srcX := srcBounds.Min.X + x*srcBounds.Dx()/newW
 			srcY := srcBounds.Min.Y + y*srcBounds.Dy()/newH
 			dst.Set(x, y, img.At(srcX, srcY))

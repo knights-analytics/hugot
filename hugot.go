@@ -18,6 +18,7 @@ type Session struct {
 	zeroShotClassificationPipelines pipelineMap[*pipelines.ZeroShotClassificationPipeline]
 	crossEncoderPipelines           pipelineMap[*pipelines.CrossEncoderPipeline]
 	imageClassificationPipelines    pipelineMap[*pipelines.ImageClassificationPipeline]
+	objectDetectionPipelines        pipelineMap[*pipelines.ObjectDetectionPipeline]
 	textGenerationPipelines         pipelineMap[*pipelines.TextGenerationPipeline]
 	seq2seqPipelines                pipelineMap[*pipelines.Seq2SeqPipeline]
 	glinerPipelines                 pipelineMap[*pipelines.GLiNERPipeline]
@@ -47,6 +48,7 @@ func newSession(backend string, opts ...options.WithOption) (*Session, error) {
 		zeroShotClassificationPipelines: map[string]*pipelines.ZeroShotClassificationPipeline{},
 		crossEncoderPipelines:           map[string]*pipelines.CrossEncoderPipeline{},
 		imageClassificationPipelines:    map[string]*pipelines.ImageClassificationPipeline{},
+		objectDetectionPipelines:        map[string]*pipelines.ObjectDetectionPipeline{},
 		textGenerationPipelines:         map[string]*pipelines.TextGenerationPipeline{},
 		seq2seqPipelines:                map[string]*pipelines.Seq2SeqPipeline{},
 		glinerPipelines:                 map[string]*pipelines.GLiNERPipeline{},
@@ -106,6 +108,12 @@ type ImageClassificationConfig = backends.PipelineConfig[*pipelines.ImageClassif
 // ImageClassificationOption is an option for an image classification pipeline.
 type ImageClassificationOption = backends.PipelineOption[*pipelines.ImageClassificationPipeline]
 
+// ObjectDetectionConfig is the configuration for an object detection pipeline.
+type ObjectDetectionConfig = backends.PipelineConfig[*pipelines.ObjectDetectionPipeline]
+
+// ObjectDetectionOption is an option for an object detection pipeline.
+type ObjectDetectionOption = backends.PipelineOption[*pipelines.ObjectDetectionPipeline]
+
 // TextGenerationConfig is the configuration for a text generation pipeline.
 type TextGenerationConfig = backends.PipelineConfig[*pipelines.TextGenerationPipeline]
 
@@ -155,7 +163,7 @@ func NewPipeline[T backends.Pipeline](s *Session, pipelineConfig backends.Pipeli
 		model, ok = s.models[pipelineConfig.ModelPath]
 
 		if !ok {
-			model, err = backends.LoadModel(pipelineConfig.ModelPath, pipelineConfig.OnnxFilename, s.options)
+			model, err = backends.LoadModel(pipelineConfig.ModelPath, pipelineConfig.OnnxFilename, s.options, pipeline.IsGenerative())
 			if err != nil {
 				return pipeline, err
 			}
@@ -181,6 +189,8 @@ func NewPipeline[T backends.Pipeline](s *Session, pipelineConfig backends.Pipeli
 		s.crossEncoderPipelines[name] = typedPipeline
 	case *pipelines.ImageClassificationPipeline:
 		s.imageClassificationPipelines[name] = typedPipeline
+	case *pipelines.ObjectDetectionPipeline:
+		s.objectDetectionPipelines[name] = typedPipeline
 	case *pipelines.TextGenerationPipeline:
 		s.textGenerationPipelines[name] = typedPipeline
 	case *pipelines.Seq2SeqPipeline:
@@ -241,6 +251,14 @@ func InitializePipeline[T backends.Pipeline](p T, pipelineConfig backends.Pipeli
 	case *pipelines.ImageClassificationPipeline:
 		config := any(pipelineConfig).(backends.PipelineConfig[*pipelines.ImageClassificationPipeline])
 		pipelineInitialised, err := pipelines.NewImageClassificationPipeline(config, options, model)
+		if err != nil {
+			return pipeline, name, err
+		}
+		pipeline = any(pipelineInitialised).(T)
+		name = config.Name
+	case *pipelines.ObjectDetectionPipeline:
+		config := any(pipelineConfig).(backends.PipelineConfig[*pipelines.ObjectDetectionPipeline])
+		pipelineInitialised, err := pipelines.NewObjectDetectionPipeline(config, options, model)
 		if err != nil {
 			return pipeline, name, err
 		}
@@ -318,6 +336,12 @@ func GetPipeline[T backends.Pipeline](s *Session, name string) (T, error) {
 		return any(p).(T), nil
 	case *pipelines.ImageClassificationPipeline:
 		p, ok := s.imageClassificationPipelines[name]
+		if !ok {
+			return pipeline, &pipelineNotFoundError{pipelineName: name}
+		}
+		return any(p).(T), nil
+	case *pipelines.ObjectDetectionPipeline:
+		p, ok := s.objectDetectionPipelines[name]
 		if !ok {
 			return pipeline, &pipelineNotFoundError{pipelineName: name}
 		}
@@ -414,6 +438,17 @@ func ClosePipeline[T backends.Pipeline](s *Session, name string) error {
 				return model.Destroy()
 			}
 		}
+	case *pipelines.ObjectDetectionPipeline:
+		p, ok := s.objectDetectionPipelines[name]
+		if ok {
+			model := p.Model
+			delete(s.objectDetectionPipelines, name)
+			delete(model.Pipelines, name)
+			if len(model.Pipelines) == 0 {
+				delete(s.models, model.Path)
+				return model.Destroy()
+			}
+		}
 	case *pipelines.TextGenerationPipeline:
 		p, ok := s.textGenerationPipelines[name]
 		if ok {
@@ -477,7 +512,7 @@ func (s *Session) GetStatistics() map[string]backends.PipelineStatistics {
 	return statistics
 }
 
-// Print prints runtime statistics for all initialized pipelines to stdout.
+// PrintStatistics prints runtime statistics for all initialized pipelines to stdout.
 func (s *Session) PrintStatistics() {
 	statistics := s.GetStatistics()
 	for pipelineName, v := range statistics {

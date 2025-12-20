@@ -1,134 +1,47 @@
 package pipelines
 
 import (
-	"bytes"
+	"context"
 	"errors"
-	"fmt"
-	"sync/atomic"
-	"text/template"
-	"time"
 
 	"github.com/knights-analytics/hugot/backends"
 	"github.com/knights-analytics/hugot/options"
-	"github.com/knights-analytics/hugot/templates"
-	"github.com/knights-analytics/hugot/util/safeconv"
 )
 
-// TextGenerationPipeline enables generative text inference using ONNX models.
-// Supported backends: Go and ORT
-//
-// Decoding method:
-// - Greedy search (default)
-//
-// Supports chat templating (like Hugging Face’s apply_chat_template) via RunWithTemplate,
-// allowing structured roles (system, user, assistant) important for instruction-tuned models.
-//
-// Templates come from tokenizer_config.json files in Jinja2 format, converted for Go’s text/template.
-// Currently includes Gemma and Phi chat templates (./templates/templates.go).
-//
-// Without templates, plain text input is supported via Run, but templated input improves output quality.
-//
-// Test cases use HuggingFaceTB/SmolLM-135M and compare the outputs with the outputs of Python's onnxruntime library.
-// onnx-community/gemma-3-1b-it and microsoft/Phi-3-mini-4k-instruct-onnx were also tested but not included in the testing file
-// Example usage:
-// session, err := NewORTSession()
-// check(err)
-//
-//	defer func(session *Session) {
-//		err := session.Destroy()
-//		check(err)
-//	}(session)
-//
-//	config := TextGenerationConfig{
-//		ModelPath:    "./models/KnightsAnalytics_gemma-3-1b-it",
-//		Name:         "testPipeline",
-//		OnnxFilename: "model_quantized.onnx",
-//		Options: []backends.PipelineOption[*pipelines.TextGenerationPipeline]{
-//			pipelines.WithMaxTokens(256),
-//			pipelines.WithGemmaTemplate(),
-//		},
-//	}
-//
-// gemmaPipeline, err := NewPipeline(session, config)
-// check(err)
-//
-//	messages := [][]pipelines.Message{
-//		{
-//			{Role: "system", Content: "you are a helpful assistant."},
-//			{Role: "user", Content: "tell me some facts about the capital of the Netherlands"},
-//		},
-//	}
-//
-// batchResult, err := gemmaPipeline.RunWithTemplate(messages)
-// check(err)
-// fmt.Println(batchResult.GetOutput()).
 type TextGenerationPipeline struct {
 	*backends.BasePipeline
-	Template     *template.Template
-	OutputName   string
-	EosToken     string
-	Output       backends.InputOutputInfo
-	MaxNewTokens int
+	MaxLength int
+	Streaming bool
 }
+
 type TextGenerationOutput struct {
-	TextGenerationOutputs []string
-	GeneratedTokens       [][]uint32
-}
-type Message struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
-}
-type TemplateData struct {
-	EosToken            string    `json:"eos_token"`
-	Messages            []Message `json:"messages"`
-	AddGenerationPrompt bool      `json:"add_generation_prompt"`
+	TokenStream chan backends.SequenceDelta
+	ErrorStream chan error
+	Responses   []string
 }
 
 func (t *TextGenerationOutput) GetOutput() []any {
-	out := make([]any, len(t.TextGenerationOutputs))
-	for i, textOutput := range t.TextGenerationOutputs {
-		out[i] = any(textOutput)
+	if t.TokenStream == nil && t.ErrorStream == nil {
+		out := make([]any, len(t.Responses))
+		for i, resp := range t.Responses {
+			out[i] = any(resp)
+		}
+		return out
 	}
-	return out
+	return []any{t.TokenStream, t.ErrorStream}
 }
 
-// WithMaxTokens allows the user to define the maximum generated tokens.
-func WithMaxTokens(maxToken int) backends.PipelineOption[*TextGenerationPipeline] {
+// WithMaxLength allows the user to define the maximum generated tokens.
+func WithMaxLength(maxLength int) backends.PipelineOption[*TextGenerationPipeline] {
 	return func(pipeline *TextGenerationPipeline) error {
-		pipeline.MaxNewTokens = maxToken
+		pipeline.MaxLength = maxLength
 		return nil
 	}
 }
 
-// WithGemmaTemplate allows the user to apply the chat template provided in Gemma's tokenizer_config file.
-func WithGemmaTemplate() backends.PipelineOption[*TextGenerationPipeline] {
+func WithStreaming() backends.PipelineOption[*TextGenerationPipeline] {
 	return func(pipeline *TextGenerationPipeline) error {
-		tmpl, err := template.New("gemma").Funcs(templates.FuncMap).Parse(templates.GemmaTemplate)
-		if err != nil {
-			return errors.New("parsing of gemma template failed")
-		}
-		pipeline.Template = tmpl
-		return nil
-	}
-}
-
-// WithPhiTemplate allows the user to apply the chat template provided in Phi's tokenizer_config file.
-func WithPhiTemplate() backends.PipelineOption[*TextGenerationPipeline] {
-	return func(pipeline *TextGenerationPipeline) error {
-		tmpl, err := template.New("phi").Funcs(templates.FuncMap).Parse(templates.PhiTemplate)
-		if err != nil {
-			return errors.New("parsing of gemma template failed")
-		}
-		pipeline.Template = tmpl
-		return nil
-	}
-}
-
-func WithCustomStopTokens(stopTokens []int64) backends.PipelineOption[*TextGenerationPipeline] {
-	return func(pipeline *TextGenerationPipeline) error {
-		for _, token := range stopTokens {
-			pipeline.Model.EosTokenIDs[token] = true
-		}
+		pipeline.Streaming = true
 		return nil
 	}
 }
@@ -146,8 +59,8 @@ func NewTextGenerationPipeline(config backends.PipelineConfig[*TextGenerationPip
 			return nil, err
 		}
 	}
-	if pipeline.MaxNewTokens <= 0 {
-		pipeline.MaxNewTokens = 1028 // Default value if not set as per Python
+	if pipeline.MaxLength == 0 {
+		pipeline.MaxLength = 1028 // Default value if not set as per Python
 	}
 	err = pipeline.Validate()
 	if err != nil {
@@ -157,6 +70,10 @@ func NewTextGenerationPipeline(config backends.PipelineConfig[*TextGenerationPip
 }
 
 // INTERFACE IMPLEMENTATION
+
+func (p *TextGenerationPipeline) IsGenerative() bool {
+	return true
+}
 
 func (p *TextGenerationPipeline) GetMetadata() backends.PipelineMetadata {
 	return backends.PipelineMetadata{}
@@ -176,107 +93,38 @@ func (p *TextGenerationPipeline) GetStatistics() backends.PipelineStatistics {
 
 func (p *TextGenerationPipeline) Validate() error {
 	var validationErrors []error
-	if p.Model.Tokenizer == nil {
-		validationErrors = append(validationErrors, fmt.Errorf("text generation pipeline requires a tokenizer"))
+	if !p.Model.IsGenerative {
+		validationErrors = append(validationErrors, errors.New("model is not generative"))
 	}
-	if len(p.Model.EosTokenIDs) == 0 {
-		validationErrors = append(validationErrors, errors.New("no EOS Token IDs found"))
+
+	if p.MaxLength <= 0 {
+		validationErrors = append(validationErrors, errors.New("max length must be greater than zero"))
 	}
-	if p.Model.NumHiddenLayers == 0 {
-		validationErrors = append(validationErrors, errors.New("num hidden layers cannot be 0"))
-	}
-	if p.Model.NumKeyValueHeads == 0 {
-		validationErrors = append(validationErrors, errors.New("num key value heads cannot be 0"))
-	}
-	if p.Model.HeadDim == 0 {
-		validationErrors = append(validationErrors, errors.New("head dim cannot be 0"))
-	}
+
 	return errors.Join(validationErrors...)
 }
 
-// Preprocess tokenizes the input strings.
-func (p *TextGenerationPipeline) Preprocess(batch *backends.PipelineBatch, inputs []string) error {
-	start := time.Now()
-	backends.TokenizeInputs(batch, p.Model.Tokenizer, inputs)
-	atomic.AddUint64(&p.Model.Tokenizer.TokenizerTimings.NumCalls, 1)
-	atomic.AddUint64(&p.Model.Tokenizer.TokenizerTimings.TotalNS, safeconv.DurationToU64(time.Since(start)))
-	return backends.CreateInputTensors(batch, p.Model, p.Runtime)
+func (p *TextGenerationPipeline) Preprocess(batch *backends.PipelineBatch, inputs any) error {
+	return backends.CreateMessages(batch, p.BasePipeline, inputs)
 }
 
-// Forward performs the generation loop.
-func (p *TextGenerationPipeline) Forward(batch *backends.PipelineBatch) error {
-	start := time.Now()
-	// generation loop
-	err := backends.RunGenerativeSessionOnBatch(batch, p.BasePipeline)
-	if err != nil {
-		return err
+// Forward initiates the generation loop.
+func (p *TextGenerationPipeline) Forward(ctx context.Context, batch *backends.PipelineBatch) (chan backends.SequenceDelta, chan error, error) {
+	tokenStream, errorStream, initErr := backends.RunGenerativeSessionOnBatch(ctx, batch, p.BasePipeline, p.MaxLength)
+	if initErr != nil {
+		return nil, nil, initErr
 	}
-	atomic.AddUint64(&p.PipelineTimings.NumCalls, 1)
-	atomic.AddUint64(&p.PipelineTimings.TotalNS, safeconv.DurationToU64(time.Since(start)))
-	return nil
-}
-
-// Postprocess converts the generated tokens back into a readable string.
-func (p *TextGenerationPipeline) Postprocess(batch *backends.PipelineBatch) (*TextGenerationOutput, error) {
-	outputValues := batch.OutputValues
-	output := TextGenerationOutput{
-		TextGenerationOutputs: make([]string, batch.Size),
-		GeneratedTokens:       make([][]uint32, batch.Size),
-	}
-	for i, val := range outputValues {
-		tokenIDs := val.([]int64)
-		convertedTokens := make([]uint32, len(tokenIDs))
-		for j, tok := range tokenIDs {
-			convertedTokens[j] = safeconv.Int64ToUint32(tok)
-		}
-		output.GeneratedTokens[i] = convertedTokens
-		decodedString, err := backends.Decode(convertedTokens, p.Model.Tokenizer, true)
-		if err != nil {
-			return nil, errors.New("error in decoding generated tokens")
-		}
-		output.TextGenerationOutputs[i] = decodedString
-	}
-	return &output, nil
+	return tokenStream, errorStream, nil
 }
 
 func (p *TextGenerationPipeline) Run(inputs []string) (backends.PipelineBatchOutput, error) {
-	return p.RunPipeline(inputs)
+	return p.RunPipeline(context.Background(), inputs)
 }
 
-// applyChatTemplate applies the provided chat template to the input sequence.
-func applyChatTemplate(tmpl *template.Template, data TemplateData) (string, error) {
-	var buf bytes.Buffer
-	err := tmpl.Execute(&buf, data)
-	if err != nil {
-		return "", err
-	}
-	return buf.String(), nil
-}
-
-// RunWithTemplate allows the user to apply a chat template to their input sequence.
-func (p *TextGenerationPipeline) RunWithTemplate(inputs [][]Message) (backends.PipelineBatchOutput, error) {
-	// apply template to messages, returning []string
-	// if template is not compliled, return error
-	templatedMessages := make([]string, len(inputs))
-	for i, message := range inputs {
-		data := TemplateData{
-			Messages:            message,
-			AddGenerationPrompt: true,
-			EosToken:            p.EosToken,
-		}
-		outputStr, err := applyChatTemplate(p.Template, data)
-		if err != nil {
-			return nil, err
-		}
-		templatedMessages[i] = outputStr
-	}
-	return p.RunPipeline(templatedMessages)
-}
-
-func (p *TextGenerationPipeline) RunPipeline(inputs []string) (*TextGenerationOutput, error) {
+func (p *TextGenerationPipeline) RunPipeline(ctx context.Context, inputs []string) (*TextGenerationOutput, error) {
 	var runErrors []error
 	batch := backends.NewBatch(len(inputs))
-	batch.MaxNewTokens = p.MaxNewTokens
+	batch.MaxNewTokens = p.MaxLength
 	defer func(*backends.PipelineBatch) {
 		runErrors = append(runErrors, batch.Destroy())
 	}(batch)
@@ -284,11 +132,66 @@ func (p *TextGenerationPipeline) RunPipeline(inputs []string) (*TextGenerationOu
 	if e := errors.Join(runErrors...); e != nil {
 		return nil, e
 	}
-	runErrors = append(runErrors, p.Forward(batch))
+	tokenStream, errorStream, forwardErr := p.Forward(ctx, batch)
+	if forwardErr != nil {
+		return nil, forwardErr
+	}
+	if p.Streaming {
+		return &TextGenerationOutput{
+			TokenStream: tokenStream,
+			ErrorStream: errorStream,
+		}, errors.Join(runErrors...)
+	}
+
+	// Collect responses and errors
+	responses, responseErr := collectResponses(tokenStream, errorStream, len(inputs))
+	return &TextGenerationOutput{
+		TokenStream: nil,
+		ErrorStream: nil,
+		Responses:   responses,
+	}, errors.Join(append(runErrors, responseErr)...)
+}
+
+func (p *TextGenerationPipeline) RunMessages(ctx context.Context, inputs [][]backends.Message) (*TextGenerationOutput, error) {
+	var runErrors []error
+	batch := backends.NewBatch(len(inputs))
+	batch.MaxNewTokens = p.MaxLength
+	defer func(*backends.PipelineBatch) {
+		runErrors = append(runErrors, batch.Destroy())
+	}(batch)
+	runErrors = append(runErrors, p.Preprocess(batch, inputs))
 	if e := errors.Join(runErrors...); e != nil {
 		return nil, e
 	}
-	result, postErr := p.Postprocess(batch)
-	runErrors = append(runErrors, postErr)
-	return result, errors.Join(runErrors...)
+	tokenStream, errorStream, forwardErr := p.Forward(ctx, batch)
+	if forwardErr != nil {
+		return nil, forwardErr
+	}
+	if p.Streaming {
+		return &TextGenerationOutput{
+			TokenStream: tokenStream,
+			ErrorStream: errorStream,
+		}, errors.Join(runErrors...)
+	}
+
+	// Collect responses and errors
+	responses, responseErr := collectResponses(tokenStream, errorStream, len(inputs))
+	return &TextGenerationOutput{
+		TokenStream: nil,
+		ErrorStream: nil,
+		Responses:   responses,
+	}, errors.Join(append(runErrors, responseErr)...)
+}
+
+func collectResponses(tokenStream chan backends.SequenceDelta, errorStream chan error, batchSize int) ([]string, error) {
+	responses := make([]string, batchSize)
+	var finalErrors []error
+	for delta := range tokenStream {
+		index := delta.Index
+		responses[index] += delta.Token
+	}
+	for err := range errorStream {
+		finalErrors = append(finalErrors, err)
+	}
+	return responses, errors.Join(finalErrors...)
 }

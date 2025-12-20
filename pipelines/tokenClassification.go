@@ -140,6 +140,10 @@ func NewTokenClassificationPipeline(config backends.PipelineConfig[*TokenClassif
 
 // INTERFACE IMPLEMENTATION
 
+func (p *TokenClassificationPipeline) IsGenerative() bool {
+	return false
+}
+
 func (p *TokenClassificationPipeline) GetModel() *backends.Model {
 	return p.Model
 }

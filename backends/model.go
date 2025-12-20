@@ -39,42 +39,45 @@ type Model struct {
 	FirstIteration        bool
 }
 
-func LoadModel(path string, onnxFilename string, options *options.Options) (*Model, error) {
+func LoadModel(path string, onnxFilename string, options *options.Options, isGenerative bool) (*Model, error) {
 	model := &Model{
 		Path:         path,
 		OnnxFilename: onnxFilename,
 		Pipelines:    make(map[string]Pipeline),
+		IsGenerative: isGenerative,
 	}
-	err := LoadOnnxModelBytes(model)
-	if err != nil {
-		return nil, err
-	}
-	err = loadModelConfig(model)
-	if err != nil {
-		return nil, err
-	}
-	err = CreateModelBackend(model, options)
-	if err != nil {
-		return nil, err
-	}
-	// for generative models that don't have head dim defined in config (example Phi)
-	// infer from cache entries, only if HeadDim hasn't been initialized yet
-	if model.HeadDim == 0 {
-		for _, inputMeta := range model.InputsMeta {
-			if strings.HasPrefix(inputMeta.Name, "past_key") {
-				dims := inputMeta.Dimensions.ValuesInt()
-				model.HeadDim = dims[len(dims)-1]
-				break
-			}
+
+	if !isGenerative {
+		err := LoadOnnxModelBytes(model)
+		if err != nil {
+			return nil, err
+		}
+		err = loadModelConfig(model)
+		if err != nil {
+			return nil, err
+		}
+		err = CreateModelBackend(model, options)
+		if err != nil {
+			return nil, err
+		}
+		tkErr := LoadTokenizer(model, options)
+		if tkErr != nil {
+			return nil, tkErr
+		}
+	} else {
+		// creation of the session. Only one output (either token or sentence embedding).
+		if options.Backend != "ORT" {
+			return nil, fmt.Errorf("generative models are only supported with ORT backend currently")
+		}
+		if onnxFilename != "" {
+			return nil, fmt.Errorf("onnx filename should not be provided for generative models as we currently rely on genai_config for the onnx backend")
+		}
+		err := createORTGenerativeSession(model, options)
+		if err != nil {
+			return nil, err
 		}
 	}
-	if model.HeadDim > 0 {
-		model.IsGenerative = true
-	}
-	tkErr := LoadTokenizer(model, options)
-	if tkErr != nil {
-		return nil, tkErr
-	}
+
 	model.Destroy = func() error {
 		var destroyErr error
 		if model.Tokenizer != nil {
@@ -83,8 +86,10 @@ func LoadModel(path string, onnxFilename string, options *options.Options) (*Mod
 		switch options.Backend {
 		case "ORT":
 			destroyErr = errors.Join(destroyErr, model.ORTModel.Destroy())
+			model.ORTModel = nil
 		case "GO", "XLA":
 			model.GoMLXModel.Destroy()
+			model.GoMLXModel = nil
 		}
 		return destroyErr
 	}
@@ -129,7 +134,10 @@ func getOnnxFiles(path string) ([][]string, error) {
 	var onnxFiles [][]string
 	walker := func(_ context.Context, _ string, parent string, info os.FileInfo, _ io.Reader) (toContinue bool, err error) {
 		if strings.HasSuffix(info.Name(), ".onnx") {
-			onnxFiles = append(onnxFiles, []string{fileutil.PathJoinSafe(path, parent), info.Name()})
+			if parent == "" {
+				parent = path
+			}
+			onnxFiles = append(onnxFiles, []string{parent, info.Name()})
 		}
 		return true, nil
 	}
@@ -270,7 +278,12 @@ func ReshapeOutput[T float32 | int64 | int32](input []T, meta InputOutputInfo, b
 	case 2:
 		outArray = flatDataTo2D(input, batchSize, dimensions[lenDimensions-1])
 	case 3:
-		outArray = flatDataTo3D(input, paddingMask, sequenceLength, dimensions[lenDimensions-1])
+		// If no padding mask is provided (vision models), infer middle dim.
+		if len(paddingMask) == 0 || sequenceLength == 0 {
+			outArray = flatDataTo3DGeneric(input, batchSize, dimensions[lenDimensions-1])
+		} else {
+			outArray = flatDataTo3D(input, paddingMask, sequenceLength, dimensions[lenDimensions-1])
+		}
 	case 4:
 		dimension := dimensions[3]
 		groupSize := dimensions[1]
@@ -324,13 +337,37 @@ func flatDataTo3D[T float32 | int64 | int32](input []T, paddingMask [][]bool, se
 	return output
 }
 
-func flatDataTo3DGenerativeLoop[T float32 | int64 | int32](input []T, batchSize int64, vocabSize int64) [][][]T {
-	result := make([][][]T, batchSize)
-	for i := range batchSize {
-		start := i * vocabSize
-		result[i] = [][]T{input[start : start+vocabSize]}
+// flatDataTo3DGeneric reshapes flat data into [batchSize][N][dimension] inferring N.
+func flatDataTo3DGeneric[T float32 | int64 | int32](input []T, batchSize int, dimension int) [][][]T {
+	if dimension == -1 {
+		// cannot infer without last dimension; return empty
+		return make([][][]T, batchSize)
 	}
-	return result
+	total := len(input)
+	if batchSize <= 0 || dimension <= 0 || total == 0 {
+		return make([][][]T, batchSize)
+	}
+	perBatch := total / batchSize
+	if perBatch%dimension != 0 {
+		// fallback: best-effort
+		perBatch = (perBatch / dimension) * dimension
+	}
+	n := perBatch / dimension
+	output := make([][][]T, batchSize)
+	idx := 0
+	for b := range batchSize {
+		seq := make([][]T, n)
+		for i := range n {
+			vec := make([]T, dimension)
+			for d := range dimension {
+				vec[d] = input[idx]
+				idx++
+			}
+			seq[i] = vec
+		}
+		output[b] = seq
+	}
+	return output
 }
 
 func flatDataTo4D[T float32 | int64 | int32](input []T, paddingMask [][]bool, groupSize int, dimension int) [][][][]T {

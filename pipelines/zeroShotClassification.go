@@ -296,6 +296,10 @@ func (p *ZeroShotClassificationPipeline) RunPipeline(inputs []string) (*ZeroShot
 
 // PIPELINE INTERFACE IMPLEMENTATION
 
+func (p *ZeroShotClassificationPipeline) IsGenerative() bool {
+	return false
+}
+
 func (p *ZeroShotClassificationPipeline) GetModel() *backends.Model {
 	return p.Model
 }
