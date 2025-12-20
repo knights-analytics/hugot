@@ -15,6 +15,7 @@ import (
 )
 
 type Model struct {
+	ID                    string
 	ORTModel              *ORTModel
 	GoMLXModel            *GoMLXModel
 	Tokenizer             *Tokenizer
@@ -36,11 +37,11 @@ type Model struct {
 	VocabSize             int
 	PadToken              int64
 	IsGenerative          bool
-	FirstIteration        bool
 }
 
 func LoadModel(path string, onnxFilename string, options *options.Options, isGenerative bool) (*Model, error) {
 	model := &Model{
+		ID: 		  path + ":" + onnxFilename,
 		Path:         path,
 		OnnxFilename: onnxFilename,
 		Pipelines:    make(map[string]Pipeline),
