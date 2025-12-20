@@ -170,10 +170,11 @@ func (p *FeatureExtractionPipeline) Validate() error {
 	}
 	for _, input := range p.Model.InputsMeta {
 		dims := []int64(input.Dimensions)
-		maxDims := 3
-		if p.imageMode {
-			maxDims = 4 // Image inputs are 4D: [batch, channels, height, width]
-		}
+		// Allow up to 4D inputs for all pipelines:
+		// - Text models: [batch, sequence] or [batch, sequence, hidden]
+		// - Image models: [batch, channels, height, width]
+		// - Multimodal models may have various dimensional structures
+		maxDims := 4
 		if len(dims) > maxDims {
 			validationErrors = append(validationErrors, fmt.Errorf("inputs and outputs currently can have at most %d dimensions", maxDims))
 		}

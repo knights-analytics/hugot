@@ -60,6 +60,15 @@ func newSession(backend string, opts ...options.WithOption) (*Session, error) {
 
 type pipelineMap[T backends.Pipeline] map[string]T
 
+// modelCacheKey generates the cache key for a model.
+// Includes ONNX filename to support directories with multiple models (e.g., CLIP).
+func modelCacheKey(model *backends.Model) string {
+	if model.OnnxFilename != "" {
+		return model.Path + ":" + model.OnnxFilename
+	}
+	return model.Path
+}
+
 func (m pipelineMap[T]) GetStatistics() map[string]backends.PipelineStatistics {
 	statistics := map[string]backends.PipelineStatistics{}
 	for pipelineName, p := range m {
@@ -134,7 +143,12 @@ func NewPipeline[T backends.Pipeline](s *Session, pipelineConfig backends.Pipeli
 	}
 
 	// Load model if it has not been loaded already
-	model, ok := s.models[pipelineConfig.ModelPath]
+	// Cache key includes both path and ONNX filename to support directories with multiple models (e.g., CLIP)
+	modelCacheKey := pipelineConfig.ModelPath
+	if pipelineConfig.OnnxFilename != "" {
+		modelCacheKey = pipelineConfig.ModelPath + ":" + pipelineConfig.OnnxFilename
+	}
+	model, ok := s.models[modelCacheKey]
 
 	var err error
 	var name string
@@ -144,7 +158,7 @@ func NewPipeline[T backends.Pipeline](s *Session, pipelineConfig backends.Pipeli
 		if err != nil {
 			return pipeline, err
 		}
-		s.models[pipelineConfig.ModelPath] = model
+		s.models[modelCacheKey] = model
 	}
 
 	pipeline, name, err = InitializePipeline(pipeline, pipelineConfig, s.options, model)
@@ -319,7 +333,7 @@ func ClosePipeline[T backends.Pipeline](s *Session, name string) error {
 			delete(s.tokenClassificationPipelines, name)
 			delete(model.Pipelines, name)
 			if len(model.Pipelines) == 0 {
-				delete(s.models, model.Path)
+				delete(s.models, modelCacheKey(model))
 				return model.Destroy()
 			}
 		}
@@ -330,7 +344,7 @@ func ClosePipeline[T backends.Pipeline](s *Session, name string) error {
 			delete(s.textClassificationPipelines, name)
 			delete(model.Pipelines, name)
 			if len(model.Pipelines) == 0 {
-				delete(s.models, model.Path)
+				delete(s.models, modelCacheKey(model))
 				return model.Destroy()
 			}
 		}
@@ -341,7 +355,7 @@ func ClosePipeline[T backends.Pipeline](s *Session, name string) error {
 			delete(s.featureExtractionPipelines, name)
 			delete(model.Pipelines, name)
 			if len(model.Pipelines) == 0 {
-				delete(s.models, model.Path)
+				delete(s.models, modelCacheKey(model))
 				return model.Destroy()
 			}
 		}
@@ -352,7 +366,7 @@ func ClosePipeline[T backends.Pipeline](s *Session, name string) error {
 			delete(s.zeroShotClassificationPipelines, name)
 			delete(model.Pipelines, name)
 			if len(model.Pipelines) == 0 {
-				delete(s.models, model.Path)
+				delete(s.models, modelCacheKey(model))
 				return model.Destroy()
 			}
 		}
@@ -363,7 +377,7 @@ func ClosePipeline[T backends.Pipeline](s *Session, name string) error {
 			delete(s.crossEncoderPipelines, name)
 			delete(model.Pipelines, name)
 			if len(model.Pipelines) == 0 {
-				delete(s.models, model.Path)
+				delete(s.models, modelCacheKey(model))
 				return model.Destroy()
 			}
 		}
@@ -374,7 +388,7 @@ func ClosePipeline[T backends.Pipeline](s *Session, name string) error {
 			delete(s.imageClassificationPipelines, name)
 			delete(model.Pipelines, name)
 			if len(model.Pipelines) == 0 {
-				delete(s.models, model.Path)
+				delete(s.models, modelCacheKey(model))
 				return model.Destroy()
 			}
 		}
@@ -385,7 +399,7 @@ func ClosePipeline[T backends.Pipeline](s *Session, name string) error {
 			delete(s.objectDetectionPipelines, name)
 			delete(model.Pipelines, name)
 			if len(model.Pipelines) == 0 {
-				delete(s.models, model.Path)
+				delete(s.models, modelCacheKey(model))
 				return model.Destroy()
 			}
 		}
@@ -396,7 +410,7 @@ func ClosePipeline[T backends.Pipeline](s *Session, name string) error {
 			delete(s.textGenerationPipelines, name)
 			delete(model.Pipelines, name)
 			if len(model.Pipelines) == 0 {
-				delete(s.models, model.Path)
+				delete(s.models, modelCacheKey(model))
 				return model.Destroy()
 			}
 		}

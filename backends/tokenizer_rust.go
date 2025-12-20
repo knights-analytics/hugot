@@ -49,6 +49,12 @@ func getRustTokenizerOptions(inputs []InputOutputInfo) ([]tokenizers.EncodeOptio
 				// handled at model level
 				continue
 			}
+			// Skip image inputs - they don't need tokenizer options
+			// Vision models (like CLIP visual encoder) use pixel_values
+			lower := strings.ToLower(input.Name)
+			if strings.Contains(lower, "pixel_values") || strings.Contains(lower, "image") {
+				continue
+			}
 			return nil, fmt.Errorf("input %s not recognized", input.Name)
 		}
 	}
