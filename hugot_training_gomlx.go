@@ -158,7 +158,7 @@ func TrainGoMLX(s *TrainingSession) error {
 			if loop.Epoch != currentEpoch {
 				if s.config.TrainEvalDataset != nil {
 					if s.config.Verbose {
-						fmt.Printf("Running evaluation for epoch %d\n on trainEvalDataset", loop.Epoch)
+						fmt.Printf("Running evaluation for epoch %d on trainEvalDataset\n", loop.Epoch)
 					}
 					lossAndMetrics, err := gomlxTrainer.Eval(s.config.TrainEvalDataset)
 					if err != nil {
@@ -170,7 +170,7 @@ func TrainGoMLX(s *TrainingSession) error {
 
 				if s.earlyStopping != nil {
 					if s.config.Verbose {
-						fmt.Printf("Running evaluation for epoch %d\n on evalDataset", loop.Epoch)
+						fmt.Printf("Running evaluation for epoch %d on evalDataset\n", loop.Epoch)
 					}
 					lossAndMetrics, err := gomlxTrainer.Eval(s.config.EvalDataset)
 					if err != nil {
