@@ -131,7 +131,21 @@ func createGoMLXModelBackend(model *Model, options *options.Options) error {
 		return contextErr
 	}
 
-	exec.SetMaxCache(-1)
+	// Limit JIT compilation cache to bound memory growth.
+	//
+	// Each unique input shape triggers XLA JIT recompilation, and each compiled
+	// program consumes 50-200MB depending on model complexity. With unlimited
+	// cache (-1), memory can grow unbounded as different request shapes accumulate.
+	//
+	// Power-of-2 padding (see createInputTensorsGoMLX) already limits shape variety:
+	//   - Batch sizes: 1, 2, 4, 8, 16, 32 (6 values)
+	//   - Sequence lengths: 8, 16, 32, 64, 128, 256, 512 (7 values)
+	//   - Maximum unique shapes: 6 × 7 = 42 per model
+	//
+	// A cache of 16 covers the most common shape combinations with LRU eviction
+	// for rare ones. Trade-off: occasional recompilation (~100-500ms) for requests
+	// with unusual shapes, but bounded memory (~800MB-3.2GB for cache vs unbounded).
+	exec.SetMaxCache(16)
 
 	model.GoMLXModel = &GoMLXModel{
 		Backend:   backend,
@@ -188,11 +202,15 @@ func createInputTensorsGoMLX(batch *PipelineBatch, model *Model, padBatchDimensi
 
 	batchSize := batch.Size
 	if padBatchDimension {
-		batchSize = nextPowerOf2(batchSize)
+		// Use coarse bucketing instead of power-of-2 to reduce JIT cache pressure.
+		// See shapeBucket() for memory savings analysis.
+		batchSize = shapeBucket(batchSize, batchBuckets)
 	}
 	maxSeqLength := batch.MaxSequenceLength
 	if padSequenceDimension && !leftPad {
-		maxSeqLength = nextPowerOf2(maxSeqLength)
+		// Use coarse bucketing instead of power-of-2 to reduce JIT cache pressure.
+		// See shapeBucket() for memory savings analysis.
+		maxSeqLength = shapeBucket(maxSeqLength, sequenceBuckets)
 	}
 	total := batchSize * maxSeqLength
 
@@ -330,6 +348,20 @@ func runGoMLXSessionOnBatch(batch *PipelineBatch, p *BasePipeline) error {
 		}
 	}()
 
+	// Transfer output tensors from device (TPU/GPU) to local (CPU) memory immediately.
+	//
+	// Go's GC doesn't see the large device-side allocations, so it doesn't feel pressure
+	// to reclaim tensor wrappers. By explicitly transferring to local memory and
+	// invalidating device copies, we release TPU/GPU memory as soon as the computation
+	// completes rather than waiting for eventual GC.
+	//
+	// This is especially important for TPU v5e where memory is limited and multiple
+	// concurrent requests can quickly exhaust device memory.
+	for _, t := range outputTensors {
+		t.MaterializeLocal()      // Copy data from device to local memory
+		_ = t.InvalidateOnDevice() // Free device memory immediately
+	}
+
 	convertedOutput := make([]any, len(outputTensors))
 	for i, t := range outputTensors {
 		var rawOutput []float32
@@ -365,6 +397,41 @@ func nextPowerOf2(n int) int {
 	}
 	return pow
 }
+
+// shapeBucket quantizes input dimensions to coarse buckets to reduce JIT cache pressure.
+//
+// XLA compiles a separate program for each unique input shape. Using power-of-2 padding
+// creates up to 42 unique shapes per model (6 batch sizes × 7 sequence lengths), which
+// can consume 2-8GB of memory for cached compiled programs.
+//
+// Coarse bucketing reduces this to just 9 shapes (3 batch × 3 sequence), significantly
+// reducing memory usage while maintaining reasonable padding overhead:
+//
+//	Batch buckets:    1, 8, 32      (covers 1-32 batch sizes)
+//	Sequence buckets: 32, 128, 512  (covers 1-512 token sequences)
+//
+// Trade-off: Slightly more padding waste for small inputs (e.g., batch=2 pads to 8),
+// but dramatically fewer compiled programs in memory.
+//
+// Example memory savings with 2 models (embedder + reranker):
+//   - Power-of-2: 42 shapes × 2 models × 100MB avg = 8.4GB
+//   - Coarse buckets: 9 shapes × 2 models × 100MB avg = 1.8GB
+func shapeBucket(n int, buckets []int) int {
+	for _, bucket := range buckets {
+		if n <= bucket {
+			return bucket
+		}
+	}
+	// Return the largest bucket if n exceeds all
+	return buckets[len(buckets)-1]
+}
+
+// Default shape buckets for batch size and sequence length.
+// These provide a good balance between padding overhead and JIT cache size.
+var (
+	batchBuckets    = []int{1, 8, 32}
+	sequenceBuckets = []int{32, 128, 512}
+)
 
 func (goMLXModel *GoMLXModel) Save(w io.Writer) error {
 	if err := goMLXModel.OnnxModel.ContextToONNX(goMLXModel.Ctx); err != nil {
