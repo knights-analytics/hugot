@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"github.com/knights-analytics/hugot/options"
 	"math"
 	"os"
 	"testing"
@@ -43,7 +44,7 @@ func runModel(t *testing.T, runtime string, examplesLeft, examplesRight []string
 		session, err = NewGoSession()
 		checkT(t, err)
 	case "XLA":
-		session, err = NewXLASession()
+		session, err = NewXLASession(options.WithGoMLXBatchBuckets([]int{35}))
 		checkT(t, err)
 	default:
 		t.Fatal("unknown runtime")
