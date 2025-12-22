@@ -24,6 +24,12 @@ type GoMLXModel struct {
 	Exec      *context.Exec    // exec is used to execute the model with a context.
 	Call      func(ctx *context.Context, inputs []*graph.Node) []*graph.Node
 	Destroy   func()
+	// BatchBuckets defines bucket sizes for batch dimension padding.
+	// Coarse bucketing reduces JIT cache pressure by limiting unique shapes.
+	BatchBuckets []int
+	// SequenceBuckets defines bucket sizes for sequence length padding.
+	// Coarse bucketing reduces JIT cache pressure by limiting unique shapes.
+	SequenceBuckets []int
 }
 
 func loadExternalData(path string, model *onnx.Model) error {
@@ -137,22 +143,38 @@ func createGoMLXModelBackend(model *Model, options *options.Options) error {
 	// program consumes 50-200MB depending on model complexity. With unlimited
 	// cache (-1), memory can grow unbounded as different request shapes accumulate.
 	//
-	// Power-of-2 padding (see createInputTensorsGoMLX) already limits shape variety:
-	//   - Batch sizes: 1, 2, 4, 8, 16, 32 (6 values)
-	//   - Sequence lengths: 8, 16, 32, 64, 128, 256, 512 (7 values)
-	//   - Maximum unique shapes: 6 × 7 = 42 per model
+	// IMPORTANT: The cache is NOT LRU - if full, new shapes return errors.
+	// The cache size must be >= the number of unique shapes from bucketing:
+	//   - Default batch buckets: 1, 8, 32 (3 values)
+	//   - Default sequence buckets: 32, 128, 512 (3 values)
+	//   - Maximum unique shapes: 3 × 3 = 9 per model
 	//
-	// A cache of 16 covers the most common shape combinations with LRU eviction
-	// for rare ones. Trade-off: occasional recompilation (~100-500ms) for requests
-	// with unusual shapes, but bounded memory (~800MB-3.2GB for cache vs unbounded).
-	exec.SetMaxCache(16)
+	// Default cache of 16 provides headroom above the 9 possible shapes.
+	// Configure via WithGoMLXMaxCache() if using custom bucket configurations.
+	maxCache := 16
+	if options.GoMLXOptions.MaxCache > 0 {
+		maxCache = options.GoMLXOptions.MaxCache
+	}
+	exec.SetMaxCache(maxCache)
+
+	// Use configured buckets or fall back to defaults.
+	batchBucketsCfg := batchBuckets
+	if len(options.GoMLXOptions.BatchBuckets) > 0 {
+		batchBucketsCfg = options.GoMLXOptions.BatchBuckets
+	}
+	sequenceBucketsCfg := sequenceBuckets
+	if len(options.GoMLXOptions.SequenceBuckets) > 0 {
+		sequenceBucketsCfg = options.GoMLXOptions.SequenceBuckets
+	}
 
 	model.GoMLXModel = &GoMLXModel{
-		Backend:   backend,
-		OnnxModel: modelParsed,
-		Ctx:       ctx,
-		Exec:      exec,
-		Call:      callFunc,
+		Backend:         backend,
+		OnnxModel:       modelParsed,
+		Ctx:             ctx,
+		Exec:            exec,
+		Call:            callFunc,
+		BatchBuckets:    batchBucketsCfg,
+		SequenceBuckets: sequenceBucketsCfg,
 		Destroy: func() {
 			exec.Finalize()
 			ctx.Finalize()
@@ -204,13 +226,13 @@ func createInputTensorsGoMLX(batch *PipelineBatch, model *Model, padBatchDimensi
 	if padBatchDimension {
 		// Use coarse bucketing instead of power-of-2 to reduce JIT cache pressure.
 		// See shapeBucket() for memory savings analysis.
-		batchSize = shapeBucket(batchSize, batchBuckets)
+		batchSize = shapeBucket(batchSize, model.GoMLXModel.BatchBuckets)
 	}
 	maxSeqLength := batch.MaxSequenceLength
 	if padSequenceDimension && !leftPad {
 		// Use coarse bucketing instead of power-of-2 to reduce JIT cache pressure.
 		// See shapeBucket() for memory savings analysis.
-		maxSeqLength = shapeBucket(maxSeqLength, sequenceBuckets)
+		maxSeqLength = shapeBucket(maxSeqLength, model.GoMLXModel.SequenceBuckets)
 	}
 	total := batchSize * maxSeqLength
 
@@ -342,35 +364,21 @@ func runGoMLXSessionOnBatch(batch *PipelineBatch, p *BasePipeline) error {
 	if err != nil {
 		return err
 	}
-	defer func() {
-		for _, t := range outputTensors {
-			err = errors.Join(t.FinalizeAll())
-		}
-	}()
-
-	// Transfer output tensors from device (TPU/GPU) to local (CPU) memory immediately.
-	//
-	// Go's GC doesn't see the large device-side allocations, so it doesn't feel pressure
-	// to reclaim tensor wrappers. By explicitly transferring to local memory and
-	// invalidating device copies, we release TPU/GPU memory as soon as the computation
-	// completes rather than waiting for eventual GC.
-	//
-	// This is especially important for TPU v5e where memory is limited and multiple
-	// concurrent requests can quickly exhaust device memory.
-	for _, t := range outputTensors {
-		t.MaterializeLocal()      // Copy data from device to local memory
-		_ = t.InvalidateOnDevice() // Free device memory immediately
-	}
 
 	convertedOutput := make([]any, len(outputTensors))
 	for i, t := range outputTensors {
 		var rawOutput []float32
+		// ConstFlatData automatically triggers MaterializeLocal under the hood,
+		// copying data from device (TPU/GPU) to local (CPU) memory.
 		err = tensors.ConstFlatData(t, func(flat []float32) {
 			rawOutput = flat
 		})
 		if err != nil {
 			return err
 		}
+		// FinalizeAll immediately frees both the device copy and the local copy.
+		// This is critical for TPU/GPU where Go's GC doesn't see device-side allocations.
+		_ = t.FinalizeAll()
 		convertedOutput[i] = ReshapeOutput(rawOutput, p.Model.OutputsMeta[i], batch.Size, batch.PaddingMask, batch.MaxSequenceLength)
 	}
 
