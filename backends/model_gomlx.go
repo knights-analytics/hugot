@@ -24,6 +24,12 @@ type GoMLXModel struct {
 	Exec      *context.Exec    // exec is used to execute the model with a context.
 	Call      func(ctx *context.Context, inputs []*graph.Node) []*graph.Node
 	Destroy   func()
+	// BatchBuckets defines bucket sizes for batch dimension padding.
+	// Coarse bucketing reduces JIT cache pressure by limiting unique shapes.
+	BatchBuckets []int
+	// SequenceBuckets defines bucket sizes for sequence length padding.
+	// Coarse bucketing reduces JIT cache pressure by limiting unique shapes.
+	SequenceBuckets []int
 }
 
 func loadExternalData(path string, model *onnx.Model) error {
@@ -131,14 +137,44 @@ func createGoMLXModelBackend(model *Model, options *options.Options) error {
 		return contextErr
 	}
 
-	exec.SetMaxCache(-1)
+	// Limit JIT compilation cache to bound memory growth.
+	//
+	// Each unique input shape triggers XLA JIT recompilation, and each compiled
+	// program consumes 50-200MB depending on model complexity. With unlimited
+	// cache (-1), memory can grow unbounded as different request shapes accumulate.
+	//
+	// IMPORTANT: The cache is NOT LRU - if full, new shapes return errors.
+	// The cache size must be >= the number of unique shapes from bucketing:
+	//   - Default batch buckets: 1, 8, 32 (3 values)
+	//   - Default sequence buckets: 32, 128, 512 (3 values)
+	//   - Maximum unique shapes: 3 × 3 = 9 per model
+	//
+	// Default cache of 16 provides headroom above the 9 possible shapes.
+	// Configure via WithGoMLXMaxCache() if using custom bucket configurations.
+	maxCache := 16
+	if options.GoMLXOptions.MaxCache > 0 {
+		maxCache = options.GoMLXOptions.MaxCache
+	}
+	exec.SetMaxCache(maxCache)
+
+	// Use configured buckets or fall back to defaults.
+	batchBucketsCfg := batchBuckets
+	if len(options.GoMLXOptions.BatchBuckets) > 0 {
+		batchBucketsCfg = options.GoMLXOptions.BatchBuckets
+	}
+	sequenceBucketsCfg := sequenceBuckets
+	if len(options.GoMLXOptions.SequenceBuckets) > 0 {
+		sequenceBucketsCfg = options.GoMLXOptions.SequenceBuckets
+	}
 
 	model.GoMLXModel = &GoMLXModel{
-		Backend:   backend,
-		OnnxModel: modelParsed,
-		Ctx:       ctx,
-		Exec:      exec,
-		Call:      callFunc,
+		Backend:         backend,
+		OnnxModel:       modelParsed,
+		Ctx:             ctx,
+		Exec:            exec,
+		Call:            callFunc,
+		BatchBuckets:    batchBucketsCfg,
+		SequenceBuckets: sequenceBucketsCfg,
 		Destroy: func() {
 			exec.Finalize()
 			ctx.Finalize()
@@ -188,11 +224,15 @@ func createInputTensorsGoMLX(batch *PipelineBatch, model *Model, padBatchDimensi
 
 	batchSize := batch.Size
 	if padBatchDimension {
-		batchSize = nextPowerOf2(batchSize)
+		// Use coarse bucketing instead of power-of-2 to reduce JIT cache pressure.
+		// See shapeBucket() for memory savings analysis.
+		batchSize = shapeBucket(batchSize, model.GoMLXModel.BatchBuckets)
 	}
 	maxSeqLength := batch.MaxSequenceLength
 	if padSequenceDimension && !leftPad {
-		maxSeqLength = nextPowerOf2(maxSeqLength)
+		// Use coarse bucketing instead of power-of-2 to reduce JIT cache pressure.
+		// See shapeBucket() for memory savings analysis.
+		maxSeqLength = shapeBucket(maxSeqLength, model.GoMLXModel.SequenceBuckets)
 	}
 	total := batchSize * maxSeqLength
 
@@ -324,21 +364,21 @@ func runGoMLXSessionOnBatch(batch *PipelineBatch, p *BasePipeline) error {
 	if err != nil {
 		return err
 	}
-	defer func() {
-		for _, t := range outputTensors {
-			err = errors.Join(t.FinalizeAll())
-		}
-	}()
 
 	convertedOutput := make([]any, len(outputTensors))
 	for i, t := range outputTensors {
 		var rawOutput []float32
+		// ConstFlatData automatically triggers MaterializeLocal under the hood,
+		// copying data from device (TPU/GPU) to local (CPU) memory.
 		err = tensors.ConstFlatData(t, func(flat []float32) {
 			rawOutput = flat
 		})
 		if err != nil {
 			return err
 		}
+		// FinalizeAll immediately frees both the device copy and the local copy.
+		// This is critical for TPU/GPU where Go's GC doesn't see device-side allocations.
+		_ = t.FinalizeAll()
 		convertedOutput[i] = ReshapeOutput(rawOutput, p.Model.OutputsMeta[i], batch.Size, batch.PaddingMask, batch.MaxSequenceLength)
 	}
 
@@ -365,6 +405,41 @@ func nextPowerOf2(n int) int {
 	}
 	return pow
 }
+
+// shapeBucket quantizes input dimensions to coarse buckets to reduce JIT cache pressure.
+//
+// XLA compiles a separate program for each unique input shape. Using power-of-2 padding
+// creates up to 42 unique shapes per model (6 batch sizes × 7 sequence lengths), which
+// can consume 2-8GB of memory for cached compiled programs.
+//
+// Coarse bucketing reduces this to just 9 shapes (3 batch × 3 sequence), significantly
+// reducing memory usage while maintaining reasonable padding overhead:
+//
+//	Batch buckets:    1, 8, 32      (covers 1-32 batch sizes)
+//	Sequence buckets: 32, 128, 512  (covers 1-512 token sequences)
+//
+// Trade-off: Slightly more padding waste for small inputs (e.g., batch=2 pads to 8),
+// but dramatically fewer compiled programs in memory.
+//
+// Example memory savings with 2 models (embedder + reranker):
+//   - Power-of-2: 42 shapes × 2 models × 100MB avg = 8.4GB
+//   - Coarse buckets: 9 shapes × 2 models × 100MB avg = 1.8GB
+func shapeBucket(n int, buckets []int) int {
+	for _, bucket := range buckets {
+		if n <= bucket {
+			return bucket
+		}
+	}
+	// Return the largest bucket if n exceeds all
+	return buckets[len(buckets)-1]
+}
+
+// Default shape buckets for batch size and sequence length.
+// These provide a good balance between padding overhead and JIT cache size.
+var (
+	batchBuckets    = []int{1, 8, 32}
+	sequenceBuckets = []int{32, 128, 512}
+)
 
 func (goMLXModel *GoMLXModel) Save(w io.Writer) error {
 	if err := goMLXModel.OnnxModel.ContextToONNX(goMLXModel.Ctx); err != nil {

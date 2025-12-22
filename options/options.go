@@ -61,6 +61,19 @@ type GoMLXOptions struct {
 	Cuda bool
 	XLA  bool
 	TPU  bool
+	// MaxCache limits the number of JIT-compiled programs cached by XLA.
+	// IMPORTANT: This is NOT an LRU cache - if full, new shapes return errors.
+	// Must be >= len(BatchBuckets) * len(SequenceBuckets).
+	// Default: 16 (sufficient for default 3×3=9 bucket combinations).
+	MaxCache int
+	// BatchBuckets defines the bucket sizes for batch dimension padding.
+	// Coarse bucketing reduces JIT cache pressure by limiting unique shapes.
+	// Default: []int{1, 8, 32}
+	BatchBuckets []int
+	// SequenceBuckets defines the bucket sizes for sequence length padding.
+	// Coarse bucketing reduces JIT cache pressure by limiting unique shapes.
+	// Default: []int{32, 128, 512}
+	SequenceBuckets []int
 }
 
 // WithOption is the interface for all option functions.
@@ -218,6 +231,50 @@ func WithTPU() WithOption {
 			return nil
 		}
 		return fmt.Errorf("WithTPU is only supported for XLA backend")
+	}
+}
+
+// WithGoMLXMaxCache (XLA only) sets the maximum number of JIT-compiled programs to cache.
+// IMPORTANT: This is NOT an LRU cache - if full, new shapes return errors.
+// The cache size must be >= len(BatchBuckets) * len(SequenceBuckets) to avoid errors.
+// Default is 16, which provides headroom for the default 3×3=9 bucket combinations.
+func WithGoMLXMaxCache(maxCache int) WithOption {
+	return func(o *Options) error {
+		if o.Backend == "XLA" {
+			o.GoMLXOptions.MaxCache = maxCache
+			return nil
+		}
+		return fmt.Errorf("WithGoMLXMaxCache is only supported for XLA backend")
+	}
+}
+
+// WithGoMLXBatchBuckets (XLA only) sets the bucket sizes for batch dimension padding.
+// Inputs are padded to the smallest bucket >= their batch size.
+// Fewer/coarser buckets reduce JIT cache pressure but increase padding overhead.
+// Default is []int{1, 8, 32}.
+// IMPORTANT: Ensure MaxCache >= len(BatchBuckets) * len(SequenceBuckets).
+func WithGoMLXBatchBuckets(buckets []int) WithOption {
+	return func(o *Options) error {
+		if o.Backend == "XLA" {
+			o.GoMLXOptions.BatchBuckets = buckets
+			return nil
+		}
+		return fmt.Errorf("WithGoMLXBatchBuckets is only supported for XLA backend")
+	}
+}
+
+// WithGoMLXSequenceBuckets (XLA only) sets the bucket sizes for sequence length padding.
+// Inputs are padded to the smallest bucket >= their sequence length.
+// Fewer/coarser buckets reduce JIT cache pressure but increase padding overhead.
+// Default is []int{32, 128, 512}.
+// IMPORTANT: Ensure MaxCache >= len(BatchBuckets) * len(SequenceBuckets).
+func WithGoMLXSequenceBuckets(buckets []int) WithOption {
+	return func(o *Options) error {
+		if o.Backend == "XLA" {
+			o.GoMLXOptions.SequenceBuckets = buckets
+			return nil
+		}
+		return fmt.Errorf("WithGoMLXSequenceBuckets is only supported for XLA backend")
 	}
 }
 
