@@ -365,20 +365,35 @@ func runGoMLXSessionOnBatch(batch *PipelineBatch, p *BasePipeline) error {
 		return err
 	}
 
+	defer func() {
+		for _, t := range outputTensors {
+			_ = t.FinalizeAll()
+		}
+	}()
+
+	// Transfer output tensors from device (TPU/GPU) to local (CPU) memory immediately.
+	//
+	// Go's GC doesn't see the large device-side allocations, so it doesn't feel pressure
+	// to reclaim tensor wrappers. By explicitly transferring to local memory and
+	// invalidating device copies, we release TPU/GPU memory as soon as the computation
+	// completes rather than waiting for eventual GC.
+	//
+	// This is especially important for TPU v5e where memory is limited and multiple
+	// concurrent requests can quickly exhaust device memory.
+	for _, t := range outputTensors {
+		t.MaterializeLocal()       // Copy data from device to local memory
+		_ = t.InvalidateOnDevice() // Free device memory immediately
+	}
+
 	convertedOutput := make([]any, len(outputTensors))
 	for i, t := range outputTensors {
 		var rawOutput []float32
-		// ConstFlatData automatically triggers MaterializeLocal under the hood,
-		// copying data from device (TPU/GPU) to local (CPU) memory.
 		err = tensors.ConstFlatData(t, func(flat []float32) {
 			rawOutput = flat
 		})
 		if err != nil {
 			return err
 		}
-		// FinalizeAll immediately frees both the device copy and the local copy.
-		// This is critical for TPU/GPU where Go's GC doesn't see device-side allocations.
-		_ = t.FinalizeAll()
 		convertedOutput[i] = ReshapeOutput(rawOutput, p.Model.OutputsMeta[i], batch.Size, batch.PaddingMask, batch.MaxSequenceLength)
 	}
 
