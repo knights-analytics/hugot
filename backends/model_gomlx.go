@@ -182,7 +182,7 @@ func getCacheAndBucketSizes(options *options.Options, model *Model, backend stri
 	} else {
 		sequenceBuckets = defaultSequenceBuckets
 		// Ensure that sequence buckets cover the max sequence length.
-		if batchBuckets[len(batchBuckets)-1] < model.MaxPositionEmbeddings {
+		if sequenceBuckets[len(sequenceBuckets)-1] < model.MaxPositionEmbeddings {
 			sequenceBuckets = append(sequenceBuckets, model.MaxPositionEmbeddings)
 		}
 	}
