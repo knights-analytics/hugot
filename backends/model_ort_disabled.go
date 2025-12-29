@@ -7,12 +7,11 @@ import (
 	"errors"
 
 	"github.com/knights-analytics/hugot/options"
-	"github.com/knights-analytics/ortgenai"
 )
 
 type ORTModel struct {
 	Destroy           func() error
-	GenerativeSession *ortgenai.Session
+	GenerativeSession any // placeholder when ORT disabled
 }
 
 func createORTModelBackend(_ *Model, _ *options.Options) error {

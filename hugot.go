@@ -159,15 +159,17 @@ func NewPipeline[T backends.Pipeline](s *Session, pipelineConfig backends.Pipeli
 
 	if !isSeq2Seq {
 		// Load model if it has not been loaded already (for non-Seq2Seq pipelines)
+		// Use combined ModelPath:OnnxFilename as key to allow multiple pipelines on same model path
+		modelID := pipelineConfig.ModelPath + ":" + pipelineConfig.OnnxFilename
 		var ok bool
-		model, ok = s.models[pipelineConfig.ModelPath]
+		model, ok = s.models[modelID]
 
 		if !ok {
 			model, err = backends.LoadModel(pipelineConfig.ModelPath, pipelineConfig.OnnxFilename, s.options, pipeline.IsGenerative())
 			if err != nil {
 				return pipeline, err
 			}
-			s.models[pipelineConfig.ModelPath] = model
+			s.models[modelID] = model
 		}
 	}
 
@@ -379,7 +381,7 @@ func ClosePipeline[T backends.Pipeline](s *Session, name string) error {
 			delete(s.tokenClassificationPipelines, name)
 			delete(model.Pipelines, name)
 			if len(model.Pipelines) == 0 {
-				delete(s.models, model.Path)
+				delete(s.models, model.ID)
 				return model.Destroy()
 			}
 		}
@@ -390,7 +392,7 @@ func ClosePipeline[T backends.Pipeline](s *Session, name string) error {
 			delete(s.textClassificationPipelines, name)
 			delete(model.Pipelines, name)
 			if len(model.Pipelines) == 0 {
-				delete(s.models, model.Path)
+				delete(s.models, model.ID)
 				return model.Destroy()
 			}
 		}
@@ -401,7 +403,7 @@ func ClosePipeline[T backends.Pipeline](s *Session, name string) error {
 			delete(s.featureExtractionPipelines, name)
 			delete(model.Pipelines, name)
 			if len(model.Pipelines) == 0 {
-				delete(s.models, model.Path)
+				delete(s.models, model.ID)
 				return model.Destroy()
 			}
 		}
@@ -412,7 +414,7 @@ func ClosePipeline[T backends.Pipeline](s *Session, name string) error {
 			delete(s.zeroShotClassificationPipelines, name)
 			delete(model.Pipelines, name)
 			if len(model.Pipelines) == 0 {
-				delete(s.models, model.Path)
+				delete(s.models, model.ID)
 				return model.Destroy()
 			}
 		}
@@ -423,7 +425,7 @@ func ClosePipeline[T backends.Pipeline](s *Session, name string) error {
 			delete(s.crossEncoderPipelines, name)
 			delete(model.Pipelines, name)
 			if len(model.Pipelines) == 0 {
-				delete(s.models, model.Path)
+				delete(s.models, model.ID)
 				return model.Destroy()
 			}
 		}
@@ -434,7 +436,7 @@ func ClosePipeline[T backends.Pipeline](s *Session, name string) error {
 			delete(s.imageClassificationPipelines, name)
 			delete(model.Pipelines, name)
 			if len(model.Pipelines) == 0 {
-				delete(s.models, model.Path)
+				delete(s.models, model.ID)
 				return model.Destroy()
 			}
 		}
@@ -445,7 +447,7 @@ func ClosePipeline[T backends.Pipeline](s *Session, name string) error {
 			delete(s.objectDetectionPipelines, name)
 			delete(model.Pipelines, name)
 			if len(model.Pipelines) == 0 {
-				delete(s.models, model.Path)
+				delete(s.models, model.ID)
 				return model.Destroy()
 			}
 		}
@@ -456,7 +458,7 @@ func ClosePipeline[T backends.Pipeline](s *Session, name string) error {
 			delete(s.textGenerationPipelines, name)
 			delete(model.Pipelines, name)
 			if len(model.Pipelines) == 0 {
-				delete(s.models, model.Path)
+				delete(s.models, model.ID)
 				return model.Destroy()
 			}
 		}

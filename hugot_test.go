@@ -176,7 +176,7 @@ func featureExtractionPipelineValidation(t *testing.T, session *Session) {
 	err = pipeline.Validate()
 	assert.Error(t, err)
 
-	pipeline.Model.InputsMeta[0].Dimensions = backends.NewShape(1, 1, 1, 1)
+	pipeline.Model.InputsMeta[0].Dimensions = backends.NewShape(1, 1, 1, 1, 1)
 	err = pipeline.Validate()
 	assert.Error(t, err)
 }

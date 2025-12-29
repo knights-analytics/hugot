@@ -3,7 +3,7 @@
 ARG GO_VERSION=1.25.5
 ARG ONNXRUNTIME_VERSION=1.23.2
 ARG ONNXRUNTIME_GENAI_VERSION=0.11.4
-ARG GOPJRT_VERSION=0.83.3
+ARG GOPJRT_VERSION=0.83.4
 ARG BUILD_PLATFORM=linux/amd64
 
 #--- runtime layer with all hugot dependencies for cpu 
@@ -23,9 +23,6 @@ COPY ./scripts/download-onnxruntime-genai.sh /download-onnxruntime-genai.sh
 RUN --mount=src=./go.mod,dst=/go.mod \
     dnf --allowerasing -y install gcc jq bash tar xz gzip glibc-static libstdc++ wget zip git dirmngr sudo which && \
     ln -s /usr/lib64/libstdc++.so.6 /usr/lib64/libstdc++.so && \
-    curl -LO https://download.fedoraproject.org/pub/fedora/linux/releases/43/Everything/x86_64/os/Packages/g/glibc-2.42-4.fc43.x86_64.rpm && \
-    rpm -Uvh --nodeps --force glibc-2.42-4.fc43.x86_64.rpm && \
-    rm glibc-2.42-4.fc43.x86_64.rpm && \
     dnf clean all && \
     # go
     curl -LO https://golang.org/dl/go${GO_VERSION}.linux-amd64.tar.gz && \
