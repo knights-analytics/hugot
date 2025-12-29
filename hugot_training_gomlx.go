@@ -43,6 +43,9 @@ func NewGoTrainingSession[T backends.Pipeline](config TrainingConfig) (*Training
 }
 
 func NewXLATrainingSession[T backends.Pipeline](config TrainingConfig) (*TrainingSession, error) {
+	// Disabled for now until we have auto installs globally
+	xlaDisableAutoInstall()
+
 	s, err := newTrainingSession[T]("XLA", config)
 	if err != nil {
 		return nil, err
@@ -155,7 +158,7 @@ func TrainGoMLX(s *TrainingSession) error {
 			if loop.Epoch != currentEpoch {
 				if s.config.TrainEvalDataset != nil {
 					if s.config.Verbose {
-						fmt.Printf("Running evaluation for epoch %d\n on trainEvalDataset", loop.Epoch)
+						fmt.Printf("Running evaluation for epoch %d on trainEvalDataset\n", loop.Epoch)
 					}
 					lossAndMetrics, err := gomlxTrainer.Eval(s.config.TrainEvalDataset)
 					if err != nil {
@@ -167,7 +170,7 @@ func TrainGoMLX(s *TrainingSession) error {
 
 				if s.earlyStopping != nil {
 					if s.config.Verbose {
-						fmt.Printf("Running evaluation for epoch %d\n on evalDataset", loop.Epoch)
+						fmt.Printf("Running evaluation for epoch %d on evalDataset\n", loop.Epoch)
 					}
 					lossAndMetrics, err := gomlxTrainer.Eval(s.config.EvalDataset)
 					if err != nil {

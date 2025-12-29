@@ -251,6 +251,10 @@ func CreateInputTensors(batch *PipelineBatch, model *Model, runtime string) erro
 	case "ORT":
 		return createInputTensorsORT(batch, model)
 	case "GO":
+		if model.GoMLXModel.MaxCache > 0 {
+			// only pad the batch dimension if we have a limited cache
+			return createInputTensorsGoMLX(batch, model, true, true)
+		}
 		return createInputTensorsGoMLX(batch, model, false, false)
 	case "XLA":
 		return createInputTensorsGoMLX(batch, model, true, true)

@@ -48,8 +48,11 @@ func getRustTokenizerOptions(inputs []InputOutputInfo) ([]tokenizers.EncodeOptio
 		case "words_mask", "text_lengths", "span_idx", "span_mask":
 			continue
 		default:
-			if strings.HasPrefix(input.Name, "past_key_values") {
-				// handled at model level
+			// Skip inputs that are handled at the model level
+			lowerName := strings.ToLower(input.Name)
+			if strings.HasPrefix(lowerName, "past_key_values") ||
+				strings.Contains(lowerName, "pixel_values") ||
+				strings.Contains(lowerName, "image") {
 				continue
 			}
 			return nil, fmt.Errorf("input %s not recognized", input.Name)

@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
+## [0.6.1] 🌲❄️🎄🎁 - 2025-12-23
+
+###  Changed
+
+- Explicit XLA compilation cache control via WithGoMLXBatchBuckets and WithGoMLXSequenceBuckets.
+- Finalize device memory earlier in XLA sessions, reducing memory pressure when using TPU/GPU.
+- Tokenizer can handle/ignore additional image tensor types.
+- Allow 4D dimensions for multimodal featureExtraction pipelines.
+- Allow multiple ONNX files/models to load from the same model directory.
+- Restore support for GLIBC 2.34 in XLA
+- Also disable XLA dependency autoinstall in training mode (will implement global C dependency autoinstall in near future!)
+
+Thanks @ajroetker for your contributions!
+
 ## [0.6.0] 🌲❄️🎄🎁 - 2025-12-18
 
 ### Changed
