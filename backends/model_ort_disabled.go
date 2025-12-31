@@ -38,6 +38,6 @@ func createORTGenerativeSession(_ *Model, _ *options.Options) error {
 	return errors.New("ORT is not enabled")
 }
 
-func CreateMessagesORT(_ *PipelineBatch, _ any) error {
+func CreateMessagesORT(_ *PipelineBatch, _ *Model, _ any) error {
 	return errors.New("ORT is not enabled")
 }
