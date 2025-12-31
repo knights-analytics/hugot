@@ -144,16 +144,29 @@ type PipelineBatch struct {
 	Size              int
 	MaxSequenceLength int
 	MaxNewTokens      int
+	// Multimodal support
+	MultimodalTensors any // Will hold *ortgenai.NamedTensors for ORT backend
+	DestroyMultimodal func() error
 }
 
 func (b *PipelineBatch) Destroy() error {
-	return b.DestroyInputs()
+	var err error
+	if b.DestroyInputs != nil {
+		err = errors.Join(err, b.DestroyInputs())
+	}
+	if b.DestroyMultimodal != nil {
+		err = errors.Join(err, b.DestroyMultimodal())
+	}
+	return err
 }
 
 // NewBatch initializes a new batch for inference.
 func NewBatch(size int) *PipelineBatch {
 	return &PipelineBatch{
 		DestroyInputs: func() error {
+			return nil
+		},
+		DestroyMultimodal: func() error {
 			return nil
 		},
 		Size: size,

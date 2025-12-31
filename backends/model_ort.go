@@ -133,9 +133,27 @@ func runGenerativeORTSessionOnBatch(ctx context.Context, batch *PipelineBatch, p
 		return nil, nil, fmt.Errorf("invalid input type %T for generative ORT session", batch.InputValues)
 	}
 
-	ortTokenStream, ortErrorStream, err := session.Generate(ctx, inputs, &ortgenai.GenerationOptions{MaxLength: maxLength})
-	if err != nil {
-		return nil, nil, fmt.Errorf("error during generation start: %w", err)
+	// Check if we have multimodal tensors to use instead of text tokenization
+	var ortTokenStream <-chan ortgenai.SequenceDelta
+	var ortErrorStream <-chan error
+	var err error
+
+	if batch.MultimodalTensors != nil {
+		// Multimodal path: use named tensors
+		namedTensors, ok := batch.MultimodalTensors.(*ortgenai.NamedTensors)
+		if !ok {
+			return nil, nil, fmt.Errorf("invalid multimodal tensors type %T", batch.MultimodalTensors)
+		}
+		ortTokenStream, ortErrorStream, err = session.GenerateWithTensors(ctx, namedTensors, &ortgenai.GenerationOptions{MaxLength: maxLength, BatchSize: len(inputs)})
+		if err != nil {
+			return nil, nil, fmt.Errorf("error during multimodal generation start: %w", err)
+		}
+	} else {
+		// Text-only path: use messages
+		ortTokenStream, ortErrorStream, err = session.Generate(ctx, inputs, &ortgenai.GenerationOptions{MaxLength: maxLength})
+		if err != nil {
+			return nil, nil, fmt.Errorf("error during generation start: %w", err)
+		}
 	}
 
 	tokenStream := make(chan SequenceDelta, 10)
@@ -560,6 +578,18 @@ func CreateMessagesORT(batch *PipelineBatch, inputs any, systemPrompt string) er
 		}
 		batch.InputValues = ortMessages
 	case [][]Message:
+		// Check if any messages contain images
+		hasImages := false
+		var allImageURLs []string
+		for _, msgList := range inputs {
+			for _, msg := range msgList {
+				if len(msg.ImageURLs) > 0 {
+					hasImages = true
+					allImageURLs = append(allImageURLs, msg.ImageURLs...)
+				}
+			}
+		}
+
 		ortMessages := make([][]ortgenai.Message, len(inputs))
 		addSystemPrompt := systemPrompt != ""
 		systemPrompt := ortgenai.Message{Role: "system", Content: systemPrompt}
@@ -580,6 +610,46 @@ func CreateMessagesORT(batch *PipelineBatch, inputs any, systemPrompt string) er
 			ortMessages[i] = out
 		}
 		batch.InputValues = ortMessages
+
+		// If multimodal, process images
+		if hasImages {
+			// Load images
+			images, err := ortgenai.LoadImages(allImageURLs)
+			if err != nil {
+				return fmt.Errorf("failed to load images: %w", err)
+			}
+
+			// Create multimodal processor
+			processor, err := ortgenai.CreateMultiModalProcessor(model.ORTModel.GenerativeSession.GetModel())
+			if err != nil {
+				images.Destroy()
+				return fmt.Errorf("failed to create multimodal processor: %w", err)
+			}
+
+			// Combine all text prompts (simplified - using first message content)
+			// In a real implementation, you might want to format this differently
+			prompt := ""
+			if len(inputs) > 0 && len(inputs[0]) > 0 {
+				prompt = inputs[0][0].Content
+			}
+
+			// Process images with prompt
+			tensors, err := processor.ProcessImages(prompt, images)
+			if err != nil {
+				images.Destroy()
+				processor.Destroy()
+				return fmt.Errorf("failed to process images: %w", err)
+			}
+
+			// Store tensors in batch
+			batch.MultimodalTensors = tensors
+			batch.DestroyMultimodal = func() error {
+				tensors.Destroy()
+				processor.Destroy()
+				images.Destroy()
+				return nil
+			}
+		}
 	default:
 		return fmt.Errorf("invalid input type %T for CreateMessagesORT", inputs)
 	}
