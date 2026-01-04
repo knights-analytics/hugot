@@ -27,6 +27,7 @@ type Model struct {
 	OnnxFilename          string
 	SeparatorToken        string
 	OnnxBytes             []byte
+	OnnxPath              string // Full path to ONNX file (used for memory-mapped loading)
 	InputsMeta            []InputOutputInfo
 	OutputsMeta           []InputOutputInfo
 	MaxPositionEmbeddings int
@@ -49,7 +50,7 @@ func LoadModel(path string, onnxFilename string, options *options.Options, isGen
 	}
 
 	if !isGenerative {
-		err := LoadOnnxModelBytes(model)
+		err := LoadOnnxModelBytes(model, options)
 		if err != nil {
 			return nil, err
 		}
@@ -97,8 +98,9 @@ func LoadModel(path string, onnxFilename string, options *options.Options, isGen
 	return model, nil
 }
 
-func LoadOnnxModelBytes(model *Model) error {
-	var modelOnnxFile string
+// ResolveOnnxPath finds the ONNX file path for a model without loading its contents.
+// This is useful for memory-mapped loading where we need the path but not the bytes.
+func ResolveOnnxPath(model *Model) error {
 	onnxFiles, err := getOnnxFiles(model.Path)
 	if err != nil {
 		return err
@@ -114,21 +116,40 @@ func LoadOnnxModelBytes(model *Model) error {
 		for i := range onnxFiles {
 			if onnxFiles[i][1] == model.OnnxFilename {
 				modelNameFound = true
-				modelOnnxFile = fileutil.PathJoinSafe(onnxFiles[i]...)
+				model.OnnxPath = fileutil.PathJoinSafe(onnxFiles[i]...)
 			}
 		}
 		if !modelNameFound {
 			return fmt.Errorf("file %s not found at %s", model.OnnxFilename, model.Path)
 		}
 	} else {
-		modelOnnxFile = fileutil.PathJoinSafe(onnxFiles[0]...)
+		model.OnnxPath = fileutil.PathJoinSafe(onnxFiles[0]...)
 	}
-	onnxBytes, err := fileutil.ReadFileBytes(modelOnnxFile)
+	return nil
+}
+
+// LoadOnnxModelBytes loads the ONNX model file into memory.
+// If opts is provided and memory-mapped loading is enabled, only the path is resolved
+// without loading the bytes (for use with file-path based session creation).
+func LoadOnnxModelBytes(model *Model, opts *options.Options) error {
+	// First resolve the path
+	if err := ResolveOnnxPath(model); err != nil {
+		return err
+	}
+
+	// If memory-mapped loading is enabled for ORT backend, skip loading bytes
+	// (GoMLX backends still need bytes for onnx.Parse)
+	if opts != nil && opts.Backend == "ORT" && opts.ORTOptions != nil && opts.ORTOptions.MemoryMappedLoading {
+		return nil
+	}
+
+	// Otherwise, load the bytes into memory
+	onnxBytes, err := fileutil.ReadFileBytes(model.OnnxPath)
 	if err != nil {
 		return err
 	}
 	model.OnnxBytes = onnxBytes
-	return err
+	return nil
 }
 
 func getOnnxFiles(path string) ([][]string, error) {

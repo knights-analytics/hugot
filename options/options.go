@@ -56,6 +56,7 @@ type OrtOptions struct {
 	DirectMLOptions       *int
 	OpenVINOOptions       map[string]string
 	TensorRTOptions       map[string]string
+	MemoryMappedLoading   bool // If true, load ONNX models directly from file path (memory-mapped) instead of reading into RAM
 }
 type GoMLXOptions struct {
 	Cuda bool
@@ -317,5 +318,19 @@ func WithTensorRT(options map[string]string) WithOption {
 			return nil
 		}
 		return fmt.Errorf("WithTensorRT is only supported for ORT backend")
+	}
+}
+
+// WithMemoryMappedLoading (ORT only) enables memory-mapped loading of ONNX models.
+// When enabled, ONNX models are loaded directly from file paths rather than being
+// read entirely into RAM first. This can significantly reduce memory usage for large models.
+// Note: This option is only effective for models loaded from the local filesystem.
+func WithMemoryMappedLoading(enabled bool) WithOption {
+	return func(o *Options) error {
+		if o.Backend == "ORT" {
+			o.ORTOptions.MemoryMappedLoading = enabled
+			return nil
+		}
+		return fmt.Errorf("WithMemoryMappedLoading is only supported for ORT backend")
 	}
 }
