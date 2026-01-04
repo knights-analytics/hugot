@@ -193,28 +193,64 @@ func createORTModelBackend(model *Model, options *options.Options) error {
 	}
 
 	sessionOptions := options.BackendOptions.(*ort.SessionOptions)
+	memoryMapped := options.ORTOptions != nil && options.ORTOptions.MemoryMappedLoading
 
-	inputs, outputs, err := loadInputOutputMetaORT(model.OnnxBytes)
-	if err != nil {
-		return err
-	}
+	var inputs, outputs []InputOutputInfo
+	var inputNames, outputNames []string
+	var session *ort.DynamicAdvancedSession
 
-	var inputNames []string
-	var outputNames []string
-	for _, v := range inputs {
-		inputNames = append(inputNames, v.Name)
-	}
-	for _, v := range outputs {
-		outputNames = append(outputNames, v.Name)
-	}
-	session, errSession := ort.NewDynamicAdvancedSessionWithONNXData(
-		model.OnnxBytes,
-		inputNames,
-		outputNames,
-		sessionOptions,
-	)
-	if errSession != nil {
-		return errSession
+	if memoryMapped && model.OnnxPath != "" {
+		// Memory-mapped loading: use file path directly
+		ortInputs, ortOutputs, metaErr := ort.GetInputOutputInfo(model.OnnxPath)
+		if metaErr != nil {
+			return metaErr
+		}
+		inputs = convertORTInputOutputs(ortInputs)
+		outputs = convertORTInputOutputs(ortOutputs)
+
+		for _, v := range inputs {
+			inputNames = append(inputNames, v.Name)
+		}
+		for _, v := range outputs {
+			outputNames = append(outputNames, v.Name)
+		}
+
+		// Create session from file path (memory-mapped)
+		session, err = ort.NewDynamicAdvancedSession(
+			model.OnnxPath,
+			inputNames,
+			outputNames,
+			sessionOptions,
+		)
+		if err != nil {
+			return err
+		}
+	} else {
+		// Traditional loading: use bytes already loaded in memory
+		inputs, outputs, err = loadInputOutputMetaORT(model.OnnxBytes)
+		if err != nil {
+			return err
+		}
+
+		for _, v := range inputs {
+			inputNames = append(inputNames, v.Name)
+		}
+		for _, v := range outputs {
+			outputNames = append(outputNames, v.Name)
+		}
+
+		session, err = ort.NewDynamicAdvancedSessionWithONNXData(
+			model.OnnxBytes,
+			inputNames,
+			outputNames,
+			sessionOptions,
+		)
+		if err != nil {
+			return err
+		}
+
+		// ONNX bytes no longer needed after creating the session
+		model.OnnxBytes = nil
 	}
 
 	model.ORTModel = &ORTModel{
@@ -231,8 +267,6 @@ func createORTModelBackend(model *Model, options *options.Options) error {
 		err = os.Chdir(cwd)
 	}
 
-	// ONNX bytes no longer needed after creating the session
-	model.OnnxBytes = nil
 	return err
 }
 
