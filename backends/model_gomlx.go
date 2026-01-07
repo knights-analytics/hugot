@@ -31,9 +31,9 @@ type GoMLXModel struct {
 	Exec            *context.Exec    // exec is used to execute the model with a context.
 	Call            func(ctx *context.Context, inputs []*graph.Node) []*graph.Node
 	Destroy         func()
-	MaxCache        int   // MaxCache sets the maximum number of unique input shapes to cache.
 	BatchBuckets    []int // BatchBuckets defines bucket sizes for batch dimension padding.
 	SequenceBuckets []int // SequenceBuckets defines bucket sizes for sequence length padding.
+	MaxCache        int   // MaxCache sets the maximum number of unique input shapes to cache.
 }
 
 func loadExternalData(path string, model *onnx.Model) error {
@@ -87,8 +87,15 @@ func loadExternalData(path string, model *onnx.Model) error {
 	return nil
 }
 
-func createGoMLXModelBackend(model *Model, options *options.Options) error {
-	modelParsed, err := onnx.Parse(model.OnnxBytes)
+func createGoMLXModelBackend(model *Model, loadAsBytes bool, options *options.Options) error {
+
+	var modelParsed *onnx.Model
+	var err error
+	if loadAsBytes {
+		modelParsed, err = onnx.Parse(model.OnnxBytes)
+	} else {
+		modelParsed, err = onnx.ReadFile(fileutil.PathJoinSafe(model.Path, model.OnnxPath))
+	}
 	if err != nil {
 		return err
 	}
@@ -162,7 +169,6 @@ func createGoMLXModelBackend(model *Model, options *options.Options) error {
 	model.InputsMeta = inputs
 	model.OutputsMeta = outputs
 
-	model.OnnxBytes = nil
 	return err
 }
 
@@ -188,7 +194,7 @@ func getCacheAndBucketSizes(options *options.Options, model *Model, backend stri
 	}
 
 	// If using simpleGo, and user hasnt specified custom buckets, set max cache to unlimitted and disable bucketing
-	if  backend == "go" && !bucketsSpecified {
+	if backend == "go" && !bucketsSpecified {
 		return -1, []int{}, []int{}
 	}
 

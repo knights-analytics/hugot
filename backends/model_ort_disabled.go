@@ -14,7 +14,7 @@ type ORTModel struct {
 	GenerativeSession any // placeholder when ORT disabled
 }
 
-func createORTModelBackend(_ *Model, _ *options.Options) error {
+func createORTModelBackend(_ *Model, _ bool, _ *options.Options) error {
 	return errors.New("ORT is not enabled")
 }
 

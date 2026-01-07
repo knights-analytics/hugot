@@ -58,9 +58,6 @@ type OrtOptions struct {
 	TensorRTOptions       map[string]string
 }
 type GoMLXOptions struct {
-	Cuda bool
-	XLA  bool
-	TPU  bool
 	// BatchBuckets defines the bucket sizes for batch dimension padding.
 	// Coarse bucketing reduces JIT cache pressure by limiting unique shapes.
 	// Default: []int{1, 8, 32}
@@ -69,6 +66,9 @@ type GoMLXOptions struct {
 	// Coarse bucketing reduces JIT cache pressure by limiting unique shapes.
 	// Default: []int{32, 128, 512}
 	SequenceBuckets []int
+	Cuda            bool
+	XLA             bool
+	TPU             bool
 }
 
 // WithOption is the interface for all option functions.
