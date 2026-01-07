@@ -10,6 +10,8 @@ import (
 
 	"github.com/knights-analytics/hugot/options"
 	"github.com/knights-analytics/hugot/util/safeconv"
+	"strings"
+	"github.com/knights-analytics/hugot/util/fileutil"
 )
 
 // BasePipeline can be embedded by a pipeline.
@@ -239,12 +241,29 @@ func NewBasePipeline[T Pipeline](config PipelineConfig[T], s *options.Options, m
 }
 
 func CreateModelBackend(model *Model, s *options.Options) error {
-	var err error
+
+	err := GetOnnxModelPath(model)
+	if err != nil {
+		return err
+	}
+
+	loadAsBytes := strings.HasPrefix(model.Path, "s3:")
+	if loadAsBytes {
+		onnxBytes, readErr := fileutil.ReadFileBytes(model.Path + "/" + model.OnnxPath)
+		if readErr != nil {
+			return readErr
+		}
+		model.OnnxBytes = onnxBytes
+	}
+
 	switch s.Backend {
 	case "ORT":
-		err = createORTModelBackend(model, s)
+		err = createORTModelBackend(model, loadAsBytes, s)
 	case "GO", "XLA":
-		err = createGoMLXModelBackend(model, s)
+		err = createGoMLXModelBackend(model, loadAsBytes, s)
 	}
+
+	// ONNX bytes no longer needed after creating the session
+	model.OnnxBytes = nil
 	return err
 }

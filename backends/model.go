@@ -23,9 +23,10 @@ type Model struct {
 	Pipelines             map[string]Pipeline
 	IDLabelMap            map[int]string
 	EosTokenIDs           map[int64]bool
+	SeparatorToken        string
 	Path                  string
 	OnnxFilename          string
-	SeparatorToken        string
+	OnnxPath              string
 	OnnxBytes             []byte
 	InputsMeta            []InputOutputInfo
 	OutputsMeta           []InputOutputInfo
@@ -41,19 +42,15 @@ type Model struct {
 
 func LoadModel(path string, onnxFilename string, options *options.Options, isGenerative bool) (*Model, error) {
 	model := &Model{
-		ID: 		  path + ":" + onnxFilename,
+		ID:           path + ":" + onnxFilename,
 		Path:         path,
 		OnnxFilename: onnxFilename,
-		Pipelines:    make(map[string]Pipeline),
+		Pipelines:    map[string]Pipeline{},
 		IsGenerative: isGenerative,
 	}
 
 	if !isGenerative {
-		err := LoadOnnxModelBytes(model)
-		if err != nil {
-			return nil, err
-		}
-		err = loadModelConfig(model)
+		err := loadModelConfig(model)
 		if err != nil {
 			return nil, err
 		}
@@ -97,8 +94,7 @@ func LoadModel(path string, onnxFilename string, options *options.Options, isGen
 	return model, nil
 }
 
-func LoadOnnxModelBytes(model *Model) error {
-	var modelOnnxFile string
+func GetOnnxModelPath(model *Model) error {
 	onnxFiles, err := getOnnxFiles(model.Path)
 	if err != nil {
 		return err
@@ -110,34 +106,22 @@ func LoadOnnxModelBytes(model *Model) error {
 		if model.OnnxFilename == "" {
 			return fmt.Errorf("multiple .onnx file detected at %s and no OnnxFilename specified", model.Path)
 		}
-		modelNameFound := false
 		for i := range onnxFiles {
 			if onnxFiles[i][1] == model.OnnxFilename {
-				modelNameFound = true
-				modelOnnxFile = fileutil.PathJoinSafe(onnxFiles[i]...)
+				model.OnnxPath = fileutil.PathJoinSafe(onnxFiles[i]...)
+				return nil
 			}
 		}
-		if !modelNameFound {
-			return fmt.Errorf("file %s not found at %s", model.OnnxFilename, model.Path)
-		}
-	} else {
-		modelOnnxFile = fileutil.PathJoinSafe(onnxFiles[0]...)
+		return fmt.Errorf("file %s not found at %s", model.OnnxFilename, model.Path)
 	}
-	onnxBytes, err := fileutil.ReadFileBytes(modelOnnxFile)
-	if err != nil {
-		return err
-	}
-	model.OnnxBytes = onnxBytes
-	return err
+	model.OnnxPath = fileutil.PathJoinSafe(onnxFiles[0]...)
+	return nil
 }
 
 func getOnnxFiles(path string) ([][]string, error) {
 	var onnxFiles [][]string
 	walker := func(_ context.Context, _ string, parent string, info os.FileInfo, _ io.Reader) (toContinue bool, err error) {
 		if strings.HasSuffix(info.Name(), ".onnx") {
-			if parent == "" {
-				parent = path
-			}
 			onnxFiles = append(onnxFiles, []string{parent, info.Name()})
 		}
 		return true, nil
