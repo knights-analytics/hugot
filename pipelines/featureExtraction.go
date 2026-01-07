@@ -231,7 +231,13 @@ func (p *FeatureExtractionPipeline) Postprocess(batch *backends.PipelineBatch) (
 		batchEmbeddings = v
 	case [][][]float32:
 		for batchIndex, tokens := range v {
-			batchEmbeddings[batchIndex] = meanPooling(tokens, batch.Input[batchIndex], batch.MaxSequenceLength, int(embeddingDimension))
+			if p.imageMode {
+				// For image mode, use mean pooling over all tokens (patches) since there's
+				// no tokenized input with attention masks. All patches are valid.
+				batchEmbeddings[batchIndex] = meanPoolingAllTokens(tokens, int(embeddingDimension))
+			} else {
+				batchEmbeddings[batchIndex] = meanPooling(tokens, batch.Input[batchIndex], batch.MaxSequenceLength, int(embeddingDimension))
+			}
 		}
 	default:
 		return nil, fmt.Errorf("output type %T is not supported", output)
@@ -259,6 +265,25 @@ func meanPooling(tokens [][]float32, input backends.TokenizedInput, maxSequence 
 	numAttentionTokens := float32(input.MaxAttentionIndex + 1)
 	for v, vectorValue := range vector {
 		vector[v] = vectorValue / numAttentionTokens
+	}
+	return vector
+}
+
+// meanPoolingAllTokens computes mean pooling over all tokens without attention masks.
+// Used for image mode where all patches are valid and there's no tokenized input.
+func meanPoolingAllTokens(tokens [][]float32, dimensions int) []float32 {
+	if len(tokens) == 0 {
+		return make([]float32, dimensions)
+	}
+	vector := make([]float32, dimensions)
+	for _, token := range tokens {
+		for k, vectorValue := range token {
+			vector[k] += vectorValue
+		}
+	}
+	numTokens := float32(len(tokens))
+	for v := range vector {
+		vector[v] /= numTokens
 	}
 	return vector
 }
