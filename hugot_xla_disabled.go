@@ -1,4 +1,4 @@
-//go:build !XLA && !ALL
+//go:build !cgo || (!XLA && !ALL)
 
 package hugot
 

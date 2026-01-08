@@ -1,4 +1,4 @@
-//go:build (XLA || ALL) && !TRAINING
+//go:build cgo && (XLA || ALL) && !TRAINING
 
 package hugot
 

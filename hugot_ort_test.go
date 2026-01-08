@@ -1,4 +1,4 @@
-//go:build (ORT || ALL) && !TRAINING
+//go:build cgo && (ORT || ALL) && !TRAINING
 
 package hugot
 
