@@ -56,6 +56,7 @@ func (p *FeatureExtractionPipeline) setImageFormat(format string) {
 }
 
 // PIPELINE OPTIONS
+
 // WithNormalization applies normalization to the mean pooled output of the feature pipeline.
 func WithNormalization() backends.PipelineOption[*FeatureExtractionPipeline] {
 	return func(pipeline *FeatureExtractionPipeline) error {
@@ -246,19 +247,33 @@ func (p *FeatureExtractionPipeline) Postprocess(batch *backends.PipelineBatch) (
 }
 
 func meanPooling(tokens [][]float32, input backends.TokenizedInput, maxSequence int, dimensions int) []float32 {
-	length := len(input.AttentionMask)
+	attentionLength := len(input.AttentionMask)
 	vector := make([]float32, dimensions)
-	for j := range maxSequence {
-		// if there is no attention mask, take all tokens
-		if length == 0 || (j+1 <= length && input.AttentionMask[j] != 0) {
-			for k, vectorValue := range tokens[j] {
-				vector[k] = vector[k] + vectorValue
+
+	if attentionLength > 0 {
+		for j := range maxSequence {
+			if j+1 <= attentionLength && input.AttentionMask[j] != 0 {
+				for k, vectorValue := range tokens[j] {
+					vector[k] = vector[k] + vectorValue
+				}
 			}
 		}
+		numAttentionTokens := float32(input.MaxAttentionIndex + 1)
+		for v, vectorValue := range vector {
+			vector[v] = vectorValue / numAttentionTokens
+		}
+		return vector
 	}
-	numAttentionTokens := float32(input.MaxAttentionIndex + 1)
+
+	for j := range maxSequence {
+		// if there is no attention mask, take all tokens
+		for k, vectorValue := range tokens[j] {
+			vector[k] = vector[k] + vectorValue
+		}
+	}
+	numTokens := float32(len(tokens))
 	for v, vectorValue := range vector {
-		vector[v] = vectorValue / numAttentionTokens
+		vector[v] = vectorValue / numTokens
 	}
 	return vector
 }
