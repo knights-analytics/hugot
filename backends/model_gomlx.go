@@ -88,7 +88,6 @@ func loadExternalData(path string, model *onnx.Model) error {
 }
 
 func createGoMLXModelBackend(model *Model, loadAsBytes bool, options *options.Options) error {
-
 	var modelParsed *onnx.Model
 	var err error
 	if loadAsBytes {
@@ -173,7 +172,6 @@ func createGoMLXModelBackend(model *Model, loadAsBytes bool, options *options.Op
 }
 
 func getCacheAndBucketSizes(options *options.Options, model *Model, backend string) (int, []int, []int) {
-
 	bucketsSpecified := false
 	// Use configured buckets or fall back to defaults.
 	batchBuckets := defaultBatchBuckets

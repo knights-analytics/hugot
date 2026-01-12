@@ -6,12 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"strings"
 	"time"
 
 	"github.com/knights-analytics/hugot/options"
-	"github.com/knights-analytics/hugot/util/safeconv"
-	"strings"
 	"github.com/knights-analytics/hugot/util/fileutil"
+	"github.com/knights-analytics/hugot/util/safeconv"
 )
 
 // BasePipeline can be embedded by a pipeline.
@@ -191,10 +191,10 @@ func RunGenerativeSessionOnBatch(ctx context.Context, batch *PipelineBatch, p *B
 	}
 }
 
-func CreateMessages(batch *PipelineBatch, p *BasePipeline, inputs any) error {
+func CreateMessages(batch *PipelineBatch, p *BasePipeline, inputs any, systemPrompt string) error {
 	switch p.Runtime {
 	case "ORT":
-		return CreateMessagesORT(batch, inputs)
+		return CreateMessagesORT(batch, inputs, systemPrompt)
 	case "GO", "XLA":
 		return fmt.Errorf("not implemented")
 	}
@@ -241,7 +241,6 @@ func NewBasePipeline[T Pipeline](config PipelineConfig[T], s *options.Options, m
 }
 
 func CreateModelBackend(model *Model, s *options.Options) error {
-
 	err := GetOnnxModelPath(model)
 	if err != nil {
 		return err

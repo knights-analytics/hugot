@@ -10,8 +10,9 @@ import (
 
 type TextGenerationPipeline struct {
 	*backends.BasePipeline
-	MaxLength int
-	Streaming bool
+	MaxLength    int
+	Streaming    bool
+	SystemPrompt string
 }
 
 type TextGenerationOutput struct {
@@ -29,6 +30,14 @@ func (t *TextGenerationOutput) GetOutput() []any {
 		return out
 	}
 	return []any{t.TokenStream, t.ErrorStream}
+}
+
+// WithSystemPrompt allows the user to define a system prompt that will be prepended to every input.
+func WithSystemPrompt(systemPrompt string) backends.PipelineOption[*TextGenerationPipeline] {
+	return func(pipeline *TextGenerationPipeline) error {
+		pipeline.SystemPrompt = systemPrompt
+		return nil
+	}
 }
 
 // WithMaxLength allows the user to define the maximum generated tokens.
@@ -105,7 +114,7 @@ func (p *TextGenerationPipeline) Validate() error {
 }
 
 func (p *TextGenerationPipeline) Preprocess(batch *backends.PipelineBatch, inputs any) error {
-	return backends.CreateMessages(batch, p.BasePipeline, inputs)
+	return backends.CreateMessages(batch, p.BasePipeline, inputs, p.SystemPrompt)
 }
 
 // Forward initiates the generation loop.

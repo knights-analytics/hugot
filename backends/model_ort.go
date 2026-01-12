@@ -540,30 +540,44 @@ func createImageTensorsORT(batch *PipelineBatch, model *Model, preprocessed [][]
 	return nil
 }
 
-func CreateMessagesORT(batch *PipelineBatch, inputs any) error {
+func CreateMessagesORT(batch *PipelineBatch, inputs any, systemPrompt string) error {
 	switch inputs := inputs.(type) {
 	case []string:
-		messages := make([][]ortgenai.Message, len(inputs))
-		for i, input := range inputs {
-			messages[i] = []ortgenai.Message{ // TODO could interpolate system prompt here
-				{
-					Role:    "user",
-					Content: input,
-				},
-			}
-		}
-		batch.InputValues = messages
-	case [][]Message:
 		ortMessages := make([][]ortgenai.Message, len(inputs))
-		for i, msgList := range inputs {
-			ortMsgList := make([]ortgenai.Message, len(msgList))
-			for j, msg := range msgList {
-				ortMsgList[j] = ortgenai.Message{
-					Role:    msg.Role,
-					Content: msg.Content,
+		addSystemPrompt := systemPrompt != ""
+		systemPrompt := ortgenai.Message{Role: "system", Content: systemPrompt}
+		for i, input := range inputs {
+			if addSystemPrompt {
+				m := make([]ortgenai.Message, 2)
+				m[0] = systemPrompt
+				m[1] = ortgenai.Message{Role: "user", Content: input}
+				ortMessages[i] = m
+			} else {
+				ortMessages[i] = []ortgenai.Message{
+					{Role: "user", Content: input},
 				}
 			}
-			ortMessages[i] = ortMsgList
+		}
+		batch.InputValues = ortMessages
+	case [][]Message:
+		ortMessages := make([][]ortgenai.Message, len(inputs))
+		addSystemPrompt := systemPrompt != ""
+		systemPrompt := ortgenai.Message{Role: "system", Content: systemPrompt}
+		for i, inputMessages := range inputs {
+			additionalLength := 0
+			if addSystemPrompt {
+				additionalLength = 1
+			}
+			out := make([]ortgenai.Message, len(inputMessages)+additionalLength)
+			offset := 0
+			if addSystemPrompt {
+				out[0] = systemPrompt
+				offset = 1
+			}
+			for j, message := range inputMessages {
+				out[offset+j] = ortgenai.Message{Role: message.Role, Content: message.Content}
+			}
+			ortMessages[i] = out
 		}
 		batch.InputValues = ortMessages
 	default:

@@ -1201,6 +1201,7 @@ func textGenerationPipeline(t *testing.T, session *Session) {
 		Name:      "testPipeline",
 		Options: []backends.PipelineOption[*pipelines.TextGenerationPipeline]{
 			pipelines.WithMaxLength(200),
+			pipelines.WithSystemPrompt("you are a helpful assistan. Answer with a single very brief sentence."),
 		},
 	}
 
@@ -1208,18 +1209,15 @@ func textGenerationPipeline(t *testing.T, session *Session) {
 	textGenPipeline, err := NewPipeline(session, config)
 	checkT(t, err)
 
-	systemPrompt := "you are a helpful assistant. Answer with a single very brief sentence."
-
 	tests := []struct {
-		name           string
-		input          [][]backends.Message
+		name             string
+		input            [][]backends.Message
 		expectedKeywords []string
 	}{
 		{
 			name: "small test",
 			input: [][]backends.Message{
 				{
-					{Role: "system", Content: systemPrompt},
 					{Role: "user", Content: "what is the capital of the Netherlands?"},
 				},
 			},
@@ -1231,15 +1229,12 @@ func textGenerationPipeline(t *testing.T, session *Session) {
 			name: "batched test",
 			input: [][]backends.Message{
 				{
-					{Role: "system", Content: systemPrompt},
 					{Role: "user", Content: "what is the capital of the Netherlands?"},
 				},
 				{
-					{Role: "system", Content: systemPrompt},
 					{Role: "user", Content: "who was the first president of the United States?"},
 				},
 				{
-					{Role: "system", Content: systemPrompt},
 					{Role: "user", Content: "Solve this equation: 2 + 2 = ?"},
 				},
 			},
