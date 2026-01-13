@@ -10,9 +10,9 @@ import (
 
 type TextGenerationPipeline struct {
 	*backends.BasePipeline
+	SystemPrompt string
 	MaxLength    int
 	Streaming    bool
-	SystemPrompt string
 }
 
 type TextGenerationOutput struct {

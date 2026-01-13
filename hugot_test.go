@@ -1201,7 +1201,7 @@ func textGenerationPipeline(t *testing.T, session *Session) {
 		Name:      "testPipeline",
 		Options: []backends.PipelineOption[*pipelines.TextGenerationPipeline]{
 			pipelines.WithMaxLength(200),
-			pipelines.WithSystemPrompt("you are a helpful assistan. Answer with a single very brief sentence."),
+			pipelines.WithSystemPrompt("You are a helpful assistant. Answer with a single very brief sentence."),
 		},
 	}
 
