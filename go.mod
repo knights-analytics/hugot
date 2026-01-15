@@ -1,6 +1,6 @@
 module github.com/knights-analytics/hugot
 
-go 1.24.3
+go 1.25.0
 
 require (
 	github.com/daulet/tokenizers v1.24.0
@@ -18,6 +18,7 @@ require (
 )
 
 require (
+	github.com/charmbracelet/colorprofile v0.3.1 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/emirpasic/gods v1.18.1 // indirect

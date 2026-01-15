@@ -20,6 +20,8 @@ type Session struct {
 	imageClassificationPipelines    pipelineMap[*pipelines.ImageClassificationPipeline]
 	objectDetectionPipelines        pipelineMap[*pipelines.ObjectDetectionPipeline]
 	textGenerationPipelines         pipelineMap[*pipelines.TextGenerationPipeline]
+	seq2seqPipelines                pipelineMap[*pipelines.Seq2SeqPipeline]
+	glinerPipelines                 pipelineMap[*pipelines.GLiNERPipeline]
 	models                          map[string]*backends.Model
 	options                         *options.Options
 	environmentDestroy              func() error
@@ -48,6 +50,8 @@ func newSession(backend string, opts ...options.WithOption) (*Session, error) {
 		imageClassificationPipelines:    map[string]*pipelines.ImageClassificationPipeline{},
 		objectDetectionPipelines:        map[string]*pipelines.ObjectDetectionPipeline{},
 		textGenerationPipelines:         map[string]*pipelines.TextGenerationPipeline{},
+		seq2seqPipelines:                map[string]*pipelines.Seq2SeqPipeline{},
+		glinerPipelines:                 map[string]*pipelines.GLiNERPipeline{},
 		models:                          map[string]*backends.Model{},
 		options:                         parsedOptions,
 		environmentDestroy: func() error {
@@ -116,6 +120,18 @@ type TextGenerationConfig = backends.PipelineConfig[*pipelines.TextGenerationPip
 // TextGenerationOption is an option for a text generation pipeline.
 type TextGenerationOption = backends.PipelineOption[*pipelines.TextGenerationPipeline]
 
+// Seq2SeqConfig is the configuration for a seq2seq (T5, doc2query, etc.) pipeline.
+type Seq2SeqConfig = backends.PipelineConfig[*pipelines.Seq2SeqPipeline]
+
+// Seq2SeqOption is an option for a seq2seq pipeline.
+type Seq2SeqOption = backends.PipelineOption[*pipelines.Seq2SeqPipeline]
+
+// GLiNERConfig is the configuration for a GLiNER (zero-shot NER) pipeline
+type GLiNERConfig = backends.PipelineConfig[*pipelines.GLiNERPipeline]
+
+// GLiNEROption is an option for a GLiNER pipeline
+type GLiNEROption = backends.PipelineOption[*pipelines.GLiNERPipeline]
+
 // NewPipeline can be used to create a new pipeline of type T. The initialised pipeline will be returned and it
 // will also be stored in the session object so that all created pipelines can be destroyed with session.Destroy()
 // at once.
@@ -133,19 +149,28 @@ func NewPipeline[T backends.Pipeline](s *Session, pipelineConfig backends.Pipeli
 		return pipeline, getError
 	}
 
-	// Load model if it has not been loaded already
-	modelID := pipelineConfig.ModelPath + ":" + pipelineConfig.OnnxFilename
-	model, ok := s.models[modelID]
-
 	var err error
 	var name string
+	var model *backends.Model
 
-	if !ok {
-		model, err = backends.LoadModel(pipelineConfig.ModelPath, pipelineConfig.OnnxFilename, s.options, pipeline.IsGenerative())
-		if err != nil {
-			return pipeline, err
+	// Check if this is a Seq2SeqPipeline - it manages its own encoder/decoder models
+	// and should not go through the standard model loading path
+	_, isSeq2Seq := any(pipeline).(*pipelines.Seq2SeqPipeline)
+
+	if !isSeq2Seq {
+		// Load model if it has not been loaded already (for non-Seq2Seq pipelines)
+		// Use combined ModelPath:OnnxFilename as key to allow multiple pipelines on same model path
+		modelID := pipelineConfig.ModelPath + ":" + pipelineConfig.OnnxFilename
+		var ok bool
+		model, ok = s.models[modelID]
+
+		if !ok {
+			model, err = backends.LoadModel(pipelineConfig.ModelPath, pipelineConfig.OnnxFilename, s.options, pipeline.IsGenerative())
+			if err != nil {
+				return pipeline, err
+			}
+			s.models[modelID] = model
 		}
-		s.models[modelID] = model
 	}
 
 	pipeline, name, err = InitializePipeline(pipeline, pipelineConfig, s.options, model)
@@ -170,6 +195,10 @@ func NewPipeline[T backends.Pipeline](s *Session, pipelineConfig backends.Pipeli
 		s.objectDetectionPipelines[name] = typedPipeline
 	case *pipelines.TextGenerationPipeline:
 		s.textGenerationPipelines[name] = typedPipeline
+	case *pipelines.Seq2SeqPipeline:
+		s.seq2seqPipelines[name] = typedPipeline
+	case *pipelines.GLiNERPipeline:
+		s.glinerPipelines[name] = typedPipeline
 	default:
 		return pipeline, fmt.Errorf("pipeline type not supported: %T", typedPipeline)
 	}
@@ -245,6 +274,26 @@ func InitializePipeline[T backends.Pipeline](p T, pipelineConfig backends.Pipeli
 		}
 		pipeline = any(pipelineInitialised).(T)
 		name = config.Name
+	case *pipelines.Seq2SeqPipeline:
+		// Seq2SeqPipeline is special: it loads its own encoder/decoder models
+		// The model parameter is ignored (passed as nil) since it manages its own models
+		config := any(pipelineConfig).(backends.PipelineConfig[*pipelines.Seq2SeqPipeline])
+		pipelineInitialised, err := pipelines.NewSeq2SeqPipeline(config, options)
+		if err != nil {
+			return pipeline, name, err
+		}
+		pipeline = any(pipelineInitialised).(T)
+		name = config.Name
+		// Don't add to model.Pipelines since Seq2SeqPipeline manages its own models
+		return pipeline, name, nil
+	case *pipelines.GLiNERPipeline:
+		config := any(pipelineConfig).(backends.PipelineConfig[*pipelines.GLiNERPipeline])
+		pipelineInitialised, err := pipelines.NewGLiNERPipeline(config, options, model)
+		if err != nil {
+			return pipeline, name, err
+		}
+		pipeline = any(pipelineInitialised).(T)
+		name = config.Name
 	default:
 		return pipeline, name, fmt.Errorf("not implemented")
 	}
@@ -301,6 +350,18 @@ func GetPipeline[T backends.Pipeline](s *Session, name string) (T, error) {
 		return any(p).(T), nil
 	case *pipelines.TextGenerationPipeline:
 		p, ok := s.textGenerationPipelines[name]
+		if !ok {
+			return pipeline, &pipelineNotFoundError{pipelineName: name}
+		}
+		return any(p).(T), nil
+	case *pipelines.Seq2SeqPipeline:
+		p, ok := s.seq2seqPipelines[name]
+		if !ok {
+			return pipeline, &pipelineNotFoundError{pipelineName: name}
+		}
+		return any(p).(T), nil
+	case *pipelines.GLiNERPipeline:
+		p, ok := s.glinerPipelines[name]
 		if !ok {
 			return pipeline, &pipelineNotFoundError{pipelineName: name}
 		}
@@ -401,6 +462,24 @@ func ClosePipeline[T backends.Pipeline](s *Session, name string) error {
 				return model.Destroy()
 			}
 		}
+	case *pipelines.Seq2SeqPipeline:
+		// Seq2SeqPipeline manages its own models, so we just destroy the pipeline
+		p, ok := s.seq2seqPipelines[name]
+		if ok {
+			delete(s.seq2seqPipelines, name)
+			return p.Destroy()
+		}
+	case *pipelines.GLiNERPipeline:
+		p, ok := s.glinerPipelines[name]
+		if ok {
+			model := p.Model
+			delete(s.glinerPipelines, name)
+			delete(model.Pipelines, name)
+			if len(model.Pipelines) == 0 {
+				delete(s.models, model.Path)
+				return model.Destroy()
+			}
+		}
 	default:
 		return errors.New("pipeline type not supported")
 	}
@@ -420,7 +499,6 @@ func (e *pipelineNotFoundError) Error() string {
 // the number of batch calls to the tokenization step
 // the average time per tokenization batch call
 // the total runtime of the inference (i.e. onnxruntime) step
-// the number of batch calls to the onnxruntime inference
 // the average time per onnxruntime inference batch call.
 func (s *Session) GetStatistics() map[string]backends.PipelineStatistics {
 	statistics := map[string]backends.PipelineStatistics{}
@@ -431,6 +509,8 @@ func (s *Session) GetStatistics() map[string]backends.PipelineStatistics {
 	maps.Copy(statistics, s.zeroShotClassificationPipelines.GetStatistics())
 	maps.Copy(statistics, s.crossEncoderPipelines.GetStatistics())
 	maps.Copy(statistics, s.textGenerationPipelines.GetStatistics())
+	maps.Copy(statistics, s.seq2seqPipelines.GetStatistics())
+	maps.Copy(statistics, s.glinerPipelines.GetStatistics())
 	return statistics
 }
 
@@ -450,6 +530,10 @@ func (s *Session) Destroy() error {
 	for _, model := range s.models {
 		err = errors.Join(err, model.Destroy())
 	}
+	// Seq2SeqPipelines manage their own models, destroy them separately
+	for _, pipeline := range s.seq2seqPipelines {
+		err = errors.Join(err, pipeline.Destroy())
+	}
 	s.models = nil
 	s.featureExtractionPipelines = nil
 	s.tokenClassificationPipelines = nil
@@ -458,6 +542,8 @@ func (s *Session) Destroy() error {
 	s.zeroShotClassificationPipelines = nil
 	s.textGenerationPipelines = nil
 	s.crossEncoderPipelines = nil
+	s.seq2seqPipelines = nil
+	s.glinerPipelines = nil
 
 	if s.options != nil {
 		err = errors.Join(err, s.options.Destroy())
