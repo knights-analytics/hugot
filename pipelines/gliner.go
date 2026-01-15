@@ -86,6 +86,23 @@ type GLiNERBatch struct {
 	OriginalText []string    // Original input texts
 }
 
+// Interface implementations for backends.GLiNERBatchInterface
+
+func (b *GLiNERBatch) GetSize() int                           { return b.Size }
+func (b *GLiNERBatch) GetMaxSequenceLength() int              { return b.MaxSequenceLength }
+func (b *GLiNERBatch) GetInput() []backends.TokenizedInput    { return b.Input }
+func (b *GLiNERBatch) GetWordsMask() [][]int64                { return b.WordsMask }
+func (b *GLiNERBatch) GetTextLengths() [][]int64              { return b.TextLengths }
+func (b *GLiNERBatch) GetSpanIdx() [][][]int64                { return b.SpanIdx }
+func (b *GLiNERBatch) GetSpanMask() [][]int64                 { return b.SpanMask }
+func (b *GLiNERBatch) GetNumSpans() int                       { return b.NumSpans }
+func (b *GLiNERBatch) GetNumLabels() int                      { return b.NumLabels }
+func (b *GLiNERBatch) SetInputValues(values any)              { b.InputValues = values }
+func (b *GLiNERBatch) GetInputValues() any                    { return b.InputValues }
+func (b *GLiNERBatch) SetOutputValues(values []any)           { b.OutputValues = values }
+func (b *GLiNERBatch) GetOutputValues() []any                 { return b.OutputValues }
+func (b *GLiNERBatch) SetDestroyInputs(fn func() error)       { b.DestroyInputs = fn }
+
 // Pipeline options
 
 // WithGLiNERLabels sets the entity labels to recognize
@@ -175,7 +192,7 @@ func NewGLiNERPipeline(config backends.PipelineConfig[*GLiNERPipeline], s *optio
 
 	pipeline := &GLiNERPipeline{
 		BasePipeline:        basePipeline,
-		MaxWidth:            GLiNERDefaultMaxWidth,
+		MaxWidth:            backends.GLiNERDefaultMaxWidth,
 		Labels:              []string{"person", "organization", "location"},
 		Threshold:           0.5,
 		FlatNER:             true,
@@ -251,15 +268,6 @@ func (p *GLiNERPipeline) IsGenerative() bool {
 // Validate checks that the pipeline configuration is valid
 func (p *GLiNERPipeline) Validate() error {
 	var validationErrors []error
-
-	// GLiNER currently only works with ORT backend due to dynamic shape operations
-	// that GoMLX cannot handle (ConstantOfShape nodes that depend on runtime inputs)
-	if p.Runtime == "GO" || p.Runtime == "XLA" {
-		validationErrors = append(validationErrors,
-			fmt.Errorf("GLiNER pipeline currently requires ORT backend (got %s). "+
-				"The model uses dynamic shapes (LSTM hidden states, output shapes) that GoMLX cannot handle. "+
-				"Please use NewORTSession() instead of NewGoSession()", p.Runtime))
-	}
 
 	if p.Model.Tokenizer == nil {
 		validationErrors = append(validationErrors, errors.New("GLiNER pipeline requires a tokenizer"))
@@ -522,31 +530,14 @@ func (p *GLiNERPipeline) generateSpans(batch *GLiNERBatch) error {
 
 // createGLiNERTensors creates input tensors for GLiNER based on runtime
 func (p *GLiNERPipeline) createGLiNERTensors(batch *GLiNERBatch) error {
-	// GLiNER requires custom input tensors - don't use the standard CreateInputTensors
-	// as it doesn't know how to handle GLiNER-specific inputs
-	switch p.Runtime {
-	case "ORT":
-		return createGLiNERTensorsORT(batch, p.Model)
-	case "GO", "XLA":
-		return createGLiNERTensorsGoMLX(batch, p.Model)
-	default:
-		return fmt.Errorf("unsupported runtime for GLiNER: %s", p.Runtime)
-	}
+	// GLiNER requires custom input tensors - delegate to backends package
+	return backends.CreateGLiNERTensors(batch, p.Model, p.Runtime)
 }
 
 // Forward performs the forward inference pass
 func (p *GLiNERPipeline) Forward(batch *GLiNERBatch) error {
 	start := time.Now()
-	var err error
-	switch p.Runtime {
-	case "ORT":
-		err = runGLiNERSessionOnBatchORT(batch, p.BasePipeline)
-	case "GO", "XLA":
-		err = runGLiNERSessionOnBatchGoMLX(batch, p.BasePipeline)
-	default:
-		return fmt.Errorf("unsupported runtime for GLiNER: %s", p.Runtime)
-	}
-	if err != nil {
+	if err := backends.RunGLiNERSession(batch, p.BasePipeline); err != nil {
 		return err
 	}
 	atomic.AddUint64(&p.PipelineTimings.NumCalls, 1)
@@ -690,8 +681,6 @@ func (p *GLiNERPipeline) extractEntities(
 
 // GLiNER constants
 const (
-	// GLiNERDefaultMaxWidth is the standard maximum span width in words for GLiNER models
-	GLiNERDefaultMaxWidth = 12
 	// GLiNER special tokens for label encoding
 	glinerEntityToken = "<<ENT>>"
 	glinerSepToken    = "<<SEP>>"
@@ -748,66 +737,6 @@ func removeNestedEntities(entities []GLiNEREntity) []GLiNEREntity {
 		}
 		if !overlaps {
 			result = append(result, entity)
-		}
-	}
-
-	return result
-}
-
-// computeGLiNEROutputDimensions extracts or infers output dimensions from batch data.
-// Returns (numWords, maxWidth, numClasses) for reshaping the output tensor.
-func computeGLiNEROutputDimensions(batch *GLiNERBatch, dims backends.Shape, dataLen int) (numWords, maxWidth, numClasses int) {
-	// Find max words across batch
-	for _, tl := range batch.TextLengths {
-		if len(tl) > 0 && int(tl[0]) > numWords {
-			numWords = int(tl[0])
-		}
-	}
-	if numWords == 0 {
-		numWords = 1
-	}
-
-	maxWidth = batch.NumSpans / numWords
-	if maxWidth == 0 {
-		maxWidth = GLiNERDefaultMaxWidth
-	}
-
-	// Last dimension is num_classes (should be fixed in model)
-	if len(dims) >= 4 && dims[3] > 0 {
-		numClasses = int(dims[3])
-	} else {
-		// Infer from data length
-		expectedSize := batch.Size * numWords * maxWidth
-		if expectedSize > 0 {
-			numClasses = dataLen / expectedSize
-		}
-		if numClasses == 0 {
-			numClasses = 1
-		}
-	}
-
-	return numWords, maxWidth, numClasses
-}
-
-// reshapeGLiNEROutput reshapes flat output data to 4D array [batch_size, num_words, max_width, num_classes].
-// This is shared between ORT and GoMLX backends.
-func reshapeGLiNEROutput(data []float32, batchSize, numWords, maxWidth, numClasses int) [][][][]float32 {
-	result := make([][][][]float32, batchSize)
-	idx := 0
-
-	for b := 0; b < batchSize; b++ {
-		result[b] = make([][][]float32, numWords)
-		for w := 0; w < numWords; w++ {
-			result[b][w] = make([][]float32, maxWidth)
-			for s := 0; s < maxWidth; s++ {
-				result[b][w][s] = make([]float32, numClasses)
-				for c := 0; c < numClasses; c++ {
-					if idx < len(data) {
-						result[b][w][s][c] = data[idx]
-						idx++
-					}
-				}
-			}
 		}
 	}
 

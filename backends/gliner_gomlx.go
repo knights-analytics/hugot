@@ -1,14 +1,12 @@
 //go:build !ORT && !ALL
 
-package pipelines
+package backends
 
 import (
 	"errors"
 	"fmt"
 
 	"github.com/gomlx/gomlx/pkg/core/tensors"
-
-	"github.com/knights-analytics/hugot/backends"
 )
 
 // Note: GLiNER GoMLX implementation exists but is not fully functional due to
@@ -16,11 +14,16 @@ import (
 // GoMLX cannot handle. The code is kept for future development when GoMLX
 // gains dynamic shape support. For production use, use ORT backend.
 
-// createGLiNERTensorsGoMLX creates ALL tensors needed for GLiNER inference using GoMLX
-func createGLiNERTensorsGoMLX(batch *GLiNERBatch, model *backends.Model) error {
-	batchSize := batch.Size
-	maxSeqLen := batch.MaxSequenceLength
-	numSpans := batch.NumSpans
+// createGLiNERTensorsGoMLX creates ALL tensors needed for GLiNER inference using GoMLX.
+func createGLiNERTensorsGoMLX(batch GLiNERBatchInterface, model *Model) error {
+	batchSize := batch.GetSize()
+	maxSeqLen := batch.GetMaxSequenceLength()
+	numSpans := batch.GetNumSpans()
+	input := batch.GetInput()
+	wordsMask := batch.GetWordsMask()
+	textLengths := batch.GetTextLengths()
+	spanIdx := batch.GetSpanIdx()
+	spanMask := batch.GetSpanMask()
 
 	// Prepare all input tensors in the correct order
 	inputTensors := make([]*tensors.Tensor, len(model.InputsMeta))
@@ -33,8 +36,8 @@ func createGLiNERTensorsGoMLX(batch *GLiNERBatch, model *backends.Model) error {
 			for b := 0; b < batchSize; b++ {
 				for s := 0; s < maxSeqLen; s++ {
 					idx := b*maxSeqLen + s
-					if b < len(batch.Input) && s < len(batch.Input[b].TokenIDs) {
-						backing[idx] = int64(batch.Input[b].TokenIDs[s])
+					if b < len(input) && s < len(input[b].TokenIDs) {
+						backing[idx] = int64(input[b].TokenIDs[s])
 					}
 				}
 			}
@@ -46,8 +49,8 @@ func createGLiNERTensorsGoMLX(batch *GLiNERBatch, model *backends.Model) error {
 			for b := 0; b < batchSize; b++ {
 				for s := 0; s < maxSeqLen; s++ {
 					idx := b*maxSeqLen + s
-					if b < len(batch.Input) && s < len(batch.Input[b].AttentionMask) {
-						backing[idx] = int64(batch.Input[b].AttentionMask[s])
+					if b < len(input) && s < len(input[b].AttentionMask) {
+						backing[idx] = int64(input[b].AttentionMask[s])
 					}
 				}
 			}
@@ -64,8 +67,8 @@ func createGLiNERTensorsGoMLX(batch *GLiNERBatch, model *backends.Model) error {
 			for b := 0; b < batchSize; b++ {
 				for s := 0; s < maxSeqLen; s++ {
 					idx := b*maxSeqLen + s
-					if b < len(batch.WordsMask) && s < len(batch.WordsMask[b]) {
-						backing[idx] = batch.WordsMask[b][s]
+					if b < len(wordsMask) && s < len(wordsMask[b]) {
+						backing[idx] = wordsMask[b][s]
 					}
 				}
 			}
@@ -75,8 +78,8 @@ func createGLiNERTensorsGoMLX(batch *GLiNERBatch, model *backends.Model) error {
 			// Flatten text_lengths: [batch_size, 1]
 			backing := make([]int64, batchSize)
 			for b := 0; b < batchSize; b++ {
-				if b < len(batch.TextLengths) && len(batch.TextLengths[b]) > 0 {
-					backing[b] = batch.TextLengths[b][0]
+				if b < len(textLengths) && len(textLengths[b]) > 0 {
+					backing[b] = textLengths[b][0]
 				}
 			}
 			inputTensors[i] = tensors.FromFlatDataAndDimensions(backing, batchSize, 1)
@@ -87,9 +90,9 @@ func createGLiNERTensorsGoMLX(batch *GLiNERBatch, model *backends.Model) error {
 			for b := 0; b < batchSize; b++ {
 				for s := 0; s < numSpans; s++ {
 					baseIdx := (b*numSpans + s) * 2
-					if b < len(batch.SpanIdx) && s < len(batch.SpanIdx[b]) && len(batch.SpanIdx[b][s]) >= 2 {
-						backing[baseIdx] = batch.SpanIdx[b][s][0]
-						backing[baseIdx+1] = batch.SpanIdx[b][s][1]
+					if b < len(spanIdx) && s < len(spanIdx[b]) && len(spanIdx[b][s]) >= 2 {
+						backing[baseIdx] = spanIdx[b][s][0]
+						backing[baseIdx+1] = spanIdx[b][s][1]
 					}
 				}
 			}
@@ -101,8 +104,8 @@ func createGLiNERTensorsGoMLX(batch *GLiNERBatch, model *backends.Model) error {
 			for b := 0; b < batchSize; b++ {
 				for s := 0; s < numSpans; s++ {
 					idx := b*numSpans + s
-					if b < len(batch.SpanMask) && s < len(batch.SpanMask[b]) {
-						backing[idx] = batch.SpanMask[b][s] != 0
+					if b < len(spanMask) && s < len(spanMask[b]) {
+						backing[idx] = spanMask[b][s] != 0
 					}
 				}
 			}
@@ -114,25 +117,25 @@ func createGLiNERTensorsGoMLX(batch *GLiNERBatch, model *backends.Model) error {
 	}
 
 	// Update batch with new tensors
-	batch.InputValues = inputTensors
+	batch.SetInputValues(inputTensors)
 
 	// Set up destroy function
-	batch.DestroyInputs = func() error {
+	batch.SetDestroyInputs(func() error {
 		for _, t := range inputTensors {
 			t.FinalizeAll()
 		}
 		return nil
-	}
+	})
 
 	return nil
 }
 
-// runGLiNERSessionOnBatchGoMLX runs the GLiNER model on a batch using GoMLX (pure Go)
-func runGLiNERSessionOnBatchGoMLX(batch *GLiNERBatch, p *backends.BasePipeline) error {
+// runGLiNERSessionGoMLX runs the GLiNER model on a batch using GoMLX (pure Go).
+func runGLiNERSessionGoMLX(batch GLiNERBatchInterface, p *BasePipeline) error {
 	if p.Model.GoMLXModel == nil || p.Model.GoMLXModel.Exec == nil {
 		return errors.New("GoMLX model not initialized")
 	}
-	inputTensors, ok := batch.InputValues.([]*tensors.Tensor)
+	inputTensors, ok := batch.GetInputValues().([]*tensors.Tensor)
 	if !ok {
 		return errors.New("expected []*tensors.Tensor for input tensors")
 	}
@@ -149,7 +152,7 @@ func runGLiNERSessionOnBatchGoMLX(batch *GLiNERBatch, p *backends.BasePipeline) 
 	}()
 
 	// Convert output to Go slices using shared reshape function
-	batch.OutputValues = make([]any, len(outputTensors))
+	outputValues := make([]any, len(outputTensors))
 	for i, t := range outputTensors {
 		var rawOutput []float32
 		tensors.ConstFlatData(t, func(flat []float32) {
@@ -159,9 +162,21 @@ func runGLiNERSessionOnBatchGoMLX(batch *GLiNERBatch, p *backends.BasePipeline) 
 		dims := p.Model.OutputsMeta[i].Dimensions
 
 		// Compute dimensions and reshape using shared function
-		numWords, maxWidth, numClasses := computeGLiNEROutputDimensions(batch, dims, len(rawOutput))
-		batch.OutputValues[i] = reshapeGLiNEROutput(rawOutput, batch.Size, numWords, maxWidth, numClasses)
+		numWords, maxWidth, numClasses := ComputeGLiNEROutputDimensions(batch, dims, len(rawOutput))
+		outputValues[i] = ReshapeGLiNEROutput(rawOutput, batch.GetSize(), numWords, maxWidth, numClasses)
 	}
+	batch.SetOutputValues(outputValues)
 
 	return nil
+}
+
+// Stub functions for ORT - these are only called if the wrong runtime is configured,
+// which should be caught earlier, but the compiler needs them defined.
+
+func createGLiNERTensorsORT(batch GLiNERBatchInterface, model *Model) error {
+	return errors.New("ORT runtime not available: build with ORT or ALL tags")
+}
+
+func runGLiNERSessionORT(batch GLiNERBatchInterface, p *BasePipeline) error {
+	return errors.New("ORT runtime not available: build with ORT or ALL tags")
 }
