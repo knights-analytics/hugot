@@ -8,10 +8,10 @@ require (
 	github.com/gomlx/go-huggingface v0.3.1
 	github.com/gomlx/gomlx v0.26.0
 	github.com/gomlx/onnx-gomlx v0.3.4
-	github.com/knights-analytics/ortgenai v0.0.1
+	github.com/knights-analytics/ortgenai v0.0.3
 	github.com/stretchr/testify v1.11.1
 	github.com/sugarme/tokenizer v0.3.0
-	github.com/urfave/cli/v3 v3.6.1
+	github.com/urfave/cli/v3 v3.6.2
 	github.com/viant/afs v1.30.0
 	github.com/yalue/onnxruntime_go v1.25.0
 	golang.org/x/image v0.35.0

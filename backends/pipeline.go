@@ -145,7 +145,7 @@ type PipelineBatch struct {
 	MaxSequenceLength int
 	MaxNewTokens      int
 	// Multimodal support
-	MultimodalTensors any // Will hold *ortgenai.NamedTensors for ORT backend
+	Images            any // Will hold *ortgenai.Images for generative models
 	DestroyMultimodal func() error
 }
 
