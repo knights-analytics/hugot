@@ -244,6 +244,19 @@ func CreateInputTensors(batch *PipelineBatch, model *Model, runtime string) erro
 	return nil
 }
 
+// CreateTabularTensors builds input tensors for classic ML/tabular models.
+func CreateTabularTensors(batch *PipelineBatch, model *Model, features [][]float32, runtime string) error {
+	switch runtime {
+	case "ORT":
+		return createTabularTensorsORT(batch, model, features)
+	case "GO", "XLA":
+		// Not implemented yet for GoMLX backends
+		return fmt.Errorf("tabular tensors not implemented for runtime %s", runtime)
+	default:
+		return fmt.Errorf("invalid runtime %s", runtime)
+	}
+}
+
 func NewBasePipeline[T Pipeline](config PipelineConfig[T], s *options.Options, model *Model) (*BasePipeline, error) {
 	pipeline := &BasePipeline{}
 	pipeline.Runtime = s.Backend

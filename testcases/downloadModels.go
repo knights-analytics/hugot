@@ -31,6 +31,7 @@ var models = []downloadModel{
 	{name: "KnightsAnalytics/resnet50"},
 	{name: "KnightsAnalytics/detr-resnet-50", onnxFilePath: "model.onnx"},
 	{name: "KnightsAnalytics/Phi-3.5-mini-instruct-onnx", onnxFilePath: "phi-3.5-mini-instruct-cpu-int4-awq-block-128-acc-level-4.onnx", externalDataPath: "phi-3.5-mini-instruct-cpu-int4-awq-block-128-acc-level-4.onnx.data"},
+	{name: "KnightsAnalytics/iris-decision-tree", onnxFilePath: "model.onnx"},
 }
 
 // Additional files to download (direct URLs).
