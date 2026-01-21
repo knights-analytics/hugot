@@ -260,6 +260,8 @@ func ReshapeOutput[T float32 | int64 | int32](input []T, meta InputOutputInfo, b
 	dimensions := meta.Dimensions.ValuesInt()
 	lenDimensions := len(dimensions)
 	switch lenDimensions {
+	case 1:
+		return input
 	case 2:
 		outArray = flatDataTo2D(input, batchSize, dimensions[lenDimensions-1])
 	case 3:

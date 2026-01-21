@@ -354,6 +354,18 @@ func TestTextGenerationPipelineValidationORT(t *testing.T) {
 	textGenerationPipelineValidation(t, session)
 }
 
+// Tabular pipeline
+
+func TestTabularPipelineORT(t *testing.T) {
+	session, err := NewORTSession()
+	checkT(t, err)
+	defer func(session *Session) {
+		destroyErr := session.Destroy()
+		checkT(t, destroyErr)
+	}(session)
+	tabularPipeline(t, session)
+}
+
 // No same name
 
 func TestNoSameNamePipelineORT(t *testing.T) {

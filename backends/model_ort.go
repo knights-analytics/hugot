@@ -447,6 +447,57 @@ func convertORTInputOutputs(inputOutputs []ort.InputOutputInfo) []InputOutputInf
 	return inputOutputsStandardised
 }
 
+// createTabularTensorsORT flattens [][]float32 features into a [batch, feature_dim] tensor.
+// Currently supports models with a single input of 2D shape (batch, features).
+func createTabularTensorsORT(batch *PipelineBatch, model *Model, features [][]float32) error {
+	if len(features) != batch.Size {
+		return fmt.Errorf("features batch size %d does not match PipelineBatch size %d", len(features), batch.Size)
+	}
+	if len(model.InputsMeta) < 1 {
+		return fmt.Errorf("model has no input metadata")
+	}
+	// Assume first input is the tabular data.
+	inMeta := model.InputsMeta[0]
+	dims := []int64(inMeta.Dimensions)
+	if len(dims) != 2 {
+		return fmt.Errorf("expected 2D input shape for tabular model, got %d dims", len(dims))
+	}
+	featDim := int(dims[len(dims)-1])
+	if featDim <= 0 {
+		// dynamic feature dim: infer from first sample
+		featDim = len(features[0])
+	}
+	// Validate feature lengths
+	for i := range features {
+		if len(features[i]) != featDim {
+			return fmt.Errorf("input %d has %d features, expected %d", i, len(features[i]), featDim)
+		}
+	}
+
+	backing := make([]float32, batch.Size*featDim)
+
+	idx := 0
+	for _, featVec := range features {
+		for _, val := range featVec {
+			backing[idx] = val
+			idx++
+		}
+	}
+
+	t, err := ort.NewTensor(ort.NewShape(int64(batch.Size), int64(featDim)), backing)
+	if err != nil {
+		return err
+	}
+	values := make([]ort.Value, len(model.InputsMeta))
+	values[0] = t
+	batch.InputValues = values
+	batch.DestroyInputs = func() error { return t.Destroy() }
+	// No padding mask for tabular
+	batch.PaddingMask = nil
+	batch.MaxSequenceLength = 0
+	return nil
+}
+
 func createImageTensorsORT(batch *PipelineBatch, model *Model, preprocessed [][][][]float32) error {
 	if len(preprocessed) == 0 {
 		return errors.New("no preprocessed images provided")

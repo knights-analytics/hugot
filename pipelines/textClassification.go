@@ -21,11 +21,6 @@ type TextClassificationPipeline struct {
 	FixedPaddingLength      int
 }
 
-type ClassificationOutput struct {
-	Label string
-	Score float32
-}
-
 type TextClassificationOutput struct {
 	ClassificationOutputs [][]ClassificationOutput
 }

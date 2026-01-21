@@ -1320,6 +1320,37 @@ func textGenerationPipelineValidation(t *testing.T, session *Session) {
 	assert.Error(t, err)
 }
 
+// Tabular pipeline
+
+func tabularPipeline(t *testing.T, session *Session) {
+	t.Helper()
+	config := backends.PipelineConfig[*pipelines.TabularPipeline]{
+		ModelPath: "./models/KnightsAnalytics_iris-decision-tree",
+		Name:      "testTabularClassification",
+		Options:   []backends.PipelineOption[*pipelines.TabularPipeline]{},
+	}
+
+	pipeline, err := NewPipeline(session, config)
+	checkT(t, err)
+
+	// Iris classification for an example
+	inputs := []string{"[6.1, 2.8, 4.7, 1.2]"}
+	result, err := pipeline.Run(inputs)
+	checkT(t, err)
+	output := result.GetOutput()
+	classification := output[0].(pipelines.TabularClassificationOutput)
+	if classification.PredictedClass != "class_1" {
+		t.Errorf("Expected label 'class_1', got '%s'", classification.PredictedClass)
+	}
+	for _, prob := range classification.Probabilities {
+		if prob.Label == "class_1" {
+			if prob.Score < 0.97 {
+				t.Errorf("Expected class_1 probability > 0.97, got '%f'", prob.Score)
+			}
+		}
+	}
+}
+
 // Thread safety
 
 func threadSafety(t *testing.T, session *Session, numEmbeddings int) {
