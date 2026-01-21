@@ -130,6 +130,7 @@ func (p *TextGenerationPipeline) Run(inputs []string) (backends.PipelineBatchOut
 	return p.RunPipeline(context.Background(), inputs)
 }
 
+// RunPipeline processes a batch of string inputs.
 func (p *TextGenerationPipeline) RunPipeline(ctx context.Context, inputs []string) (*TextGenerationOutput, error) {
 	var runErrors []error
 	batch := backends.NewBatch(len(inputs))
@@ -161,6 +162,8 @@ func (p *TextGenerationPipeline) RunPipeline(ctx context.Context, inputs []strin
 	}, errors.Join(append(runErrors, responseErr)...)
 }
 
+// RunMessages processes a batch of message inputs.
+// If multimodal, the images should be added to the messages.
 func (p *TextGenerationPipeline) RunMessages(ctx context.Context, inputs [][]backends.Message) (*TextGenerationOutput, error) {
 	var runErrors []error
 	batch := backends.NewBatch(len(inputs))
