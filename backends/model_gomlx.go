@@ -526,3 +526,50 @@ func createImageTensorsGoXLA(batch *PipelineBatch, model *Model, preprocessed []
 	}
 	return nil
 }
+
+func createTabularTensorsGoMLX(batch *PipelineBatch, model *Model, features [][]float32) error {
+	if len(features) != batch.Size {
+		return fmt.Errorf("features batch size %d does not match PipelineBatch size %d", len(features), batch.Size)
+	}
+	if len(model.InputsMeta) < 1 {
+		return fmt.Errorf("model has no input metadata")
+	}
+	// Assume first input is the tabular data.
+	inMeta := model.InputsMeta[0]
+	dims := []int64(inMeta.Dimensions)
+	if len(dims) != 2 {
+		return fmt.Errorf("expected 2D input shape for tabular model, got %d dims", len(dims))
+	}
+	featDim := int(dims[len(dims)-1])
+	if featDim <= 0 {
+		// dynamic feature dim: infer from first sample
+		featDim = len(features[0])
+	}
+	// Validate feature lengths
+	for i := range features {
+		if len(features[i]) != featDim {
+			return fmt.Errorf("input %d has %d features, expected %d", i, len(features[i]), featDim)
+		}
+	}
+
+	backing := make([]float32, batch.Size*featDim)
+
+	idx := 0
+	for _, featVec := range features {
+		for _, val := range featVec {
+			backing[idx] = val
+			idx++
+		}
+	}
+
+	t := tensors.FromFlatDataAndDimensions(backing, batch.Size, featDim)
+	inputTensors := []*tensors.Tensor{t}
+	batch.InputValues = inputTensors
+	batch.DestroyInputs = func() error {
+		return t.FinalizeAll()
+	}
+	// No padding mask for tabular
+	batch.PaddingMask = nil
+	batch.MaxSequenceLength = 0
+	return nil
+}

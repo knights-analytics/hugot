@@ -336,6 +336,35 @@ func TestTextGenerationPipelineValidationXLA(t *testing.T) {
 	textGenerationPipelineValidation(t, session)
 }
 
+// Tabular
+
+func TestTabularPipelineXLA(t *testing.T) {
+	t.Skip("Currently missing TreeEnsembleClassifier ONNX operator")
+	session, err := NewXLASession()
+	checkT(t, err)
+	defer func(session *Session) {
+		destroyErr := session.Destroy()
+		checkT(t, destroyErr)
+	}(session)
+	tabularPipeline(t, session)
+}
+
+func TestTabularPipelineXLACuda(t *testing.T) {
+	t.Skip("Currently missing TreeEnsembleClassifier ONNX operator")
+	if os.Getenv("CI") != "" {
+		t.SkipNow()
+	}
+	session, err := NewXLASession(options.WithCuda(map[string]string{
+		"device_id": "0",
+	}))
+	checkT(t, err)
+	defer func(session *Session) {
+		destroyErr := session.Destroy()
+		checkT(t, destroyErr)
+	}(session)
+	tabularPipeline(t, session)
+}
+
 // No same name
 
 func TestNoSameNamePipelineXLA(t *testing.T) {

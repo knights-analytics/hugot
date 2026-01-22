@@ -250,8 +250,7 @@ func CreateTabularTensors(batch *PipelineBatch, model *Model, features [][]float
 	case "ORT":
 		return createTabularTensorsORT(batch, model, features)
 	case "GO", "XLA":
-		// Not implemented yet for GoMLX backends
-		return fmt.Errorf("tabular tensors not implemented for runtime %s", runtime)
+		return createTabularTensorsGoMLX(batch, model, features)
 	default:
 		return fmt.Errorf("invalid runtime %s", runtime)
 	}
