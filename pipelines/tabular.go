@@ -19,8 +19,9 @@ import (
 // or regression values.
 type TabularPipeline struct {
 	*backends.BasePipeline
-	AggregationFunctionName string // for classification: SOFTMAX or SIGMOID
-	ProblemType             string // "classification" or "regression"
+	AggregationFunctionName string         // for classification: SOFTMAX or SIGMOID
+	ProblemType             string         // "classification" or "regression"
+	IDLabelMap              map[int]string // optional mapping from class IDs to labels
 }
 
 type TabularClassificationOutput struct {
@@ -68,6 +69,13 @@ func WithTabularSigmoid() backends.PipelineOption[*TabularPipeline] {
 	}
 }
 
+func WithIDLabelMap(labels map[int]string) backends.PipelineOption[*TabularPipeline] {
+	return func(p *TabularPipeline) error {
+		p.IDLabelMap = labels
+		return nil
+	}
+}
+
 // NewTabularPipeline initializes the pipeline.
 func NewTabularPipeline(config backends.PipelineConfig[*TabularPipeline], s *options.Options, model *backends.Model) (*TabularPipeline, error) {
 	base, err := backends.NewBasePipeline(config, s, model)
@@ -85,6 +93,20 @@ func NewTabularPipeline(config backends.PipelineConfig[*TabularPipeline], s *opt
 	}
 	if err = p.Validate(); err != nil {
 		return nil, err
+	}
+
+	if p.IDLabelMap == nil && p.ProblemType == "classification" {
+		// build default IDLabelMap
+		p.IDLabelMap = make(map[int]string)
+		var numClasses int64
+		if len(p.Model.OutputsMeta) == 1 {
+			numClasses = p.Model.OutputsMeta[0].Dimensions[1]
+		} else if len(p.Model.OutputsMeta) == 2 {
+			numClasses = p.Model.OutputsMeta[1].Dimensions[1]
+		}
+		for i := int64(0); i < numClasses; i++ {
+			p.IDLabelMap[int(i)] = fmt.Sprintf("class_%d", i)
+		}
 	}
 	return p, nil
 }
@@ -130,16 +152,29 @@ func (p *TabularPipeline) Validate() error {
 			if len(dims) != 2 {
 				errs = append(errs, fmt.Errorf("classification model with one output must have 2D output (batch, num_classes); got %d dims", len(dims)))
 			}
+			if p.IDLabelMap != nil {
+				numClasses := dims[1]
+				if int64(len(p.IDLabelMap)) != numClasses {
+					errs = append(errs, fmt.Errorf("IDLabelMap has %d entries but model output has %d classes", len(p.IDLabelMap), numClasses))
+				}
+			}
 		} else if len(p.Model.OutputsMeta) == 2 {
 			dims0 := p.Model.OutputsMeta[0].Dimensions
 			dims1 := p.Model.OutputsMeta[1].Dimensions
 			if len(dims0) != 1 || len(dims1) != 2 {
 				errs = append(errs, fmt.Errorf("classification model with two outputs must have 2D outputs; got %d and %d dims", len(dims0), len(dims1)))
 			}
+			if p.IDLabelMap != nil {
+				numClasses := dims1[1]
+				if int64(len(p.IDLabelMap)) != numClasses {
+					errs = append(errs, fmt.Errorf("IDLabelMap has %d entries but model output has %d classes", len(p.IDLabelMap), numClasses))
+				}
+			}
 		} else {
 			errs = append(errs, fmt.Errorf("classification model must have one or two outputs; got %d", len(p.Model.OutputsMeta)))
 		}
 	}
+
 	if p.ProblemType == "regression" {
 		if len(p.Model.OutputsMeta) != 1 {
 			errs = append(errs, fmt.Errorf("regression model must have one output; got %d", len(p.Model.OutputsMeta)))
@@ -212,12 +247,12 @@ func (p *TabularPipeline) Postprocess(batch *backends.PipelineBatch) (*TabularOu
 				classOutputs := make([]ClassificationOutput, len(predictedLogits))
 				for j := range predictedLogits {
 					classOutputs[j] = ClassificationOutput{
-						Label: fmt.Sprintf("class_%d", j),
+						Label: p.IDLabelMap[j],
 						Score: predictedLogits[j],
 					}
 				}
 				output := TabularClassificationOutput{
-					PredictedClass: fmt.Sprintf("class_%v", predictedClassLabel),
+					PredictedClass: p.IDLabelMap[int(predictedClassLabel)],
 					Probabilities:  classOutputs,
 				}
 				results[i] = output
@@ -236,7 +271,7 @@ func (p *TabularPipeline) Postprocess(batch *backends.PipelineBatch) (*TabularOu
 				classOutputs := make([]ClassificationOutput, len(predictedLogits))
 				for j := range predictedLogits {
 					classOutputs[j] = ClassificationOutput{
-						Label: fmt.Sprintf("class_%d", j),
+						Label: p.IDLabelMap[j],
 						Score: predictedLogits[j],
 					}
 				}
@@ -246,7 +281,7 @@ func (p *TabularPipeline) Postprocess(batch *backends.PipelineBatch) (*TabularOu
 					return nil, err
 				}
 				output := TabularClassificationOutput{
-					PredictedClass: fmt.Sprintf("class_%d", maxIndex),
+					PredictedClass: p.IDLabelMap[maxIndex],
 					Probabilities:  classOutputs,
 				}
 				results[i] = output
