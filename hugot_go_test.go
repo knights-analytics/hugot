@@ -199,6 +199,19 @@ func TestTextGenerationPipelineValidationGo(t *testing.T) {
 	textGenerationPipelineValidation(t, session)
 }
 
+// Tabular
+
+func TestTabularPipelineGo(t *testing.T) {
+	t.Skip("Currently missing TreeEnsembleClassifier ONNX operator")
+	session, err := NewGoSession()
+	checkT(t, err)
+	defer func(session *Session) {
+		destroyErr := session.Destroy()
+		checkT(t, destroyErr)
+	}(session)
+	tabularPipeline(t, session)
+}
+
 // No same name
 
 func TestNoSameNamePipelineGo(t *testing.T) {

@@ -366,6 +366,21 @@ func TestTabularPipelineORT(t *testing.T) {
 	tabularPipeline(t, session)
 }
 
+func TestTabularPipelineORTCuda(t *testing.T) {
+	if os.Getenv("CI") != "" {
+		t.SkipNow()
+	}
+	session, err := NewORTSession(options.WithCuda(map[string]string{
+		"device_id": "0",
+	}))
+	checkT(t, err)
+	defer func(session *Session) {
+		destroyErr := session.Destroy()
+		checkT(t, destroyErr)
+	}(session)
+	tabularPipeline(t, session)
+}
+
 // No same name
 
 func TestNoSameNamePipelineORT(t *testing.T) {
