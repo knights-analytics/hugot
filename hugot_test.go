@@ -1327,7 +1327,13 @@ func tabularPipeline(t *testing.T, session *Session) {
 	config := backends.PipelineConfig[*pipelines.TabularPipeline]{
 		ModelPath: "./models/KnightsAnalytics_iris-decision-tree",
 		Name:      "testTabularClassification",
-		Options:   []backends.PipelineOption[*pipelines.TabularPipeline]{},
+		Options: []backends.PipelineOption[*pipelines.TabularPipeline]{
+			pipelines.WithIDLabelMap(map[int]string{
+				0: "setosa",
+				1: "versicolor",
+				2: "virginica",
+			}),
+		},
 	}
 
 	pipeline, err := NewPipeline(session, config)
@@ -1339,13 +1345,13 @@ func tabularPipeline(t *testing.T, session *Session) {
 	checkT(t, err)
 	output := result.GetOutput()
 	classification := output[0].(pipelines.TabularClassificationOutput)
-	if classification.PredictedClass != "class_1" {
-		t.Errorf("Expected label 'class_1', got '%s'", classification.PredictedClass)
+	if classification.PredictedClass != "versicolor" {
+		t.Errorf("Expected label 'versicolor', got '%s'", classification.PredictedClass)
 	}
 	for _, prob := range classification.Probabilities {
-		if prob.Label == "class_1" {
+		if prob.Label == "versicolor" {
 			if prob.Score < 0.97 {
-				t.Errorf("Expected class_1 probability > 0.97, got '%f'", prob.Score)
+				t.Errorf("Expected versicolor probability > 0.97, got '%f'", prob.Score)
 			}
 		}
 	}
