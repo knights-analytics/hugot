@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
+## [0.6.2] - 2026-01-28
+
+First release of 2026!
+
+###  Changed
+
+- Added TabularPipeline to run onnx exports of classical ML models (regression or classification) from, e.g., sklearn
+- Added multimodal support for text generation pipeline (kudos to @ajroetker)
+- Memory mapped loading of onnx models on native fs to reduce memory usage
+
 ## [0.6.1] 🌲❄️🎄🎁 - 2025-12-23
 
 ###  Changed
