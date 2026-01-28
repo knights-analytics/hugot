@@ -34,10 +34,27 @@ type TabularClassificationOutput struct {
 // - For regression: float32
 // for each input.
 type TabularOutput struct {
-	Results []any
+	ClassificationResults []TabularClassificationOutput
+	RegressionResults     []float32
 }
 
-func (o *TabularOutput) GetOutput() []any { return o.Results }
+func (o *TabularOutput) GetOutput() []any {
+	if len(o.RegressionResults) > 0 {
+		outRegression := make([]any, len(o.RegressionResults))
+		for i, result := range o.RegressionResults {
+			outRegression[i] = any(result)
+		}
+		return outRegression
+	}
+	if len(o.ClassificationResults) > 0 {
+		outClassification := make([]any, len(o.ClassificationResults))
+		for i, result := range o.ClassificationResults {
+			outClassification[i] = any(result)
+		}
+		return outClassification
+	}
+	return nil
+}
 
 // Options
 
@@ -213,9 +230,8 @@ func (p *TabularPipeline) Forward(batch *backends.PipelineBatch) error {
 }
 
 func (p *TabularPipeline) Postprocess(batch *backends.PipelineBatch) (*TabularOutput, error) {
-	results := make([]any, batch.Size)
-
 	if p.ProblemType == "classification" {
+		results := make([]TabularClassificationOutput, batch.Size)
 		var agg func([]float32) []float32
 		switch p.AggregationFunctionName {
 		case "SOFTMAX":
@@ -289,18 +305,18 @@ func (p *TabularPipeline) Postprocess(batch *backends.PipelineBatch) (*TabularOu
 		default:
 			return nil, fmt.Errorf("unsupported number of outputs %d for classification", len(p.Model.OutputsMeta))
 		}
-		return &TabularOutput{Results: results}, nil
+
+		return &TabularOutput{ClassificationResults: results}, nil
 	}
 
+	results := make([]float32, batch.Size)
 	switch v := batch.OutputValues[0].(type) {
 	case []float32:
-		for i := range v {
-			results[i] = v[i]
-		}
+		copy(results, v)
 	default:
 		return nil, fmt.Errorf("unsupported regression output type %T", batch.OutputValues[0])
 	}
-	return &TabularOutput{Results: results}, nil
+	return &TabularOutput{RegressionResults: results}, nil
 }
 
 // Run executes the pipeline over inputs.
