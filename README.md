@@ -10,11 +10,11 @@
 
 ## What
 
-TL;DR: AI use-cases such as embeddings, text generation, image classification, entity recognition, fine-tuning, and more, natively running in Go!
+TL;DR: AI use-cases such as embeddings, text generation (generative/LLMs), image classification, entity recognition, fine-tuning, and more, natively running in Go!
 
 The goal of this library is to provide an easy, scalable, and hassle-free way to run transformer pipelines inference and training in golang applications, such as Hugging Face 🤗 transformers pipelines. It is built on the following principles:
 
-1. Hugging Face compatibility: models trained and tested using the python Hugging Face transformer library can be exported to onnx and used with the hugot pipelines to obtain identical predictions as in the python version.
+1. Hugging Face compatibility: models trained and tested using the python Hugging Face transformer library can be exported to onnx and used with the Hugot pipelines to obtain identical predictions as in the python version.
 2. Hassle-free and performant production use: we exclusively support onnx models. Pytorch transformer models that don't have an onnx version can be easily exported to onnx via [Hugging Face Optimum](https://huggingface.co/docs/optimum/index), and used with the library.
 3. Run on your hardware: this library is for those who want to run transformer models tightly coupled with their go applications, without the performance drawbacks of having to hit a rest API or the hassle of setting up and maintaining e.g. a python RPC service that talks to go.
 4. Simplicity: the Hugot API allows you to easily deploy pipelines without having to write your own inference or training code. It also now includes a pure Go backend for minimal dependencies!
@@ -49,6 +49,7 @@ Currently, we have implementations for the following transformer pipelines:
 - [textGeneration](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.TextGenerationPipeline) (currently ORT only)
 - [tokenClassification](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.TokenClassificationPipeline)
 - [zeroShotClassification](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.ZeroShotClassificationPipeline)
+- tabular (classic ML models such as decision trees, random forests etc)
 
 Implementations for additional pipelines will follow. We also very gladly accept PRs to expand the set of pipelines! See [here](https://huggingface.co/docs/transformers/en/main_classes/pipelines) for the missing pipelines that can be implemented, and the contributing section below if you want to lend a hand.
 
@@ -261,7 +262,7 @@ We use an [abstract file system](https://github.com/viant/afs) within Hugot. It 
 import _ "github.com/viant/afsc/s3"
 ```
 
-### Use it as a cli: Hugging Face 🤗 pipelines from the command line
+## Use it as a cli: Hugging Face 🤗 pipelines from the command line
 
 Note: the cli is currently only built and tested on amd64-linux using the ONNX Runtime backend.
 
