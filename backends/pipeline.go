@@ -70,17 +70,23 @@ type Pipeline interface {
 }
 
 type PipelineStatistics struct {
-	TokenizerTotalTime      time.Duration
-	TokenizerExecutionCount uint64
-	TokenizerAvgQueryTime   time.Duration
-	OnnxTotalTime           time.Duration
-	OnnxExecutionCount      uint64
-	OnnxAvgQueryTime        time.Duration
-	TotalQueries            uint64
-	TotalDocuments          uint64
-	AverageLatency          time.Duration
-	AverageBatchSize        float64
-	FilteredResults         uint64
+	TokenizerTotalTime             time.Duration
+	TokenizerExecutionCount        uint64
+	TokenizerAvgQueryTime          time.Duration
+	OnnxTotalTime                  time.Duration
+	OnnxExecutionCount             uint64
+	OnnxAvgQueryTime               time.Duration
+	TotalQueries                   uint64
+	TotalDocuments                 uint64
+	AverageLatency                 time.Duration
+	AverageBatchSize               float64
+	FilteredResults                uint64
+	AvgPrefillSeconds              float64
+	TokensPerSecond                float64
+	CumulativePrefillSum           float64
+	CumulativePrefillCount         int
+	CumulativeTokens               int
+	CumulativeTokenDurationSeconds float64
 }
 
 func (p *PipelineStatistics) ComputeTokenizerStatistics(timings *timings) {

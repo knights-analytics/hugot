@@ -94,10 +94,15 @@ func (p *TextGenerationPipeline) GetModel() *backends.Model {
 
 // GetStatistics returns the runtime statistics for the pipeline.
 func (p *TextGenerationPipeline) GetStatistics() backends.PipelineStatistics {
-	statistics := backends.PipelineStatistics{}
-	statistics.ComputeTokenizerStatistics(p.Model.Tokenizer.TokenizerTimings)
-	statistics.ComputeOnnxStatistics(p.PipelineTimings)
-	return statistics
+	generativeStatistics := p.Model.ORTModel.GenerativeSession.GetStatistics()
+	return backends.PipelineStatistics{
+		AvgPrefillSeconds:              generativeStatistics.AvgPrefillSeconds,
+		TokensPerSecond:                generativeStatistics.TokensPerSecond,
+		CumulativePrefillSum:           generativeStatistics.CumulativePrefillSum,
+		CumulativePrefillCount:         generativeStatistics.CumulativePrefillCount,
+		CumulativeTokens:               generativeStatistics.CumulativeTokens,
+		CumulativeTokenDurationSeconds: generativeStatistics.CumulativeTokenDurationSeconds,
+	}
 }
 
 func (p *TextGenerationPipeline) Validate() error {
