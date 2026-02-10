@@ -159,34 +159,35 @@ func runGenerativeORTSessionOnBatch(ctx context.Context, batch *PipelineBatch, p
 
 	go func() {
 		defer close(tokenStream)
-		defer close(errorStream)
 		defer batch.Destroy()
-
 		for {
-			// If both upstream channels are closed, finish and close our outputs.
-			if ortTokenStream == nil && ortErrorStream == nil {
+			select {
+			case <-ctx.Done():
 				return
+			case tokenDelta, ok := <-ortTokenStream:
+				if !ok {
+					return
+				}
+				tokenStream <- SequenceDelta{
+					Token: tokenDelta.Token,
+					Index: tokenDelta.Sequence,
+				}
 			}
+		}
+	}()
+
+	go func() {
+		defer close(errorStream)
+		for {
 			select {
 			case <-ctx.Done():
 				return
 			case err, ok := <-ortErrorStream:
 				if !ok {
-					ortErrorStream = nil
-					continue
+					return
 				}
-				select {
-				case errorStream <- fmt.Errorf("error during generation: %w", err):
-				default:
-				}
-			case tokenDelta, ok := <-ortTokenStream:
-				if !ok {
-					ortTokenStream = nil
-					continue
-				}
-				tokenStream <- SequenceDelta{
-					Token: tokenDelta.Tokens, // TODO rename to token in ortgenai?
-					Index: tokenDelta.Sequence,
+				if err != nil {
+					errorStream <- err
 				}
 			}
 		}
