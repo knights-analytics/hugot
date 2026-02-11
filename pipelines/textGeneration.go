@@ -10,9 +10,10 @@ import (
 
 type TextGenerationPipeline struct {
 	*backends.BasePipeline
-	SystemPrompt string
-	MaxLength    int
-	Streaming    bool
+	SystemPrompt  string
+	MaxLength     int
+	Streaming     bool
+	StopSequences []string
 }
 
 type TextGenerationOutput struct {
@@ -48,9 +49,19 @@ func WithMaxLength(maxLength int) backends.PipelineOption[*TextGenerationPipelin
 	}
 }
 
+// WithStreaming allows the user to receive generated tokens as a stream instead of waiting for the entire response.
 func WithStreaming() backends.PipelineOption[*TextGenerationPipeline] {
 	return func(pipeline *TextGenerationPipeline) error {
 		pipeline.Streaming = true
+		return nil
+	}
+}
+
+// WithStopSequences allows the user to define stop sequences that will end the generation when encountered.
+// If the model produces any of the provided strings in the output, generation for that sequence will stop and the stop string will be excluded.
+func WithStopSequences(stopSequences []string) backends.PipelineOption[*TextGenerationPipeline] {
+	return func(pipeline *TextGenerationPipeline) error {
+		pipeline.StopSequences = stopSequences
 		return nil
 	}
 }
@@ -124,7 +135,7 @@ func (p *TextGenerationPipeline) Preprocess(batch *backends.PipelineBatch, input
 
 // Forward initiates the generation loop.
 func (p *TextGenerationPipeline) Forward(ctx context.Context, batch *backends.PipelineBatch) (chan backends.SequenceDelta, chan error, error) {
-	tokenStream, errorStream, initErr := backends.RunGenerativeSessionOnBatch(ctx, batch, p.BasePipeline, p.MaxLength)
+	tokenStream, errorStream, initErr := backends.RunGenerativeSessionOnBatch(ctx, batch, p.BasePipeline, p.MaxLength, p.StopSequences)
 	if initErr != nil {
 		return nil, nil, initErr
 	}

@@ -122,7 +122,7 @@ func createORTGenerativeSession(model *Model, options *options.Options) error {
 	return nil
 }
 
-func runGenerativeORTSessionOnBatch(ctx context.Context, batch *PipelineBatch, p *BasePipeline, maxLength int) (chan SequenceDelta, chan error, error) {
+func runGenerativeORTSessionOnBatch(ctx context.Context, batch *PipelineBatch, p *BasePipeline, maxLength int, stopSequences []string) (chan SequenceDelta, chan error, error) {
 	session := p.Model.ORTModel.GenerativeSession
 	if session == nil {
 		return nil, nil, errors.New("ORT generative session is not initialized")
