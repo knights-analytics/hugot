@@ -140,16 +140,13 @@ func (p *TextGenerationPipeline) RunPipeline(ctx context.Context, inputs []strin
 	var runErrors []error
 	batch := backends.NewBatch(len(inputs))
 	batch.MaxNewTokens = p.MaxLength
-	defer func(*backends.PipelineBatch) {
-		runErrors = append(runErrors, batch.Destroy())
-	}(batch)
 	runErrors = append(runErrors, p.Preprocess(batch, inputs))
 	if e := errors.Join(runErrors...); e != nil {
-		return nil, e
+		return nil, errors.Join(e, batch.Destroy())
 	}
 	tokenStream, errorStream, forwardErr := p.Forward(ctx, batch)
 	if forwardErr != nil {
-		return nil, forwardErr
+		return nil, errors.Join(forwardErr, batch.Destroy())
 	}
 	if p.Streaming {
 		return &TextGenerationOutput{
@@ -173,16 +170,13 @@ func (p *TextGenerationPipeline) RunMessages(ctx context.Context, inputs [][]bac
 	var runErrors []error
 	batch := backends.NewBatch(len(inputs))
 	batch.MaxNewTokens = p.MaxLength
-	defer func(*backends.PipelineBatch) {
-		runErrors = append(runErrors, batch.Destroy())
-	}(batch)
 	runErrors = append(runErrors, p.Preprocess(batch, inputs))
 	if e := errors.Join(runErrors...); e != nil {
-		return nil, e
+		return nil, errors.Join(e, batch.Destroy())
 	}
 	tokenStream, errorStream, forwardErr := p.Forward(ctx, batch)
 	if forwardErr != nil {
-		return nil, forwardErr
+		return nil, errors.Join(forwardErr, batch.Destroy())
 	}
 	if p.Streaming {
 		return &TextGenerationOutput{

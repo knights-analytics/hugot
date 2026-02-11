@@ -160,6 +160,7 @@ func runGenerativeORTSessionOnBatch(ctx context.Context, batch *PipelineBatch, p
 	go func() {
 		defer close(tokenStream)
 		defer close(errorStream)
+		defer batch.Destroy()
 
 		for {
 			// If both upstream channels are closed, finish and close our outputs.
@@ -194,7 +195,6 @@ func runGenerativeORTSessionOnBatch(ctx context.Context, batch *PipelineBatch, p
 }
 
 func createORTModelBackend(model *Model, loadAsBytes bool, options *options.Options) error {
-
 	sessionOptions := options.BackendOptions.(*ort.SessionOptions)
 
 	var inputs, outputs []InputOutputInfo
@@ -608,15 +608,15 @@ func createImageTensorsORT(batch *PipelineBatch, model *Model, preprocessed [][]
 }
 
 func CreateMessagesORT(batch *PipelineBatch, inputs any, systemPrompt string) error {
-	switch inputs := inputs.(type) {
+	switch inputCast := inputs.(type) {
 	case []string:
-		ortMessages := make([][]ortgenai.Message, len(inputs))
+		ortMessages := make([][]ortgenai.Message, len(inputCast))
 		addSystemPrompt := systemPrompt != ""
-		systemPrompt := ortgenai.Message{Role: "system", Content: systemPrompt}
-		for i, input := range inputs {
+		systemPromptMessage := ortgenai.Message{Role: "system", Content: systemPrompt}
+		for i, input := range inputCast {
 			if addSystemPrompt {
 				m := make([]ortgenai.Message, 2)
-				m[0] = systemPrompt
+				m[0] = systemPromptMessage
 				m[1] = ortgenai.Message{Role: "user", Content: input}
 				ortMessages[i] = m
 			} else {
@@ -630,7 +630,7 @@ func CreateMessagesORT(batch *PipelineBatch, inputs any, systemPrompt string) er
 		// Check if any messages contain images
 		hasImages := false
 		var allImageURLs []string
-		for _, msgList := range inputs {
+		for _, msgList := range inputCast {
 			for _, msg := range msgList {
 				if len(msg.ImageURLs) > 0 {
 					hasImages = true
@@ -644,12 +644,16 @@ func CreateMessagesORT(batch *PipelineBatch, inputs any, systemPrompt string) er
 				return fmt.Errorf("failed to load images: %w", err)
 			}
 			batch.Images = images
+			batch.DestroyMultimodal = func() error {
+				images.Destroy()
+				return nil
+			}
 		}
 
-		ortMessages := make([][]ortgenai.Message, len(inputs))
+		ortMessages := make([][]ortgenai.Message, len(inputCast))
 		addSystemPrompt := systemPrompt != ""
-		systemPrompt := ortgenai.Message{Role: "system", Content: systemPrompt}
-		for i, inputMessages := range inputs {
+		systemPromptMessage := ortgenai.Message{Role: "system", Content: systemPrompt}
+		for i, inputMessages := range inputCast {
 			additionalLength := 0
 			if addSystemPrompt {
 				additionalLength = 1
@@ -657,7 +661,7 @@ func CreateMessagesORT(batch *PipelineBatch, inputs any, systemPrompt string) er
 			out := make([]ortgenai.Message, len(inputMessages)+additionalLength)
 			offset := 0
 			if addSystemPrompt {
-				out[0] = systemPrompt
+				out[0] = systemPromptMessage
 				offset = 1
 			}
 			for j, message := range inputMessages {
@@ -667,7 +671,7 @@ func CreateMessagesORT(batch *PipelineBatch, inputs any, systemPrompt string) er
 		}
 		batch.InputValues = ortMessages
 	default:
-		return fmt.Errorf("invalid input type %T for CreateMessagesORT", inputs)
+		return fmt.Errorf("invalid input type %T for CreateMessagesORT", inputCast)
 	}
 	return nil
 }
