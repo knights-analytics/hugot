@@ -2,6 +2,8 @@ module github.com/knights-analytics/hugot
 
 go 1.24.3
 
+replace github.com/knights-analytics/ortgenai => github.com/knights-analytics/ortgenai v0.0.4-0.20260211164146-da7a2fad9008
+
 require (
 	github.com/daulet/tokenizers v1.25.0
 	github.com/gomlx/exceptions v0.0.3

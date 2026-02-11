@@ -138,24 +138,34 @@ func runGenerativeORTSessionOnBatch(ctx context.Context, batch *PipelineBatch, p
 	var ortErrorStream <-chan error
 	var err error
 
+	generateCtx, cancel := context.WithCancel(ctx)
+
 	if batch.Images != nil {
 		images, ok := batch.Images.(*ortgenai.Images)
 		if !ok {
+			cancel()
 			return nil, nil, fmt.Errorf("invalid images type %T for generative ORT session", batch.Images)
 		}
-		ortTokenStream, ortErrorStream, err = session.GenerateWithImages(ctx, inputs, images, &ortgenai.GenerationOptions{MaxLength: maxLength, BatchSize: len(inputs)})
+		ortTokenStream, ortErrorStream, err = session.GenerateWithImages(generateCtx, inputs, images, &ortgenai.GenerationOptions{MaxLength: maxLength, BatchSize: len(inputs)})
 		if err != nil {
+			cancel()
 			return nil, nil, fmt.Errorf("error during multimodal generation start: %w", err)
 		}
 	} else {
-		ortTokenStream, ortErrorStream, err = session.Generate(ctx, inputs, &ortgenai.GenerationOptions{MaxLength: maxLength})
+		ortTokenStream, ortErrorStream, err = session.Generate(generateCtx, inputs, &ortgenai.GenerationOptions{MaxLength: maxLength})
 		if err != nil {
+			cancel()
 			return nil, nil, fmt.Errorf("error during generation start: %w", err)
 		}
 	}
 
 	tokenStream := make(chan SequenceDelta, 10)
 	errorStream := make(chan error, 1)
+
+	completeSequences := map[int]bool{}
+	buffers := make([]string, len(inputs))
+	completedCount := 0
+	totalSequences := len(inputs)
 
 	go func() {
 		defer close(tokenStream)
@@ -168,9 +178,42 @@ func runGenerativeORTSessionOnBatch(ctx context.Context, batch *PipelineBatch, p
 				if !ok {
 					return
 				}
-				tokenStream <- SequenceDelta{
-					Token: tokenDelta.Token,
-					Index: tokenDelta.Sequence,
+				idx := tokenDelta.Sequence
+				if completeSequences[idx] {
+					// Already complete; ignore further tokens for this sequence.
+					continue
+				}
+				if tokenDelta.EOSReached {
+					// EOS terminates sequence; no token content to forward.
+					completeSequences[idx] = true
+					completedCount++
+					if completedCount == totalSequences {
+						cancel()
+						return
+					}
+					continue
+				}
+
+				// Append token to buffer and forward it.
+				buffers[idx] += tokenDelta.Token
+				tokenStream <- SequenceDelta{Token: tokenDelta.Token, Index: idx}
+
+				// Detect stop sequences; include the stop string (already forwarded), then mark complete.
+				if len(stopSequences) > 0 {
+					for _, s := range stopSequences {
+						if s == "" {
+							continue
+						}
+						if strings.Contains(buffers[idx], s) {
+							completeSequences[idx] = true
+							completedCount++
+							if completedCount == totalSequences {
+								cancel()
+								return
+							}
+							break
+						}
+					}
 				}
 			}
 		}

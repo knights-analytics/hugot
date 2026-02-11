@@ -34,7 +34,7 @@ func createTabularTensorsORT(_ *PipelineBatch, _ *Model, _ [][]float32) error {
 	return errors.New("ORT is not enabled")
 }
 
-func runGenerativeORTSessionOnBatch(_ context.Context, _ *PipelineBatch, _ *BasePipeline, _ int) (chan SequenceDelta, chan error, error) {
+func runGenerativeORTSessionOnBatch(_ context.Context, _ *PipelineBatch, _ *BasePipeline, _ int, _ []string) (chan SequenceDelta, chan error, error) {
 	return nil, nil, errors.New("ORT is not enabled")
 }
 
