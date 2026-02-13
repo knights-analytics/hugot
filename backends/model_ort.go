@@ -37,14 +37,14 @@ func mapORTOptions(options *options.Options) ([]string, map[string]map[string]st
 
 	// CUDA
 	if ortOptions.CudaOptions != nil {
-		providers = append(providers, "cuda")
-		providerOptions["cuda"] = ortOptions.CudaOptions
+		providers = append(providers, "CUDAExecutionProvider")
+		providerOptions["CUDAExecutionProvider"] = ortOptions.CudaOptions
 	}
 
 	// CoreML
 	if ortOptions.CoreMLOptions != nil {
-		providers = append(providers, "CoreML")
-		providerOptions["CoreML"] = ortOptions.CoreMLOptions
+		providers = append(providers, "CoreMLExecutionProvider")
+		providerOptions["CoreMLExecutionProvider"] = ortOptions.CoreMLOptions
 	}
 
 	// DirectML
@@ -58,14 +58,28 @@ func mapORTOptions(options *options.Options) ([]string, map[string]map[string]st
 
 	// OpenVINO
 	if ortOptions.OpenVINOOptions != nil {
-		providers = append(providers, "OpenVINO")
-		providerOptions["OpenVINO"] = ortOptions.OpenVINOOptions
+		providers = append(providers, "OpenVINOExecutionProvider")
+		providerOptions["OpenVINOExecutionProvider"] = ortOptions.OpenVINOOptions
 	}
 
 	// TensorRT
 	if ortOptions.TensorRTOptions != nil {
-		providers = append(providers, "NvTensorRtRtx")
-		providerOptions["NvTensorRtRtx"] = ortOptions.TensorRTOptions
+		providers = append(providers, "TensorrtExecutionProvider")
+		providerOptions["TensorrtExecutionProvider"] = ortOptions.TensorRTOptions
+	}
+
+	// TensorRT
+	if ortOptions.NvTensorRTRTXOptions != nil {
+		providers = append(providers, "NvTensorRtRtxExecutionProvider")
+		providerOptions["NvTensorRtRtxExecutionProvider"] = ortOptions.TensorRTOptions
+	}
+
+	// Extra EPs
+	if len(ortOptions.ExtraExecutionProviders) > 0 {
+		for _, ep := range ortOptions.ExtraExecutionProviders {
+			providers = append(providers, ep.Name)
+			providerOptions[ep.Name] = ep.Options
+		}
 	}
 	return providers, providerOptions, nil
 }
@@ -122,7 +136,7 @@ func createORTGenerativeSession(model *Model, options *options.Options) error {
 	return nil
 }
 
-func runGenerativeORTSessionOnBatch(ctx context.Context, batch *PipelineBatch, p *BasePipeline, maxLength int) (chan SequenceDelta, chan error, error) {
+func runGenerativeORTSessionOnBatch(ctx context.Context, batch *PipelineBatch, p *BasePipeline, maxLength int, stopSequences []string) (chan SequenceDelta, chan error, error) {
 	session := p.Model.ORTModel.GenerativeSession
 	if session == nil {
 		return nil, nil, errors.New("ORT generative session is not initialized")
@@ -138,18 +152,23 @@ func runGenerativeORTSessionOnBatch(ctx context.Context, batch *PipelineBatch, p
 	var ortErrorStream <-chan error
 	var err error
 
+	generateCtx, cancel := context.WithCancel(ctx)
+
 	if batch.Images != nil {
 		images, ok := batch.Images.(*ortgenai.Images)
 		if !ok {
+			cancel()
 			return nil, nil, fmt.Errorf("invalid images type %T for generative ORT session", batch.Images)
 		}
-		ortTokenStream, ortErrorStream, err = session.GenerateWithImages(ctx, inputs, images, &ortgenai.GenerationOptions{MaxLength: maxLength, BatchSize: len(inputs)})
+		ortTokenStream, ortErrorStream, err = session.GenerateWithImages(generateCtx, inputs, images, &ortgenai.GenerationOptions{MaxLength: maxLength, BatchSize: len(inputs)})
 		if err != nil {
+			cancel()
 			return nil, nil, fmt.Errorf("error during multimodal generation start: %w", err)
 		}
 	} else {
-		ortTokenStream, ortErrorStream, err = session.Generate(ctx, inputs, &ortgenai.GenerationOptions{MaxLength: maxLength})
+		ortTokenStream, ortErrorStream, err = session.Generate(generateCtx, inputs, &ortgenai.GenerationOptions{MaxLength: maxLength})
 		if err != nil {
+			cancel()
 			return nil, nil, fmt.Errorf("error during generation start: %w", err)
 		}
 	}
@@ -157,35 +176,75 @@ func runGenerativeORTSessionOnBatch(ctx context.Context, batch *PipelineBatch, p
 	tokenStream := make(chan SequenceDelta, 10)
 	errorStream := make(chan error, 1)
 
+	completeSequences := map[int]bool{}
+	buffers := make([]string, len(inputs))
+	completedCount := 0
+	totalSequences := len(inputs)
+
 	go func() {
 		defer close(tokenStream)
-		defer close(errorStream)
-
+		defer batch.Destroy()
 		for {
-			// If both upstream channels are closed, finish and close our outputs.
-			if ortTokenStream == nil && ortErrorStream == nil {
+			select {
+			case <-ctx.Done():
 				return
+			case tokenDelta, ok := <-ortTokenStream:
+				if !ok {
+					return
+				}
+				idx := tokenDelta.Sequence
+				if completeSequences[idx] {
+					// Already complete; ignore further tokens for this sequence.
+					continue
+				}
+				if tokenDelta.EOSReached {
+					// EOS terminates sequence; no token content to forward.
+					completeSequences[idx] = true
+					completedCount++
+					if completedCount == totalSequences {
+						cancel()
+						return
+					}
+					continue
+				}
+
+				// Append token to buffer and forward it.
+				buffers[idx] += tokenDelta.Token
+				tokenStream <- SequenceDelta{Token: tokenDelta.Token, Index: idx}
+
+				// Detect stop sequences; include the stop string (already forwarded), then mark complete.
+				if len(stopSequences) > 0 {
+					for _, s := range stopSequences {
+						if s == "" {
+							continue
+						}
+						if strings.Contains(buffers[idx], s) {
+							completeSequences[idx] = true
+							completedCount++
+							if completedCount == totalSequences {
+								cancel()
+								return
+							}
+							break
+						}
+					}
+				}
 			}
+		}
+	}()
+
+	go func() {
+		defer close(errorStream)
+		for {
 			select {
 			case <-ctx.Done():
 				return
 			case err, ok := <-ortErrorStream:
 				if !ok {
-					ortErrorStream = nil
-					continue
+					return
 				}
-				select {
-				case errorStream <- fmt.Errorf("error during generation: %w", err):
-				default:
-				}
-			case tokenDelta, ok := <-ortTokenStream:
-				if !ok {
-					ortTokenStream = nil
-					continue
-				}
-				tokenStream <- SequenceDelta{
-					Token: tokenDelta.Tokens, // TODO rename to token in ortgenai?
-					Index: tokenDelta.Sequence,
+				if err != nil {
+					errorStream <- err
 				}
 			}
 		}
@@ -194,7 +253,6 @@ func runGenerativeORTSessionOnBatch(ctx context.Context, batch *PipelineBatch, p
 }
 
 func createORTModelBackend(model *Model, loadAsBytes bool, options *options.Options) error {
-
 	sessionOptions := options.BackendOptions.(*ort.SessionOptions)
 
 	var inputs, outputs []InputOutputInfo
@@ -608,15 +666,15 @@ func createImageTensorsORT(batch *PipelineBatch, model *Model, preprocessed [][]
 }
 
 func CreateMessagesORT(batch *PipelineBatch, inputs any, systemPrompt string) error {
-	switch inputs := inputs.(type) {
+	switch inputCast := inputs.(type) {
 	case []string:
-		ortMessages := make([][]ortgenai.Message, len(inputs))
+		ortMessages := make([][]ortgenai.Message, len(inputCast))
 		addSystemPrompt := systemPrompt != ""
-		systemPrompt := ortgenai.Message{Role: "system", Content: systemPrompt}
-		for i, input := range inputs {
+		systemPromptMessage := ortgenai.Message{Role: "system", Content: systemPrompt}
+		for i, input := range inputCast {
 			if addSystemPrompt {
 				m := make([]ortgenai.Message, 2)
-				m[0] = systemPrompt
+				m[0] = systemPromptMessage
 				m[1] = ortgenai.Message{Role: "user", Content: input}
 				ortMessages[i] = m
 			} else {
@@ -630,7 +688,7 @@ func CreateMessagesORT(batch *PipelineBatch, inputs any, systemPrompt string) er
 		// Check if any messages contain images
 		hasImages := false
 		var allImageURLs []string
-		for _, msgList := range inputs {
+		for _, msgList := range inputCast {
 			for _, msg := range msgList {
 				if len(msg.ImageURLs) > 0 {
 					hasImages = true
@@ -644,12 +702,16 @@ func CreateMessagesORT(batch *PipelineBatch, inputs any, systemPrompt string) er
 				return fmt.Errorf("failed to load images: %w", err)
 			}
 			batch.Images = images
+			batch.DestroyMultimodal = func() error {
+				images.Destroy()
+				return nil
+			}
 		}
 
-		ortMessages := make([][]ortgenai.Message, len(inputs))
+		ortMessages := make([][]ortgenai.Message, len(inputCast))
 		addSystemPrompt := systemPrompt != ""
-		systemPrompt := ortgenai.Message{Role: "system", Content: systemPrompt}
-		for i, inputMessages := range inputs {
+		systemPromptMessage := ortgenai.Message{Role: "system", Content: systemPrompt}
+		for i, inputMessages := range inputCast {
 			additionalLength := 0
 			if addSystemPrompt {
 				additionalLength = 1
@@ -657,7 +719,7 @@ func CreateMessagesORT(batch *PipelineBatch, inputs any, systemPrompt string) er
 			out := make([]ortgenai.Message, len(inputMessages)+additionalLength)
 			offset := 0
 			if addSystemPrompt {
-				out[0] = systemPrompt
+				out[0] = systemPromptMessage
 				offset = 1
 			}
 			for j, message := range inputMessages {
@@ -667,7 +729,7 @@ func CreateMessagesORT(batch *PipelineBatch, inputs any, systemPrompt string) er
 		}
 		batch.InputValues = ortMessages
 	default:
-		return fmt.Errorf("invalid input type %T for CreateMessagesORT", inputs)
+		return fmt.Errorf("invalid input type %T for CreateMessagesORT", inputCast)
 	}
 	return nil
 }

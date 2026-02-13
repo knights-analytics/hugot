@@ -70,17 +70,23 @@ type Pipeline interface {
 }
 
 type PipelineStatistics struct {
-	TokenizerTotalTime      time.Duration
-	TokenizerExecutionCount uint64
-	TokenizerAvgQueryTime   time.Duration
-	OnnxTotalTime           time.Duration
-	OnnxExecutionCount      uint64
-	OnnxAvgQueryTime        time.Duration
-	TotalQueries            uint64
-	TotalDocuments          uint64
-	AverageLatency          time.Duration
-	AverageBatchSize        float64
-	FilteredResults         uint64
+	TokenizerTotalTime             time.Duration
+	TokenizerExecutionCount        uint64
+	TokenizerAvgQueryTime          time.Duration
+	OnnxTotalTime                  time.Duration
+	OnnxExecutionCount             uint64
+	OnnxAvgQueryTime               time.Duration
+	TotalQueries                   uint64
+	TotalDocuments                 uint64
+	AverageLatency                 time.Duration
+	AverageBatchSize               float64
+	FilteredResults                uint64
+	AvgPrefillSeconds              float64
+	TokensPerSecond                float64
+	CumulativePrefillSum           float64
+	CumulativePrefillCount         int
+	CumulativeTokens               int
+	CumulativeTokenDurationSeconds float64
 }
 
 func (p *PipelineStatistics) ComputeTokenizerStatistics(timings *timings) {
@@ -191,10 +197,10 @@ func RunSessionOnBatch(batch *PipelineBatch, p *BasePipeline) error {
 	return nil
 }
 
-func RunGenerativeSessionOnBatch(ctx context.Context, batch *PipelineBatch, p *BasePipeline, maxLength int) (chan SequenceDelta, chan error, error) {
+func RunGenerativeSessionOnBatch(ctx context.Context, batch *PipelineBatch, p *BasePipeline, maxLength int, stopSequences []string) (chan SequenceDelta, chan error, error) {
 	switch p.Runtime {
 	case "ORT":
-		return runGenerativeORTSessionOnBatch(ctx, batch, p, maxLength)
+		return runGenerativeORTSessionOnBatch(ctx, batch, p, maxLength, stopSequences)
 	case "GO":
 		return nil, nil, errors.New("GO backend is not yet implemented for generative models")
 	case "XLA":

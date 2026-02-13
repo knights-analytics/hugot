@@ -61,6 +61,11 @@ func (s *Session) initialiseORT() (bool, error) {
 	}
 
 	// Start OnnxRuntime
+	if o.EnvLoggingLevel != nil {
+		if err := ort.SetEnvironmentLogLevel(ort.LoggingLevel(*o.EnvLoggingLevel)); err != nil {
+			return false, err
+		}
+	}
 	if err := ort.InitializeEnvironment(); err != nil {
 		return false, err
 	}
@@ -92,6 +97,16 @@ func (s *Session) initialiseORT() (bool, error) {
 	}
 	if o.InterOpNumThreads != nil {
 		if err := sessionOptions.SetInterOpNumThreads(*o.InterOpNumThreads); err != nil {
+			return true, err
+		}
+	}
+	if o.LogSeverityLevel != nil {
+		if err := sessionOptions.SetLogSeverityLevel(ort.LoggingLevel(*o.LogSeverityLevel)); err != nil {
+			return true, err
+		}
+	}
+	if o.GraphOptimizationLevel != nil {
+		if err := sessionOptions.SetGraphOptimizationLevel(ort.GraphOptimizationLevel(*o.GraphOptimizationLevel)); err != nil {
 			return true, err
 		}
 	}
@@ -151,6 +166,13 @@ func (s *Session) initialiseORT() (bool, error) {
 		}
 		if err := sessionOptions.AppendExecutionProviderCUDA(cudaOptions); err != nil {
 			return true, err
+		}
+	}
+	if len(o.ExtraExecutionProviders) > 0 {
+		for _, ep := range o.ExtraExecutionProviders {
+			if err := sessionOptions.AppendExecutionProvider(ep.Name, ep.Options); err != nil {
+				return true, err
+			}
 		}
 	}
 	if o.CoreMLOptions != nil {

@@ -40,22 +40,51 @@ func getDefaultLibraryPaths() (string, string, string) {
 	}
 }
 
+type GraphOptimizationLevel int
+
+const (
+	GraphOptimizationLevelDisableAll     GraphOptimizationLevel = 0
+	GraphOptimizationLevelEnableBasic    GraphOptimizationLevel = 1
+	GraphOptimizationLevelEnableExtended GraphOptimizationLevel = 2
+	GraphOptimizationLevelEnableAll      GraphOptimizationLevel = 99
+)
+
+type LoggingLevel int
+
+const (
+	LoggingLevelVerbose LoggingLevel = 0
+	LoggingLevelInfo    LoggingLevel = 1
+	LoggingLevelWarning LoggingLevel = 2
+	LoggingLevelError   LoggingLevel = 3
+	LoggingLevelFatal   LoggingLevel = 4
+)
+
 type OrtOptions struct {
-	LibraryPath           *string
-	LibraryDir            *string
-	Telemetry             *bool
-	IntraOpNumThreads     *int
-	InterOpNumThreads     *int
-	CPUMemArena           *bool
-	MemPattern            *bool
-	ParallelExecutionMode *bool
-	IntraOpSpinning       *bool
-	InterOpSpinning       *bool
-	CudaOptions           map[string]string
-	CoreMLOptions         map[string]string
-	DirectMLOptions       *int
-	OpenVINOOptions       map[string]string
-	TensorRTOptions       map[string]string
+	LibraryPath             *string
+	LibraryDir              *string
+	Telemetry               *bool
+	IntraOpNumThreads       *int
+	InterOpNumThreads       *int
+	CPUMemArena             *bool
+	MemPattern              *bool
+	ParallelExecutionMode   *bool
+	IntraOpSpinning         *bool
+	InterOpSpinning         *bool
+	LogSeverityLevel        *LoggingLevel
+	EnvLoggingLevel         *LoggingLevel
+	GraphOptimizationLevel  *GraphOptimizationLevel
+	CudaOptions             map[string]string
+	CoreMLOptions           map[string]string
+	DirectMLOptions         *int
+	OpenVINOOptions         map[string]string
+	TensorRTOptions         map[string]string
+	NvTensorRTRTXOptions    map[string]string
+	ExtraExecutionProviders []ExtraExecutionProvider
+}
+
+type ExtraExecutionProvider struct {
+	Name    string
+	Options map[string]string
 }
 type GoMLXOptions struct {
 	// BatchBuckets defines the bucket sizes for batch dimension padding.
@@ -304,10 +333,7 @@ func WithOpenVINO(options map[string]string) WithOption {
 // By default, the options will be nil and the TensorRT provider will not be used.
 // Example usage:
 //
-//	options := &onnxbackend_go.TensorRTProviderOptions{
-//	    DeviceID: 0,
-//	}
-//	WithTensorRT(options)
+//	WithTensorRT(map[string]string{"device_id": "0"})
 //
 // Note: For the TensorRT provider to work, the onnxbackend library must be built with TensorRT support.
 func WithTensorRT(options map[string]string) WithOption {
@@ -317,5 +343,70 @@ func WithTensorRT(options map[string]string) WithOption {
 			return nil
 		}
 		return fmt.Errorf("WithTensorRT is only supported for ORT backend")
+	}
+}
+
+// WithNvTensorRTRTX (ORT only) Use this function to set the options for the NvTensorRTRTX provider.
+// The options parameter should be a pointer to an instance of NvTensorRTRTXOptions.
+// By default, the options will be nil and the NvTensorRTRTX provider will not be used.
+// Example usage:
+//
+//	WithNvTensorRTRTX(map[string]string{"device_id": "0"})
+//
+// Note: For the TensorRT provider to work, the onnxbackend library must be built with TensorRT support.
+func WithNvTensorRTRTX(options map[string]string) WithOption {
+	return func(o *Options) error {
+		if o.Backend == "ORT" {
+			o.ORTOptions.NvTensorRTRTXOptions = options
+			return nil
+		}
+		return fmt.Errorf("WithNvTensorRTRTX is only supported for ORT backend")
+	}
+}
+
+// WithLogSeverityLevel (ORT only) Sets the log severity level for the session.
+func WithLogSeverityLevel(level LoggingLevel) WithOption {
+	return func(o *Options) error {
+		if o.Backend == "ORT" {
+			o.ORTOptions.LogSeverityLevel = &level
+			return nil
+		}
+		return fmt.Errorf("WithLogSeverityLevel is only supported for ORT backend")
+	}
+}
+
+// WithEnvLoggingLevel (ORT only) Sets the log severity level for the environment.
+func WithEnvLoggingLevel(level LoggingLevel) WithOption {
+	return func(o *Options) error {
+		if o.Backend == "ORT" {
+			o.ORTOptions.EnvLoggingLevel = &level
+			return nil
+		}
+		return fmt.Errorf("WithEnvLoggingLevel is only supported for ORT backend")
+	}
+}
+
+// WithGraphOptimizationLevel (ORT only) Sets the graph optimization level for the session.
+func WithGraphOptimizationLevel(level GraphOptimizationLevel) WithOption {
+	return func(o *Options) error {
+		if o.Backend == "ORT" {
+			o.ORTOptions.GraphOptimizationLevel = &level
+			return nil
+		}
+		return fmt.Errorf("WithGraphOptimizationLevel is only supported for ORT backend")
+	}
+}
+
+// WithExtraExecutionProvider (ORT only) Adds an extra execution provider to the session.
+func WithExtraExecutionProvider(name string, options map[string]string) WithOption {
+	return func(o *Options) error {
+		if o.Backend == "ORT" {
+			o.ORTOptions.ExtraExecutionProviders = append(o.ORTOptions.ExtraExecutionProviders, ExtraExecutionProvider{
+				Name:    name,
+				Options: options,
+			})
+			return nil
+		}
+		return fmt.Errorf("WithExtraExecutionProvider is only supported for ORT backend")
 	}
 }
