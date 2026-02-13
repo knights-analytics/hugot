@@ -1,6 +1,6 @@
 module github.com/knights-analytics/hugot
 
-go 1.24.3
+go 1.25.0
 
 replace github.com/knights-analytics/ortgenai => github.com/knights-analytics/ortgenai v0.0.4-0.20260211164146-da7a2fad9008
 
@@ -16,7 +16,7 @@ require (
 	github.com/urfave/cli/v3 v3.6.2
 	github.com/viant/afs v1.30.0
 	github.com/yalue/onnxruntime_go v1.25.0
-	golang.org/x/image v0.35.0
+	golang.org/x/image v0.36.0
 )
 
 require (
@@ -36,11 +36,11 @@ require (
 	github.com/schollz/progressbar/v2 v2.15.0 // indirect
 	github.com/sugarme/regexpset v0.0.0-20200920021344-4d4ec8eaf93c // indirect
 	github.com/x448/float16 v0.8.4 // indirect
-	golang.org/x/crypto v0.47.0 // indirect
-	golang.org/x/exp v0.0.0-20260112195511-716be5621a96 // indirect
+	golang.org/x/crypto v0.48.0 // indirect
+	golang.org/x/exp v0.0.0-20260212183809-81e46e3db34a // indirect
 	golang.org/x/sys v0.41.0 // indirect
-	golang.org/x/term v0.39.0 // indirect
-	golang.org/x/text v0.33.0 // indirect
+	golang.org/x/term v0.40.0 // indirect
+	golang.org/x/text v0.34.0 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	k8s.io/klog/v2 v2.130.1 // indirect

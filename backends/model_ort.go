@@ -67,6 +67,14 @@ func mapORTOptions(options *options.Options) ([]string, map[string]map[string]st
 		providers = append(providers, "NvTensorRtRtx")
 		providerOptions["NvTensorRtRtx"] = ortOptions.TensorRTOptions
 	}
+
+	// Extra EPs
+	if len(ortOptions.ExtraExecutionProviders) > 0 {
+		for _, ep := range ortOptions.ExtraExecutionProviders {
+			providers = append(providers, ep.Name)
+			providerOptions[ep.Name] = ep.Options
+		}
+	}
 	return providers, providerOptions, nil
 }
 
