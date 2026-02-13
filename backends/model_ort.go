@@ -37,14 +37,14 @@ func mapORTOptions(options *options.Options) ([]string, map[string]map[string]st
 
 	// CUDA
 	if ortOptions.CudaOptions != nil {
-		providers = append(providers, "cuda")
-		providerOptions["cuda"] = ortOptions.CudaOptions
+		providers = append(providers, "CUDAExecutionProvider")
+		providerOptions["CUDAExecutionProvider"] = ortOptions.CudaOptions
 	}
 
 	// CoreML
 	if ortOptions.CoreMLOptions != nil {
-		providers = append(providers, "CoreML")
-		providerOptions["CoreML"] = ortOptions.CoreMLOptions
+		providers = append(providers, "CoreMLExecutionProvider")
+		providerOptions["CoreMLExecutionProvider"] = ortOptions.CoreMLOptions
 	}
 
 	// DirectML
@@ -58,14 +58,20 @@ func mapORTOptions(options *options.Options) ([]string, map[string]map[string]st
 
 	// OpenVINO
 	if ortOptions.OpenVINOOptions != nil {
-		providers = append(providers, "OpenVINO")
-		providerOptions["OpenVINO"] = ortOptions.OpenVINOOptions
+		providers = append(providers, "OpenVINOExecutionProvider")
+		providerOptions["OpenVINOExecutionProvider"] = ortOptions.OpenVINOOptions
 	}
 
 	// TensorRT
 	if ortOptions.TensorRTOptions != nil {
-		providers = append(providers, "NvTensorRtRtx")
-		providerOptions["NvTensorRtRtx"] = ortOptions.TensorRTOptions
+		providers = append(providers, "TensorrtExecutionProvider")
+		providerOptions["TensorrtExecutionProvider"] = ortOptions.TensorRTOptions
+	}
+
+	// TensorRT
+	if ortOptions.NvTensorRTRTXOptions != nil {
+		providers = append(providers, "NvTensorRtRtxExecutionProvider")
+		providerOptions["NvTensorRtRtxExecutionProvider"] = ortOptions.TensorRTOptions
 	}
 
 	// Extra EPs

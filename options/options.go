@@ -78,6 +78,7 @@ type OrtOptions struct {
 	DirectMLOptions         *int
 	OpenVINOOptions         map[string]string
 	TensorRTOptions         map[string]string
+	NvTensorRTRTXOptions    map[string]string
 	ExtraExecutionProviders []ExtraExecutionProvider
 }
 
@@ -332,10 +333,7 @@ func WithOpenVINO(options map[string]string) WithOption {
 // By default, the options will be nil and the TensorRT provider will not be used.
 // Example usage:
 //
-//	options := &onnxbackend_go.TensorRTProviderOptions{
-//	    DeviceID: 0,
-//	}
-//	WithTensorRT(options)
+//	WithTensorRT(map[string]string{"device_id": "0"})
 //
 // Note: For the TensorRT provider to work, the onnxbackend library must be built with TensorRT support.
 func WithTensorRT(options map[string]string) WithOption {
@@ -345,6 +343,24 @@ func WithTensorRT(options map[string]string) WithOption {
 			return nil
 		}
 		return fmt.Errorf("WithTensorRT is only supported for ORT backend")
+	}
+}
+
+// WithNvTensorRTRTX (ORT only) Use this function to set the options for the NvTensorRTRTX provider.
+// The options parameter should be a pointer to an instance of NvTensorRTRTXOptions.
+// By default, the options will be nil and the NvTensorRTRTX provider will not be used.
+// Example usage:
+//
+//	WithNvTensorRTRTX(map[string]string{"device_id": "0"})
+//
+// Note: For the TensorRT provider to work, the onnxbackend library must be built with TensorRT support.
+func WithNvTensorRTRTX(options map[string]string) WithOption {
+	return func(o *Options) error {
+		if o.Backend == "ORT" {
+			o.ORTOptions.NvTensorRTRTXOptions = options
+			return nil
+		}
+		return fmt.Errorf("WithNvTensorRTRTX is only supported for ORT backend")
 	}
 }
 
