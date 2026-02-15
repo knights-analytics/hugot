@@ -37,8 +37,8 @@ func mapORTOptions(options *options.Options) ([]string, map[string]map[string]st
 
 	// CUDA
 	if ortOptions.CudaOptions != nil {
-		providers = append(providers, "CUDAExecutionProvider")
-		providerOptions["CUDAExecutionProvider"] = ortOptions.CudaOptions
+		providers = append(providers, "cuda")
+		providerOptions["cuda"] = ortOptions.CudaOptions
 	}
 
 	// CoreML
@@ -49,9 +49,9 @@ func mapORTOptions(options *options.Options) ([]string, map[string]map[string]st
 
 	// DirectML
 	if ortOptions.DirectMLOptions != nil {
-		providers = append(providers, "DML")
+		providers = append(providers, "DmlExecutionProvider")
 		// Map device id to string map expected by advanced session
-		providerOptions["DML"] = map[string]string{
+		providerOptions["DmlExecutionProvider"] = map[string]string{
 			"device_id": strconv.Itoa(*ortOptions.DirectMLOptions),
 		}
 	}
@@ -70,8 +70,8 @@ func mapORTOptions(options *options.Options) ([]string, map[string]map[string]st
 
 	// TensorRT
 	if ortOptions.NvTensorRTRTXOptions != nil {
-		providers = append(providers, "NvTensorRtRtxExecutionProvider")
-		providerOptions["NvTensorRtRtxExecutionProvider"] = ortOptions.TensorRTOptions
+		providers = append(providers, "NvTensorRTRTXExecutionProvider")
+		providerOptions["NvTensorRTRTXExecutionProvider"] = ortOptions.TensorRTOptions
 	}
 
 	// Extra EPs

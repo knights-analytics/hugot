@@ -2,7 +2,7 @@ module github.com/knights-analytics/hugot
 
 go 1.25.0
 
-replace github.com/knights-analytics/ortgenai => github.com/knights-analytics/ortgenai v0.0.4-0.20260211164146-da7a2fad9008
+replace github.com/knights-analytics/ortgenai => github.com/knights-analytics/ortgenai v0.0.4-0.20260215135708-fac6c4fd8063
 
 require (
 	github.com/daulet/tokenizers v1.25.0
@@ -15,7 +15,7 @@ require (
 	github.com/sugarme/tokenizer v0.3.0
 	github.com/urfave/cli/v3 v3.6.2
 	github.com/viant/afs v1.30.0
-	github.com/yalue/onnxruntime_go v1.25.0
+	github.com/yalue/onnxruntime_go v1.26.0
 	golang.org/x/image v0.36.0
 )
 
