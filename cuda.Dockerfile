@@ -1,8 +1,8 @@
 #--- dockerfile to test hugot  ---
 
 ARG GO_VERSION=1.26.0
-ARG ONNXRUNTIME_VERSION=1.23.2
-ARG ONNXRUNTIME_GENAI_VERSION=0.11.4
+ARG ONNXRUNTIME_VERSION=1.24.1
+ARG ONNXRUNTIME_GENAI_VERSION=0.12.0
 ARG GOPJRT_VERSION=0.83.4
 ARG JAX_CUDA_VERSION=0.8.1
 ARG BUILD_PLATFORM=linux/amd64
@@ -27,7 +27,7 @@ RUN --mount=src=./go.mod,dst=/go.mod \
     dnf install -y 'dnf-command(config-manager)' && \
     # from rhel
     dnf config-manager --add-repo https://developer.download.nvidia.com/compute/cuda/repos/rhel9/x86_64/cuda-rhel9.repo && \
-    dnf install -y cuda-cudart-12-9 cuda-nvrtc-12-9 libcublas-12-9 libcurand-12-9 libcufft-12-9 libcudnn9-cuda-12 && \
+    dnf install -y cuda-cudart-13-1 cuda-nvrtc-13-1 libcublas-13-1 libcurand-13-1 libcufft-13-1 libcudnn9-cuda-13 && \
     dnf clean all && \
    # go
     curl -LO https://golang.org/dl/go${GO_VERSION}.linux-amd64.tar.gz && \

@@ -15,7 +15,7 @@ require (
 	github.com/sugarme/tokenizer v0.3.0
 	github.com/urfave/cli/v3 v3.6.2
 	github.com/viant/afs v1.30.0
-	github.com/yalue/onnxruntime_go v1.25.0
+	github.com/yalue/onnxruntime_go v1.26.0
 	golang.org/x/image v0.36.0
 )
 

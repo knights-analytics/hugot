@@ -210,9 +210,9 @@ To use Hugot with Nvidia gpu acceleration, you need to have the following:
       session, err := NewXLASession(opts...)
       ```
 
-For the ONNX Runtime Cuda libraries, you can install CUDA 12.x by installing the full cuda toolkit, but that's quite a big package. In our testing on awslinux/fedora, we have been able to limit the libraries needed to run Hugot with Nvidia gpu acceleration to just these:
+For the ONNX Runtime Cuda libraries, you can install CUDA 13.x by installing the full cuda toolkit, but that's quite a big package. In our testing on awslinux/fedora, we have been able to limit the libraries needed to run Hugot with Nvidia gpu acceleration to just these:
 
-- cuda-cudart-12-9 cuda-nvrtc-12-9 libcublas-12-9 libcurand-12-9 libcufft-12-9 libcudnn9-cuda-12
+- cuda-cudart-13-1 cuda-nvrtc-13-1 libcublas-13-1 libcurand-13-1 libcufft-13-1 libcudnn9-cuda-13
 
 On different distros (e.g. Ubuntu), you should be able to install the equivalent packages.
 
