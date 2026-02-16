@@ -177,7 +177,24 @@ func runGenerativeORTSessionOnBatch(ctx context.Context, batch *PipelineBatch, p
 	errorStream := make(chan error, 1)
 
 	completeSequences := map[int]bool{}
-	buffers := make([]string, len(inputs))
+
+	// Precompute stop-sequence data once (avoid scanning growing buffers).
+	filteredStops := make([]string, 0, len(stopSequences))
+	maxStopLen := 0
+	for _, s := range stopSequences {
+		if s == "" {
+			continue
+		}
+		filteredStops = append(filteredStops, s)
+		if len(s) > maxStopLen {
+			maxStopLen = len(s)
+		}
+	}
+
+	// Keep only a rolling tail per sequence (enough to detect stop sequences).
+	// This avoids O(n^2) behavior from (a) growing strings and (b) repeatedly searching the whole prefix.
+	tails := make([]string, len(inputs))
+
 	completedCount := 0
 	totalSequences := len(inputs)
 
@@ -208,17 +225,26 @@ func runGenerativeORTSessionOnBatch(ctx context.Context, batch *PipelineBatch, p
 					continue
 				}
 
-				// Append token to buffer and forward it.
-				buffers[idx] += tokenDelta.Token
+				// Forward token immediately.
 				tokenStream <- SequenceDelta{Token: tokenDelta.Token, Index: idx}
 
-				// Detect stop sequences; include the stop string (already forwarded), then mark complete.
-				if len(stopSequences) > 0 {
-					for _, s := range stopSequences {
-						if s == "" {
-							continue
-						}
-						if strings.Contains(buffers[idx], s) {
+				// Detect stop sequences using a bounded rolling window.
+				// Window size is maxStopLen + len(current token) to catch:
+				//  - stops spanning the boundary between previous tail and this token
+				//  - stops fully contained inside a single (possibly long) token
+				if len(filteredStops) > 0 && maxStopLen > 0 {
+					tail := tails[idx] + tokenDelta.Token
+					keep := maxStopLen + len(tokenDelta.Token)
+					if keep < maxStopLen {
+						keep = maxStopLen
+					}
+					if len(tail) > keep {
+						tail = tail[len(tail)-keep:]
+					}
+					tails[idx] = tail
+
+					for _, s := range filteredStops {
+						if strings.Contains(tail, s) {
 							completeSequences[idx] = true
 							completedCount++
 							if completedCount == totalSequences {
