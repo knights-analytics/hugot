@@ -7,16 +7,28 @@ this_dir="$( cd "$( dirname "$0" )" && pwd )"
 src_dir="$(realpath "${this_dir}/..")"
 export src_dir
 
-onnxruntime_version="$1"
-gpu="$2"
+for arg in "$@"; do
+  case $arg in
+    --onnxruntime-version=*)
+      onnxruntime_version="${arg#*=}"
+      ;;
+    --cuda)
+      cuda=true
+      ;;
+    *)
+      echo "Invalid argument: $arg"
+      exit 1
+      ;;
+  esac
+done
 
 if [[ -z $onnxruntime_version ]]; then
-    echo version is required
+    echo onnxruntime version is required
     exit 1
 fi
 
 version=""
-if [[ -n $gpu ]]; then
+if [[ -n $cuda ]]; then
     version="-gpu"
 fi
 

@@ -7,8 +7,20 @@ this_dir="$( cd "$( dirname "$0" )" && pwd )"
 src_dir="$(realpath "${this_dir}/..")"
 export src_dir
 
-onnxruntime_genai_version="$1"
-gpu="$2"
+for arg in "$@"; do
+  case $arg in
+    --onnxruntime-genai-version=*)
+      onnxruntime_genai_version="${arg#*=}"
+      ;;
+    --cuda)
+      cuda=true
+      ;;
+    *)
+      echo "Invalid argument: $arg"
+      exit 1
+      ;;
+  esac
+done
 
 if [[ -z $onnxruntime_genai_version ]]; then
     echo version is required
@@ -16,7 +28,7 @@ if [[ -z $onnxruntime_genai_version ]]; then
 fi
 
 version=""
-if [[ -n $gpu ]]; then
+if [[ -n $cuda ]]; then
     version="-cuda"
 fi
 

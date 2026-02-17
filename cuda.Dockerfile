@@ -21,6 +21,7 @@ ENV PATH="$PATH:/usr/local/go/bin" \
 
 COPY ./scripts/download-onnxruntime.sh /download-onnxruntime.sh
 COPY ./scripts/download-onnxruntime-genai.sh /download-onnxruntime-genai.sh
+COPY ./scripts/download-tokenizers.sh /download-tokenizers.sh
 RUN --mount=src=./go.mod,dst=/go.mod \
     dnf --allowerasing -y install gcc jq bash tar xz gzip glibc-static libstdc++ wget zip git dirmngr sudo which && \
     ln -s /usr/lib64/libstdc++.so.6 /usr/lib64/libstdc++.so && \
@@ -34,17 +35,12 @@ RUN --mount=src=./go.mod,dst=/go.mod \
     tar -C /usr/local -xzf go${GO_VERSION}.linux-amd64.tar.gz && \
     rm go${GO_VERSION}.linux-amd64.tar.gz && \
     # tokenizers
-    tokenizer_version=$(grep 'github.com/daulet/tokenizers' /go.mod | awk '{print $2}') && \
-    tokenizer_version=$(echo $tokenizer_version | awk -F'-' '{print $NF}') && \
-    echo "tokenizer_version: $tokenizer_version" && \
-    curl -LO https://github.com/daulet/tokenizers/releases/download/${tokenizer_version}/libtokenizers.linux-amd64.tar.gz && \
-    tar -C /usr/lib -xzf libtokenizers.linux-amd64.tar.gz && \
-    rm libtokenizers.linux-amd64.tar.gz && \
+    ./download-tokenizers.sh && \
     # onnxruntime cpu and gpu
     sed -i 's/\r//g' /download-onnxruntime.sh && chmod +x /download-onnxruntime.sh && \
-    /download-onnxruntime.sh ${ONNXRUNTIME_VERSION} gpu && \
+    /download-onnxruntime.sh --onnxruntime-version=${ONNXRUNTIME_VERSION} --cuda && \
     sed -i 's/\r//g' /download-onnxruntime-genai.sh && chmod +x /download-onnxruntime-genai.sh && \
-    /download-onnxruntime-genai.sh ${ONNXRUNTIME_GENAI_VERSION} gpu && \
+    /download-onnxruntime-genai.sh --onnxruntime-genai-version=${ONNXRUNTIME_GENAI_VERSION} --cuda && \
     # XLA/goMLX
     GOPROXY=direct go run github.com/gomlx/go-xla/cmd/pjrt_installer@latest -plugin=linux -version=v${GOPJRT_VERSION} -path=/usr/local/lib/go-xla && \
     GOPROXY=direct go run github.com/gomlx/go-xla/cmd/pjrt_installer@latest -plugin=cuda13 -version=${JAX_CUDA_VERSION} -path=/usr/local/lib/go-xla && \
