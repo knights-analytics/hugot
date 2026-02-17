@@ -30,6 +30,7 @@ RUN --mount=src=./go.mod,dst=/go.mod \
     tar -C /usr/local -xzf go${GO_VERSION}.linux-amd64.tar.gz && \
     rm go${GO_VERSION}.linux-amd64.tar.gz && \
     # tokenizers
+    sed -i 's/\r//g' /download-tokenizers.sh && chmod +x /download-tokenizers.sh && \
     ./download-tokenizers.sh && \
     # onnxruntime cpu
     sed -i 's/\r//g' /download-onnxruntime.sh && chmod +x /download-onnxruntime.sh && \
