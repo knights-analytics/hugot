@@ -161,10 +161,13 @@ func (s *Session) initialiseORT() (bool, error) {
 		if len(o.CudaOptions) > 0 {
 			optErr = cudaOptions.Update(o.CudaOptions)
 			if optErr != nil {
-				return true, optErr
+				return true, errors.Join(optErr, cudaOptions.Destroy())
 			}
 		}
 		if err := sessionOptions.AppendExecutionProviderCUDA(cudaOptions); err != nil {
+			return true, errors.Join(err, cudaOptions.Destroy())
+		}
+		if err := cudaOptions.Destroy(); err != nil {
 			return true, err
 		}
 	}

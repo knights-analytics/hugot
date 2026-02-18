@@ -494,9 +494,12 @@ func (s *Session) Destroy() error {
 	s.zeroShotClassificationPipelines = nil
 	s.textGenerationPipelines = nil
 	s.crossEncoderPipelines = nil
+	s.tabularPipelines = nil
+	s.objectDetectionPipelines = nil
 
 	if s.options != nil {
 		err = errors.Join(err, s.options.Destroy())
+		s.options.BackendOptions = nil
 		s.options = nil
 	}
 

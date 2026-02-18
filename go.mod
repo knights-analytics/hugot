@@ -2,7 +2,7 @@ module github.com/knights-analytics/hugot
 
 go 1.25.0
 
-replace github.com/knights-analytics/ortgenai => github.com/knights-analytics/ortgenai v0.0.4-0.20260215135708-fac6c4fd8063
+replace github.com/knights-analytics/ortgenai => github.com/knights-analytics/ortgenai v0.0.4-0.20260218101058-e1cb6ede03a0
 
 require (
 	github.com/daulet/tokenizers v1.25.0
