@@ -22,7 +22,6 @@ type Model struct {
 	Destroy               func() error
 	Pipelines             map[string]Pipeline
 	IDLabelMap            map[int]string
-	EosTokenIDs           map[int64]bool
 	SeparatorToken        string
 	Path                  string
 	OnnxFilename          string
@@ -31,12 +30,6 @@ type Model struct {
 	InputsMeta            []InputOutputInfo
 	OutputsMeta           []InputOutputInfo
 	MaxPositionEmbeddings int
-	NumHiddenLayers       int // Number of key value heads, used for text generation
-	NumKeyValueHeads      int
-	HeadDim               int
-	FixedCacheSize        int
-	VocabSize             int
-	PadToken              int64
 	IsGenerative          bool
 }
 
@@ -152,11 +145,6 @@ func loadModelConfig(model *Model) error {
 				model.MaxPositionEmbeddings = int(maxPositionEmbeddings)
 			}
 		}
-		if padTokenRaw, existsOk := configMap["pad_token_id"]; existsOk {
-			if padToken, castOk := padTokenRaw.(float64); castOk {
-				model.PadToken = int64(padToken)
-			}
-		}
 		if id2LabelRaw, existsOk := configMap["id2label"]; existsOk {
 			if id2Label, castOk := id2LabelRaw.(map[string]any); castOk {
 				id2labelCast := map[int]string{}
@@ -170,51 +158,6 @@ func loadModelConfig(model *Model) error {
 				model.IDLabelMap = id2labelCast
 			} else {
 				return fmt.Errorf("id2label is not a map")
-			}
-		}
-		if eosRaw, exists := configMap["eos_token_id"]; exists {
-			model.EosTokenIDs = map[int64]bool{}
-			switch v := eosRaw.(type) {
-			case []any:
-				for i, item := range v {
-					if num, ok := item.(float64); ok {
-						model.EosTokenIDs[int64(num)] = true
-					} else {
-						return fmt.Errorf("eos_token_id contains non-numeric value at index %d", i)
-					}
-				}
-			case float64:
-				model.EosTokenIDs[int64(v)] = true
-			default:
-				return errors.New("eos_token_id must be either a number or an array of numbers")
-			}
-		}
-		if numHiddenLayersRaw, exists := configMap["num_hidden_layers"]; exists {
-			if numHiddenLayersFloat, ok := numHiddenLayersRaw.(float64); ok {
-				model.NumHiddenLayers = int(numHiddenLayersFloat)
-			} else {
-				return errors.New("num_hidden_layers is not a number")
-			}
-		}
-		if numKeyValueHeads, exists := configMap["num_key_value_heads"]; exists {
-			if numKeyValueHeadsValue, ok := numKeyValueHeads.(float64); ok {
-				model.NumKeyValueHeads = int(numKeyValueHeadsValue)
-			} else {
-				return errors.New("num_key_value_heads is not a number")
-			}
-		}
-		if headDim, exists := configMap["head_dim"]; exists {
-			if headDimValue, ok := headDim.(float64); ok {
-				model.HeadDim = int(headDimValue)
-			} else {
-				return errors.New("num_key_value_heads is not a number")
-			}
-		}
-		if vocabSize, exists := configMap["vocab_size"]; exists {
-			if vocabSizeValue, ok := vocabSize.(float64); ok {
-				model.VocabSize = int(vocabSizeValue)
-			} else {
-				return errors.New("vocab_size is not a number")
 			}
 		}
 	}
