@@ -229,11 +229,6 @@ func loadInputOutputMetaGoMLX(model *onnx.Model) ([]InputOutputInfo, []InputOutp
 }
 
 func createInputTensorsGoMLX(batch *PipelineBatch, model *Model, padBatchDimension bool, padSequenceDimension bool) error {
-	leftPad := len(model.EosTokenIDs) > 0
-
-	// TODO: replace this once dynamic input shapes fixed
-	model.FixedCacheSize = 150
-
 	var err error
 	batchSize := batch.Size
 	if padBatchDimension {
@@ -243,7 +238,7 @@ func createInputTensorsGoMLX(batch *PipelineBatch, model *Model, padBatchDimensi
 		}
 	}
 	maxSeqLength := batch.MaxSequenceLength
-	if padSequenceDimension && !leftPad {
+	if padSequenceDimension {
 		maxSeqLength, err = shapeBucket(maxSeqLength, model.GoMLXModel.SequenceBuckets)
 		if err != nil {
 			return fmt.Errorf("sequence length larger than max bucket, please adjust WithGoMLXSequenceBuckets: %w", err)
@@ -257,98 +252,52 @@ func createInputTensorsGoMLX(batch *PipelineBatch, model *Model, padBatchDimensi
 
 	// 2) build each tensor
 	for mi, meta := range model.InputsMeta {
-		switch {
-		case strings.HasPrefix(meta.Name, "past_key"):
-			// Create key cache tensor
-			cacheTensor := createSingleCacheTensorGoMLX(
-				batchSize,
-				model.NumKeyValueHeads,
-				model.FixedCacheSize,
-				model.HeadDim,
-			)
-			inputTensors[mi] = cacheTensor
-
-		case strings.HasPrefix(meta.Name, "past_value"):
-			// Create value cache tensor
-			cacheTensor := createSingleCacheTensorGoMLX(
-				batchSize,
-				model.NumKeyValueHeads,
-				model.FixedCacheSize,
-				model.HeadDim,
-			)
-			inputTensors[mi] = cacheTensor
-
-		default:
-			// Handle regular input tensors
-			backing := make([]int64, total)
-			idx := 0
-			switch meta.Name {
-			case "input_ids":
-				for bi, inp := range batch.Input {
-					seqLen := len(inp.TokenIDs)
-					padLen := maxSeqLength - seqLen
-					maskRow := make([]bool, maxSeqLength)
-					for pos := 0; pos < maxSeqLength; pos++ {
-						if leftPad {
-							if pos < padLen {
-								backing[idx] = model.PadToken
-							} else {
-								backing[idx] = int64(inp.TokenIDs[pos-padLen])
-								maskRow[pos] = true
-							}
-						} else {
-							if pos < seqLen {
-								backing[idx] = int64(inp.TokenIDs[pos])
-								maskRow[pos] = true
-							}
-						}
-						idx++
+		backing := make([]int64, total)
+		idx := 0
+		switch meta.Name {
+		case "input_ids":
+			for bi, inp := range batch.Input {
+				seqLen := len(inp.TokenIDs)
+				maskRow := make([]bool, maxSeqLength)
+				for pos := 0; pos < maxSeqLength; pos++ {
+					if pos < seqLen {
+						backing[idx] = int64(inp.TokenIDs[pos])
+						maskRow[pos] = true
 					}
-					paddingMasks[bi] = maskRow
+					idx++
 				}
-			case "token_type_ids":
-				for _, inp := range batch.Input {
-					seqLen := len(inp.TokenIDs)
-					for pos := range maxSeqLength {
-						// always right-pad
-						if pos < seqLen {
-							backing[idx] = int64(inp.TypeIDs[pos])
-						}
-						idx++
-					}
-				}
-			case "attention_mask":
-				if model.IsGenerative {
-					for range batch.Input {
-						for range maxSeqLength {
-							backing[idx] = 1
-							idx++
-						}
-					}
-				} else {
-					// For non-generative models, take the input mask from the tokenizer output
-					for _, inp := range batch.Input {
-						for pos := range maxSeqLength {
-							if pos < len(inp.TokenIDs) {
-								backing[idx] = int64(inp.AttentionMask[pos])
-							}
-							idx++
-						}
-					}
-				}
-
-			case "position_ids":
-				for range batch.Input {
-					for pos := range maxSeqLength {
-						backing[idx] = int64(pos + 1)
-						idx++
-					}
-				}
-			default:
-				return fmt.Errorf("unknown input meta name %s", meta.Name)
+				paddingMasks[bi] = maskRow
 			}
-			inputTensors[mi] = tensors.FromFlatDataAndDimensions(backing, batchSize, maxSeqLength)
+		case "token_type_ids":
+			for _, inp := range batch.Input {
+				seqLen := len(inp.TokenIDs)
+				for pos := range maxSeqLength {
+					if pos < seqLen {
+						backing[idx] = int64(inp.TypeIDs[pos])
+					}
+					idx++
+				}
+			}
+		case "attention_mask":
+			for _, inp := range batch.Input {
+				for pos := range maxSeqLength {
+					if pos < len(inp.TokenIDs) {
+						backing[idx] = int64(inp.AttentionMask[pos])
+					}
+					idx++
+				}
+			}
+		case "position_ids":
+			for range batch.Input {
+				for pos := range maxSeqLength {
+					backing[idx] = int64(pos + 1)
+					idx++
+				}
+			}
+		default:
+			return fmt.Errorf("unknown input meta name %s", meta.Name)
 		}
+		inputTensors[mi] = tensors.FromFlatDataAndDimensions(backing, batchSize, maxSeqLength)
 	}
 
 	// 3) assign and prepare cleanup
@@ -365,12 +314,6 @@ func createInputTensorsGoMLX(batch *PipelineBatch, model *Model, padBatchDimensi
 		return err
 	}
 	return nil
-}
-
-// createSingleCacheTensorGoMLX creates a single cache tensor (either key or value).
-func createSingleCacheTensorGoMLX(batchSize, numKeyValueHeads, maxSeqLen, headDim int) *tensors.Tensor {
-	return tensors.FromScalarAndDimensions(
-		float32(0), batchSize, numKeyValueHeads, maxSeqLen, headDim)
 }
 
 func runGoMLXSessionOnBatch(batch *PipelineBatch, p *BasePipeline) error {

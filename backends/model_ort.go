@@ -366,7 +366,6 @@ func loadInputOutputMetaORTFile(onnxPath string) ([]InputOutputInfo, []InputOutp
 }
 
 func createInputTensorsORT(batch *PipelineBatch, model *Model) error {
-	padLeft := len(model.EosTokenIDs) > 0
 	batchSize := batch.Size
 	maxSequenceLength := batch.MaxSequenceLength
 	total := batchSize * maxSequenceLength
@@ -377,97 +376,60 @@ func createInputTensorsORT(batch *PipelineBatch, model *Model) error {
 
 	// 2) build each tensor
 	for mi, meta := range model.InputsMeta {
-		switch {
-		case strings.HasPrefix(meta.Name, "past_key"):
-			// Create key cache tensor
-			cacheTensor, err := createSingleCacheTensorORT(
-				batchSize,
-				model.NumKeyValueHeads,
-				model.FixedCacheSize,
-				model.HeadDim,
-			)
-			if err != nil {
-				return err
+		// Handle regular input tensors
+		backing := make([]int64, total)
+		idx := 0
+		switch meta.Name {
+		case "input_ids":
+			for bi, inp := range batch.Input {
+				seqLen := len(inp.TokenIDs)
+				maskRow := make([]bool, maxSequenceLength)
+				for pos := range maxSequenceLength {
+					if pos < seqLen {
+						backing[idx] = int64(inp.TokenIDs[pos])
+						maskRow[pos] = true
+					}
+					idx++
+				}
+				masks[bi] = maskRow
 			}
-			inputVals[mi] = cacheTensor
-
+		case "token_type_ids":
+			for _, inp := range batch.Input {
+				seqLen := len(inp.TokenIDs)
+				for pos := range maxSequenceLength {
+					if pos < seqLen {
+						backing[idx] = int64(inp.TypeIDs[pos])
+					}
+					idx++
+				}
+			}
+		case "attention_mask":
+			for _, inp := range batch.Input {
+				for pos := range maxSequenceLength {
+					if pos < len(inp.TokenIDs) {
+						backing[idx] = int64(inp.AttentionMask[pos])
+					}
+					idx++
+				}
+			}
+		case "position_ids":
+			for range batch.Input {
+				for pos := range maxSequenceLength {
+					// 1-indexed positions
+					backing[idx] = int64(pos + 1)
+					idx++
+				}
+			}
 		default:
-			// Handle regular input tensors
-			backing := make([]int64, total)
-			idx := 0
-			switch meta.Name {
-			case "input_ids":
-				for bi, inp := range batch.Input {
-					seqLen := len(inp.TokenIDs)
-					padLen := maxSequenceLength - seqLen
-					maskRow := make([]bool, maxSequenceLength)
-					for pos := range maxSequenceLength {
-						if padLeft {
-							if pos < padLen {
-								backing[idx] = model.PadToken
-							} else {
-								backing[idx] = int64(inp.TokenIDs[pos-padLen])
-								maskRow[pos] = true
-							}
-						} else {
-							if pos < seqLen {
-								backing[idx] = int64(inp.TokenIDs[pos])
-								maskRow[pos] = true
-							}
-						}
-						idx++
-					}
-					masks[bi] = maskRow
-				}
-			case "token_type_ids":
-				for _, inp := range batch.Input {
-					seqLen := len(inp.TokenIDs)
-					for pos := range maxSequenceLength {
-						// always right-pad
-						if pos < seqLen {
-							backing[idx] = int64(inp.TypeIDs[pos])
-						}
-						idx++
-					}
-				}
-			case "attention_mask":
-				if model.IsGenerative {
-					for range batch.Input {
-						for range maxSequenceLength {
-							backing[idx] = 1
-							idx++
-						}
-					}
-				} else {
-					// For non-generative models, take the input mask from the tokenizer output
-					for _, inp := range batch.Input {
-						for pos := range maxSequenceLength {
-							if pos < len(inp.TokenIDs) {
-								backing[idx] = int64(inp.AttentionMask[pos])
-							}
-							idx++
-						}
-					}
-				}
-			case "position_ids":
-				for range batch.Input {
-					for pos := range maxSequenceLength {
-						// 1-indexed positions
-						backing[idx] = int64(pos + 1)
-						idx++
-					}
-				}
-			default:
-				return fmt.Errorf("unrecognized input %q", meta.Name)
-			}
-
-			// create the ONNX Runtime tensor for regular inputs
-			t, err := ort.NewTensor(ort.NewShape(int64(batchSize), int64(maxSequenceLength)), backing)
-			if err != nil {
-				return err
-			}
-			inputVals[mi] = t
+			return fmt.Errorf("unrecognized input %q", meta.Name)
 		}
+
+		// create the ONNX Runtime tensor for regular inputs
+		t, err := ort.NewTensor(ort.NewShape(int64(batchSize), int64(maxSequenceLength)), backing)
+		if err != nil {
+			return err
+		}
+		inputVals[mi] = t
 	}
 
 	// 3) assign and prepare cleanup
@@ -485,16 +447,6 @@ func createInputTensorsORT(batch *PipelineBatch, model *Model) error {
 		return agg
 	}
 	return nil
-}
-
-// createSingleCacheTensorORT creates a single cache tensor.
-func createSingleCacheTensorORT(batchSize, numKeyValueHeads, maxSeqLen, headDim int) (ort.Value, error) {
-	tensorSize := batchSize * numKeyValueHeads * maxSeqLen * headDim
-	slice := make([]float32, tensorSize)
-	return ort.NewTensor(
-		ort.NewShape(int64(batchSize), int64(numKeyValueHeads), int64(maxSeqLen), int64(headDim)),
-		slice,
-	)
 }
 
 func runORTSessionOnBatch(batch *PipelineBatch, p *BasePipeline) error {
