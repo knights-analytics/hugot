@@ -208,6 +208,26 @@ func (s *Session) initialiseORT() (bool, error) {
 			return true, err
 		}
 	}
+	if o.OptimizedModelFilePath != nil {
+		if err := sessionOptions.SetOptimizedModelFilePath(*o.OptimizedModelFilePath); err != nil {
+			return true, err
+		}
+	}
+	if o.ProfilingEnabled != nil {
+		if *o.ProfilingEnabled {
+			prefix := ""
+			if o.ProfilingFilePrefix != nil {
+				prefix = *o.ProfilingFilePrefix
+			}
+			if err := sessionOptions.EnableProfiling(prefix); err != nil {
+				return true, err
+			}
+		} else {
+			if err := sessionOptions.DisableProfiling(); err != nil {
+				return true, err
+			}
+		}
+	}
 
 	return true, nil
 }

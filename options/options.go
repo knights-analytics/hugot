@@ -80,6 +80,9 @@ type OrtOptions struct {
 	TensorRTOptions         map[string]string
 	NvTensorRTRTXOptions    map[string]string
 	ExtraExecutionProviders []ExtraExecutionProvider
+	OptimizedModelFilePath  *string
+	ProfilingEnabled        *bool
+	ProfilingFilePrefix     *string
 }
 
 type ExtraExecutionProvider struct {
@@ -408,5 +411,28 @@ func WithExtraExecutionProvider(name string, options map[string]string) WithOpti
 			return nil
 		}
 		return fmt.Errorf("WithExtraExecutionProvider is only supported for ORT backend")
+	}
+}
+
+// WithOptimizedModelFilePath (ORT only) Sets the path to the optimized model file.
+func WithOptimizedModelFilePath(path string) WithOption {
+	return func(o *Options) error {
+		if o.Backend == "ORT" {
+			o.ORTOptions.OptimizedModelFilePath = &path
+			return nil
+		}
+		return fmt.Errorf("WithOptimizedModelFilePath is only supported for ORT backend")
+	}
+}
+
+// WithProfiling (ORT only) Enables or disables profiling.
+func WithProfiling(enabled bool, filePrefix string) WithOption {
+	return func(o *Options) error {
+		if o.Backend == "ORT" {
+			o.ORTOptions.ProfilingEnabled = &enabled
+			o.ORTOptions.ProfilingFilePrefix = &filePrefix
+			return nil
+		}
+		return fmt.Errorf("WithProfiling is only supported for ORT backend")
 	}
 }
