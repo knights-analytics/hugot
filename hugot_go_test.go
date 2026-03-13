@@ -154,7 +154,6 @@ func TestImageClassificationPipelineValidationGo(t *testing.T) {
 // Object detection
 
 func TestObjectDetectionPipelineGo(t *testing.T) {
-	t.Skip("Currently fails due to unsupported constant in XLA backend")
 	session, err := NewGoSession()
 	checkT(t, err)
 	defer func(session *Session) {
@@ -165,7 +164,6 @@ func TestObjectDetectionPipelineGo(t *testing.T) {
 }
 
 func TestObjectDetectionPipelineValidationGo(t *testing.T) {
-	t.Skip("Currently fails due to unsupported constant in XLA backend")
 	session, err := NewGoSession()
 	checkT(t, err)
 	defer func(session *Session) {

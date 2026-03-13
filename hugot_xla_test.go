@@ -259,7 +259,6 @@ func TestImageClassificationPipelineValidationXLA(t *testing.T) {
 // Object detection
 
 func TestObjectDetectionPipelineXLA(t *testing.T) {
-	t.Skip("Currently fails due to unsupported constant in XLA backend")
 	session, err := NewXLASession()
 	checkT(t, err)
 	defer func(session *Session) {
@@ -273,7 +272,6 @@ func TestObjectDetectionPipelineXLACuda(t *testing.T) {
 	if os.Getenv("CI") != "" {
 		t.SkipNow()
 	}
-	t.Skip("Currently fails due to unsupported constant in XLA backend")
 	session, err := NewXLASession(options.WithCuda(map[string]string{
 		"device_id": "0",
 	}))
@@ -286,7 +284,6 @@ func TestObjectDetectionPipelineXLACuda(t *testing.T) {
 }
 
 func TestObjectDetectionPipelineValidationXLA(t *testing.T) {
-	t.Skip("Currently fails due to unsupported constant in XLA backend")
 	session, err := NewXLASession()
 	checkT(t, err)
 	defer func(session *Session) {

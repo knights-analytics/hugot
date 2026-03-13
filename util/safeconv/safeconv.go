@@ -58,17 +58,6 @@ func IntOffsetsToUintPairs(input [][]int) [][2]uint {
 	return out
 }
 
-// Int64ToUint32 converts int64 to uint32 with clamping into [0, MaxUint32].
-func Int64ToUint32(v int64) uint32 {
-	if v < 0 {
-		return 0
-	}
-	if v > math.MaxUint32 {
-		return math.MaxUint32
-	}
-	return uint32(v)
-}
-
 // DurationToU64 converts a duration to an unsigned nanoseconds counter safely.
 // Negative durations are mapped to 0.
 func DurationToU64(d time.Duration) uint64 {

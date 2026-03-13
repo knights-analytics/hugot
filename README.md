@@ -44,7 +44,7 @@ Currently, we have implementations for the following transformer pipelines:
 - [crossEncoder](https://huggingface.co/cross-encoder)
 - [featureExtraction](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.FeatureExtractionPipeline)
 - [imageClassification](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.ImageClassificationPipeline)
-- [objectDetection](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.ImageClassificationPipeline) (currently ORT only)
+- [objectDetection](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.ImageClassificationPipeline)
 - [textClassification](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.TextClassificationPipeline)
 - [textGeneration](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.TextGenerationPipeline) (currently ORT only)
 - [tokenClassification](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.TokenClassificationPipeline)

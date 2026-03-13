@@ -131,6 +131,7 @@ func NewFeatureExtractionPipeline(config backends.PipelineConfig[*FeatureExtract
 }
 
 // INTERFACE IMPLEMENTATIONS.
+
 func (p *FeatureExtractionPipeline) IsGenerative() bool {
 	return false
 }
@@ -304,6 +305,7 @@ func (p *FeatureExtractionPipeline) RunPipeline(inputs []string) (*FeatureExtrac
 }
 
 // IMAGE MODE METHODS
+
 // PreprocessImages converts images to input tensors for vision models.
 func (p *FeatureExtractionPipeline) PreprocessImages(batch *backends.PipelineBatch, inputs []image.Image) error {
 	preprocessed, err := backends.PreprocessImages(p.imageFormat, inputs, p.preprocessSteps, p.normalizationSteps)

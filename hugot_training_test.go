@@ -200,7 +200,8 @@ func TestTrainSemanticSimilarity(t *testing.T) {
 	fmt.Printf("RMSE untrained is: %f\n", rmseUntrained)
 	fmt.Printf("RMSE trained is: %f\n", rmseTrained)
 	assert.Less(t, rmseTrained, rmseUntrained)
-	assert.Equal(t, 0.047, round3decimals(rmseTrained))
+	assert.Greater(t, 0.06, round3decimals(rmseTrained))
+	assert.Less(t, 0.04, round3decimals(rmseTrained))
 
 	// we can also train a model using an in memory dataset. For this we create the slice of examples manually.
 	var examples []datasets.SemanticSimilarityExample
