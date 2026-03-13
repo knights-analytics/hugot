@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
+## [0.6.5] - 2026-03-13
+
+###  Changed
+
+- Upgraded to GoMLX v0.27.0
+  - Includes performance improvements, new onnx ops and quantization types for Go and XLA backends
+  - See [here](https://github.com/gomlx/gomlx/releases/tag/v0.27.0) for details
+- Upgraded to ORT v1.24.3
+- Upgraded to ORT GenAI v0.12.1
+- Upgraded to Tokenizers v1.26.0
+- Added WithProfiling and WithOptimizedModelFilePath options
+
 ## [0.6.4] - 2026-03-02
 
 - bugfix: correct wrong input token creation in feature extraction for models with eos tokens.
