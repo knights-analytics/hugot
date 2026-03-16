@@ -16,11 +16,12 @@ host_uid=$(id -u "$USER")
 export host_uid
 
 # build with compose
-docker compose -f "$src_dir/compose-test.yaml" build hugot && \
-docker compose -f "$src_dir/compose-test.yaml" build hugot-test
-
-docker rmi ghcr.io/knights-analytics/hugot/models:latest || true
-docker builder prune --all || true
+docker buildx bake \
+--file "$src_dir/docker-bake.hcl" \
+"hugot" && \
+docker buildx bake \
+--file "$src_dir/docker-bake.hcl" \
+"hugot-test"
 
 echo "Running tests for commit hash: $commit_hash"
 docker compose -f "$src_dir/compose-test.yaml" up && \

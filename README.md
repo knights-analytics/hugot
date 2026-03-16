@@ -98,6 +98,8 @@ session, err := NewORTSession(
 
 Alternatively, you can also use the [docker image](https://github.com/knights-analytics/hugot/pkgs/container/hugot) which has all the above dependencies already baked in.
 
+- the latest versions of the onnxruntime and gopjrt libraries that are used in our testing can be found in the [bakefile](./docker-bake.hcl).
+
 The library can be used as follows:
 
 ```go

@@ -2,7 +2,7 @@
 
 set -e
 
-folder=/test/unit
+folder=/testTarget/unit
 
 cd /build && \
 mkdir -p $folder && \

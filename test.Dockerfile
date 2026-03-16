@@ -11,8 +11,8 @@ RUN cd /build && \
     chown -R testuser:testuser /build && \
     curl -LO https://github.com/gotestyourself/gotestsum/releases/download/v1.13.0/gotestsum_1.13.0_linux_amd64.tar.gz && \
     tar -xzf gotestsum_1.13.0_linux_amd64.tar.gz --directory /usr/local/bin && \
-    # entrypoint
-    cp /build/scripts/entrypoint.sh /entrypoint.sh && sed -i 's/\r//g' /entrypoint.sh && chmod +x /entrypoint.sh
+    cp /build/scripts/entrypoint.sh /entrypoint.sh && sed -i 's/\r//g' /entrypoint.sh && chmod +x /entrypoint.sh && \
+    cp /build/scripts/run-unit-tests-container.sh /run-unit-tests-container.sh && sed -i 's/\r//g' /run-unit-tests-container.sh && chmod +x /run-unit-tests-container.sh
 
 ENTRYPOINT ["/entrypoint.sh"]
 
