@@ -47,3 +47,12 @@ target "hugot-test" {
   ]
   output = ["type=docker"]
 }
+
+target "hugot-ghcr" {
+  inherits   = ["base"]
+  dockerfile = "Dockerfile"
+  tags = [
+    "ghcr.io/knights-analytics/hugot:latest"
+  ]
+  output = ["type=registry"]
+}
