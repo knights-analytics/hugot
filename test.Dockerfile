@@ -1,8 +1,8 @@
-ARG BUILD_PLATFORM=linux/amd64
+ARG BUILDPLATFORM
 
 FROM ghcr.io/knights-analytics/hugot/models:latest AS models
 
-FROM --platform=$BUILD_PLATFORM hugot:latest AS hugot-test
+FROM --platform=$BUILDPLATFORM hugot:latest AS hugot-test
 
 COPY . /build
 COPY --from=models /models /build/models
@@ -17,7 +17,7 @@ RUN cd /build && \
 ENTRYPOINT ["/entrypoint.sh"]
 
 #--- artifacts layer ---
-FROM --platform=$BUILD_PLATFORM scratch AS artifacts
+FROM --platform=$BUILDPLATFORM scratch AS artifacts
 
 COPY --from=hugot-test /usr/lib/libonnxruntime.so libonnxruntime-linux-x64.so
 COPY --from=hugot-test /usr/lib/libonnxruntime-genai.so libonnxruntime-genai-linux-x64.so

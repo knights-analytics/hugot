@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"strconv"
 	"strings"
 
 	"github.com/gomlx/gomlx/backends"
@@ -12,6 +11,7 @@ import (
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/onnx-gomlx/onnx"
+	"github.com/gomlx/onnx-gomlx/onnx/parser"
 
 	"github.com/knights-analytics/hugot/options"
 	"github.com/knights-analytics/hugot/util/fileutil"
@@ -26,7 +26,7 @@ var (
 
 type GoMLXModel struct {
 	Backend         backends.Backend
-	OnnxModel       *onnx.Model
+	OnnxModel       onnx.Model
 	Ctx             *context.Context // ctx with the model's weights.
 	Exec            *context.Exec    // exec is used to execute the model with a context.
 	Call            func(ctx *context.Context, inputs []*graph.Node) []*graph.Node
@@ -36,64 +36,16 @@ type GoMLXModel struct {
 	MaxCache        int   // MaxCache sets the maximum number of unique input shapes to cache.
 }
 
-func loadExternalData(path string, model *onnx.Model) error {
-	externalMap := map[string][]byte{}
-	// load external data from same dir as the base model ONNX file
-	for _, proto := range model.Proto.Graph.Initializer {
-		// proto.Datalocation is 1 if data is external, 0 otherwise
-		if proto.DataLocation == 1 {
-			externalPath := ""
-			offset := int64(0)
-			length := int64(-1)
-
-			for _, entry := range proto.ExternalData {
-				switch entry.Key {
-				case "location":
-					externalPath = entry.Value
-				case "offset":
-					parsedOffset, err := strconv.ParseInt(entry.Value, 10, 64)
-					if err != nil {
-						return fmt.Errorf("parsing offset failed with err %w", err)
-					}
-					offset = parsedOffset
-				case "length":
-					parsedLength, err := strconv.ParseInt(entry.Value, 10, 64)
-					if err != nil {
-						return fmt.Errorf("parsing length failed with err %w", err)
-					}
-					length = parsedLength
-				}
-			}
-
-			weightsPath := fileutil.PathJoinSafe(path, externalPath)
-
-			if _, ok := externalMap[externalPath]; !ok {
-				bytes, err := fileutil.ReadFileBytes(weightsPath)
-				if err != nil {
-					return err
-				}
-				externalMap[externalPath] = bytes
-			}
-
-			fullBytes := externalMap[externalPath]
-			end := int64(len(fullBytes))
-			if length >= 0 && offset+length <= int64(len(fullBytes)) {
-				end = offset + length
-			}
-			subsetBytes := fullBytes[offset:end]
-			proto.RawData = subsetBytes
-		}
-	}
-	return nil
-}
-
-func createGoMLXModelBackend(model *Model, loadAsBytes bool, options *options.Options) error {
-	var modelParsed *onnx.Model
+func createGoMLXModelBackend(model *Model, options *options.Options) error {
+	var modelParsed onnx.Model
 	var err error
-	if loadAsBytes {
-		modelParsed, err = onnx.Parse(model.OnnxBytes)
+	if model.OnnxReader != nil {
+		modelParsed, err = parser.ParseReader(model.OnnxReader)
 	} else {
-		modelParsed, err = onnx.ReadFile(fileutil.PathJoinSafe(model.Path, model.OnnxPath))
+		modelParsed, err = parser.ParseFile(fileutil.PathJoinSafe(model.Path, model.OnnxPath))
+		if err != nil {
+			modelParsed = modelParsed.WithBaseDir(model.Path)
+		}
 	}
 	if err != nil {
 		return err
@@ -105,10 +57,6 @@ func createGoMLXModelBackend(model *Model, loadAsBytes bool, options *options.Op
 		outputNames = append(outputNames, v.Name)
 	}
 
-	if err = loadExternalData(model.Path, modelParsed); err != nil {
-		return err
-	}
-
 	ctx := context.New()
 	// Mark it to reuse variables: it will be an error to create a new variable – for safety.
 	ctx = ctx.Reuse()
@@ -116,7 +64,7 @@ func createGoMLXModelBackend(model *Model, loadAsBytes bool, options *options.Op
 	// Read variables from ONNX model.
 	err = modelParsed.VariablesToContext(ctx)
 	if err != nil {
-		return err
+		return errors.Join(err, modelParsed.Close())
 	}
 
 	config := "go"
@@ -130,7 +78,7 @@ func createGoMLXModelBackend(model *Model, loadAsBytes bool, options *options.Op
 
 	backend, backendErr := backends.NewWithConfig(config)
 	if backendErr != nil {
-		return backendErr
+		return errors.Join(backendErr, modelParsed.Close())
 	}
 
 	// Create model executor.
@@ -144,7 +92,7 @@ func createGoMLXModelBackend(model *Model, loadAsBytes bool, options *options.Op
 
 	exec, contextErr := context.NewExec(backend, ctx, callFunc)
 	if contextErr != nil {
-		return contextErr
+		return errors.Join(contextErr, modelParsed.Close())
 	}
 
 	maxCache, batchBuckets, sequenceBuckets := getCacheAndBucketSizes(options, model, config)
@@ -200,11 +148,12 @@ func getCacheAndBucketSizes(options *options.Options, model *Model, backend stri
 	return maxCache, batchBuckets, sequenceBuckets
 }
 
-func loadInputOutputMetaGoMLX(model *onnx.Model) ([]InputOutputInfo, []InputOutputInfo) {
+func loadInputOutputMetaGoMLX(model onnx.Model) ([]InputOutputInfo, []InputOutputInfo) {
 	var inputs, outputs []InputOutputInfo
 
-	for i, name := range model.InputsNames {
-		shape := model.InputsShapes[i]
+	inputNames, inputShapes := model.Inputs()
+	for i, name := range inputNames {
+		shape := inputShapes[i]
 		dimensions := make([]int64, len(shape.Dimensions))
 		for j, y := range shape.Dimensions {
 			dimensions[j] = int64(y)
@@ -214,8 +163,10 @@ func loadInputOutputMetaGoMLX(model *onnx.Model) ([]InputOutputInfo, []InputOutp
 			Dimensions: dimensions,
 		})
 	}
-	for i, name := range model.OutputsNames {
-		shape := model.OutputsShapes[i]
+
+	outputNames, outputShapes := model.Outputs()
+	for i, name := range outputNames {
+		shape := outputShapes[i]
 		dimensions := make([]int64, len(shape.Dimensions))
 		for j, y := range shape.Dimensions {
 			dimensions[j] = int64(y)
@@ -428,7 +379,7 @@ func createImageTensorsGoXLA(batch *PipelineBatch, model *Model, preprocessed []
 						mh = int(d)
 						continue
 					}
-					if d > 1 && mh != 0 && mw == 0 {
+					if d > 1 {
 						mw = int(d)
 						break
 					}

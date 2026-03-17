@@ -277,23 +277,20 @@ func CreateModelBackend(model *Model, s *options.Options) error {
 		return err
 	}
 
-	loadAsBytes := strings.HasPrefix(model.Path, "s3:")
-	if loadAsBytes {
-		onnxBytes, readErr := fileutil.ReadFileBytes(model.Path + "/" + model.OnnxPath)
+	if strings.HasPrefix(model.Path, "s3:") {
+		reader, readErr := fileutil.OpenFile(fileutil.PathJoinSafe(model.Path, model.OnnxPath))
 		if readErr != nil {
 			return readErr
 		}
-		model.OnnxBytes = onnxBytes
+		model.OnnxReader = reader
 	}
 
 	switch s.Backend {
 	case "ORT":
-		err = createORTModelBackend(model, loadAsBytes, s)
+		err = createORTModelBackend(model, s)
 	case "GO", "XLA":
-		err = createGoMLXModelBackend(model, loadAsBytes, s)
+		err = createGoMLXModelBackend(model, s)
 	}
 
-	// ONNX bytes no longer needed after creating the session
-	model.OnnxBytes = nil
 	return err
 }

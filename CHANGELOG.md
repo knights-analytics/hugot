@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ###  Changed
 
-- Upgraded to GoMLX v0.27.0
+- Upgraded to GoMLX v0.27.1
   - Includes performance improvements, new onnx ops and quantization types for Go and XLA backends
   - See [here](https://github.com/gomlx/gomlx/releases/tag/v0.27.0) for details
 - Upgraded to ORT v1.24.3

@@ -9,7 +9,7 @@ ARG BUILD_PLATFORM=linux/amd64
 #--- runtime layer with all hugot dependencies for cpu 
 #--- the image generated does not contain the hugot code, only the dependencies needed by hugot and the compiled cli binary
 
-FROM --platform=$BUILD_PLATFORM public.ecr.aws/amazonlinux/amazonlinux:2023 AS hugot-runtime
+FROM --platform=$BUILDPLATFORM public.ecr.aws/amazonlinux/amazonlinux:2023 AS hugot-runtime
 ARG GO_VERSION
 ARG ONNXRUNTIME_VERSION
 ARG ONNXRUNTIME_GENAI_VERSION

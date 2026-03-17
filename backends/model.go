@@ -26,7 +26,7 @@ type Model struct {
 	Path                  string
 	OnnxFilename          string
 	OnnxPath              string
-	OnnxBytes             []byte
+	OnnxReader            io.ReadCloser
 	InputsMeta            []InputOutputInfo
 	OutputsMeta           []InputOutputInfo
 	MaxPositionEmbeddings int

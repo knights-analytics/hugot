@@ -6,8 +6,8 @@ require (
 	github.com/daulet/tokenizers v1.26.0
 	github.com/gomlx/exceptions v0.0.3
 	github.com/gomlx/go-huggingface v0.3.2
-	github.com/gomlx/gomlx v0.27.0
-	github.com/gomlx/onnx-gomlx v0.3.5
+	github.com/gomlx/gomlx v0.27.1
+	github.com/gomlx/onnx-gomlx v0.4.1
 	github.com/knights-analytics/ortgenai v0.1.0
 	github.com/stretchr/testify v1.11.1
 	github.com/sugarme/tokenizer v0.3.0

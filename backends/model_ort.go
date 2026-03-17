@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"runtime"
 	"strconv"
@@ -85,6 +86,11 @@ func mapORTOptions(options *options.Options) ([]string, map[string]map[string]st
 }
 
 func createORTGenerativeSession(model *Model, options *options.Options) error {
+
+	if strings.HasPrefix(model.Path, "s3:") {
+		return errors.New("ORT Gen AI does not support S3 paths. Please download the model to a local directory and try again")
+	}
+
 	if !ortgenai.IsInitialized() {
 		if options == nil || options.ORTOptions == nil {
 			return fmt.Errorf("ORT options must be provided to initialize ortgenai")
@@ -278,14 +284,20 @@ func runGenerativeORTSessionOnBatch(ctx context.Context, batch *PipelineBatch, p
 	return tokenStream, errorStream, nil
 }
 
-func createORTModelBackend(model *Model, loadAsBytes bool, options *options.Options) error {
+func createORTModelBackend(model *Model, options *options.Options) error {
 	sessionOptions := options.BackendOptions.(*ort.SessionOptions)
 
 	var inputs, outputs []InputOutputInfo
 	var cwd string
 	var err error
-	if loadAsBytes {
-		inputs, outputs, err = loadInputOutputMetaORTBytes(model.OnnxBytes)
+	var onnxBytes []byte
+
+	if model.OnnxReader != nil {
+		onnxBytes, err = io.ReadAll(model.OnnxReader)
+		if err != nil {
+			return err
+		}
+		inputs, outputs, err = loadInputOutputMetaORTReader(onnxBytes)
 	} else {
 		// TODO: currently models with external data can only load from regular filesystems, and require dir change
 		cwd, err = os.Getwd()
@@ -313,9 +325,9 @@ func createORTModelBackend(model *Model, loadAsBytes bool, options *options.Opti
 	}
 
 	var session *ort.DynamicAdvancedSession
-	if loadAsBytes {
+	if len(onnxBytes) > 0 {
 		session, err = ort.NewDynamicAdvancedSessionWithONNXData(
-			model.OnnxBytes,
+			onnxBytes,
 			inputNames,
 			outputNames,
 			sessionOptions,
@@ -349,7 +361,7 @@ func createORTModelBackend(model *Model, loadAsBytes bool, options *options.Opti
 	return err
 }
 
-func loadInputOutputMetaORTBytes(onnxBytes []byte) ([]InputOutputInfo, []InputOutputInfo, error) {
+func loadInputOutputMetaORTReader(onnxBytes []byte) ([]InputOutputInfo, []InputOutputInfo, error) {
 	inputs, outputs, err := ort.GetInputOutputInfoWithONNXData(onnxBytes)
 	if err != nil {
 		return nil, nil, err
