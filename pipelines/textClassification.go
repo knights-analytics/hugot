@@ -89,7 +89,7 @@ func NewTextClassificationPipeline(config backends.PipelineConfig[*TextClassific
 		pipeline.ProblemType = "singleLabel"
 	}
 	if pipeline.AggregationFunctionName == "" {
-		if pipeline.PipelineName == "singleLabel" {
+		if pipeline.ProblemType == "singleLabel" {
 			pipeline.AggregationFunctionName = "SOFTMAX"
 		} else {
 			pipeline.AggregationFunctionName = "SIGMOID"
