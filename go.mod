@@ -5,8 +5,8 @@ go 1.25.0
 require (
 	github.com/daulet/tokenizers v1.26.0
 	github.com/gomlx/exceptions v0.0.3
-	github.com/gomlx/go-huggingface v0.3.2
-	github.com/gomlx/gomlx v0.27.1
+	github.com/gomlx/go-huggingface v0.3.4
+	github.com/gomlx/gomlx v0.27.2
 	github.com/gomlx/onnx-gomlx v0.4.1
 	github.com/knights-analytics/ortgenai v0.1.0
 	github.com/stretchr/testify v1.11.1
@@ -24,7 +24,7 @@ require (
 	github.com/go-errors/errors v1.5.1 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/gofrs/flock v0.13.0 // indirect
-	github.com/gomlx/go-xla v0.2.0 // indirect
+	github.com/gomlx/go-xla v0.2.2 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/mitchellh/colorstring v0.0.0-20190213212951-d06e56a500db // indirect
 	github.com/patrickmn/go-cache v2.1.0+incompatible // indirect
