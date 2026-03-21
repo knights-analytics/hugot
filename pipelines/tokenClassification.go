@@ -27,7 +27,7 @@ type Entity struct {
 	Entity    string
 	Word      string
 	Scores    []float32
-	TokenID   []uint32
+	TokenIDs  []uint32
 	Index     int
 	Start     uint
 	End       uint
@@ -130,7 +130,10 @@ func NewTokenClassificationPipeline(config backends.PipelineConfig[*TokenClassif
 		pipeline.IgnoreLabels = []string{"O"}
 	}
 	// Additional options needed for postprocessing
-	backends.AllInputTokens(pipeline.BasePipeline)
+	err = backends.AllInputTokens(pipeline.BasePipeline)
+	if err != nil {
+		return nil, err
+	}
 	err = pipeline.Validate()
 	if err != nil {
 		return nil, err
@@ -246,31 +249,8 @@ func (p *TokenClassificationPipeline) PreprocessWords(batch *backends.PipelineBa
 	atomic.AddUint64(&p.Model.Tokenizer.TokenizerTimings.NumCalls, 1)
 	atomic.AddUint64(&p.Model.Tokenizer.TokenizerTimings.TotalNS, safeconv.DurationToU64(time.Since(start)))
 
-	// Map token offsets to word indices
 	for i := range batch.Input {
-		input := batch.Input[i]
-		boundaries := wordBoundaries[i]
-		wordIDs := make([]int, len(input.Offsets))
-		for t := range input.Offsets {
-			if input.SpecialTokensMask[t] > 0 {
-				wordIDs[t] = -1
-				continue
-			}
-			tokStart := input.Offsets[t][0]
-			tokEnd := input.Offsets[t][1]
-			id := -1
-			for w := range boundaries {
-				b := boundaries[w]
-				// assign if token lies within the word span
-				if tokStart >= b[0] && tokEnd <= b[1] {
-					id = w
-					break
-				}
-			}
-			wordIDs[t] = id
-		}
-		batch.Input[i].WordIDs = wordIDs
-		// also set raw to joined string for offsets consistency
+		// set raw to joined string for offsets consistency
 		batch.Input[i].Raw = joined[i]
 	}
 	return backends.CreateInputTensors(batch, p.Model, p.Runtime)
@@ -351,7 +331,7 @@ func (p *TokenClassificationPipeline) GatherPreEntities(input backends.Tokenized
 		// in that case set the subword as in the python code
 		preEntities = append(preEntities, Entity{
 			Word:      word,
-			TokenID:   []uint32{tokenID},
+			TokenIDs:  []uint32{tokenID},
 			Scores:    tokenScores,
 			Start:     startInd,
 			End:       endInd,
@@ -365,10 +345,10 @@ func (p *TokenClassificationPipeline) GatherPreEntities(input backends.Tokenized
 func (p *TokenClassificationPipeline) aggregateWord(entities []Entity) (Entity, error) {
 	tokens := make([]uint32, len(entities))
 	for i, e := range entities {
-		tokens[i] = e.TokenID[0]
+		tokens[i] = e.TokenIDs[0]
 	}
 	newEntity := Entity{}
-	word, err := backends.Decode(tokens, p.Model.Tokenizer, true)
+	word, err := backends.Decode(tokens, p.Model.Tokenizer)
 	if err != nil {
 		return newEntity, err
 	}
@@ -430,12 +410,12 @@ func (p *TokenClassificationPipeline) aggregateWord(entities []Entity) (Entity, 
 		return Entity{}, fmt.Errorf("aggregation strategy %s not recognized", p.AggregationStrategy)
 	}
 	return Entity{
-		Entity:  label,
-		Score:   score,
-		Word:    word,
-		TokenID: tokens,
-		Start:   entities[0].Start,
-		End:     entities[len(entities)-1].End,
+		Entity:   label,
+		Score:    score,
+		Word:     word,
+		TokenIDs: tokens,
+		Start:    entities[0].Start,
+		End:      entities[len(entities)-1].End,
 	}, nil
 }
 
@@ -494,13 +474,13 @@ func (p *TokenClassificationPipeline) Aggregate(input backends.TokenizedInput, p
 				return nil, fmt.Errorf("could not determine entity type for input %s, predicted entity index %d", input.Raw, entityIdx)
 			}
 			entities[i] = Entity{
-				Entity:  label,
-				Score:   score,
-				Index:   preEntity.Index,
-				Word:    preEntity.Word,
-				TokenID: preEntity.TokenID,
-				Start:   preEntity.Start,
-				End:     preEntity.End,
+				Entity:   label,
+				Score:    score,
+				Index:    preEntity.Index,
+				Word:     preEntity.Word,
+				TokenIDs: preEntity.TokenIDs,
+				Start:    preEntity.Start,
+				End:      preEntity.End,
 			}
 		}
 	} else {
@@ -541,15 +521,15 @@ func (p *TokenClassificationPipeline) groupSubEntities(entities []Entity) (Entit
 		entityType = strings.Join(splits[1:], "-")
 	}
 	scores := make([]float32, len(entities))
-	tokens := make([]uint32, len(entities))
+	var tokens []uint32
 	for i, s := range entities {
 		scores[i] = s.Score
-		tokens = slices.Concat(tokens, s.TokenID)
+		tokens = append(tokens, s.TokenIDs...)
 	}
 	score := vectorutil.Mean(scores)
 	// note: here we directly appeal to the tokenizer decoder with the tokenIds
 	// in the python code they pass the words to a token_to_string_method
-	word, err := backends.Decode(tokens, p.Model.Tokenizer, true)
+	word, err := backends.Decode(tokens, p.Model.Tokenizer)
 	if err != nil {
 		return Entity{}, err
 	}

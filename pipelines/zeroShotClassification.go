@@ -138,6 +138,15 @@ func (p *ZeroShotClassificationPipeline) Preprocess(batch *backends.PipelineBatc
 	return err
 }
 
+func (p *ZeroShotClassificationPipeline) PreprocessPairs(batch *backends.PipelineBatch, inputs [][2]string) error {
+	start := time.Now()
+	backends.TokenizeInputPairs(batch, p.Model.Tokenizer, inputs, p.Model.SeparatorToken)
+	atomic.AddUint64(&p.Model.Tokenizer.TokenizerTimings.NumCalls, 1)
+	atomic.AddUint64(&p.Model.Tokenizer.TokenizerTimings.TotalNS, safeconv.DurationToU64(time.Since(start)))
+	err := backends.CreateInputTensors(batch, p.Model, p.Runtime)
+	return err
+}
+
 func (p *ZeroShotClassificationPipeline) Forward(batch *backends.PipelineBatch) error {
 	start := time.Now()
 	err := backends.RunSessionOnBatch(batch, p.BasePipeline)
@@ -265,26 +274,15 @@ func (p *ZeroShotClassificationPipeline) RunPipeline(inputs []string) (*ZeroShot
 		var sequenceTensors [][]float32
 		for _, pair := range sequence {
 			batch := backends.NewBatch(len(inputs))
-			// have to do this because python inserts a separator token in between the two clauses when tokenizing
-			// separator token isn't universal and depends on its value in special_tokens_map.json of model
-			// still isn't perfect because some models (protectai/MoritzLaurer-roberta-base-zeroshot-v2.0-c-onnx for example)
-			// insert two separator tokens while others (protectai/deberta-v3-base-zeroshot-v1-onnx and others) only insert one
-			// need to find a way to determine how many to insert or find a better way to tokenize inputs
-			// The difference in outputs for one separator vs two is very small (differences in the thousandths place), but they
-			// definitely are different
-			concatenatedString := pair[0] + p.Model.SeparatorToken + pair[1]
-			runErrors = append(runErrors, p.Preprocess(batch, []string{concatenatedString}))
-			if e := errors.Join(runErrors...); e != nil {
-				return nil, errors.Join(e, batch.Destroy())
+			if err := p.PreprocessPairs(batch, [][2]string{{pair[0], pair[1]}}); err != nil {
+				return nil, errors.Join(err, batch.Destroy())
 			}
-			runErrors = append(runErrors, p.Forward(batch))
-			if e := errors.Join(runErrors...); e != nil {
-				return nil, errors.Join(e, batch.Destroy())
+			if err := p.Forward(batch); err != nil {
+				return nil, errors.Join(err, batch.Destroy())
 			}
 			sequenceTensors = append(sequenceTensors, batch.OutputValues[0].([][]float32)[0])
-			runErrors = append(runErrors, batch.Destroy())
-			if e := errors.Join(runErrors...); e != nil {
-				return nil, e
+			if err := batch.Destroy(); err != nil {
+				return nil, err
 			}
 		}
 		outputTensors = append(outputTensors, sequenceTensors)

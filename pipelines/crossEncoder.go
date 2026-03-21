@@ -157,46 +157,18 @@ func (p *CrossEncoderPipeline) Validate() error {
 	return errors.Join(validationErrors...)
 }
 
-func patchBertSequenceTokenTypeIDs(batch *backends.PipelineBatch, sepToken string) {
-	// Fix token_type_ids for BERT-style models when we manually concatenated the pair as a single sequence.
-	// Pattern expected: [CLS] query [SEP] doc [SEP]
-	// HF sets token_type_ids=0 up to and including first [SEP], then 1 for remainder (including final [SEP]).
-	for index := range batch.Input {
-		input := &batch.Input[index]
-		// Only adjust if type ids exist and are all zero
-		allZero := true
-		for _, t := range input.TypeIDs {
-			if t != 0 {
-				allZero = false
-				break
-			}
-		}
-		if !allZero || len(input.TypeIDs) == 0 {
-			continue
-		}
-		// Find first [SEP] token index (skip position 0 which should be [CLS])
-		firstSep := -1
-		for iTok := 1; iTok < len(input.Tokens); iTok++ {
-			if input.Tokens[iTok] == sepToken {
-				firstSep = iTok
-				break
-			}
-		}
-		if firstSep == -1 || firstSep == len(input.Tokens)-1 { // nothing to split
-			continue
-		}
-		for iTok := firstSep + 1; iTok < len(input.TypeIDs); iTok++ {
-			input.TypeIDs[iTok] = 1
-		}
-	}
-}
-
 func (p *CrossEncoderPipeline) Preprocess(batch *backends.PipelineBatch, inputs []string) error {
 	start := time.Now()
 	backends.TokenizeInputs(batch, p.Model.Tokenizer, inputs)
-	if p.Model != nil && p.Model.Tokenizer != nil && p.Model.SeparatorToken == "[SEP]" {
-		patchBertSequenceTokenTypeIDs(batch, p.Model.SeparatorToken)
-	}
+	atomic.AddUint64(&p.Model.Tokenizer.TokenizerTimings.NumCalls, 1)
+	atomic.AddUint64(&p.Model.Tokenizer.TokenizerTimings.TotalNS, safeconv.DurationToU64(time.Since(start)))
+	err := backends.CreateInputTensors(batch, p.Model, p.Runtime)
+	return err
+}
+
+func (p *CrossEncoderPipeline) PreprocessPairs(batch *backends.PipelineBatch, inputs [][2]string) error {
+	start := time.Now()
+	backends.TokenizeInputPairs(batch, p.Model.Tokenizer, inputs, p.Model.SeparatorToken)
 	atomic.AddUint64(&p.Model.Tokenizer.TokenizerTimings.NumCalls, 1)
 	atomic.AddUint64(&p.Model.Tokenizer.TokenizerTimings.TotalNS, safeconv.DurationToU64(time.Since(start)))
 	err := backends.CreateInputTensors(batch, p.Model, p.Runtime)
@@ -291,22 +263,15 @@ func (p *CrossEncoderPipeline) RunPipeline(query string, documents []string) (*C
 
 func (p *CrossEncoderPipeline) runBatch(query string, documents []string, startIndex int) (*CrossEncoderOutput, error) {
 	var runErrors []error
-	inputs := make([]string, len(documents))
-	sep := p.Model.SeparatorToken
+	inputs := make([][2]string, len(documents))
 	for i, doc := range documents {
-		if sep == "</s>" {
-			// RoBERTa style: query </s> </s> document
-			inputs[i] = fmt.Sprintf("%s%s%s%s", query, sep, sep, doc)
-		} else {
-			// BERT style: query [SEP] document [SEP]
-			inputs[i] = fmt.Sprintf("%s%s%s", query, sep, doc)
-		}
+		inputs[i] = [2]string{query, doc}
 	}
 	batch := backends.NewBatch(len(inputs))
 	defer func(*backends.PipelineBatch) {
 		runErrors = append(runErrors, batch.Destroy())
 	}(batch)
-	runErrors = append(runErrors, p.Preprocess(batch, inputs))
+	runErrors = append(runErrors, p.PreprocessPairs(batch, inputs))
 	if e := errors.Join(runErrors...); e != nil {
 		return nil, e
 	}

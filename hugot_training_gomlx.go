@@ -9,7 +9,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/gomlx/exceptions"
 	"github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
 	"github.com/gomlx/gomlx/pkg/ml/context"
@@ -206,20 +205,16 @@ func TrainGoMLX(s *TrainingSession) error {
 
 		// we rely on try catch because an error is returned if there is an initialization error but
 		// a panic will be thrown if e.g. dataset reset fails.
-		err := exceptions.TryCatch[error](func() {
-			if _, err := loop.RunEpochs(s.config.TrainDataset, s.maxEpochs); err != nil {
-				if errors.Is(err, stoppingError{}) {
-					if s.config.Verbose {
-						fmt.Printf("Training stopped after epoch %d\n", currentEpoch)
-					}
-				} else {
-					panic(err)
+		if _, err := loop.RunEpochs(s.config.TrainDataset, s.maxEpochs); err != nil {
+			if errors.Is(err, stoppingError{}) {
+				if s.config.Verbose {
+					fmt.Printf("Training stopped after epoch %d\n", currentEpoch)
 				}
+			} else {
+				return err
 			}
-		})
-		if err != nil {
-			return err
 		}
+
 		if s.config.Verbose {
 			fmt.Println("Training complete")
 		}

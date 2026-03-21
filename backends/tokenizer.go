@@ -47,18 +47,64 @@ func TokenizeInputs(batch *PipelineBatch, tk *Tokenizer, inputs []string) {
 	}
 }
 
-func AllInputTokens(pipeline *BasePipeline) {
-	if pipeline.Model.Tokenizer.Runtime == "RUST" {
-		allInputTokensRust(pipeline)
+func TokenizeInputPairs(batch *PipelineBatch, tk *Tokenizer, inputs [][2]string, sepToken string) {
+	switch tk.Runtime {
+	case "RUST":
+		tokenizeInputPairsRust(batch, tk, inputs, sepToken)
+	case "GO":
+		tokenizeInputPairsGo(batch, tk, inputs, sepToken)
 	}
 }
 
-func Decode(tokens []uint32, tokenizer *Tokenizer, skipSpecialTokens bool) (string, error) {
+func patchBertSequenceTokenTypeIDs(batch *PipelineBatch, sepToken string) {
+	// Fix token_type_ids for BERT-style models when we manually concatenated the pair as a single sequence.
+	// Pattern expected: [CLS] query [SEP] doc [SEP]
+	// HF sets token_type_ids=0 up to and including first [SEP], then 1 for remainder (including final [SEP]).
+	for index := range batch.Input {
+		input := &batch.Input[index]
+		// Only adjust if type ids exist and are all zero
+		allZero := true
+		for _, t := range input.TypeIDs {
+			if t != 0 {
+				allZero = false
+				break
+			}
+		}
+		if !allZero || len(input.TypeIDs) == 0 {
+			continue
+		}
+		// Find first [SEP] token index (skip position 0 which should be [CLS])
+		firstSep := -1
+		for iTok := 1; iTok < len(input.Tokens); iTok++ {
+			if input.Tokens[iTok] == sepToken {
+				firstSep = iTok
+				break
+			}
+		}
+		if firstSep == -1 || firstSep == len(input.Tokens)-1 { // nothing to split
+			continue
+		}
+		for iTok := firstSep + 1; iTok < len(input.TypeIDs); iTok++ {
+			input.TypeIDs[iTok] = 1
+		}
+	}
+}
+
+func AllInputTokens(pipeline *BasePipeline) error {
+	if pipeline.Model.Tokenizer.Runtime == "RUST" {
+		return allInputTokensRust(pipeline)
+	} else if pipeline.Model.Tokenizer.Runtime == "GO" {
+		return allInputTokensGo(pipeline)
+	}
+	return fmt.Errorf("runtime %s not recognized", pipeline.Model.Tokenizer.Runtime)
+}
+
+func Decode(tokens []uint32, tokenizer *Tokenizer) (string, error) {
 	switch tokenizer.Runtime {
 	case "RUST":
-		return decodeRust(tokens, tokenizer, skipSpecialTokens), nil
+		return decodeRust(tokens, tokenizer, true), nil
 	case "GO":
-		return decodeGo(tokens, tokenizer, skipSpecialTokens), nil
+		return decodeGo(tokens, tokenizer), nil
 	}
 	return "", fmt.Errorf("runtime %s not recognized", tokenizer.Runtime)
 }

@@ -136,7 +136,6 @@ type TokenizedInput struct {
 	AttentionMask     []uint32
 	SpecialTokensMask []uint32
 	Offsets           [][2]uint
-	WordIDs           []int
 	MaxAttentionIndex int
 }
 

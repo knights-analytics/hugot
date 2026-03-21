@@ -22,7 +22,7 @@ func loadRustTokenizer(tokenizerBytes []byte, model *Model) error {
 	}
 
 	// tokenizer init
-	rustOptions, optErr := getRustTokenizerOptions(model.InputsMeta)
+	rustOptions, optErr := getRustTokenizerOptions(model)
 	if optErr != nil {
 		return errors.Join(optErr, tk.Close())
 	}
@@ -32,9 +32,9 @@ func loadRustTokenizer(tokenizerBytes []byte, model *Model) error {
 	return nil
 }
 
-func getRustTokenizerOptions(inputs []InputOutputInfo) ([]tokenizers.EncodeOption, error) {
+func getRustTokenizerOptions(model *Model) ([]tokenizers.EncodeOption, error) {
 	var encodeOptions []tokenizers.EncodeOption
-	for _, input := range inputs {
+	for _, input := range model.InputsMeta {
 		switch input.Name {
 		case "input_ids":
 			encodeOptions = append(encodeOptions, tokenizers.WithReturnTokens())
@@ -84,7 +84,7 @@ func tokenizeInputsRust(batch *PipelineBatch, tk *Tokenizer, inputs []string) {
 			}
 		}
 
-		outputs[i] = TokenizedInput{
+		ti := TokenizedInput{
 			Raw:               input,
 			Tokens:            output.Tokens,
 			TokenIDs:          output.IDs,
@@ -94,12 +94,72 @@ func tokenizeInputsRust(batch *PipelineBatch, tk *Tokenizer, inputs []string) {
 			SpecialTokensMask: output.SpecialTokensMask,
 			Offsets:           convertRustOffsets(output.Offsets), // we need the offsets here for postprocessing later
 		}
+		outputs[i] = ti
 		if maxAttentionIndex > maxSequence {
 			maxSequence = maxAttentionIndex
 		}
 	}
 	batch.Input = outputs
 	batch.MaxSequenceLength = maxSequence + 1
+}
+
+func tokenizeInputPairsRust(batch *PipelineBatch, tk *Tokenizer, inputs [][2]string, sepToken string) {
+	outputs := make([]TokenizedInput, len(inputs))
+	maxSequence := 0
+	rustTK := tk.RustTokenizer
+	for i, inputPair := range inputs {
+		fullInput := inputPair[0] + sepToken + inputPair[1]
+		if sepToken == "</s>" {
+			fullInput = inputPair[0] + sepToken + sepToken + inputPair[1]
+		}
+		output := rustTK.Tokenizer.EncodeWithOptions(fullInput,
+			true,
+			rustTK.Options...,
+		)
+
+		if tk.MaxAllowedTokens > 0 && len(output.Tokens) > tk.MaxAllowedTokens {
+			output.Tokens = output.Tokens[:tk.MaxAllowedTokens]
+			output.IDs = output.IDs[:min(len(output.IDs), tk.MaxAllowedTokens)]
+			output.TypeIDs = output.TypeIDs[:min(len(output.TypeIDs), tk.MaxAllowedTokens)]
+			output.AttentionMask = output.AttentionMask[:min(len(output.AttentionMask), tk.MaxAllowedTokens)]
+			output.SpecialTokensMask = output.SpecialTokensMask[:min(len(output.SpecialTokensMask), tk.MaxAllowedTokens)]
+			output.Offsets = output.Offsets[:min(len(output.Offsets), tk.MaxAllowedTokens)]
+		}
+
+		// Adjust type IDs. Since we manually concatenated, we should try to find where the second part starts.
+		// However, the most robust way if we don't know the separator is to tokenize separately,
+		// but daulet/tokenizers EncodeWithOptions is better if it supports pairs.
+		// Given I cannot find WithEncodePair, I will use the patch logic if TypeIDs are all zero.
+
+		maxAttentionIndex := 0
+		for j, attentionMaskValue := range output.AttentionMask {
+			if attentionMaskValue != 0 {
+				maxAttentionIndex = j
+			}
+		}
+
+		ti := TokenizedInput{
+			Raw:               fullInput,
+			Tokens:            output.Tokens,
+			TokenIDs:          output.IDs,
+			TypeIDs:           output.TypeIDs,
+			AttentionMask:     output.AttentionMask,
+			MaxAttentionIndex: maxAttentionIndex,
+			SpecialTokensMask: output.SpecialTokensMask,
+			Offsets:           convertRustOffsets(output.Offsets), // we need the offsets here for postprocessing later
+		}
+
+		outputs[i] = ti
+		if maxAttentionIndex > maxSequence {
+			maxSequence = maxAttentionIndex
+		}
+	}
+	batch.Input = outputs
+	batch.MaxSequenceLength = maxSequence + 1
+
+	if sepToken == "[SEP]" {
+		patchBertSequenceTokenTypeIDs(batch, sepToken)
+	}
 }
 
 func decodeRust(tokens []uint32, tokenizer *Tokenizer, skipSpecialTokens bool) string {
@@ -114,9 +174,10 @@ func convertRustOffsets(input []tokenizers.Offset) [][2]uint {
 	return output
 }
 
-func allInputTokensRust(pipeline *BasePipeline) {
+func allInputTokensRust(pipeline *BasePipeline) error {
 	pipeline.Model.Tokenizer.RustTokenizer.Options = append(pipeline.Model.Tokenizer.RustTokenizer.Options,
 		tokenizers.WithReturnSpecialTokensMask(),
 		tokenizers.WithReturnOffsets(),
 	)
+	return nil
 }

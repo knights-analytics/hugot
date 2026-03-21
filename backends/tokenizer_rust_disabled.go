@@ -12,8 +12,12 @@ func loadRustTokenizer(_ []byte, _ *Model) error {
 
 func tokenizeInputsRust(_ *PipelineBatch, _ *Tokenizer, _ []string) {}
 
+func tokenizeInputPairsRust(_ *PipelineBatch, _ *Tokenizer, _ [][2]string, _ string) {}
+
 func decodeRust(_ []uint32, _ *Tokenizer, _ bool) string {
 	return ""
 }
 
-func allInputTokensRust(_ *BasePipeline) {}
+func allInputTokensRust(_ *BasePipeline) error {
+	return errors.New("rust Tokenizer is not enabled")
+}
