@@ -43,9 +43,9 @@ func WithBatchSize(size int) backends.PipelineOption[*CrossEncoderPipeline] {
 	}
 }
 
-func WithSortResults(sort bool) backends.PipelineOption[*CrossEncoderPipeline] {
+func WithSortResults() backends.PipelineOption[*CrossEncoderPipeline] {
 	return func(p *CrossEncoderPipeline) error {
-		p.sortResults = sort
+		p.sortResults = true
 		return nil
 	}
 }
