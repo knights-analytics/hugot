@@ -354,6 +354,33 @@ func TestTextGenerationPipelineValidationORT(t *testing.T) {
 	textGenerationPipelineValidation(t, session)
 }
 
+// Question answering
+
+func TestQAPipelineORT(t *testing.T) {
+	session, err := NewORTSession()
+	checkT(t, err)
+	defer func(session *Session) {
+		destroyErr := session.Destroy()
+		checkT(t, destroyErr)
+	}(session)
+	questionAnsweringPipeline(t, session)
+}
+
+func TestQAPipelineORTCuda(t *testing.T) {
+	if os.Getenv("CI") != "" {
+		t.SkipNow()
+	}
+	session, err := NewORTSession(options.WithCuda(map[string]string{
+		"device_id": "0",
+	}))
+	checkT(t, err)
+	defer func(session *Session) {
+		destroyErr := session.Destroy()
+		checkT(t, destroyErr)
+	}(session)
+	questionAnsweringPipeline(t, session)
+}
+
 // Tabular pipeline
 
 func TestTabularPipelineORT(t *testing.T) {

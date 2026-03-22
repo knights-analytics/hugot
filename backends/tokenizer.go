@@ -91,9 +91,10 @@ func patchBertSequenceTokenTypeIDs(batch *PipelineBatch, sepToken string) {
 }
 
 func AllInputTokens(pipeline *BasePipeline) error {
-	if pipeline.Model.Tokenizer.Runtime == "RUST" {
+	switch pipeline.Model.Tokenizer.Runtime {
+	case "RUST":
 		return allInputTokensRust(pipeline)
-	} else if pipeline.Model.Tokenizer.Runtime == "GO" {
+	case "GO":
 		return allInputTokensGo(pipeline)
 	}
 	return fmt.Errorf("runtime %s not recognized", pipeline.Model.Tokenizer.Runtime)

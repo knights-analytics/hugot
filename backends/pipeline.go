@@ -149,6 +149,9 @@ type PipelineBatch struct {
 	Size              int
 	MaxSequenceLength int
 	MaxNewTokens      int
+	// PaddedBatchSize is the bucketed batch size used when XLA pads the batch dimension.
+	// Zero means no batch padding was applied (ORT / GO backend).
+	PaddedBatchSize int
 	// Multimodal support
 	Images            any // Will hold *ortgenai.Images for generative models
 	DestroyMultimodal func() error

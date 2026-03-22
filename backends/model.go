@@ -195,6 +195,58 @@ func loadModelConfig(model *Model) error {
 			}
 		}
 	}
+	// Fallback 1: tokenizer_config.json may contain sep_token (common in HF models).
+	if model.SeparatorToken == "" {
+		tokenizerConfigPath := fileutil.PathJoinSafe(model.Path, "tokenizer_config.json")
+		tcExists, tcErr := fileutil.FileExists(tokenizerConfigPath)
+		if tcErr != nil {
+			return tcErr
+		}
+		if tcExists {
+			tcBytes, tcReadErr := fileutil.ReadFileBytes(tokenizerConfigPath)
+			if tcReadErr != nil {
+				return tcReadErr
+			}
+			var tcMap map[string]interface{}
+			if tcReadErr = json.Unmarshal(tcBytes, &tcMap); tcReadErr != nil {
+				return tcReadErr
+			}
+			if sepToken, ok := tcMap["sep_token"]; ok {
+				if s, isStr := sepToken.(string); isStr && s != "" {
+					model.SeparatorToken = s
+				}
+			}
+		}
+	}
+	// Fallback 2: tokenizer.json post_processor.special_tokens may list the separator.
+	// We recognise the two canonical HF separators: [SEP] (BERT family) and </s> (RoBERTa family).
+	if model.SeparatorToken == "" {
+		tokenizerPath := fileutil.PathJoinSafe(model.Path, "tokenizer.json")
+		tjExists, tjErr := fileutil.FileExists(tokenizerPath)
+		if tjErr != nil {
+			return tjErr
+		}
+		if tjExists {
+			tjBytes, tjReadErr := fileutil.ReadFileBytes(tokenizerPath)
+			if tjReadErr != nil {
+				return tjReadErr
+			}
+			var tjMap map[string]interface{}
+			if tjReadErr = json.Unmarshal(tjBytes, &tjMap); tjReadErr != nil {
+				return tjReadErr
+			}
+			if pp, ok := tjMap["post_processor"].(map[string]interface{}); ok {
+				if specialTokens, ok := pp["special_tokens"].(map[string]interface{}); ok {
+					for _, candidate := range []string{"[SEP]", "</s>"} {
+						if _, found := specialTokens[candidate]; found {
+							model.SeparatorToken = candidate
+							break
+						}
+					}
+				}
+			}
+		}
+	}
 	return nil
 }
 

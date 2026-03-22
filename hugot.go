@@ -21,6 +21,7 @@ type Session struct {
 	objectDetectionPipelines        pipelineMap[*pipelines.ObjectDetectionPipeline]
 	textGenerationPipelines         pipelineMap[*pipelines.TextGenerationPipeline]
 	tabularPipelines                pipelineMap[*pipelines.TabularPipeline]
+	questionAnsweringPipelines      pipelineMap[*pipelines.QuestionAnsweringPipeline]
 	models                          map[string]*backends.Model
 	options                         *options.Options
 	environmentDestroy              func() error
@@ -50,6 +51,7 @@ func newSession(backend string, opts ...options.WithOption) (*Session, error) {
 		objectDetectionPipelines:        map[string]*pipelines.ObjectDetectionPipeline{},
 		textGenerationPipelines:         map[string]*pipelines.TextGenerationPipeline{},
 		tabularPipelines:                map[string]*pipelines.TabularPipeline{},
+		questionAnsweringPipelines:      map[string]*pipelines.QuestionAnsweringPipeline{},
 		models:                          map[string]*backends.Model{},
 		options:                         parsedOptions,
 		environmentDestroy: func() error {
@@ -124,6 +126,12 @@ type TabularConfig = backends.PipelineConfig[*pipelines.TabularPipeline]
 // TabularOption is an option for a tabular pipeline.
 type TabularOption = backends.PipelineOption[*pipelines.TabularPipeline]
 
+// QuestionAnsweringConfig is the configuration for a question answering pipeline.
+type QuestionAnsweringConfig = backends.PipelineConfig[*pipelines.QuestionAnsweringPipeline]
+
+// QuestionAnsweringOption is an option for a question answering pipeline.
+type QuestionAnsweringOption = backends.PipelineOption[*pipelines.QuestionAnsweringPipeline]
+
 // NewPipeline can be used to create a new pipeline of type T. The initialised pipeline will be returned and it
 // will also be stored in the session object so that all created pipelines can be destroyed with session.Destroy()
 // at once.
@@ -180,6 +188,8 @@ func NewPipeline[T backends.Pipeline](s *Session, pipelineConfig backends.Pipeli
 		s.textGenerationPipelines[name] = typedPipeline
 	case *pipelines.TabularPipeline:
 		s.tabularPipelines[name] = typedPipeline
+	case *pipelines.QuestionAnsweringPipeline:
+		s.questionAnsweringPipelines[name] = typedPipeline
 	default:
 		return pipeline, fmt.Errorf("pipeline type not supported: %T", typedPipeline)
 	}
@@ -263,6 +273,14 @@ func InitializePipeline[T backends.Pipeline](p T, pipelineConfig backends.Pipeli
 		}
 		pipeline = any(pipelineInitialised).(T)
 		name = config.Name
+	case *pipelines.QuestionAnsweringPipeline:
+		config := any(pipelineConfig).(backends.PipelineConfig[*pipelines.QuestionAnsweringPipeline])
+		pipelineInitialised, err := pipelines.NewQuestionAnsweringPipeline(config, options, model)
+		if err != nil {
+			return pipeline, name, err
+		}
+		pipeline = any(pipelineInitialised).(T)
+		name = config.Name
 	default:
 		return pipeline, name, fmt.Errorf("not implemented")
 	}
@@ -325,6 +343,12 @@ func GetPipeline[T backends.Pipeline](s *Session, name string) (T, error) {
 		return any(p).(T), nil
 	case *pipelines.TabularPipeline:
 		p, ok := s.tabularPipelines[name]
+		if !ok {
+			return pipeline, &pipelineNotFoundError{pipelineName: name}
+		}
+		return any(p).(T), nil
+	case *pipelines.QuestionAnsweringPipeline:
+		p, ok := s.questionAnsweringPipelines[name]
 		if !ok {
 			return pipeline, &pipelineNotFoundError{pipelineName: name}
 		}
@@ -430,6 +454,17 @@ func ClosePipeline[T backends.Pipeline](s *Session, name string) error {
 		if ok {
 			model := p.Model
 			delete(s.tabularPipelines, name)
+			delete(model.Pipelines, name)
+			if len(model.Pipelines) == 0 {
+				delete(s.models, model.ID)
+				return model.Destroy()
+			}
+		}
+	case *pipelines.QuestionAnsweringPipeline:
+		p, ok := s.questionAnsweringPipelines[name]
+		if ok {
+			model := p.Model
+			delete(s.questionAnsweringPipelines, name)
 			delete(model.Pipelines, name)
 			if len(model.Pipelines) == 0 {
 				delete(s.models, model.ID)

@@ -1320,7 +1320,75 @@ func textGenerationPipelineValidation(t *testing.T, session *Session) {
 	assert.Error(t, err)
 }
 
-// Tabular pipeline
+// QUESTION ANSWERING
+
+func questionAnsweringPipeline(t *testing.T, session *Session) {
+	t.Helper()
+
+	modelPath := "./models/philschmid_distilbert-onnx"
+
+	config := QuestionAnsweringConfig{
+		ModelPath: modelPath,
+		Name:      "testQAPipeline",
+	}
+	pipeline, err := NewPipeline(session, config)
+	checkT(t, err)
+
+	// Context is a JSON document; questions target specific property values.
+	contextJSON := `{"product": "coffee maker", "brand": "Acme", "price": 49.99, "currency": "USD", "in_stock": true}`
+
+	inputs := []pipelines.QuestionAnsweringInput{
+		{Question: "What is the brand?", Context: contextJSON},
+		{Question: "What is the currency?", Context: contextJSON},
+	}
+
+	result, err := pipeline.RunPipeline(inputs)
+	checkT(t, err)
+
+	assert.Equal(t, 2, len(result.Outputs), "expected one result per input")
+
+	brand := result.Outputs[0][0]
+	assert.Greater(t, brand.Score, float32(0), "brand answer score should be > 0")
+	assert.Contains(t, contextJSON[brand.Start:brand.End], brand.Answer, "answer should be a substring of the context")
+	assert.Contains(t, strings.ToLower(brand.Answer), "acme", "brand answer should contain 'acme'")
+
+	currency := result.Outputs[1][0]
+	assert.Greater(t, currency.Score, float32(0), "currency answer score should be > 0")
+	assert.Contains(t, contextJSON[currency.Start:currency.End], currency.Answer, "answer should be a substring of the context")
+	assert.Contains(t, strings.ToLower(currency.Answer), "usd", "currency answer should contain 'usd'")
+
+	// WithTopKAnswers(2): verify that 2 ranked answers are returned per input and are ordered by score.
+
+	contextJSON = `{"product": "coffee maker", "brand": "Acme", "price": 49.99, "currency": "USD", "in_stock": true},{"product": "coffee maker", "brand": "Lavazza", "price": 100.99, "currency": "USD", "in_stock": true}`
+
+	inputs = []pipelines.QuestionAnsweringInput{
+		{Question: "What is the brand?", Context: contextJSON},
+		{Question: "What is the currency?", Context: contextJSON},
+	}
+	configTopK := QuestionAnsweringConfig{
+		ModelPath: modelPath,
+		Name:      "testQAPipelineTopK",
+		Options: []QuestionAnsweringOption{
+			pipelines.WithTopKAnswers(2),
+		},
+	}
+	pipelineTopK, err := NewPipeline(session, configTopK)
+	checkT(t, err)
+
+	resultTopK, err := pipelineTopK.RunPipeline(inputs)
+	checkT(t, err)
+
+	assert.Equal(t, 2, len(resultTopK.Outputs), "expected one result set per input")
+	for inputIdx, answers := range resultTopK.Outputs {
+		assert.Equal(t, 2, len(answers), "expected 2 answers per input with TopK=2")
+		assert.GreaterOrEqual(t, answers[0].Score, answers[1].Score, "answers for input %d should be sorted by score descending", inputIdx)
+		for answerIdx, answer := range answers {
+			assert.Contains(t, contextJSON[answer.Start:answer.End], answer.Answer, "answer %d for input %d should be a substring of the context", answerIdx, inputIdx)
+		}
+	}
+}
+
+// TABULAR
 
 func tabularPipeline(t *testing.T, session *Session) {
 	t.Helper()

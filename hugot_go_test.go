@@ -210,6 +210,18 @@ func TestTabularPipelineGo(t *testing.T) {
 	tabularPipeline(t, session)
 }
 
+// QA
+
+func TestQAPipelineGo(t *testing.T) {
+	session, err := NewGoSession()
+	checkT(t, err)
+	defer func(session *Session) {
+		destroyErr := session.Destroy()
+		checkT(t, destroyErr)
+	}(session)
+	questionAnsweringPipeline(t, session)
+}
+
 // No same name
 
 func TestNoSameNamePipelineGo(t *testing.T) {

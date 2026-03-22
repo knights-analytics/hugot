@@ -159,13 +159,18 @@ func getGoTokens(ids []int, tokenizer *Tokenizer) []string {
 func convertGoOffsets(spans []api.TokenSpan) [][2]uint {
 	offsets := make([][2]uint, len(spans))
 	for j, span := range spans {
-		if span.Start == -1 {
-			span.Start = 0
+		var start, end uint
+		if span.Start > 0 {
+			start = uint(span.Start)
+		} else {
+			start = 0
 		}
-		if span.End == -1 {
-			span.End = 0
+		if span.End > 0 {
+			end = uint(span.End)
+		} else {
+			end = 0
 		}
-		offsets[j] = [2]uint{uint(span.Start), uint(span.End)}
+		offsets[j] = [2]uint{start, end}
 	}
 	return offsets
 }

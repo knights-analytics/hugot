@@ -362,6 +362,33 @@ func TestTabularPipelineXLACuda(t *testing.T) {
 	tabularPipeline(t, session)
 }
 
+// Question answering
+
+func TestQuestionAnsweringPipelineXLA(t *testing.T) {
+	session, err := NewXLASession()
+	checkT(t, err)
+	defer func(session *Session) {
+		destroyErr := session.Destroy()
+		checkT(t, destroyErr)
+	}(session)
+	questionAnsweringPipeline(t, session)
+}
+
+func TestQuestionAnsweringPipelineXLACuda(t *testing.T) {
+	if os.Getenv("CI") != "" {
+		t.SkipNow()
+	}
+	session, err := NewXLASession(options.WithCuda(map[string]string{
+		"device_id": "0",
+	}))
+	checkT(t, err)
+	defer func(session *Session) {
+		destroyErr := session.Destroy()
+		checkT(t, destroyErr)
+	}(session)
+	questionAnsweringPipeline(t, session)
+}
+
 // No same name
 
 func TestNoSameNamePipelineXLA(t *testing.T) {

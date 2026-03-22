@@ -187,6 +187,7 @@ func createInputTensorsGoMLX(batch *PipelineBatch, model *Model, padBatchDimensi
 		if err != nil {
 			return fmt.Errorf("batch size larger than max bucket, please adjust WithGoMLXBatchBuckets: %w", err)
 		}
+		batch.PaddedBatchSize = batchSize
 	}
 	maxSeqLength := batch.MaxSequenceLength
 	if padSequenceDimension {
@@ -302,6 +303,21 @@ func runGoMLXSessionOnBatch(batch *PipelineBatch, p *BasePipeline) error {
 		})
 		if err != nil {
 			return err
+		}
+		// When the batch dimension was padded to a bucket (e.g. batch=2 → bucket=8),
+		// the flat output contains paddedBatch × paddedSeq elements. Passing paddedBatch
+		// rows to ReshapeOutput with batch.Size=2 causes flatDataTo2D to compute the
+		// wrong row width (totalElems/2 instead of paddedSeq), mapping row-1 onto
+		// padding-batch rows whose NaN logits (from all-zero attention masks) propagate
+		// through softmax and make every score comparison with bestScore(-1) false.
+		// Strip excess batch rows here so ReshapeOutput only sees batch.Size rows.
+		if batch.PaddedBatchSize > batch.Size && len(rawOutput) > 0 {
+			paddedSeqLen := len(rawOutput) / batch.PaddedBatchSize
+			trimmed := make([]float32, batch.Size*paddedSeqLen)
+			for row := 0; row < batch.Size; row++ {
+				copy(trimmed[row*paddedSeqLen:], rawOutput[row*paddedSeqLen:(row+1)*paddedSeqLen])
+			}
+			rawOutput = trimmed
 		}
 		convertedOutput[i] = ReshapeOutput(rawOutput, p.Model.OutputsMeta[i], batch.Size, batch.PaddingMask, batch.MaxSequenceLength)
 	}
