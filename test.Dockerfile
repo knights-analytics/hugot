@@ -22,4 +22,3 @@ FROM --platform=$BUILDPLATFORM scratch AS artifacts
 COPY --from=hugot-test /usr/lib/libonnxruntime.so libonnxruntime-linux-x64.so
 COPY --from=hugot-test /usr/lib/libonnxruntime-genai.so libonnxruntime-genai-linux-x64.so
 COPY --from=hugot-test /usr/lib/libtokenizers.a libtokenizers.a
-COPY --from=hugot-test /cli /hugot-cli-linux-x64

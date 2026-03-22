@@ -51,10 +51,6 @@ jobs:
         with:
           name: libonnxruntime-genai-linux-x64.so
           path: ./artifacts/libonnxruntime-genai-linux-x64.so
-      - uses: actions/upload-artifact@v4
-        with:
-          name: hugot-cli-linux-x64
-          path: ./artifacts/hugot-cli-linux-x64
       - name: Publish Test Report
         uses: mikepenz/action-junit-report@v4
         if: success() || failure()

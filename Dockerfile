@@ -7,7 +7,7 @@ ARG GOPJRT_VERSION
 ARG BUILDPLATFORM
 
 #--- runtime layer with all hugot dependencies for cpu 
-#--- the image generated does not contain the hugot code, only the dependencies needed by hugot and the compiled cli binary
+#--- the image generated does not contain the hugot code, only the dependencies needed by hugot
 
 FROM --platform=$BUILDPLATFORM public.ecr.aws/amazonlinux/amazonlinux:2023 AS hugot-runtime
 ARG GO_VERSION
@@ -50,7 +50,4 @@ RUN --mount=src=./go.mod,dst=/go.mod \
 
 COPY . /build
 RUN cd /build && \
-    chown -R testuser:testuser /build && \
-    # cli binary
-    cd /build/cmd && CGO_ENABLED=1 CGO_LDFLAGS="-L/usr/lib/" GOOS=linux GOARCH=amd64 go build -tags "ALL" -a -o /cli main.go && \
-    cd / && rm -rf /build
+    chown -R testuser:testuser /build

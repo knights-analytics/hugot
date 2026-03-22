@@ -78,7 +78,7 @@ Once compiled, Hugot can be instantiated with your backend of choice via calling
 
 You may combine build tags "-tags XLA,ORT" or use "-tags ALL" to be able to use all available backends interchangeably.
 
-### Use it as a library
+### Usage
 
 To use Hugot as a library in your application, you can directly import it and follow the example below.
 
@@ -264,57 +264,11 @@ We use an [abstract file system](https://github.com/viant/afs) within Hugot. It 
 import _ "github.com/viant/afsc/s3"
 ```
 
-## Use it as a cli: Hugging Face 🤗 pipelines from the command line
-
-Note: the cli is currently only built and tested on amd64-linux using the ONNX Runtime backend.
-
-With Hugot you don't need python, pytorch, or even go to run Hugging Face transformers. Simply install the Hugot cli (alpha):
-
-```
-curl https://raw.githubusercontent.com/knights-analytics/hugot/main/scripts/install-hugot-cli.sh | bash
-```
-
-This will install the Hugot binary at $HOME/.local/bin/hugot, and the corresponding onnxruntime.so library at $HOME/lib/hugot/onnxruntime.so.
-The if $HOME/.local/bin is on your $PATH, you can do:
-
-```
-hugot run --model=KnightsAnalytics/distilbert-base-uncased-finetuned-sst-2-english --input=/path/to/input.jsonl --output=/path/to/folder/output --type=textClassification
-```
-
-Hugot will load the model, process the input, and write the results in the output folder.
-Note that the Hugot cli currently expects the input in a specific format: json lines with an "input" key containing the string to process.
-Example:
-
-```
-{"input": "The director tried too much"}
-{"input": "The film was excellent"}
-```
-
-Will produce a file called result_0.jsonl in the output folder with contents:
-
-```
-{"input":"The director tried too much","output":[{"Label":"NEGATIVE","Score":0.99752176}]}
-{"input":"The film was excellent","output":[{"Label":"POSITIVE","Score":0.99986285}]}
-```
-
-Note that if --input is not provided, Hugot will read from stdin, and if --output is not provided, it will write to stdout.
-This allows to chain things like:
-
-```
-echo '{"input":"The director tried too much"}' | hugot run --model=/path/to/model --type=textClassification | jq
-```
-
-To be able to run transformers fully from the command line.
-
-Note that the --model parameter can be:
-1. the full path to a model to load
-2. the name of a Hugging Face model. Hugot will first try to look for the model at $HOME/hugot, or will try to download the model from Hugging Face.
-
 ## Limitations
 
 Apart from the fact that only the aforementioned pipelines are currently implemented, the current limitations are:
 
-- the library and cli are only built/tested on amd64-linux currently.
+- the library is only built/tested on amd64-linux currently.
 
 ## Contributing
 
