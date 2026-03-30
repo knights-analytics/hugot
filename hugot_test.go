@@ -1191,6 +1191,7 @@ func destroyPipelines(t *testing.T, session *Session) {
 // Text Generation.
 func textGenerationPipeline(t *testing.T, session *Session) {
 	t.Helper()
+	modelPath := "./models/KnightsAnalytics_qwen3-4B-int4"
 
 	defer func(session *Session) {
 		err := session.Destroy()
@@ -1199,10 +1200,10 @@ func textGenerationPipeline(t *testing.T, session *Session) {
 
 	// Configure the text generation pipeline
 	config := TextGenerationConfig{
-		ModelPath: "./models/KnightsAnalytics_Phi-3.5-mini-instruct-onnx",
+		ModelPath: modelPath,
 		Name:      "testPipeline",
 		Options: []backends.PipelineOption[*pipelines.TextGenerationPipeline]{
-			pipelines.WithMaxLength(200),
+			pipelines.WithMaxLength(2000),
 			pipelines.WithSystemPrompt("You are a helpful assistant. Answer with a single very brief sentence."),
 		},
 	}
@@ -1266,10 +1267,10 @@ func textGenerationPipeline(t *testing.T, session *Session) {
 
 	// streaming test
 	streamingConfig := TextGenerationConfig{
-		ModelPath: "./models/KnightsAnalytics_Phi-3.5-mini-instruct-onnx",
+		ModelPath: modelPath,
 		Name:      "testPipelineStreaming",
 		Options: []backends.PipelineOption[*pipelines.TextGenerationPipeline]{
-			pipelines.WithMaxLength(200),
+			pipelines.WithMaxLength(2000),
 			pipelines.WithStreaming(),
 		},
 	}
@@ -1284,18 +1285,12 @@ func textGenerationPipeline(t *testing.T, session *Session) {
 			},
 		}
 		output, err := streamingPipeline.RunMessages(context.Background(), input)
-		firstThreeTokens := make([]string, 0, 3)
+		var fullAnswer strings.Builder
 		for token := range output.TokenStream {
-			firstThreeTokens = append(firstThreeTokens, token.Token)
+			fullAnswer.WriteString(token.Token)
 		}
-		if firstThreeTokens[0] != "The" {
-			t.Fatalf("Expected first token 'The', got '%s'", firstThreeTokens[0])
-		}
-		if firstThreeTokens[1] != " sum" {
-			t.Fatalf("Expected second token ' sum', got '%s'", firstThreeTokens[1])
-		}
-		if firstThreeTokens[2] != " of" {
-			t.Fatalf("Expected third token ' of', got '%s'", firstThreeTokens[2])
+		if !strings.Contains(fullAnswer.String(), "4") {
+			t.Fatalf("Expected answer to contain '4', got '%s'", fullAnswer.String())
 		}
 		checkT(t, err)
 	})
@@ -1324,8 +1319,8 @@ tool_json: %json {"anyOf": [` +
 			EnableFFTokens: true,
 		}
 
-		config := TextGenerationConfig{
-			ModelPath: "./models/qwen3-4B-int4",
+		config = TextGenerationConfig{
+			ModelPath: modelPath,
 			Name:      "testPipelineWithTools",
 			Options: []backends.PipelineOption[*pipelines.TextGenerationPipeline]{
 				pipelines.WithMaxLength(2000),
@@ -1335,7 +1330,7 @@ tool_json: %json {"anyOf": [` +
 		}
 
 		// Create the pipeline
-		textGenPipeline, err := NewPipeline(session, config)
+		textGenPipeline, err = NewPipeline(session, config)
 		checkT(t, err)
 
 		// Two minimal Hermes-style tool definitions.
@@ -1396,7 +1391,7 @@ func textGenerationPipelineValidation(t *testing.T, session *Session) {
 
 	// Configure the text generation pipeline
 	config := TextGenerationConfig{
-		ModelPath: "./models/KnightsAnalytics_Phi-3.5-mini-instruct-onnx",
+		ModelPath: "./models/KnightsAnalytics_qwen3-4B-int4",
 		Name:      "testPipeline",
 		Options:   []backends.PipelineOption[*pipelines.TextGenerationPipeline]{},
 	}
@@ -1412,7 +1407,7 @@ func textGenerationPipelineValidation(t *testing.T, session *Session) {
 func questionAnsweringPipeline(t *testing.T, session *Session) {
 	t.Helper()
 
-	modelPath := "./models/philschmid_distilbert-onnx"
+	modelPath := "./models/KnightsAnalytics_distilbert-onnx"
 
 	config := QuestionAnsweringConfig{
 		ModelPath: modelPath,

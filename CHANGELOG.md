@@ -4,6 +4,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
+## [0.7.0] - 2026-03-30
+
+###  Changed
+
+- Added QuestionAnsweringPipeline
+- Added ConstrainedGeneration, Tools and Guidance to TextGenerationPipeline
+- Upgraded to GoMLX v0.27.2
+  - Fixes multiple quantization issues in simple Go backend
+- Upgraded to ORT v1.24.4
+- Upgraded to ORT GenAI v0.12.2
+- Replaced Go Tokenizers with GoMLX version
+  - Supports Pair Tokenization
+  - Further reduces dependencies
+- Fix: Allow use of SOFTMAX in TextClassificationPipeline
+- Breaking: Remove CLI to simplify dependencies (can be reintroduced as a separate library on request) 
+
 ## [0.6.5] - 2026-03-17
 
 ###  Changed
