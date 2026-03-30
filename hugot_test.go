@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"regexp"
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gomlx/go-huggingface/hub"
 	"github.com/stretchr/testify/assert"
@@ -1249,7 +1251,7 @@ func textGenerationPipeline(t *testing.T, session *Session) {
 	// Execute tests
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			batchResult, err := textGenPipeline.RunMessages(context.Background(), tt.input)
+			batchResult, err := textGenPipeline.RunMessages(context.Background(), tt.input, nil, nil)
 			checkT(t, err)
 			outputs := batchResult.GetOutput()
 			for i := range len(outputs) {
@@ -1281,7 +1283,7 @@ func textGenerationPipeline(t *testing.T, session *Session) {
 				{Role: "user", Content: "Solve this equation: 2 + 2 = ? Be very brief in your explanation."},
 			},
 		}
-		output, err := streamingPipeline.RunMessages(context.Background(), input)
+		output, err := streamingPipeline.RunMessages(context.Background(), input, nil, nil)
 		firstThreeTokens := make([]string, 0, 3)
 		for token := range output.TokenStream {
 			firstThreeTokens = append(firstThreeTokens, token.Token)
@@ -1296,6 +1298,89 @@ func textGenerationPipeline(t *testing.T, session *Session) {
 			t.Fatalf("Expected third token ' of', got '%s'", firstThreeTokens[2])
 		}
 		checkT(t, err)
+	})
+
+	// tools test
+	t.Run("tools test", func(t *testing.T) {
+		config := TextGenerationConfig{
+			ModelPath: "./models/qwen3-4B-int4",
+			Name:      "testPipelineWithTools",
+			Options: []backends.PipelineOption[*pipelines.TextGenerationPipeline]{
+				pipelines.WithMaxLength(2000),
+				pipelines.WithSystemPrompt("You are a helpful assistant that answers questions using tools."),
+			},
+		}
+
+		// Create the pipeline
+		textGenPipeline, err := NewPipeline(session, config)
+		checkT(t, err)
+
+		// Two minimal Hermes-style tool definitions.
+		tools := []string{
+			`{
+			"type": "function",
+			"function": {
+				"name": "get_current_time",
+				"description": "Returns the current UTC time.",
+				"parameters": {
+					"type": "object",
+					"properties": {},
+					"required": []
+				}
+			}
+		}`,
+			`{
+			"type": "function",
+			"function": {
+				"name": "get_weather",
+				"description": "Returns the current weather for a given city.",
+				"parameters": {
+					"type": "object",
+					"properties": {
+						"city": {
+							"type": "string",
+							"description": "The name of the city."
+						}
+					},
+					"required": ["city"]
+				}
+			}
+		}`,
+		}
+
+		messages := [][]backends.Message{
+			{
+				{Role: "user", Content: "What time is it right now, and what's the weather like in Paris?"},
+			},
+		}
+
+		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
+		defer cancel()
+
+		// Lark grammar that constrains both <tool_call> blocks to valid JSON.
+		//
+		// Requirements:
+		//   - <tool_call> and </tool_call> must be "special": false in tokenizer.json so that
+		//     llguidance can match them as regular byte sequences. Marking them "special": true
+		//     promotes them to control tokens that the guidance system cannot byte-force, causing
+		//     "token doesn't satisfy the grammar" errors.
+		//   - The grammar expects exactly two tool calls for this query.
+		toolGrammar := `start: fun_call fun_call /\n?/
+fun_call: "<tool_call>\n" tool_json "\n</tool_call>\n"
+tool_json: %json {"anyOf": [` +
+			`{"type":"object","required":["name","arguments"],"additionalProperties":false,` +
+			`"properties":{"name":{"const":"get_current_time"},"arguments":{"type":"object","properties":{},"additionalProperties":false}}},` +
+			`{"type":"object","required":["name","arguments"],"additionalProperties":false,` +
+			`"properties":{"name":{"const":"get_weather"},"arguments":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false}}}` +
+			`]}`
+		guidance := &backends.Guidance{
+			Type:           backends.GuidanceTypeLarkGrammar,
+			Data:           toolGrammar,
+			EnableFFTokens: true,
+		}
+		toolOutput, err := textGenPipeline.RunMessages(ctx, messages, tools, guidance)
+		checkT(t, err)
+		checkToolCalls(t, toolOutput.Responses[0])
 	})
 }
 
@@ -1550,6 +1635,57 @@ func printTokenEntities(o *pipelines.TokenClassificationOutput) {
 		fmt.Printf("Input %d\n", i)
 		for _, entity := range entities {
 			fmt.Printf("%+v\n", entity)
+		}
+	}
+}
+
+type toolCall struct {
+	Name      string         `json:"name"`
+	Arguments map[string]any `json:"arguments"`
+}
+
+// parseToolCalls extracts all <tool_call>...</tool_call> blocks from s and unmarshals
+// each as a toolCall. Uses json.Decoder so that a trailing stray `}` (a common
+// int4-quantisation artefact) does not cause the block to be skipped — Decode reads
+// exactly one JSON value and stops, leaving trailing garbage unread.
+func parseToolCalls(s string) []toolCall {
+	re := regexp.MustCompile(`(?s)<tool_call>\s*(.+?)\s*</tool_call>`)
+	matches := re.FindAllStringSubmatch(s, -1)
+	var calls []toolCall
+	for _, m := range matches {
+		dec := json.NewDecoder(strings.NewReader(m[1]))
+		var tc toolCall
+		if err := dec.Decode(&tc); err != nil {
+			continue
+		}
+		calls = append(calls, tc)
+	}
+	return calls
+}
+
+func checkToolCalls(t *testing.T, output string) {
+	t.Helper()
+	calls := parseToolCalls(output)
+	if len(calls) < 2 {
+		t.Fatalf("expected at least 2 tool calls, got %d: %s", len(calls), output)
+	}
+
+	names := make(map[string]bool, len(calls))
+	for _, c := range calls {
+		names[c.Name] = true
+	}
+	if !names["get_current_time"] {
+		t.Errorf("expected get_current_time tool call, got calls: %v", calls)
+	}
+	if !names["get_weather"] {
+		t.Errorf("expected get_weather tool call, got calls: %v", calls)
+	}
+	for _, c := range calls {
+		if c.Name == "get_weather" {
+			city, _ := c.Arguments["city"].(string)
+			if !strings.EqualFold(city, "Paris") {
+				t.Errorf("expected get_weather city=Paris, got %q", city)
+			}
 		}
 	}
 }

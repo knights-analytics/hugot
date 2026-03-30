@@ -142,7 +142,7 @@ func createORTGenerativeSession(model *Model, options *options.Options) error {
 	return nil
 }
 
-func runGenerativeORTSessionOnBatch(ctx context.Context, batch *PipelineBatch, p *BasePipeline, maxLength int, stopSequences []string, temperature *float64, topP *float64, seed *int) (chan SequenceDelta, chan error, error) {
+func runGenerativeORTSessionOnBatch(ctx context.Context, batch *PipelineBatch, p *BasePipeline, maxLength int, stopSequences []string, temperature *float64, topP *float64, seed *int, tools []string, guidance *Guidance) (chan SequenceDelta, chan error, error) {
 	session := p.Model.ORTModel.GenerativeSession
 	if session == nil {
 		return nil, nil, errors.New("ORT generative session is not initialized")
@@ -158,6 +158,16 @@ func runGenerativeORTSessionOnBatch(ctx context.Context, batch *PipelineBatch, p
 	var ortErrorStream <-chan error
 	var err error
 
+	// Map optional guidance config to ortgenai type.
+	var ortGuidance *ortgenai.Guidance
+	if guidance != nil {
+		ortGuidance = &ortgenai.Guidance{
+			Type:           ortgenai.GuidanceType(guidance.Type),
+			Data:           guidance.Data,
+			EnableFFTokens: guidance.EnableFFTokens,
+		}
+	}
+
 	generateCtx, cancel := context.WithCancel(ctx)
 
 	if batch.Images != nil {
@@ -166,13 +176,13 @@ func runGenerativeORTSessionOnBatch(ctx context.Context, batch *PipelineBatch, p
 			cancel()
 			return nil, nil, fmt.Errorf("invalid images type %T for generative ORT session", batch.Images)
 		}
-		ortTokenStream, ortErrorStream, err = session.GenerateWithImages(generateCtx, inputs, images, &ortgenai.GenerationOptions{MaxLength: maxLength, BatchSize: len(inputs), Temperature: temperature, TopP: topP, Seed: seed})
+		ortTokenStream, ortErrorStream, err = session.GenerateWithImages(generateCtx, inputs, images, tools, &ortgenai.GenerationOptions{MaxLength: maxLength, BatchSize: len(inputs), Temperature: temperature, TopP: topP, Seed: seed, Guidance: ortGuidance})
 		if err != nil {
 			cancel()
 			return nil, nil, fmt.Errorf("error during multimodal generation start: %w", err)
 		}
 	} else {
-		ortTokenStream, ortErrorStream, err = session.Generate(generateCtx, inputs, &ortgenai.GenerationOptions{MaxLength: maxLength, Temperature: temperature, TopP: topP, Seed: seed})
+		ortTokenStream, ortErrorStream, err = session.Generate(generateCtx, inputs, tools, &ortgenai.GenerationOptions{MaxLength: maxLength, Temperature: temperature, TopP: topP, Seed: seed, Guidance: ortGuidance})
 		if err != nil {
 			cancel()
 			return nil, nil, fmt.Errorf("error during generation start: %w", err)

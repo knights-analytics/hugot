@@ -14,6 +14,12 @@ type ORTModel struct {
 	GenerativeSession disabledGenerativeSession // placeholder when ORT disabled
 }
 
+type Guidance struct {
+	Type           GuidanceType
+	Data           string
+	EnableFFTokens bool
+}
+
 func createORTModelBackend(_ *Model, _ *options.Options) error {
 	return errors.New("ORT is not enabled")
 }
@@ -34,7 +40,7 @@ func createTabularTensorsORT(_ *PipelineBatch, _ *Model, _ [][]float32) error {
 	return errors.New("ORT is not enabled")
 }
 
-func runGenerativeORTSessionOnBatch(_ context.Context, _ *PipelineBatch, _ *BasePipeline, _ int, _ []string, _ *float64, _ *float64, _ *int) (chan SequenceDelta, chan error, error) {
+func runGenerativeORTSessionOnBatch(_ context.Context, _ *PipelineBatch, _ *BasePipeline, _ int, _ []string, _ *float64, _ *float64, _ *int, tools []string, guidance *Guidance) (chan SequenceDelta, chan error, error) {
 	return nil, nil, errors.New("ORT is not enabled")
 }
 

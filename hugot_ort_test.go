@@ -327,9 +327,9 @@ func TestTextGenerationPipelineORT(t *testing.T) {
 }
 
 func TestTextGenerationPipelineORTCuda(t *testing.T) {
-	if os.Getenv("CI") != "" {
-		t.SkipNow()
-	}
+	// if os.Getenv("CI") != "" {
+	// 	t.SkipNow()
+	// }
 	session, err := NewORTSession(options.WithCuda(map[string]string{
 		"device_id": "0",
 	}))

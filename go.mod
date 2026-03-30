@@ -2,6 +2,8 @@ module github.com/knights-analytics/hugot
 
 go 1.25.0
 
+replace github.com/knights-analytics/ortgenai v0.1.0 => ../ortgenai
+
 require (
 	github.com/daulet/tokenizers v1.26.0
 	github.com/gomlx/go-huggingface v0.3.5-0.20260327162928-af20e4f3e7b5

@@ -17,6 +17,8 @@ type TextGenerationPipeline struct {
 	TopP          *float64
 	Seed          *int
 	StopSequences []string
+	Tools         []string
+	Guidance      *backends.Guidance
 }
 
 type TextGenerationOutput struct {
@@ -90,6 +92,22 @@ func WithStopSequences(stopSequences []string) backends.PipelineOption[*TextGene
 	}
 }
 
+// WithTools sets the list of Hermes-style tool definition JSON strings to include in the chat template.
+func WithTools(tools []string) backends.PipelineOption[*TextGenerationPipeline] {
+	return func(pipeline *TextGenerationPipeline) error {
+		pipeline.Tools = tools
+		return nil
+	}
+}
+
+// WithGuidance enables constrained (guided) generation using a lark grammar, JSON schema, or regex.
+func WithGuidance(guidance *backends.Guidance) backends.PipelineOption[*TextGenerationPipeline] {
+	return func(pipeline *TextGenerationPipeline) error {
+		pipeline.Guidance = guidance
+		return nil
+	}
+}
+
 // NewTextGenerationPipeline initializes a new text generation pipeline.
 func NewTextGenerationPipeline(config backends.PipelineConfig[*TextGenerationPipeline], s *options.Options, model *backends.Model) (*TextGenerationPipeline, error) {
 	defaultPipeline, err := backends.NewBasePipeline(config, s, model)
@@ -157,9 +175,17 @@ func (p *TextGenerationPipeline) Preprocess(batch *backends.PipelineBatch, input
 	return backends.CreateMessages(batch, p.BasePipeline, inputs, p.SystemPrompt)
 }
 
-// Forward initiates the generation loop.
-func (p *TextGenerationPipeline) Forward(ctx context.Context, batch *backends.PipelineBatch) (chan backends.SequenceDelta, chan error, error) {
-	tokenStream, errorStream, initErr := backends.RunGenerativeSessionOnBatch(ctx, batch, p.BasePipeline, p.MaxLength, p.StopSequences, p.Temperature, p.TopP, p.Seed)
+// forwardWith initiates the generation loop with explicit tools and guidance, allowing per-call overrides.
+func (p *TextGenerationPipeline) Forward(ctx context.Context, batch *backends.PipelineBatch, tools []string, guidance *backends.Guidance) (chan backends.SequenceDelta, chan error, error) {
+	effectiveTools := tools
+	if len(effectiveTools) == 0 {
+		effectiveTools = p.Tools
+	}
+	effectiveGuidance := guidance
+	if effectiveGuidance == nil {
+		effectiveGuidance = p.Guidance
+	}
+	tokenStream, errorStream, initErr := backends.RunGenerativeSessionOnBatch(ctx, batch, p.BasePipeline, p.MaxLength, p.StopSequences, p.Temperature, p.TopP, p.Seed, effectiveTools, effectiveGuidance)
 	if initErr != nil {
 		return nil, nil, initErr
 	}
@@ -179,7 +205,7 @@ func (p *TextGenerationPipeline) RunPipeline(ctx context.Context, inputs []strin
 	if e := errors.Join(runErrors...); e != nil {
 		return nil, errors.Join(e, batch.Destroy())
 	}
-	tokenStream, errorStream, forwardErr := p.Forward(ctx, batch)
+	tokenStream, errorStream, forwardErr := p.Forward(ctx, batch, p.Tools, p.Guidance)
 	if forwardErr != nil {
 		return nil, errors.Join(forwardErr, batch.Destroy())
 	}
@@ -200,8 +226,10 @@ func (p *TextGenerationPipeline) RunPipeline(ctx context.Context, inputs []strin
 }
 
 // RunMessages processes a batch of message inputs.
+// tools and guidance override the pipeline-level defaults for this call only.
+// If the model produces any of the provided strings in the output, generation for that sequence will stop and the stop string will be excluded.
 // If multimodal, the images should be added to the messages.
-func (p *TextGenerationPipeline) RunMessages(ctx context.Context, inputs [][]backends.Message) (*TextGenerationOutput, error) {
+func (p *TextGenerationPipeline) RunMessages(ctx context.Context, inputs [][]backends.Message, tools []string, guidance *backends.Guidance) (*TextGenerationOutput, error) {
 	var runErrors []error
 	batch := backends.NewBatch(len(inputs))
 	batch.MaxNewTokens = p.MaxLength
@@ -209,7 +237,7 @@ func (p *TextGenerationPipeline) RunMessages(ctx context.Context, inputs [][]bac
 	if e := errors.Join(runErrors...); e != nil {
 		return nil, errors.Join(e, batch.Destroy())
 	}
-	tokenStream, errorStream, forwardErr := p.Forward(ctx, batch)
+	tokenStream, errorStream, forwardErr := p.Forward(ctx, batch, tools, guidance)
 	if forwardErr != nil {
 		return nil, errors.Join(forwardErr, batch.Destroy())
 	}
