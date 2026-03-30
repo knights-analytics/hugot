@@ -134,7 +134,8 @@ func validateDownloadedHFModel(repo *hub.Repo, options DownloadOptions) ([]strin
 			baseFileName == "tokenizer_config.json" ||
 			baseFileName == "config.json" ||
 			baseFileName == "genai_config.json" ||
-			baseFileName == "vocab.txt" {
+			baseFileName == "vocab.txt" ||
+			baseFileName == "chat_template.jinja" {
 			toDownload = append(toDownload, fileName)
 		} else if filepath.Ext(baseFileName) == ".onnx" {
 			if options.OnnxFilePath != "" {

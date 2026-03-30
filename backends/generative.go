@@ -1,5 +1,23 @@
 package backends
 
+// GuidanceType specifies the constrained-generation strategy.
+type GuidanceType string
+
+const (
+	GuidanceTypeJSONSchema  GuidanceType = "json_schema"
+	GuidanceTypeRegex       GuidanceType = "regex"
+	GuidanceTypeLarkGrammar GuidanceType = "lark_grammar"
+)
+
+// Guidance configures constrained (guided) generation.
+// EnableFFTokens speeds up generation by force-forwarding tokens that satisfy the grammar
+// without calling the model. Requires BatchSize=1.
+type Guidance struct {
+	Type           GuidanceType
+	Data           string
+	EnableFFTokens bool
+}
+
 type SequenceDelta struct {
 	Token string
 	Index int

@@ -26,13 +26,13 @@ var models = []downloadModel{
 	{name: "KnightsAnalytics/deberta-v3-base-zeroshot-v1"},
 	{name: "KnightsAnalytics/distilbert-base-uncased-finetuned-sst-2-english"},
 	{name: "KnightsAnalytics/distilbert-NER"},
+	{name: "KnightsAnalytics/distilbert-onnx"},
 	{name: "KnightsAnalytics/roberta-base-go_emotions"},
 	{name: "KnightsAnalytics/jina-reranker-v1-tiny-en", onnxFilePath: "model.onnx"},
 	{name: "KnightsAnalytics/resnet50"},
 	{name: "KnightsAnalytics/detr-resnet-50", onnxFilePath: "model.onnx"},
-	{name: "KnightsAnalytics/Phi-3.5-mini-instruct-onnx", onnxFilePath: "phi-3.5-mini-instruct-cpu-int4-awq-block-128-acc-level-4.onnx", externalDataPath: "phi-3.5-mini-instruct-cpu-int4-awq-block-128-acc-level-4.onnx.data"},
 	{name: "KnightsAnalytics/iris-decision-tree", onnxFilePath: "model.onnx"},
-	{name: "philschmid/distilbert-onnx"},
+	{name: "KnightsAnalytics/qwen3-4B-int4", onnxFilePath: "model.onnx", externalDataPath: "model.onnx.data"},
 }
 
 // Additional files to download (direct URLs).
@@ -52,7 +52,7 @@ func main() {
 			}
 		}
 		for _, model := range models {
-			if os.Getenv("CI") != "" && model.name == "KnightsAnalytics/Phi-3.5-mini-instruct-onnx" {
+			if os.Getenv("CI") != "" && model.name == "KnightsAnalytics/qwen3-4B-int4" {
 				continue // skipping this model for cicd
 			}
 
