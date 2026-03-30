@@ -199,10 +199,10 @@ func RunSessionOnBatch(batch *PipelineBatch, p *BasePipeline) error {
 	return nil
 }
 
-func RunGenerativeSessionOnBatch(ctx context.Context, batch *PipelineBatch, p *BasePipeline, maxLength int, stopSequences []string, temperature *float64, topP *float64, seed *int) (chan SequenceDelta, chan error, error) {
+func RunGenerativeSessionOnBatch(ctx context.Context, batch *PipelineBatch, p *BasePipeline, maxLength int, stopSequences []string, temperature *float64, topP *float64, seed *int, tools []string, guidance *Guidance) (chan SequenceDelta, chan error, error) {
 	switch p.Runtime {
 	case "ORT":
-		return runGenerativeORTSessionOnBatch(ctx, batch, p, maxLength, stopSequences, temperature, topP, seed)
+		return runGenerativeORTSessionOnBatch(ctx, batch, p, maxLength, stopSequences, temperature, topP, seed, tools, guidance)
 	case "GO":
 		return nil, nil, errors.New("GO backend is not yet implemented for generative models")
 	case "XLA":
