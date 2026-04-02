@@ -1,6 +1,7 @@
 package pipelines
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"sort"
@@ -65,8 +66,8 @@ func (t *CrossEncoderOutput) GetOutput() []any {
 	return out
 }
 
-func NewCrossEncoderPipeline(config backends.PipelineConfig[*CrossEncoderPipeline], s *options.Options, model *backends.Model) (*CrossEncoderPipeline, error) {
-	defaultPipeline, err := backends.NewBasePipeline(config, s, model)
+func NewCrossEncoderPipeline(sessionContext context.Context, config backends.PipelineConfig[*CrossEncoderPipeline], s *options.Options, model *backends.Model) (*CrossEncoderPipeline, error) {
+	defaultPipeline, err := backends.NewBasePipeline(sessionContext, config, s, model)
 	if err != nil {
 		return nil, err
 	}
@@ -157,7 +158,7 @@ func (p *CrossEncoderPipeline) Validate() error {
 	return errors.Join(validationErrors...)
 }
 
-func (p *CrossEncoderPipeline) Preprocess(batch *backends.PipelineBatch, inputs []string) error {
+func (p *CrossEncoderPipeline) preprocess(batch *backends.PipelineBatch, inputs []string) error {
 	start := time.Now()
 	backends.TokenizeInputs(batch, p.Model.Tokenizer, inputs)
 	atomic.AddUint64(&p.Model.Tokenizer.TokenizerTimings.NumCalls, 1)
@@ -166,7 +167,7 @@ func (p *CrossEncoderPipeline) Preprocess(batch *backends.PipelineBatch, inputs 
 	return err
 }
 
-func (p *CrossEncoderPipeline) PreprocessPairs(batch *backends.PipelineBatch, inputs [][2]string) error {
+func (p *CrossEncoderPipeline) preprocessPairs(batch *backends.PipelineBatch, inputs [][2]string) error {
 	start := time.Now()
 	backends.TokenizeInputPairs(batch, p.Model.Tokenizer, inputs, p.Model.SeparatorToken)
 	atomic.AddUint64(&p.Model.Tokenizer.TokenizerTimings.NumCalls, 1)
@@ -175,12 +176,12 @@ func (p *CrossEncoderPipeline) PreprocessPairs(batch *backends.PipelineBatch, in
 	return err
 }
 
-func (p *CrossEncoderPipeline) Forward(batch *backends.PipelineBatch) error {
+func (p *CrossEncoderPipeline) forward(ctx context.Context, batch *backends.PipelineBatch) error {
 	start := time.Now()
 	if p.Model.Tokenizer.MaxAllowedTokens >= p.Model.MaxPositionEmbeddings {
 		p.Model.Tokenizer.MaxAllowedTokens = p.Model.MaxPositionEmbeddings - 1
 	}
-	err := backends.RunSessionOnBatch(batch, p.BasePipeline)
+	err := backends.RunSessionOnBatch(ctx, batch, p.BasePipeline)
 	if err != nil {
 		return err
 	}
@@ -189,7 +190,7 @@ func (p *CrossEncoderPipeline) Forward(batch *backends.PipelineBatch) error {
 	return nil
 }
 
-func (p *CrossEncoderPipeline) Postprocess(batch *backends.PipelineBatch, documents []string) (*CrossEncoderOutput, error) {
+func (p *CrossEncoderPipeline) postprocess(batch *backends.PipelineBatch, documents []string) (*CrossEncoderOutput, error) {
 	var outputCast [][]float32
 	output := batch.OutputValues[0]
 	switch v := output.(type) {
@@ -219,16 +220,16 @@ func (p *CrossEncoderPipeline) Postprocess(batch *backends.PipelineBatch, docume
 	return &CrossEncoderOutput{Results: results}, nil
 }
 
-func (p *CrossEncoderPipeline) Run(inputs []string) (backends.PipelineBatchOutput, error) {
+func (p *CrossEncoderPipeline) Run(ctx context.Context, inputs []string) (backends.PipelineBatchOutput, error) {
 	if len(inputs) < 2 {
 		return nil, errors.New("cross encoder pipeline requires at least two inputs: a query and one or more documents")
 	}
 	query := inputs[0]
 	documents := inputs[1:]
-	return p.RunPipeline(query, documents)
+	return p.RunPipeline(ctx, query, documents)
 }
 
-func (p *CrossEncoderPipeline) RunPipeline(query string, documents []string) (*CrossEncoderOutput, error) {
+func (p *CrossEncoderPipeline) RunPipeline(ctx context.Context, query string, documents []string) (*CrossEncoderOutput, error) {
 	start := time.Now()
 	defer func() {
 		duration := time.Since(start)
@@ -240,7 +241,7 @@ func (p *CrossEncoderPipeline) RunPipeline(query string, documents []string) (*C
 	allResults := make([]CrossEncoderResult, 0, len(documents))
 	for i := 0; i < len(documents); i += p.batchSize {
 		end := min(i+p.batchSize, len(documents))
-		out, err := p.runBatch(query, documents[i:end], i)
+		out, err := p.runBatch(ctx, query, documents[i:end], i)
 		if err != nil {
 			runErrors = append(runErrors, err)
 			continue
@@ -261,7 +262,7 @@ func (p *CrossEncoderPipeline) RunPipeline(query string, documents []string) (*C
 	return output, errors.Join(runErrors...)
 }
 
-func (p *CrossEncoderPipeline) runBatch(query string, documents []string, startIndex int) (*CrossEncoderOutput, error) {
+func (p *CrossEncoderPipeline) runBatch(ctx context.Context, query string, documents []string, startIndex int) (*CrossEncoderOutput, error) {
 	var runErrors []error
 	inputs := make([][2]string, len(documents))
 	for i, doc := range documents {
@@ -271,15 +272,15 @@ func (p *CrossEncoderPipeline) runBatch(query string, documents []string, startI
 	defer func(*backends.PipelineBatch) {
 		runErrors = append(runErrors, batch.Destroy())
 	}(batch)
-	runErrors = append(runErrors, p.PreprocessPairs(batch, inputs))
+	runErrors = append(runErrors, p.preprocessPairs(batch, inputs))
 	if e := errors.Join(runErrors...); e != nil {
 		return nil, e
 	}
-	runErrors = append(runErrors, p.Forward(batch))
+	runErrors = append(runErrors, p.forward(ctx, batch))
 	if e := errors.Join(runErrors...); e != nil {
 		return nil, e
 	}
-	result, postErr := p.Postprocess(batch, documents)
+	result, postErr := p.postprocess(batch, documents)
 	runErrors = append(runErrors, postErr)
 	if result != nil {
 		for i := range result.Results {

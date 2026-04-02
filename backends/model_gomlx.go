@@ -1,6 +1,7 @@
 package backends
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -9,12 +10,12 @@ import (
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
-	"github.com/gomlx/gomlx/pkg/ml/context"
+	gomlxcontext "github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/onnx-gomlx/onnx"
 	"github.com/gomlx/onnx-gomlx/onnx/parser"
-
 	"github.com/knights-analytics/hugot/options"
 	"github.com/knights-analytics/hugot/util/fileutil"
+	"golang.org/x/sync/errgroup"
 )
 
 // Default shape buckets for batch size and sequence length.
@@ -27,9 +28,9 @@ var (
 type GoMLXModel struct {
 	Backend         backends.Backend
 	OnnxModel       onnx.Model
-	Ctx             *context.Context // ctx with the model's weights.
-	Exec            *context.Exec    // exec is used to execute the model with a context.
-	Call            func(ctx *context.Context, inputs []*graph.Node) []*graph.Node
+	Ctx             *gomlxcontext.Context // ctx with the model's weights.
+	Exec            *gomlxcontext.Exec    // exec is used to execute the model with a context.
+	Call            func(ctx *gomlxcontext.Context, inputs []*graph.Node) []*graph.Node
 	Destroy         func()
 	BatchBuckets    []int // BatchBuckets defines bucket sizes for batch dimension padding.
 	SequenceBuckets []int // SequenceBuckets defines bucket sizes for sequence length padding.
@@ -57,7 +58,7 @@ func createGoMLXModelBackend(model *Model, options *options.Options) error {
 		outputNames = append(outputNames, v.Name)
 	}
 
-	ctx := context.New()
+	ctx := gomlxcontext.New()
 	// Mark it to reuse variables: it will be an error to create a new variable – for safety.
 	ctx = ctx.Reuse()
 
@@ -82,7 +83,7 @@ func createGoMLXModelBackend(model *Model, options *options.Options) error {
 	}
 
 	// Create model executor.
-	callFunc := func(ctx *context.Context, inputs []*graph.Node) []*graph.Node {
+	callFunc := func(ctx *gomlxcontext.Context, inputs []*graph.Node) []*graph.Node {
 		inputsMap := map[string]*graph.Node{}
 		for i, inputMeta := range model.InputsMeta {
 			inputsMap[inputMeta.Name] = inputs[i]
@@ -90,7 +91,7 @@ func createGoMLXModelBackend(model *Model, options *options.Options) error {
 		return modelParsed.CallGraph(ctx, inputs[0].Graph(), inputsMap, outputNames...)
 	}
 
-	exec, contextErr := context.NewExec(backend, ctx, callFunc)
+	exec, contextErr := gomlxcontext.NewExec(backend, ctx, callFunc)
 	if contextErr != nil {
 		return errors.Join(contextErr, modelParsed.Close())
 	}
@@ -268,13 +269,47 @@ func createInputTensorsGoMLX(batch *PipelineBatch, model *Model, padBatchDimensi
 	return nil
 }
 
-func runGoMLXSessionOnBatch(batch *PipelineBatch, p *BasePipeline) error {
-	// Non-generative models
-	outputTensors, err := p.Model.GoMLXModel.Exec.Exec(batch.InputValues.([]*tensors.Tensor))
-	if err != nil {
-		return err
+func runGoMLXSessionOnBatch(ctx context.Context, batch *PipelineBatch, p *BasePipeline) error {
+	if p.SessionContext == nil {
+		return errors.New("no session context")
+	}
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-p.SessionContext.Done():
+		return p.SessionContext.Err()
+	default:
 	}
 
+	var outputTensors []*tensors.Tensor
+	doneChannel := make(chan bool, 1)
+	eg := errgroup.Group{}
+	eg.Go(func() (err error) {
+		defer func() {
+			// C code does not support context, so cancelling a context and/or session will usually trigger a segfault(panic).
+			// recover this here, so context can be cancelled gracefully and return an error.
+			if r := recover(); r != nil {
+				err = fmt.Errorf("recovered from panic: %v", r)
+			}
+			close(doneChannel)
+		}()
+		var execErr error
+		outputTensors, execErr = p.Model.GoMLXModel.Exec.Exec(batch.InputValues.([]*tensors.Tensor))
+		return errors.Join(execErr, err)
+	})
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-p.SessionContext.Done():
+		return p.SessionContext.Err()
+	case <-doneChannel:
+		if err := eg.Wait(); err != nil {
+			return err
+		}
+	}
+
+	var err error
 	defer func() {
 		for _, t := range outputTensors {
 			err = errors.Join(t.FinalizeAll())

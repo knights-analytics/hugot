@@ -1,6 +1,7 @@
 package hugot
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"math"
@@ -11,7 +12,7 @@ import (
 
 	"github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
-	"github.com/gomlx/gomlx/pkg/ml/context"
+	gomlxcontext "github.com/gomlx/gomlx/pkg/ml/context"
 	"github.com/gomlx/gomlx/pkg/ml/train"
 	"github.com/gomlx/gomlx/pkg/ml/train/losses"
 	"github.com/gomlx/gomlx/pkg/ml/train/optimizers"
@@ -32,8 +33,8 @@ func (e stoppingError) Error() string {
 	return "stopping error"
 }
 
-func NewGoTrainingSession[T backends.Pipeline](config TrainingConfig) (*TrainingSession, error) {
-	s, err := newTrainingSession[T]("GO", config)
+func NewGoTrainingSession[T backends.Pipeline](ctx context.Context, config TrainingConfig) (*TrainingSession, error) {
+	s, err := newTrainingSession[T](ctx, "GO", config)
 	if err != nil {
 		return nil, err
 	}
@@ -41,11 +42,11 @@ func NewGoTrainingSession[T backends.Pipeline](config TrainingConfig) (*Training
 	return newGoMLXTrainingSession(s)
 }
 
-func NewXLATrainingSession[T backends.Pipeline](config TrainingConfig) (*TrainingSession, error) {
+func NewXLATrainingSession[T backends.Pipeline](ctx context.Context, config TrainingConfig) (*TrainingSession, error) {
 	// Disabled for now until we have auto installs globally
 	xlaDisableAutoInstall()
 
-	s, err := newTrainingSession[T]("XLA", config)
+	s, err := newTrainingSession[T](ctx, "XLA", config)
 	if err != nil {
 		return nil, err
 	}
@@ -103,7 +104,7 @@ func TrainGoMLX(s *TrainingSession) error {
 			}
 		}
 
-		modelFn := func(ctx *context.Context, _ any, inputs []*context.Node) []*context.Node {
+		modelFn := func(ctx *gomlxcontext.Context, _ any, inputs []*gomlxcontext.Node) []*gomlxcontext.Node {
 			inputsLHS := inputs[:3] // inputIDs, attentionMask, tokenTypeIDs if present
 			inputsRHS := inputs[3:]
 
@@ -124,7 +125,7 @@ func TrainGoMLX(s *TrainingSession) error {
 				embeddingRHS = graph.MaskedReduceMean(embeddingRHS, maskRHS, 1)
 			}
 			cosineSimilarity := graph.CosineSimilarity(embeddingLHS, embeddingRHS, -1)
-			return []*context.Node{cosineSimilarity}
+			return []*gomlxcontext.Node{cosineSimilarity}
 		}
 
 		gomlxTrainer := train.NewTrainer(backend,

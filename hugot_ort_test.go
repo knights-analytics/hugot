@@ -3,6 +3,7 @@
 package hugot
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"testing"
@@ -13,7 +14,7 @@ import (
 // FEATURE EXTRACTION
 
 func TestFeatureExtractionPipelineORT(t *testing.T) {
-	session, err := NewORTSession()
+	session, err := NewORTSession(t.Context())
 	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
@@ -26,7 +27,7 @@ func TestFeatureExtractionPipelineORTCuda(t *testing.T) {
 	if os.Getenv("CI") != "" {
 		t.SkipNow()
 	}
-	session, err := NewORTSession(options.WithCuda(map[string]string{
+	session, err := NewORTSession(t.Context(), options.WithCuda(map[string]string{
 		"device_id": "0",
 	}))
 	checkT(t, err)
@@ -38,7 +39,7 @@ func TestFeatureExtractionPipelineORTCuda(t *testing.T) {
 }
 
 func TestFeatureExtractionPipelineValidationORT(t *testing.T) {
-	session, err := NewORTSession()
+	session, err := NewORTSession(t.Context())
 	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
@@ -58,7 +59,7 @@ func TestTextClassificationPipelineORT(t *testing.T) {
 		options.WithIntraOpNumThreads(1),
 		options.WithInterOpNumThreads(1),
 	}
-	session, err := NewORTSession(opts...)
+	session, err := NewORTSession(t.Context(), opts...)
 	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
@@ -71,7 +72,7 @@ func TestTextClassificationPipelineORTCuda(t *testing.T) {
 	if os.Getenv("CI") != "" {
 		t.SkipNow()
 	}
-	session, err := NewORTSession(options.WithCuda(map[string]string{
+	session, err := NewORTSession(t.Context(), options.WithCuda(map[string]string{
 		"device_id": "0",
 	}))
 	checkT(t, err)
@@ -91,7 +92,7 @@ func TestTextClassificationPipelineMultiORT(t *testing.T) {
 		options.WithIntraOpNumThreads(1),
 		options.WithInterOpNumThreads(1),
 	}
-	session, err := NewORTSession(opts...)
+	session, err := NewORTSession(t.Context(), opts...)
 	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
@@ -104,7 +105,7 @@ func TestTextClassificationPipelineORTMultiCuda(t *testing.T) {
 	if os.Getenv("CI") != "" {
 		t.SkipNow()
 	}
-	session, err := NewORTSession(options.WithCuda(map[string]string{
+	session, err := NewORTSession(t.Context(), options.WithCuda(map[string]string{
 		"device_id": "0",
 	}))
 	checkT(t, err)
@@ -116,7 +117,7 @@ func TestTextClassificationPipelineORTMultiCuda(t *testing.T) {
 }
 
 func TestTextClassificationPipelineValidationORT(t *testing.T) {
-	session, err := NewORTSession()
+	session, err := NewORTSession(t.Context())
 	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
@@ -128,7 +129,7 @@ func TestTextClassificationPipelineValidationORT(t *testing.T) {
 // Token classification
 
 func TestTokenClassificationPipelineORT(t *testing.T) {
-	session, err := NewORTSession()
+	session, err := NewORTSession(t.Context())
 	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
@@ -141,7 +142,7 @@ func TestTokenClassificationPipelineORTCuda(t *testing.T) {
 	if os.Getenv("CI") != "" {
 		t.SkipNow()
 	}
-	session, err := NewORTSession(options.WithCuda(map[string]string{
+	session, err := NewORTSession(t.Context(), options.WithCuda(map[string]string{
 		"device_id": "0",
 	}))
 	checkT(t, err)
@@ -153,7 +154,7 @@ func TestTokenClassificationPipelineORTCuda(t *testing.T) {
 }
 
 func TestTokenClassificationPipelineValidationORT(t *testing.T) {
-	session, err := NewORTSession()
+	session, err := NewORTSession(t.Context())
 	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
@@ -165,7 +166,7 @@ func TestTokenClassificationPipelineValidationORT(t *testing.T) {
 // Zero shot
 
 func TestZeroShotClassificationPipelineORT(t *testing.T) {
-	session, err := NewORTSession()
+	session, err := NewORTSession(t.Context())
 	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
@@ -178,7 +179,7 @@ func TestZeroShotClassificationPipelineORTCuda(t *testing.T) {
 	if os.Getenv("CI") != "" {
 		t.SkipNow()
 	}
-	session, err := NewORTSession(options.WithCuda(map[string]string{
+	session, err := NewORTSession(t.Context(), options.WithCuda(map[string]string{
 		"device_id": "0",
 	}))
 	checkT(t, err)
@@ -190,7 +191,7 @@ func TestZeroShotClassificationPipelineORTCuda(t *testing.T) {
 }
 
 func TestZeroShotClassificationPipelineValidationORT(t *testing.T) {
-	session, err := NewORTSession()
+	session, err := NewORTSession(t.Context())
 	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
@@ -202,7 +203,7 @@ func TestZeroShotClassificationPipelineValidationORT(t *testing.T) {
 // Cross Encoder
 
 func TestCrossEncoderPipelineORT(t *testing.T) {
-	session, err := NewORTSession()
+	session, err := NewORTSession(t.Context())
 	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
@@ -215,7 +216,7 @@ func TestCrossEncoderPipelineORTCuda(t *testing.T) {
 	if os.Getenv("CI") != "" {
 		t.SkipNow()
 	}
-	session, err := NewORTSession(options.WithCuda(map[string]string{
+	session, err := NewORTSession(t.Context(), options.WithCuda(map[string]string{
 		"device_id": "0",
 	}))
 	checkT(t, err)
@@ -227,7 +228,7 @@ func TestCrossEncoderPipelineORTCuda(t *testing.T) {
 }
 
 func TestCrossEncoderPipelineValidationORT(t *testing.T) {
-	session, err := NewORTSession()
+	session, err := NewORTSession(t.Context())
 	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
@@ -239,7 +240,7 @@ func TestCrossEncoderPipelineValidationORT(t *testing.T) {
 // Image classification
 
 func TestImageClassificationPipelineORT(t *testing.T) {
-	session, err := NewORTSession()
+	session, err := NewORTSession(t.Context())
 	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
@@ -252,7 +253,7 @@ func TestImageClassificationPipelineORTCuda(t *testing.T) {
 	if os.Getenv("CI") != "" {
 		t.SkipNow()
 	}
-	session, err := NewORTSession(options.WithCuda(map[string]string{
+	session, err := NewORTSession(t.Context(), options.WithCuda(map[string]string{
 		"device_id": "0",
 	}))
 	checkT(t, err)
@@ -264,7 +265,7 @@ func TestImageClassificationPipelineORTCuda(t *testing.T) {
 }
 
 func TestImageClassificationPipelineValidationORT(t *testing.T) {
-	session, err := NewORTSession()
+	session, err := NewORTSession(t.Context())
 	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
@@ -276,7 +277,7 @@ func TestImageClassificationPipelineValidationORT(t *testing.T) {
 // Object detection
 
 func TestObjectDetectionPipelineORT(t *testing.T) {
-	session, err := NewORTSession()
+	session, err := NewORTSession(t.Context())
 	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
@@ -289,7 +290,7 @@ func TestObjectDetectionPipelineORTCuda(t *testing.T) {
 	if os.Getenv("CI") != "" {
 		t.SkipNow()
 	}
-	session, err := NewORTSession(options.WithCuda(map[string]string{
+	session, err := NewORTSession(t.Context(), options.WithCuda(map[string]string{
 		"device_id": "0",
 	}))
 	checkT(t, err)
@@ -301,7 +302,7 @@ func TestObjectDetectionPipelineORTCuda(t *testing.T) {
 }
 
 func TestObjectDetectionPipelineValidationORT(t *testing.T) {
-	session, err := NewORTSession()
+	session, err := NewORTSession(t.Context())
 	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
@@ -317,7 +318,7 @@ func TestTextGenerationPipelineORT(t *testing.T) {
 	if os.Getenv("CI") != "" {
 		t.SkipNow()
 	}
-	session, err := NewORTSession()
+	session, err := NewORTSession(t.Context())
 	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
@@ -330,7 +331,7 @@ func TestTextGenerationPipelineORTCuda(t *testing.T) {
 	if os.Getenv("CI") != "" {
 		t.SkipNow()
 	}
-	session, err := NewORTSession(options.WithCuda(map[string]string{
+	session, err := NewORTSession(t.Context(), options.WithCuda(map[string]string{
 		"device_id": "0",
 	}))
 	checkT(t, err)
@@ -345,7 +346,7 @@ func TestTextGenerationPipelineValidationORT(t *testing.T) {
 	if os.Getenv("CI") != "" {
 		t.SkipNow()
 	}
-	session, err := NewORTSession()
+	session, err := NewORTSession(t.Context())
 	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
@@ -357,7 +358,7 @@ func TestTextGenerationPipelineValidationORT(t *testing.T) {
 // Question answering
 
 func TestQAPipelineORT(t *testing.T) {
-	session, err := NewORTSession()
+	session, err := NewORTSession(t.Context())
 	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
@@ -370,7 +371,7 @@ func TestQAPipelineORTCuda(t *testing.T) {
 	if os.Getenv("CI") != "" {
 		t.SkipNow()
 	}
-	session, err := NewORTSession(options.WithCuda(map[string]string{
+	session, err := NewORTSession(t.Context(), options.WithCuda(map[string]string{
 		"device_id": "0",
 	}))
 	checkT(t, err)
@@ -384,7 +385,7 @@ func TestQAPipelineORTCuda(t *testing.T) {
 // Tabular pipeline
 
 func TestTabularPipelineORT(t *testing.T) {
-	session, err := NewORTSession()
+	session, err := NewORTSession(t.Context())
 	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
@@ -397,7 +398,7 @@ func TestTabularPipelineORTCuda(t *testing.T) {
 	if os.Getenv("CI") != "" {
 		t.SkipNow()
 	}
-	session, err := NewORTSession(options.WithCuda(map[string]string{
+	session, err := NewORTSession(t.Context(), options.WithCuda(map[string]string{
 		"device_id": "0",
 	}))
 	checkT(t, err)
@@ -411,7 +412,7 @@ func TestTabularPipelineORTCuda(t *testing.T) {
 // No same name
 
 func TestNoSameNamePipelineORT(t *testing.T) {
-	session, err := NewORTSession()
+	session, err := NewORTSession(t.Context())
 	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
@@ -421,7 +422,7 @@ func TestNoSameNamePipelineORT(t *testing.T) {
 }
 
 func TestClosePipelineORT(t *testing.T) {
-	session, err := NewORTSession()
+	session, err := NewORTSession(t.Context())
 	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
@@ -433,7 +434,7 @@ func TestClosePipelineORT(t *testing.T) {
 // Thread safety
 
 func TestThreadSafetyORT(t *testing.T) {
-	session, err := NewORTSession()
+	session, err := NewORTSession(t.Context())
 	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
@@ -446,7 +447,7 @@ func TestThreadSafetyORTCuda(t *testing.T) {
 	if os.Getenv("CI") != "" {
 		t.SkipNow()
 	}
-	session, err := NewORTSession(options.WithCuda(map[string]string{
+	session, err := NewORTSession(t.Context(), options.WithCuda(map[string]string{
 		"device_id": "0",
 	}))
 	checkT(t, err)
@@ -459,7 +460,7 @@ func TestThreadSafetyORTCuda(t *testing.T) {
 
 // Benchmarks
 
-func runBenchmarkEmbedding(strings *[]string, cuda bool) {
+func runBenchmarkEmbedding(ctx context.Context, strings *[]string, cuda bool) {
 	var opts []options.WithOption
 	switch cuda {
 	case true:
@@ -471,7 +472,7 @@ func runBenchmarkEmbedding(strings *[]string, cuda bool) {
 	default:
 		opts = []options.WithOption{}
 	}
-	session, err := NewORTSession(opts...)
+	session, err := NewORTSession(ctx, opts...)
 	if err != nil {
 		panic(err)
 	}
@@ -492,7 +493,7 @@ func runBenchmarkEmbedding(strings *[]string, cuda bool) {
 	if err2 != nil {
 		panic(err2)
 	}
-	res, err := pipelineEmbedder.Run(*strings)
+	res, err := pipelineEmbedder.Run(ctx, *strings)
 	if err != nil {
 		panic(err)
 	}
@@ -508,7 +509,7 @@ func BenchmarkORTCudaEmbedding(b *testing.B) {
 		p[i] = "The goal of this library is to provide an easy, scalable, and hassle-free way to run huggingface transformer pipelines in golang applications."
 	}
 	for b.Loop() {
-		runBenchmarkEmbedding(&p, true)
+		runBenchmarkEmbedding(b.Context(), &p, true)
 	}
 }
 
@@ -521,6 +522,6 @@ func BenchmarkORTCPUEmbedding(b *testing.B) {
 		p[i] = "The goal of this library is to provide an easy, scalable, and hassle-free way to run huggingface transformer pipelines in golang applications."
 	}
 	for b.Loop() {
-		runBenchmarkEmbedding(&p, false)
+		runBenchmarkEmbedding(b.Context(), &p, false)
 	}
 }

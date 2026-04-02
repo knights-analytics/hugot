@@ -55,7 +55,7 @@ func featureExtractionPipeline(t *testing.T, session *Session) {
 
 	// test 'robert smith'
 	testResults = expectedResults["test1output"]
-	batchResult, err := pipeline.RunPipeline([]string{"robert smith"})
+	batchResult, err := pipeline.RunPipeline(t.Context(), []string{"robert smith"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -69,7 +69,7 @@ func featureExtractionPipeline(t *testing.T, session *Session) {
 
 	// test ['robert smith junior', 'francis ford coppola']
 	testResults = expectedResults["test2output"]
-	batchResult, err = pipeline.RunPipeline([]string{"robert smith junior", "francis ford coppola"})
+	batchResult, err = pipeline.RunPipeline(t.Context(), []string{"robert smith junior", "francis ford coppola"})
 	if err != nil {
 		t.FailNow()
 	}
@@ -89,11 +89,11 @@ func featureExtractionPipeline(t *testing.T, session *Session) {
 
 	for k, sentencePair := range testPairs {
 		// these vectors should be the same
-		firstBatchResult, err2 := pipeline.RunPipeline(sentencePair[0])
+		firstBatchResult, err2 := pipeline.RunPipeline(t.Context(), sentencePair[0])
 		checkT(t, err2)
 		firstEmbedding := firstBatchResult.Embeddings[0]
 
-		secondBatchResult, err3 := pipeline.RunPipeline(sentencePair[1])
+		secondBatchResult, err3 := pipeline.RunPipeline(t.Context(), sentencePair[1])
 		checkT(t, err3)
 		secondEmbedding := secondBatchResult.Embeddings[0]
 		e := floatsEqual(firstEmbedding, secondEmbedding)
@@ -125,7 +125,7 @@ func featureExtractionPipeline(t *testing.T, session *Session) {
 	checkT(t, err)
 
 	normalizationStrings := []string{"Onnxruntime is a great inference backend"}
-	normalizedEmbedding, err := pipeline.RunPipeline(normalizationStrings)
+	normalizedEmbedding, err := pipeline.RunPipeline(t.Context(), normalizationStrings)
 	checkT(t, err)
 	for i, embedding := range normalizedEmbedding.Embeddings {
 		e := floatsEqual(embedding, testResults[i])
@@ -144,7 +144,7 @@ func featureExtractionPipeline(t *testing.T, session *Session) {
 	pipelineSentence, err := NewPipeline(session, configSentence)
 	checkT(t, err)
 
-	_, err = pipelineSentence.RunPipeline([]string{"Onnxruntime is a great inference backend"})
+	_, err = pipelineSentence.RunPipeline(t.Context(), []string{"Onnxruntime is a great inference backend"})
 	if err != nil {
 		t.FailNow()
 	}
@@ -155,7 +155,7 @@ func featureExtractionPipeline(t *testing.T, session *Session) {
 	}
 	pipelineToken, err := NewPipeline(session, configSentence)
 	checkT(t, err)
-	_, err = pipelineToken.RunPipeline([]string{"Onnxruntime is a great inference backend"})
+	_, err = pipelineToken.RunPipeline(t.Context(), []string{"Onnxruntime is a great inference backend"})
 	if err != nil {
 		t.FailNow()
 	}
@@ -228,7 +228,7 @@ func textClassificationPipeline(t *testing.T, session *Session) {
 	}
 
 	t.Run(test.name, func(t *testing.T) {
-		batchResult, err := test.pipeline.RunPipeline(test.strings)
+		batchResult, err := test.pipeline.RunPipeline(t.Context(), test.strings)
 		checkT(t, err)
 		for i, expected := range test.expected.ClassificationOutputs {
 			checkClassificationOutput(t, expected, batchResult.ClassificationOutputs[i])
@@ -387,7 +387,7 @@ func textClassificationPipelineMulti(t *testing.T, session *Session) {
 	}
 
 	t.Run(test.name, func(t *testing.T) {
-		batchResult, err := test.pipeline.RunPipeline(test.strings)
+		batchResult, err := test.pipeline.RunPipeline(t.Context(), test.strings)
 		checkT(t, err)
 		for i, expected := range test.expected.ClassificationOutputs {
 			checkClassificationOutput(t, expected, batchResult.ClassificationOutputs[i])
@@ -647,7 +647,7 @@ func zeroShotClassificationPipeline(t *testing.T, session *Session) {
 		t.Run(tt.name, func(t *testing.T) {
 			classificationPipeline.Labels = tt.labels
 			classificationPipeline.Multilabel = tt.multilabel
-			batchResult, err := tt.pipeline.RunPipeline(tt.sequences)
+			batchResult, err := tt.pipeline.RunPipeline(t.Context(), tt.sequences)
 			checkT(t, err)
 			assert.Equal(t, len(batchResult.GetOutput()), len(tt.expected.ClassificationOutputs))
 
@@ -769,7 +769,7 @@ func tokenClassificationPipeline(t *testing.T, session *Session) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			batchResult, err := tt.pipeline.RunPipeline(tt.strings)
+			batchResult, err := tt.pipeline.RunPipeline(t.Context(), tt.strings)
 			checkT(t, err)
 			printTokenEntities(batchResult)
 			for i, predictedEntities := range batchResult.Entities {
@@ -786,7 +786,7 @@ func tokenClassificationPipeline(t *testing.T, session *Session) {
 	// Expect same entities as the simple aggregation for the equivalent sentence for split words
 	t.Run("Split words aggregation", func(t *testing.T) {
 		words := [][]string{{"My", "name", "is", "Wolfgang", "and", "I", "live", "in", "Berlin", "."}}
-		batchResult, err := pipelineSplit.RunWords(words)
+		batchResult, err := pipelineSplit.RunWords(t.Context(), words)
 		checkT(t, err)
 		printTokenEntities(batchResult)
 		expected := expectedResults[0]
@@ -805,9 +805,9 @@ func tokenClassificationPipeline(t *testing.T, session *Session) {
 		nonSplit := []string{"New  York is great."}
 		splitWords := [][]string{{"New", "York", "is", "great", "."}}
 
-		resNonSplit, errNon := pipelineSimple.RunPipeline(nonSplit)
+		resNonSplit, errNon := pipelineSimple.RunPipeline(t.Context(), nonSplit)
 		checkT(t, errNon)
-		resSplit, errSplitRun := pipelineSplit.RunWords(splitWords)
+		resSplit, errSplitRun := pipelineSplit.RunWords(t.Context(), splitWords)
 		checkT(t, errSplitRun)
 
 		// Compare first sequence: entity words may match, but offsets should differ due to space normalization.
@@ -823,9 +823,9 @@ func tokenClassificationPipeline(t *testing.T, session *Session) {
 		nonSplit := []string{"XBerlinXXisXbeautiful."}
 		split := [][]string{{"Berlin is", "beautiful", "."}}
 
-		resNonSplit, errNS := pipelineSimple.RunPipeline(nonSplit)
+		resNonSplit, errNS := pipelineSimple.RunPipeline(t.Context(), nonSplit)
 		checkT(t, errNS)
-		resSplit, errSW := pipelineSplit.RunWords(split)
+		resSplit, errSW := pipelineSplit.RunWords(t.Context(), split)
 		checkT(t, errSW)
 
 		gotA := resNonSplit.Entities[0]
@@ -923,7 +923,7 @@ func crossEncoderPipeline(t *testing.T, session *Session) {
 	}
 
 	inputs := append([]string{query}, documents...)
-	output, err := pipeline.Run(inputs)
+	output, err := pipeline.Run(t.Context(), inputs)
 	checkT(t, err)
 	results := output.(*pipelines.CrossEncoderOutput).Results
 
@@ -996,7 +996,7 @@ func imageClassificationPipeline(t *testing.T, session *Session) {
 	pipeline, err := NewPipeline(session, config)
 	checkT(t, err)
 
-	result, err := pipeline.RunPipeline([]string{imagePath, imagePath})
+	result, err := pipeline.RunPipeline(t.Context(), []string{imagePath, imagePath})
 	checkT(t, err)
 
 	for i, pred := range result.Predictions[0] {
@@ -1045,7 +1045,7 @@ func objectDetectionPipeline(t *testing.T, session *Session) {
 
 	// Use a simple cat image similar to classification test style
 	inputs := []string{"models/imageData/cat.jpg"}
-	result, err := pipeline.RunPipeline(inputs)
+	result, err := pipeline.RunPipeline(t.Context(), inputs)
 	checkT(t, err)
 
 	if len(result.Detections) == 0 || len(result.Detections[0]) == 0 {
@@ -1424,7 +1424,7 @@ func questionAnsweringPipeline(t *testing.T, session *Session) {
 		{Question: "What is the currency?", Context: contextJSON},
 	}
 
-	result, err := pipeline.RunPipeline(inputs)
+	result, err := pipeline.RunPipeline(t.Context(), inputs)
 	checkT(t, err)
 
 	assert.Equal(t, 2, len(result.Outputs), "expected one result per input")
@@ -1457,7 +1457,7 @@ func questionAnsweringPipeline(t *testing.T, session *Session) {
 	pipelineTopK, err := NewPipeline(session, configTopK)
 	checkT(t, err)
 
-	resultTopK, err := pipelineTopK.RunPipeline(inputs)
+	resultTopK, err := pipelineTopK.RunPipeline(t.Context(), inputs)
 	checkT(t, err)
 
 	assert.Equal(t, 2, len(resultTopK.Outputs), "expected one result set per input")
@@ -1491,7 +1491,7 @@ func tabularPipeline(t *testing.T, session *Session) {
 
 	// Iris classification for an example
 	inputs := []string{"[6.1, 2.8, 4.7, 1.2]"}
-	result, err := pipeline.Run(inputs)
+	result, err := pipeline.Run(t.Context(), inputs)
 	checkT(t, err)
 	output := result.GetOutput()
 	classification := output[0].(pipelines.TabularClassificationOutput)
@@ -1536,12 +1536,12 @@ func threadSafety(t *testing.T, session *Session, numEmbeddings int) {
 
 	worker := func() {
 		for range numEmbeddings {
-			batchResult, threadErr := pipeline.RunPipeline([]string{"robert smith"})
+			batchResult, threadErr := pipeline.RunPipeline(t.Context(), []string{"robert smith"})
 			if threadErr != nil {
 				errChannel <- threadErr
 			}
 			outputChannel1 <- batchResult.Embeddings
-			batchResult, threadErr = pipeline.RunPipeline([]string{"robert smith junior", "francis ford coppola"})
+			batchResult, threadErr = pipeline.RunPipeline(t.Context(), []string{"robert smith junior", "francis ford coppola"})
 			if threadErr != nil {
 				errChannel <- threadErr
 			}

@@ -15,6 +15,7 @@ package pipelines
 // Typical models: distilbert-base-uncased-distilled-squad, bert-large-uncased-whole-word-masking-finetuned-squad.
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"slices"
@@ -90,8 +91,8 @@ func WithTopKAnswers(k int) backends.PipelineOption[*QuestionAnsweringPipeline] 
 }
 
 // NewQuestionAnsweringPipeline initialises a question answering pipeline.
-func NewQuestionAnsweringPipeline(config backends.PipelineConfig[*QuestionAnsweringPipeline], s *options.Options, model *backends.Model) (*QuestionAnsweringPipeline, error) {
-	defaultPipeline, err := backends.NewBasePipeline(config, s, model)
+func NewQuestionAnsweringPipeline(sessionContext context.Context, config backends.PipelineConfig[*QuestionAnsweringPipeline], s *options.Options, model *backends.Model) (*QuestionAnsweringPipeline, error) {
+	defaultPipeline, err := backends.NewBasePipeline(sessionContext, config, s, model)
 	if err != nil {
 		return nil, err
 	}
@@ -174,8 +175,8 @@ func (p *QuestionAnsweringPipeline) Validate() error {
 	return errors.Join(errs...)
 }
 
-// Preprocess tokenises each question/context pair into a single combined sequence.
-func (p *QuestionAnsweringPipeline) Preprocess(batch *backends.PipelineBatch, inputs []QuestionAnsweringInput) error {
+// preprocess tokenises each question/context pair into a single combined sequence.
+func (p *QuestionAnsweringPipeline) preprocess(batch *backends.PipelineBatch, inputs []QuestionAnsweringInput) error {
 	start := time.Now()
 	inputPairs := make([][2]string, 0, len(inputs))
 	for _, in := range inputs {
@@ -188,10 +189,10 @@ func (p *QuestionAnsweringPipeline) Preprocess(batch *backends.PipelineBatch, in
 	return err
 }
 
-// Forward runs the ONNX session on the batch.
-func (p *QuestionAnsweringPipeline) Forward(batch *backends.PipelineBatch) error {
+// forward runs the ONNX session on the batch.
+func (p *QuestionAnsweringPipeline) forward(ctx context.Context, batch *backends.PipelineBatch) error {
 	start := time.Now()
-	if err := backends.RunSessionOnBatch(batch, p.BasePipeline); err != nil {
+	if err := backends.RunSessionOnBatch(ctx, batch, p.BasePipeline); err != nil {
 		return err
 	}
 	atomic.AddUint64(&p.PipelineTimings.NumCalls, 1)
@@ -199,8 +200,8 @@ func (p *QuestionAnsweringPipeline) Forward(batch *backends.PipelineBatch) error
 	return nil
 }
 
-// Postprocess extracts the top-k answer spans for each item in the batch, ranked by score descending.
-func (p *QuestionAnsweringPipeline) Postprocess(batch *backends.PipelineBatch, inputs []QuestionAnsweringInput) (*QuestionAnsweringBatchOutput, error) {
+// postprocess extracts the top-k answer spans for each item in the batch, ranked by score descending.
+func (p *QuestionAnsweringPipeline) postprocess(batch *backends.PipelineBatch, inputs []QuestionAnsweringInput) (*QuestionAnsweringBatchOutput, error) {
 	if len(batch.OutputValues) < 2 {
 		return nil, fmt.Errorf("expected at least 2 output tensors (start_logits, end_logits), got %d", len(batch.OutputValues))
 	}
@@ -240,7 +241,7 @@ func (p *QuestionAnsweringPipeline) Postprocess(batch *backends.PipelineBatch, i
 }
 
 // Run implements the Pipeline interface. Inputs are interleaved [question0, context0, question1, context1, …].
-func (p *QuestionAnsweringPipeline) Run(inputs []string) (backends.PipelineBatchOutput, error) {
+func (p *QuestionAnsweringPipeline) Run(ctx context.Context, inputs []string) (backends.PipelineBatchOutput, error) {
 	if len(inputs) == 0 || len(inputs)%2 != 0 {
 		return nil, fmt.Errorf("question answering pipeline requires an even, non-zero number of strings: [question0, context0, question1, context1, ...]")
 	}
@@ -248,28 +249,28 @@ func (p *QuestionAnsweringPipeline) Run(inputs []string) (backends.PipelineBatch
 	for i := 0; i < len(inputs); i += 2 {
 		qaInputs[i/2] = QuestionAnsweringInput{Question: inputs[i], Context: inputs[i+1]}
 	}
-	return p.RunPipeline(qaInputs)
+	return p.RunPipeline(ctx, qaInputs)
 }
 
 // RunPipeline is the typed entry point for the question answering pipeline.
-func (p *QuestionAnsweringPipeline) RunPipeline(inputs []QuestionAnsweringInput) (*QuestionAnsweringBatchOutput, error) {
+func (p *QuestionAnsweringPipeline) RunPipeline(ctx context.Context, inputs []QuestionAnsweringInput) (*QuestionAnsweringBatchOutput, error) {
 	var runErrors []error
 	batch := backends.NewBatch(len(inputs))
 	defer func(*backends.PipelineBatch) {
 		runErrors = append(runErrors, batch.Destroy())
 	}(batch)
 
-	runErrors = append(runErrors, p.Preprocess(batch, inputs))
+	runErrors = append(runErrors, p.preprocess(batch, inputs))
 	if e := errors.Join(runErrors...); e != nil {
 		return nil, e
 	}
 
-	runErrors = append(runErrors, p.Forward(batch))
+	runErrors = append(runErrors, p.forward(ctx, batch))
 	if e := errors.Join(runErrors...); e != nil {
 		return nil, e
 	}
 
-	result, postErr := p.Postprocess(batch, inputs)
+	result, postErr := p.postprocess(batch, inputs)
 	runErrors = append(runErrors, postErr)
 	return result, errors.Join(runErrors...)
 }

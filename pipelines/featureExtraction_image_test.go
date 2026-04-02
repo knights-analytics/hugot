@@ -123,7 +123,7 @@ func TestImageModeValidation(t *testing.T) {
 	}
 
 	img := image.NewRGBA(image.Rect(0, 0, 10, 10))
-	_, err := pipeline.RunWithImages([]image.Image{img})
+	_, err := pipeline.RunWithImages(t.Context(), []image.Image{img})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "ImageMode")
 }

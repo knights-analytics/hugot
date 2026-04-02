@@ -6,10 +6,11 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"github.com/knights-analytics/hugot/options"
 	"math"
 	"os"
 	"testing"
+
+	"github.com/knights-analytics/hugot/options"
 
 	"github.com/stretchr/testify/assert"
 
@@ -38,13 +39,13 @@ func runModel(t *testing.T, runtime string, examplesLeft, examplesRight []string
 
 	switch runtime {
 	case "ORT":
-		session, err = NewORTSession()
+		session, err = NewORTSession(t.Context())
 		checkT(t, err)
 	case "GO":
-		session, err = NewGoSession()
+		session, err = NewGoSession(t.Context())
 		checkT(t, err)
 	case "XLA":
-		session, err = NewXLASession(options.WithGoMLXBatchBuckets([]int{35}))
+		session, err = NewXLASession(t.Context(), options.WithGoMLXBatchBuckets([]int{35}))
 		checkT(t, err)
 	default:
 		t.Fatal("unknown runtime")
@@ -62,9 +63,9 @@ func runModel(t *testing.T, runtime string, examplesLeft, examplesRight []string
 	pipeline, err := NewPipeline(session, config)
 	checkT(t, err)
 
-	resultsLeft, err := pipeline.RunPipeline(examplesLeft)
+	resultsLeft, err := pipeline.RunPipeline(t.Context(), examplesLeft)
 	checkT(t, err)
-	resultsRight, err := pipeline.RunPipeline(examplesRight)
+	resultsRight, err := pipeline.RunPipeline(t.Context(), examplesRight)
 	checkT(t, err)
 
 	// calculate cosine similarity between the embeddings
@@ -89,7 +90,7 @@ func trainSimilarity(t *testing.T,
 	// Create a new GoMLX training session. Currently, training is only possible by loading an onnx model
 	// into GoMLX, fine-tuning it, and then writing it back to onnx. Hugot deals with the details
 	// for you here.
-	trainingSession, err := NewXLATrainingSession[*pipelines.FeatureExtractionPipeline](config)
+	trainingSession, err := NewXLATrainingSession[*pipelines.FeatureExtractionPipeline](t.Context(), config)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -251,6 +252,7 @@ func TestTrainSemanticSimilarityCuda(t *testing.T) {
 	modelPath := "./models/KnightsAnalytics_all-MiniLM-L6-v2"
 
 	session, err := NewXLATrainingSession[*pipelines.FeatureExtractionPipeline](
+		t.Context(),
 		TrainingConfig{
 			ModelPath:    modelPath,
 			TrainDataset: dataset,
@@ -297,6 +299,7 @@ func TestTrainSemanticSimilarityGo(t *testing.T) {
 	modelPath := "./models/KnightsAnalytics_all-MiniLM-L6-v2"
 
 	session, err := NewGoTrainingSession[*pipelines.FeatureExtractionPipeline](
+		t.Context(),
 		TrainingConfig{
 			ModelPath:    modelPath,
 			TrainDataset: dataset,
@@ -358,7 +361,7 @@ func TestEarlyStopping(t *testing.T) {
 		Verbose: true,
 	}
 
-	trainingSession, err := NewXLATrainingSession[*pipelines.FeatureExtractionPipeline](trainingConfig)
+	trainingSession, err := NewXLATrainingSession[*pipelines.FeatureExtractionPipeline](t.Context(), trainingConfig)
 	if err != nil {
 		t.Fatal(err)
 	}

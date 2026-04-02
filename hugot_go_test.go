@@ -12,7 +12,7 @@ import (
 // FEATURE EXTRACTION
 
 func TestFeatureExtractionPipelineGo(t *testing.T) {
-	session, err := NewGoSession()
+	session, err := NewGoSession(t.Context())
 	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
@@ -22,7 +22,7 @@ func TestFeatureExtractionPipelineGo(t *testing.T) {
 }
 
 func TestFeatureExtractionPipelineValidationGo(t *testing.T) {
-	session, err := NewGoSession()
+	session, err := NewGoSession(t.Context())
 	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
@@ -34,7 +34,7 @@ func TestFeatureExtractionPipelineValidationGo(t *testing.T) {
 // Text classification
 
 func TestTextClassificationPipelineGo(t *testing.T) {
-	session, err := NewGoSession()
+	session, err := NewGoSession(t.Context())
 	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
@@ -44,7 +44,7 @@ func TestTextClassificationPipelineGo(t *testing.T) {
 }
 
 func TestTextClassificationPipelineMultiGo(t *testing.T) {
-	session, err := NewGoSession()
+	session, err := NewGoSession(t.Context())
 	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
@@ -54,7 +54,7 @@ func TestTextClassificationPipelineMultiGo(t *testing.T) {
 }
 
 func TestTextClassificationPipelineValidationGo(t *testing.T) {
-	session, err := NewGoSession()
+	session, err := NewGoSession(t.Context())
 	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
@@ -66,7 +66,7 @@ func TestTextClassificationPipelineValidationGo(t *testing.T) {
 // Token classification
 
 func TestTokenClassificationPipelineGo(t *testing.T) {
-	session, err := NewGoSession()
+	session, err := NewGoSession(t.Context())
 	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
@@ -76,7 +76,7 @@ func TestTokenClassificationPipelineGo(t *testing.T) {
 }
 
 func TestTokenClassificationPipelineValidationGo(t *testing.T) {
-	session, err := NewGoSession()
+	session, err := NewGoSession(t.Context())
 	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
@@ -88,7 +88,7 @@ func TestTokenClassificationPipelineValidationGo(t *testing.T) {
 // Zero shot
 
 func TestZeroShotClassificationPipelineGo(t *testing.T) {
-	session, err := NewGoSession()
+	session, err := NewGoSession(t.Context())
 	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
@@ -98,7 +98,7 @@ func TestZeroShotClassificationPipelineGo(t *testing.T) {
 }
 
 func TestZeroShotClassificationPipelineValidationGo(t *testing.T) {
-	session, err := NewGoSession()
+	session, err := NewGoSession(t.Context())
 	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
@@ -110,7 +110,7 @@ func TestZeroShotClassificationPipelineValidationGo(t *testing.T) {
 // Cross Encoder
 
 func TestCrossEncoderPipelineGo(t *testing.T) {
-	session, err := NewGoSession()
+	session, err := NewGoSession(t.Context())
 	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
@@ -120,7 +120,7 @@ func TestCrossEncoderPipelineGo(t *testing.T) {
 }
 
 func TestCrossEncoderPipelineValidationGo(t *testing.T) {
-	session, err := NewGoSession()
+	session, err := NewGoSession(t.Context())
 	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
@@ -132,7 +132,7 @@ func TestCrossEncoderPipelineValidationGo(t *testing.T) {
 // Image classification
 
 func TestImageClassificationPipelineGo(t *testing.T) {
-	session, err := NewGoSession()
+	session, err := NewGoSession(t.Context())
 	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
@@ -142,7 +142,7 @@ func TestImageClassificationPipelineGo(t *testing.T) {
 }
 
 func TestImageClassificationPipelineValidationGo(t *testing.T) {
-	session, err := NewGoSession()
+	session, err := NewGoSession(t.Context())
 	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
@@ -154,7 +154,7 @@ func TestImageClassificationPipelineValidationGo(t *testing.T) {
 // Object detection
 
 func TestObjectDetectionPipelineGo(t *testing.T) {
-	session, err := NewGoSession()
+	session, err := NewGoSession(t.Context())
 	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
@@ -164,7 +164,7 @@ func TestObjectDetectionPipelineGo(t *testing.T) {
 }
 
 func TestObjectDetectionPipelineValidationGo(t *testing.T) {
-	session, err := NewGoSession()
+	session, err := NewGoSession(t.Context())
 	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
@@ -177,7 +177,7 @@ func TestObjectDetectionPipelineValidationGo(t *testing.T) {
 
 func TestTextGenerationPipelineGo(t *testing.T) {
 	t.Skip("Generative models are not supported yet for Go")
-	session, err := NewGoSession()
+	session, err := NewGoSession(t.Context())
 	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
@@ -188,7 +188,7 @@ func TestTextGenerationPipelineGo(t *testing.T) {
 
 func TestTextGenerationPipelineValidationGo(t *testing.T) {
 	t.Skip("Generative models are not supported yet for Go")
-	session, err := NewGoSession()
+	session, err := NewGoSession(t.Context())
 	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
@@ -201,7 +201,7 @@ func TestTextGenerationPipelineValidationGo(t *testing.T) {
 
 func TestTabularPipelineGo(t *testing.T) {
 	t.Skip("Currently missing TreeEnsembleClassifier ONNX operator")
-	session, err := NewGoSession()
+	session, err := NewGoSession(t.Context())
 	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
@@ -213,7 +213,7 @@ func TestTabularPipelineGo(t *testing.T) {
 // QA
 
 func TestQAPipelineGo(t *testing.T) {
-	session, err := NewGoSession()
+	session, err := NewGoSession(t.Context())
 	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
@@ -225,7 +225,7 @@ func TestQAPipelineGo(t *testing.T) {
 // No same name
 
 func TestNoSameNamePipelineGo(t *testing.T) {
-	session, err := NewGoSession()
+	session, err := NewGoSession(t.Context())
 	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
@@ -235,7 +235,7 @@ func TestNoSameNamePipelineGo(t *testing.T) {
 }
 
 func TestDestroyPipelineGo(t *testing.T) {
-	session, err := NewGoSession()
+	session, err := NewGoSession(t.Context())
 	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
@@ -250,7 +250,7 @@ func TestThreadSafetyGo(t *testing.T) {
 	if os.Getenv("CI") != "" {
 		t.SkipNow()
 	}
-	session, err := NewGoSession()
+	session, err := NewGoSession(t.Context())
 	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
@@ -270,7 +270,7 @@ func TestReadmeExample(t *testing.T) {
 	}
 
 	// start a new session
-	session, err := NewGoSession()
+	session, err := NewGoSession(t.Context())
 	// For XLA (requires go build tags "XLA" or "ALL"):
 	// session, err := NewXLASession()
 	// For ORT (requires go build tags "ORT" or "ALL"):
@@ -307,7 +307,7 @@ func TestReadmeExample(t *testing.T) {
 
 	// we can now use the pipeline for prediction on a batch of strings
 	batch := []string{"This movie is disgustingly good !", "The director tried too much"}
-	batchResult, err := sentimentPipeline.RunPipeline(batch)
+	batchResult, err := sentimentPipeline.RunPipeline(t.Context(), batch)
 	check(err)
 
 	// and do whatever we want with it :)

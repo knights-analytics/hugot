@@ -116,7 +116,7 @@ type TrainingConfig struct {
 	Verbose              bool
 }
 
-func newTrainingSession[T backends.Pipeline](backend string, config TrainingConfig) (*TrainingSession, error) {
+func newTrainingSession[T backends.Pipeline](sessionContext context.Context, backend string, config TrainingConfig) (*TrainingSession, error) {
 	session := &TrainingSession{
 		config:  config,
 		backend: backend,
@@ -150,7 +150,7 @@ func newTrainingSession[T backends.Pipeline](backend string, config TrainingConf
 	case *pipelines.FeatureExtractionPipeline:
 		pipelineConfig := FeatureExtractionConfig{}
 		pipeline := any(trainingPipeline).(*pipelines.FeatureExtractionPipeline)
-		pipeline, _, err = InitializePipeline(pipeline, pipelineConfig, opts, model)
+		pipeline, _, err = initializePipeline(sessionContext, pipeline, pipelineConfig, opts, model)
 		if err != nil {
 			return nil, err
 		}

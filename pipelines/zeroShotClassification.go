@@ -1,6 +1,7 @@
 package pipelines
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"math"
@@ -102,8 +103,8 @@ func createSequencePairs(sequences interface{}, labels []string, hypothesisTempl
 }
 
 // NewZeroShotClassificationPipeline create new Zero Shot Classification Pipeline.
-func NewZeroShotClassificationPipeline(config backends.PipelineConfig[*ZeroShotClassificationPipeline], s *options.Options, model *backends.Model) (*ZeroShotClassificationPipeline, error) {
-	defaultPipeline, err := backends.NewBasePipeline(config, s, model)
+func NewZeroShotClassificationPipeline(sessionContext context.Context, config backends.PipelineConfig[*ZeroShotClassificationPipeline], s *options.Options, model *backends.Model) (*ZeroShotClassificationPipeline, error) {
+	defaultPipeline, err := backends.NewBasePipeline(sessionContext, config, s, model)
 	if err != nil {
 		return nil, err
 	}
@@ -129,7 +130,7 @@ func NewZeroShotClassificationPipeline(config backends.PipelineConfig[*ZeroShotC
 	return pipeline, err
 }
 
-func (p *ZeroShotClassificationPipeline) Preprocess(batch *backends.PipelineBatch, inputs []string) error {
+func (p *ZeroShotClassificationPipeline) preprocess(batch *backends.PipelineBatch, inputs []string) error {
 	start := time.Now()
 	backends.TokenizeInputs(batch, p.Model.Tokenizer, inputs)
 	atomic.AddUint64(&p.Model.Tokenizer.TokenizerTimings.NumCalls, 1)
@@ -138,7 +139,7 @@ func (p *ZeroShotClassificationPipeline) Preprocess(batch *backends.PipelineBatc
 	return err
 }
 
-func (p *ZeroShotClassificationPipeline) PreprocessPairs(batch *backends.PipelineBatch, inputs [][2]string) error {
+func (p *ZeroShotClassificationPipeline) preprocessPairs(batch *backends.PipelineBatch, inputs [][2]string) error {
 	start := time.Now()
 	backends.TokenizeInputPairs(batch, p.Model.Tokenizer, inputs, p.Model.SeparatorToken)
 	atomic.AddUint64(&p.Model.Tokenizer.TokenizerTimings.NumCalls, 1)
@@ -147,9 +148,9 @@ func (p *ZeroShotClassificationPipeline) PreprocessPairs(batch *backends.Pipelin
 	return err
 }
 
-func (p *ZeroShotClassificationPipeline) Forward(batch *backends.PipelineBatch) error {
+func (p *ZeroShotClassificationPipeline) forward(ctx context.Context, batch *backends.PipelineBatch) error {
 	start := time.Now()
-	err := backends.RunSessionOnBatch(batch, p.BasePipeline)
+	err := backends.RunSessionOnBatch(ctx, batch, p.BasePipeline)
 	if err != nil {
 		return err
 	}
@@ -158,7 +159,7 @@ func (p *ZeroShotClassificationPipeline) Forward(batch *backends.PipelineBatch) 
 	return nil
 }
 
-func (p *ZeroShotClassificationPipeline) Postprocess(outputTensors [][][]float32, labels []string, sequences []string) (*ZeroShotOutput, error) {
+func (p *ZeroShotClassificationPipeline) postprocess(outputTensors [][][]float32, labels []string, sequences []string) (*ZeroShotOutput, error) {
 	classificationOutputs := make([]ZeroShotClassificationOutput, 0, len(sequences))
 	LabelLikelihood := make(map[string]float64)
 	if p.Multilabel || len(p.Labels) == 1 {
@@ -263,7 +264,7 @@ func (p *ZeroShotClassificationPipeline) Postprocess(outputTensors [][][]float32
 	}, nil
 }
 
-func (p *ZeroShotClassificationPipeline) RunPipeline(inputs []string) (*ZeroShotOutput, error) {
+func (p *ZeroShotClassificationPipeline) RunPipeline(ctx context.Context, inputs []string) (*ZeroShotOutput, error) {
 	var outputTensors [][][]float32
 	var runErrors []error
 	sequencePairs, _, err := createSequencePairs(inputs, p.Labels, p.HypothesisTemplate)
@@ -274,10 +275,10 @@ func (p *ZeroShotClassificationPipeline) RunPipeline(inputs []string) (*ZeroShot
 		var sequenceTensors [][]float32
 		for _, pair := range sequence {
 			batch := backends.NewBatch(len(inputs))
-			if err := p.PreprocessPairs(batch, [][2]string{{pair[0], pair[1]}}); err != nil {
+			if err := p.preprocessPairs(batch, [][2]string{{pair[0], pair[1]}}); err != nil {
 				return nil, errors.Join(err, batch.Destroy())
 			}
-			if err := p.Forward(batch); err != nil {
+			if err := p.forward(ctx, batch); err != nil {
 				return nil, errors.Join(err, batch.Destroy())
 			}
 			sequenceTensors = append(sequenceTensors, batch.OutputValues[0].([][]float32)[0])
@@ -287,7 +288,7 @@ func (p *ZeroShotClassificationPipeline) RunPipeline(inputs []string) (*ZeroShot
 		}
 		outputTensors = append(outputTensors, sequenceTensors)
 	}
-	outputs, err := p.Postprocess(outputTensors, p.Labels, inputs)
+	outputs, err := p.postprocess(outputTensors, p.Labels, inputs)
 	runErrors = append(runErrors, err)
 	return outputs, errors.Join(runErrors...)
 }
@@ -321,8 +322,8 @@ func (p *ZeroShotClassificationPipeline) GetStatistics() backends.PipelineStatis
 	return statistics
 }
 
-func (p *ZeroShotClassificationPipeline) Run(inputs []string) (backends.PipelineBatchOutput, error) {
-	return p.RunPipeline(inputs)
+func (p *ZeroShotClassificationPipeline) Run(ctx context.Context, inputs []string) (backends.PipelineBatchOutput, error) {
+	return p.RunPipeline(ctx, inputs)
 }
 
 func (p *ZeroShotClassificationPipeline) Validate() error {

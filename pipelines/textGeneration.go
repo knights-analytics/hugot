@@ -109,8 +109,8 @@ func WithGuidance(guidance *backends.Guidance) backends.PipelineOption[*TextGene
 }
 
 // NewTextGenerationPipeline initializes a new text generation pipeline.
-func NewTextGenerationPipeline(config backends.PipelineConfig[*TextGenerationPipeline], s *options.Options, model *backends.Model) (*TextGenerationPipeline, error) {
-	defaultPipeline, err := backends.NewBasePipeline(config, s, model)
+func NewTextGenerationPipeline(sessionContext context.Context, config backends.PipelineConfig[*TextGenerationPipeline], s *options.Options, model *backends.Model) (*TextGenerationPipeline, error) {
+	defaultPipeline, err := backends.NewBasePipeline(sessionContext, config, s, model)
 	if err != nil {
 		return nil, err
 	}
@@ -171,12 +171,12 @@ func (p *TextGenerationPipeline) Validate() error {
 	return errors.Join(validationErrors...)
 }
 
-func (p *TextGenerationPipeline) Preprocess(batch *backends.PipelineBatch, inputs any) error {
+func (p *TextGenerationPipeline) preprocess(batch *backends.PipelineBatch, inputs any) error {
 	return backends.CreateMessages(batch, p.BasePipeline, inputs, p.SystemPrompt)
 }
 
-// forwardWith initiates the generation loop with explicit tools and guidance, allowing per-call overrides.
-func (p *TextGenerationPipeline) Forward(ctx context.Context, batch *backends.PipelineBatch, tools []string, guidance *backends.Guidance) (chan backends.SequenceDelta, chan error, error) {
+// forward initiates the generation loop with explicit tools and guidance, allowing per-call overrides.
+func (p *TextGenerationPipeline) forward(ctx context.Context, batch *backends.PipelineBatch, tools []string, guidance *backends.Guidance) (chan backends.SequenceDelta, chan error, error) {
 	effectiveTools := tools
 	if len(effectiveTools) == 0 {
 		effectiveTools = p.Tools
@@ -192,20 +192,19 @@ func (p *TextGenerationPipeline) Forward(ctx context.Context, batch *backends.Pi
 	return tokenStream, errorStream, nil
 }
 
-func (p *TextGenerationPipeline) Run(inputs []string) (backends.PipelineBatchOutput, error) {
-	return p.RunPipeline(context.Background(), inputs)
+func (p *TextGenerationPipeline) Run(ctx context.Context, inputs []string) (backends.PipelineBatchOutput, error) {
+	return p.RunPipeline(ctx, inputs)
 }
 
-// RunPipeline processes a batch of string inputs.
 func (p *TextGenerationPipeline) RunPipeline(ctx context.Context, inputs []string) (*TextGenerationOutput, error) {
 	var runErrors []error
 	batch := backends.NewBatch(len(inputs))
 	batch.MaxNewTokens = p.MaxLength
-	runErrors = append(runErrors, p.Preprocess(batch, inputs))
+	runErrors = append(runErrors, p.preprocess(batch, inputs))
 	if e := errors.Join(runErrors...); e != nil {
 		return nil, errors.Join(e, batch.Destroy())
 	}
-	tokenStream, errorStream, forwardErr := p.Forward(ctx, batch, p.Tools, p.Guidance)
+	tokenStream, errorStream, forwardErr := p.forward(ctx, batch, p.Tools, p.Guidance)
 	if forwardErr != nil {
 		return nil, errors.Join(forwardErr, batch.Destroy())
 	}
@@ -233,11 +232,11 @@ func (p *TextGenerationPipeline) runMessages(ctx context.Context, inputs [][]bac
 	var runErrors []error
 	batch := backends.NewBatch(len(inputs))
 	batch.MaxNewTokens = p.MaxLength
-	runErrors = append(runErrors, p.Preprocess(batch, inputs))
+	runErrors = append(runErrors, p.preprocess(batch, inputs))
 	if e := errors.Join(runErrors...); e != nil {
 		return nil, errors.Join(e, batch.Destroy())
 	}
-	tokenStream, errorStream, forwardErr := p.Forward(ctx, batch, tools, guidance)
+	tokenStream, errorStream, forwardErr := p.forward(ctx, batch, tools, guidance)
 	if forwardErr != nil {
 		return nil, errors.Join(forwardErr, batch.Destroy())
 	}

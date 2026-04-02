@@ -12,7 +12,7 @@ import (
 // FEATURE EXTRACTION
 
 func TestFeatureExtractionPipelineXLA(t *testing.T) {
-	session, err := NewXLASession()
+	session, err := NewXLASession(t.Context())
 	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
@@ -25,7 +25,7 @@ func TestFeatureExtractionPipelineXLACuda(t *testing.T) {
 	if os.Getenv("CI") != "" {
 		t.SkipNow()
 	}
-	session, err := NewXLASession(options.WithCuda(map[string]string{
+	session, err := NewXLASession(t.Context(), options.WithCuda(map[string]string{
 		"device_id": "0",
 	}))
 	checkT(t, err)
@@ -37,7 +37,7 @@ func TestFeatureExtractionPipelineXLACuda(t *testing.T) {
 }
 
 func TestFeatureExtractionPipelineValidationXLA(t *testing.T) {
-	session, err := NewXLASession()
+	session, err := NewXLASession(t.Context())
 	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
@@ -49,7 +49,7 @@ func TestFeatureExtractionPipelineValidationXLA(t *testing.T) {
 // Text classification
 
 func TestTextClassificationPipelineXLA(t *testing.T) {
-	session, err := NewXLASession()
+	session, err := NewXLASession(t.Context())
 	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
@@ -62,7 +62,7 @@ func TestTextClassificationPipelineXLACuda(t *testing.T) {
 	if os.Getenv("CI") != "" {
 		t.SkipNow()
 	}
-	session, err := NewXLASession(options.WithCuda(map[string]string{
+	session, err := NewXLASession(t.Context(), options.WithCuda(map[string]string{
 		"device_id": "0",
 	}))
 	checkT(t, err)
@@ -74,7 +74,7 @@ func TestTextClassificationPipelineXLACuda(t *testing.T) {
 }
 
 func TestTextClassificationPipelineMultiXLA(t *testing.T) {
-	session, err := NewXLASession()
+	session, err := NewXLASession(t.Context())
 	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
@@ -87,7 +87,7 @@ func TestTextClassificationPipelineMultiXLACuda(t *testing.T) {
 	if os.Getenv("CI") != "" {
 		t.SkipNow()
 	}
-	session, err := NewXLASession(options.WithCuda(map[string]string{
+	session, err := NewXLASession(t.Context(), options.WithCuda(map[string]string{
 		"device_id": "0",
 	}))
 	checkT(t, err)
@@ -99,7 +99,7 @@ func TestTextClassificationPipelineMultiXLACuda(t *testing.T) {
 }
 
 func TestTextClassificationPipelineValidationXLA(t *testing.T) {
-	session, err := NewXLASession()
+	session, err := NewXLASession(t.Context())
 	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
@@ -111,7 +111,7 @@ func TestTextClassificationPipelineValidationXLA(t *testing.T) {
 // Token classification
 
 func TestTokenClassificationPipelineXLA(t *testing.T) {
-	session, err := NewXLASession()
+	session, err := NewXLASession(t.Context())
 	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
@@ -124,7 +124,7 @@ func TestTokenClassificationPipelineXLACuda(t *testing.T) {
 	if os.Getenv("CI") != "" {
 		t.SkipNow()
 	}
-	session, err := NewXLASession(options.WithCuda(map[string]string{
+	session, err := NewXLASession(t.Context(), options.WithCuda(map[string]string{
 		"device_id": "0",
 	}))
 	checkT(t, err)
@@ -136,7 +136,7 @@ func TestTokenClassificationPipelineXLACuda(t *testing.T) {
 }
 
 func TestTokenClassificationPipelineValidationXLA(t *testing.T) {
-	session, err := NewXLASession()
+	session, err := NewXLASession(t.Context())
 	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
@@ -148,7 +148,7 @@ func TestTokenClassificationPipelineValidationXLA(t *testing.T) {
 // Zero shot
 
 func TestZeroShotClassificationPipelineXLA(t *testing.T) {
-	session, err := NewXLASession()
+	session, err := NewXLASession(t.Context())
 	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
@@ -161,7 +161,7 @@ func TestZeroShotClassificationPipelineXLACuda(t *testing.T) {
 	if os.Getenv("CI") != "" {
 		t.SkipNow()
 	}
-	session, err := NewXLASession(options.WithCuda(map[string]string{
+	session, err := NewXLASession(t.Context(), options.WithCuda(map[string]string{
 		"device_id": "0",
 	}))
 	checkT(t, err)
@@ -173,7 +173,7 @@ func TestZeroShotClassificationPipelineXLACuda(t *testing.T) {
 }
 
 func TestZeroShotClassificationPipelineValidationXLA(t *testing.T) {
-	session, err := NewXLASession()
+	session, err := NewXLASession(t.Context())
 	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
@@ -185,7 +185,7 @@ func TestZeroShotClassificationPipelineValidationXLA(t *testing.T) {
 // Cross Encoder
 
 func TestCrossEncoderPipelineXLA(t *testing.T) {
-	session, err := NewXLASession()
+	session, err := NewXLASession(t.Context())
 	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
@@ -198,7 +198,7 @@ func TestCrossEncoderPipelineXLACuda(t *testing.T) {
 	if os.Getenv("CI") != "" {
 		t.SkipNow()
 	}
-	session, err := NewXLASession(options.WithCuda(map[string]string{
+	session, err := NewXLASession(t.Context(), options.WithCuda(map[string]string{
 		"device_id": "0",
 	}))
 	checkT(t, err)
@@ -210,7 +210,7 @@ func TestCrossEncoderPipelineXLACuda(t *testing.T) {
 }
 
 func TestCrossEncoderPipelineValidationXLA(t *testing.T) {
-	session, err := NewXLASession()
+	session, err := NewXLASession(t.Context())
 	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
@@ -222,7 +222,7 @@ func TestCrossEncoderPipelineValidationXLA(t *testing.T) {
 // Image classification
 
 func TestImageClassificationPipelineXLA(t *testing.T) {
-	session, err := NewXLASession()
+	session, err := NewXLASession(t.Context())
 	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
@@ -235,7 +235,7 @@ func TestImageClassificationPipelineXLACuda(t *testing.T) {
 	if os.Getenv("CI") != "" {
 		t.SkipNow()
 	}
-	session, err := NewXLASession(options.WithCuda(map[string]string{
+	session, err := NewXLASession(t.Context(), options.WithCuda(map[string]string{
 		"device_id": "0",
 	}))
 	checkT(t, err)
@@ -247,7 +247,7 @@ func TestImageClassificationPipelineXLACuda(t *testing.T) {
 }
 
 func TestImageClassificationPipelineValidationXLA(t *testing.T) {
-	session, err := NewXLASession()
+	session, err := NewXLASession(t.Context())
 	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
@@ -259,7 +259,7 @@ func TestImageClassificationPipelineValidationXLA(t *testing.T) {
 // Object detection
 
 func TestObjectDetectionPipelineXLA(t *testing.T) {
-	session, err := NewXLASession()
+	session, err := NewXLASession(t.Context())
 	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
@@ -272,7 +272,7 @@ func TestObjectDetectionPipelineXLACuda(t *testing.T) {
 	if os.Getenv("CI") != "" {
 		t.SkipNow()
 	}
-	session, err := NewXLASession(options.WithCuda(map[string]string{
+	session, err := NewXLASession(t.Context(), options.WithCuda(map[string]string{
 		"device_id": "0",
 	}))
 	checkT(t, err)
@@ -284,7 +284,7 @@ func TestObjectDetectionPipelineXLACuda(t *testing.T) {
 }
 
 func TestObjectDetectionPipelineValidationXLA(t *testing.T) {
-	session, err := NewXLASession()
+	session, err := NewXLASession(t.Context())
 	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
@@ -297,7 +297,7 @@ func TestObjectDetectionPipelineValidationXLA(t *testing.T) {
 
 func TestTextGenerationPipelineXLA(t *testing.T) {
 	t.Skip("Generative models are not supported yet for XLA")
-	session, err := NewXLASession()
+	session, err := NewXLASession(t.Context())
 	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
@@ -311,7 +311,7 @@ func TestTextGenerationPipelineXLACuda(t *testing.T) {
 		t.SkipNow()
 	}
 	t.Skip("Generative models are not supported yet for XLA")
-	session, err := NewXLASession(options.WithCuda(map[string]string{
+	session, err := NewXLASession(t.Context(), options.WithCuda(map[string]string{
 		"device_id": "0",
 	}))
 	checkT(t, err)
@@ -324,7 +324,7 @@ func TestTextGenerationPipelineXLACuda(t *testing.T) {
 
 func TestTextGenerationPipelineValidationXLA(t *testing.T) {
 	t.Skip("Generative models are not supported yet for XLA")
-	session, err := NewXLASession()
+	session, err := NewXLASession(t.Context())
 	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
@@ -337,7 +337,7 @@ func TestTextGenerationPipelineValidationXLA(t *testing.T) {
 
 func TestTabularPipelineXLA(t *testing.T) {
 	t.Skip("Currently missing TreeEnsembleClassifier ONNX operator")
-	session, err := NewXLASession()
+	session, err := NewXLASession(t.Context())
 	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
@@ -351,7 +351,7 @@ func TestTabularPipelineXLACuda(t *testing.T) {
 	if os.Getenv("CI") != "" {
 		t.SkipNow()
 	}
-	session, err := NewXLASession(options.WithCuda(map[string]string{
+	session, err := NewXLASession(t.Context(), options.WithCuda(map[string]string{
 		"device_id": "0",
 	}))
 	checkT(t, err)
@@ -365,7 +365,7 @@ func TestTabularPipelineXLACuda(t *testing.T) {
 // Question answering
 
 func TestQuestionAnsweringPipelineXLA(t *testing.T) {
-	session, err := NewXLASession()
+	session, err := NewXLASession(t.Context())
 	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
@@ -378,7 +378,7 @@ func TestQuestionAnsweringPipelineXLACuda(t *testing.T) {
 	if os.Getenv("CI") != "" {
 		t.SkipNow()
 	}
-	session, err := NewXLASession(options.WithCuda(map[string]string{
+	session, err := NewXLASession(t.Context(), options.WithCuda(map[string]string{
 		"device_id": "0",
 	}))
 	checkT(t, err)
@@ -392,7 +392,7 @@ func TestQuestionAnsweringPipelineXLACuda(t *testing.T) {
 // No same name
 
 func TestNoSameNamePipelineXLA(t *testing.T) {
-	session, err := NewXLASession()
+	session, err := NewXLASession(t.Context())
 	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
@@ -402,7 +402,7 @@ func TestNoSameNamePipelineXLA(t *testing.T) {
 }
 
 func TestDestroyPipelineXLA(t *testing.T) {
-	session, err := NewXLASession()
+	session, err := NewXLASession(t.Context())
 	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
@@ -414,7 +414,7 @@ func TestDestroyPipelineXLA(t *testing.T) {
 // Thread safety
 
 func TestThreadSafetyXLA(t *testing.T) {
-	session, err := NewXLASession()
+	session, err := NewXLASession(t.Context())
 	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
@@ -427,7 +427,7 @@ func TestThreadSafetyXLACuda(t *testing.T) {
 	if os.Getenv("CI") != "" {
 		t.SkipNow()
 	}
-	session, err := NewXLASession(options.WithCuda(map[string]string{
+	session, err := NewXLASession(t.Context(), options.WithCuda(map[string]string{
 		"device_id": "0",
 	}))
 	checkT(t, err)

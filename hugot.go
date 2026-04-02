@@ -1,6 +1,7 @@
 package hugot
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"maps"
@@ -25,9 +26,11 @@ type Session struct {
 	models                          map[string]*backends.Model
 	options                         *options.Options
 	environmentDestroy              func() error
+	sessionContext                  context.Context
+	cancelSessionContext            context.CancelFunc
 }
 
-func newSession(backend string, opts ...options.WithOption) (*Session, error) {
+func newSession(ctx context.Context, backend string, opts ...options.WithOption) (*Session, error) {
 	parsedOptions := options.Defaults()
 	parsedOptions.Backend = backend
 	// Collect options into a struct, so they can be applied in the correct order later
@@ -40,6 +43,8 @@ func newSession(backend string, opts ...options.WithOption) (*Session, error) {
 			return nil, err
 		}
 	}
+
+	sessionContext, cancelSessionContext := context.WithCancel(ctx)
 
 	session := &Session{
 		featureExtractionPipelines:      map[string]*pipelines.FeatureExtractionPipeline{},
@@ -57,6 +62,8 @@ func newSession(backend string, opts ...options.WithOption) (*Session, error) {
 		environmentDestroy: func() error {
 			return nil
 		},
+		sessionContext:       sessionContext,
+		cancelSessionContext: cancelSessionContext,
 	}
 
 	return session, nil
@@ -164,7 +171,7 @@ func NewPipeline[T backends.Pipeline](s *Session, pipelineConfig backends.Pipeli
 		s.models[modelID] = model
 	}
 
-	pipeline, name, err = InitializePipeline(pipeline, pipelineConfig, s.options, model)
+	pipeline, name, err = initializePipeline(s.sessionContext, pipeline, pipelineConfig, s.options, model)
 	if err != nil {
 		return pipeline, err
 	}
@@ -196,14 +203,14 @@ func NewPipeline[T backends.Pipeline](s *Session, pipelineConfig backends.Pipeli
 	return pipeline, nil
 }
 
-func InitializePipeline[T backends.Pipeline](p T, pipelineConfig backends.PipelineConfig[T], options *options.Options, model *backends.Model) (T, string, error) {
+func initializePipeline[T backends.Pipeline](sessionContext context.Context, p T, pipelineConfig backends.PipelineConfig[T], options *options.Options, model *backends.Model) (T, string, error) {
 	var pipeline T
 	var name string
 
 	switch any(p).(type) {
 	case *pipelines.TokenClassificationPipeline:
 		config := any(pipelineConfig).(backends.PipelineConfig[*pipelines.TokenClassificationPipeline])
-		pipelineInitialised, err := pipelines.NewTokenClassificationPipeline(config, options, model)
+		pipelineInitialised, err := pipelines.NewTokenClassificationPipeline(sessionContext, config, options, model)
 		if err != nil {
 			return pipeline, name, err
 		}
@@ -211,7 +218,7 @@ func InitializePipeline[T backends.Pipeline](p T, pipelineConfig backends.Pipeli
 		name = config.Name
 	case *pipelines.TextClassificationPipeline:
 		config := any(pipelineConfig).(backends.PipelineConfig[*pipelines.TextClassificationPipeline])
-		pipelineInitialised, err := pipelines.NewTextClassificationPipeline(config, options, model)
+		pipelineInitialised, err := pipelines.NewTextClassificationPipeline(sessionContext, config, options, model)
 		if err != nil {
 			return pipeline, name, err
 		}
@@ -219,7 +226,7 @@ func InitializePipeline[T backends.Pipeline](p T, pipelineConfig backends.Pipeli
 		name = config.Name
 	case *pipelines.FeatureExtractionPipeline:
 		config := any(pipelineConfig).(backends.PipelineConfig[*pipelines.FeatureExtractionPipeline])
-		pipelineInitialised, err := pipelines.NewFeatureExtractionPipeline(config, options, model)
+		pipelineInitialised, err := pipelines.NewFeatureExtractionPipeline(sessionContext, config, options, model)
 		if err != nil {
 			return pipeline, name, err
 		}
@@ -227,7 +234,7 @@ func InitializePipeline[T backends.Pipeline](p T, pipelineConfig backends.Pipeli
 		name = config.Name
 	case *pipelines.ZeroShotClassificationPipeline:
 		config := any(pipelineConfig).(backends.PipelineConfig[*pipelines.ZeroShotClassificationPipeline])
-		pipelineInitialised, err := pipelines.NewZeroShotClassificationPipeline(config, options, model)
+		pipelineInitialised, err := pipelines.NewZeroShotClassificationPipeline(sessionContext, config, options, model)
 		if err != nil {
 			return pipeline, name, err
 		}
@@ -235,7 +242,7 @@ func InitializePipeline[T backends.Pipeline](p T, pipelineConfig backends.Pipeli
 		name = config.Name
 	case *pipelines.CrossEncoderPipeline:
 		config := any(pipelineConfig).(backends.PipelineConfig[*pipelines.CrossEncoderPipeline])
-		pipelineInitialised, err := pipelines.NewCrossEncoderPipeline(config, options, model)
+		pipelineInitialised, err := pipelines.NewCrossEncoderPipeline(sessionContext, config, options, model)
 		if err != nil {
 			return pipeline, name, err
 		}
@@ -243,7 +250,7 @@ func InitializePipeline[T backends.Pipeline](p T, pipelineConfig backends.Pipeli
 		name = config.Name
 	case *pipelines.ImageClassificationPipeline:
 		config := any(pipelineConfig).(backends.PipelineConfig[*pipelines.ImageClassificationPipeline])
-		pipelineInitialised, err := pipelines.NewImageClassificationPipeline(config, options, model)
+		pipelineInitialised, err := pipelines.NewImageClassificationPipeline(sessionContext, config, options, model)
 		if err != nil {
 			return pipeline, name, err
 		}
@@ -251,7 +258,7 @@ func InitializePipeline[T backends.Pipeline](p T, pipelineConfig backends.Pipeli
 		name = config.Name
 	case *pipelines.ObjectDetectionPipeline:
 		config := any(pipelineConfig).(backends.PipelineConfig[*pipelines.ObjectDetectionPipeline])
-		pipelineInitialised, err := pipelines.NewObjectDetectionPipeline(config, options, model)
+		pipelineInitialised, err := pipelines.NewObjectDetectionPipeline(sessionContext, config, options, model)
 		if err != nil {
 			return pipeline, name, err
 		}
@@ -259,7 +266,7 @@ func InitializePipeline[T backends.Pipeline](p T, pipelineConfig backends.Pipeli
 		name = config.Name
 	case *pipelines.TextGenerationPipeline:
 		config := any(pipelineConfig).(backends.PipelineConfig[*pipelines.TextGenerationPipeline])
-		pipelineInitialised, err := pipelines.NewTextGenerationPipeline(config, options, model)
+		pipelineInitialised, err := pipelines.NewTextGenerationPipeline(sessionContext, config, options, model)
 		if err != nil {
 			return pipeline, name, err
 		}
@@ -267,7 +274,7 @@ func InitializePipeline[T backends.Pipeline](p T, pipelineConfig backends.Pipeli
 		name = config.Name
 	case *pipelines.TabularPipeline:
 		config := any(pipelineConfig).(backends.PipelineConfig[*pipelines.TabularPipeline])
-		pipelineInitialised, err := pipelines.NewTabularPipeline(config, options, model)
+		pipelineInitialised, err := pipelines.NewTabularPipeline(sessionContext, config, options, model)
 		if err != nil {
 			return pipeline, name, err
 		}
@@ -275,7 +282,7 @@ func InitializePipeline[T backends.Pipeline](p T, pipelineConfig backends.Pipeli
 		name = config.Name
 	case *pipelines.QuestionAnsweringPipeline:
 		config := any(pipelineConfig).(backends.PipelineConfig[*pipelines.QuestionAnsweringPipeline])
-		pipelineInitialised, err := pipelines.NewQuestionAnsweringPipeline(config, options, model)
+		pipelineInitialised, err := pipelines.NewQuestionAnsweringPipeline(sessionContext, config, options, model)
 		if err != nil {
 			return pipeline, name, err
 		}
@@ -539,5 +546,12 @@ func (s *Session) Destroy() error {
 	}
 
 	err = errors.Join(err, s.environmentDestroy())
+
+	if s.cancelSessionContext != nil {
+		s.cancelSessionContext()
+		s.cancelSessionContext = nil
+		s.sessionContext = nil
+	}
+
 	return err
 }

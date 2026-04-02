@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	ort "github.com/yalue/onnxruntime_go"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/knights-analytics/hugot/options"
 	"github.com/knights-analytics/hugot/util/fileutil"
@@ -143,6 +144,17 @@ func createORTGenerativeSession(model *Model, options *options.Options) error {
 }
 
 func runGenerativeORTSessionOnBatch(ctx context.Context, batch *PipelineBatch, p *BasePipeline, maxLength int, stopSequences []string, temperature *float64, topP *float64, seed *int, tools []string, guidance *Guidance) (chan SequenceDelta, chan error, error) {
+	if p.SessionContext == nil {
+		return nil, nil, errors.New("no session context")
+	}
+	select {
+	case <-ctx.Done():
+		return nil, nil, ctx.Err()
+	case <-p.SessionContext.Done():
+		return nil, nil, p.SessionContext.Err()
+	default:
+	}
+
 	session := p.Model.ORTModel.GenerativeSession
 	if session == nil {
 		return nil, nil, errors.New("ORT generative session is not initialized")
@@ -471,13 +483,42 @@ func createInputTensorsORT(batch *PipelineBatch, model *Model) error {
 	return nil
 }
 
-func runORTSessionOnBatch(batch *PipelineBatch, p *BasePipeline) error {
-	var err error
+func runORTSessionOnBatch(ctx context.Context, batch *PipelineBatch, p *BasePipeline) error {
+	if p.SessionContext == nil {
+		return errors.New("no session context")
+	}
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-p.SessionContext.Done():
+		return p.SessionContext.Err()
+	default:
+	}
 
 	outputTensors := make([]ort.Value, len(p.Model.OutputsMeta))
-	errOnnx := p.Model.ORTModel.Session.Run(batch.InputValues.([]ort.Value), outputTensors)
-	if errOnnx != nil {
-		return errOnnx
+	doneChannel := make(chan bool, 1)
+	eg := errgroup.Group{}
+	eg.Go(func() (err error) {
+		defer func() {
+			// C code does not support context, so cancelling a context and/or session will usually trigger a segfault(panic).
+			// recover this here, so context can be cancelled gracefully and return an error.
+			if r := recover(); r != nil {
+				err = fmt.Errorf("recovered from panic: %v", r)
+			}
+			close(doneChannel)
+		}()
+		return errors.Join(err, p.Model.ORTModel.Session.Run(batch.InputValues.([]ort.Value), outputTensors))
+	})
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-p.SessionContext.Done():
+		return p.SessionContext.Err()
+	case <-doneChannel:
+		if err := eg.Wait(); err != nil {
+			return err
+		}
 	}
 
 	convertedOutput := make([]any, len(outputTensors))
@@ -491,7 +532,7 @@ func runORTSessionOnBatch(batch *PipelineBatch, p *BasePipeline) error {
 	}
 	// store resulting tensors
 	batch.OutputValues = convertedOutput
-	return err
+	return nil
 }
 
 func convertORTInputOutputs(inputOutputs []ort.InputOutputInfo) []InputOutputInfo {

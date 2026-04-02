@@ -1,6 +1,7 @@
 package pipelines
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"slices"
@@ -108,8 +109,8 @@ func WithSplitWords() backends.PipelineOption[*TokenClassificationPipeline] {
 }
 
 // NewTokenClassificationPipeline Initializes a feature extraction pipeline.
-func NewTokenClassificationPipeline(config backends.PipelineConfig[*TokenClassificationPipeline], s *options.Options, model *backends.Model) (*TokenClassificationPipeline, error) {
-	defaultPipeline, err := backends.NewBasePipeline(config, s, model)
+func NewTokenClassificationPipeline(sessionContext context.Context, config backends.PipelineConfig[*TokenClassificationPipeline], s *options.Options, model *backends.Model) (*TokenClassificationPipeline, error) {
+	defaultPipeline, err := backends.NewBasePipeline(sessionContext, config, s, model)
 	if err != nil {
 		return nil, err
 	}
@@ -193,8 +194,8 @@ func (p *TokenClassificationPipeline) Validate() error {
 	return errors.Join(validationErrors...)
 }
 
-// Preprocess tokenizes the input strings.
-func (p *TokenClassificationPipeline) Preprocess(batch *backends.PipelineBatch, inputs []string) error {
+// preprocess tokenizes the input strings.
+func (p *TokenClassificationPipeline) preprocess(batch *backends.PipelineBatch, inputs []string) error {
 	if p.SplitWords {
 		return fmt.Errorf("split-words enabled: use RunWords/PreprocessWords for [][]string inputs")
 	}
@@ -206,8 +207,8 @@ func (p *TokenClassificationPipeline) Preprocess(batch *backends.PipelineBatch, 
 	return err
 }
 
-// PreprocessWords tokenizes pre-split words and maps tokens to word IDs via offsets.
-func (p *TokenClassificationPipeline) PreprocessWords(batch *backends.PipelineBatch, inputs [][]string) error {
+// preprocessWords tokenizes pre-split words and maps tokens to word IDs via offsets.
+func (p *TokenClassificationPipeline) preprocessWords(batch *backends.PipelineBatch, inputs [][]string) error {
 	start := time.Now()
 	// Join words with single spaces to simulate pretokenized behavior
 	joined := make([]string, len(inputs))
@@ -256,10 +257,10 @@ func (p *TokenClassificationPipeline) PreprocessWords(batch *backends.PipelineBa
 	return backends.CreateInputTensors(batch, p.Model, p.Runtime)
 }
 
-// Forward performs the forward inference of the pipeline.
-func (p *TokenClassificationPipeline) Forward(batch *backends.PipelineBatch) error {
+// forward performs the forward inference of the pipeline.
+func (p *TokenClassificationPipeline) forward(ctx context.Context, batch *backends.PipelineBatch) error {
 	start := time.Now()
-	err := backends.RunSessionOnBatch(batch, p.BasePipeline)
+	err := backends.RunSessionOnBatch(ctx, batch, p.BasePipeline)
 	if err != nil {
 		return err
 	}
@@ -268,8 +269,8 @@ func (p *TokenClassificationPipeline) Forward(batch *backends.PipelineBatch) err
 	return nil
 }
 
-// Postprocess function for a token classification pipeline.
-func (p *TokenClassificationPipeline) Postprocess(batch *backends.PipelineBatch) (*TokenClassificationOutput, error) {
+// postprocess function for a token classification pipeline.
+func (p *TokenClassificationPipeline) postprocess(batch *backends.PipelineBatch) (*TokenClassificationOutput, error) {
 	if batch.Size == 0 {
 		return &TokenClassificationOutput{}, nil
 	}
@@ -292,8 +293,8 @@ func (p *TokenClassificationPipeline) Postprocess(batch *backends.PipelineBatch)
 		Entities: make([][]Entity, batch.Size),
 	}
 	for i, input := range batch.Input {
-		preEntities := p.GatherPreEntities(input, outputCast[i])
-		entities, errAggregate := p.Aggregate(input, preEntities)
+		preEntities := p.gatherPreEntities(input, outputCast[i])
+		entities, errAggregate := p.aggregate(input, preEntities)
 		if errAggregate != nil {
 			return nil, errAggregate
 		}
@@ -309,8 +310,8 @@ func (p *TokenClassificationPipeline) Postprocess(batch *backends.PipelineBatch)
 	return &classificationOutput, nil
 }
 
-// GatherPreEntities from batch of logits to list of pre-aggregated outputs.
-func (p *TokenClassificationPipeline) GatherPreEntities(input backends.TokenizedInput, output [][]float32) []Entity {
+// gatherPreEntities from batch of logits to list of pre-aggregated outputs.
+func (p *TokenClassificationPipeline) gatherPreEntities(input backends.TokenizedInput, output [][]float32) []Entity {
 	sentence := input.Raw
 	var preEntities []Entity
 	for j, tokenScores := range output {
@@ -460,7 +461,7 @@ func (p *TokenClassificationPipeline) aggregateWords(entities []Entity) ([]Entit
 	return wordEntities, nil
 }
 
-func (p *TokenClassificationPipeline) Aggregate(input backends.TokenizedInput, preEntities []Entity) ([]Entity, error) {
+func (p *TokenClassificationPipeline) aggregate(input backends.TokenizedInput, preEntities []Entity) ([]Entity, error) {
 	entities := make([]Entity, len(preEntities))
 	var aggregationError error
 	if p.AggregationStrategy == "SIMPLE" || p.AggregationStrategy == "NONE" {
@@ -492,7 +493,7 @@ func (p *TokenClassificationPipeline) Aggregate(input backends.TokenizedInput, p
 	if p.AggregationStrategy == "NONE" {
 		return entities, nil
 	}
-	return p.GroupEntities(entities)
+	return p.groupEntities(entities)
 }
 
 func (p *TokenClassificationPipeline) getTag(entityName string) (string, string) {
@@ -542,8 +543,8 @@ func (p *TokenClassificationPipeline) groupSubEntities(entities []Entity) (Entit
 	}, nil
 }
 
-// GroupEntities group together adjacent tokens with the same entity predicted.
-func (p *TokenClassificationPipeline) GroupEntities(entities []Entity) ([]Entity, error) {
+// groupEntities group together adjacent tokens with the same entity predicted.
+func (p *TokenClassificationPipeline) groupEntities(entities []Entity) ([]Entity, error) {
 	var entityGroups []Entity
 	var currentGroupDisagg []Entity
 	for _, e := range entities {
@@ -577,26 +578,26 @@ func (p *TokenClassificationPipeline) GroupEntities(entities []Entity) ([]Entity
 }
 
 // Run the pipeline on a string batch.
-func (p *TokenClassificationPipeline) Run(inputs []string) (backends.PipelineBatchOutput, error) {
-	return p.RunPipeline(inputs)
+func (p *TokenClassificationPipeline) Run(ctx context.Context, inputs []string) (backends.PipelineBatchOutput, error) {
+	return p.RunPipeline(ctx, inputs)
 }
 
 // RunPipeline is like Run but returns the concrete type rather than the interface.
-func (p *TokenClassificationPipeline) RunPipeline(inputs []string) (*TokenClassificationOutput, error) {
+func (p *TokenClassificationPipeline) RunPipeline(ctx context.Context, inputs []string) (*TokenClassificationOutput, error) {
 	var runErrors []error
 	batch := backends.NewBatch(len(inputs))
 	defer func(*backends.PipelineBatch) {
 		runErrors = append(runErrors, batch.Destroy())
 	}(batch)
-	runErrors = append(runErrors, p.Preprocess(batch, inputs))
+	runErrors = append(runErrors, p.preprocess(batch, inputs))
 	if e := errors.Join(runErrors...); e != nil {
 		return nil, e
 	}
-	runErrors = append(runErrors, p.Forward(batch))
+	runErrors = append(runErrors, p.forward(ctx, batch))
 	if e := errors.Join(runErrors...); e != nil {
 		return nil, e
 	}
-	result, postErr := p.Postprocess(batch)
+	result, postErr := p.postprocess(batch)
 	runErrors = append(runErrors, postErr)
 	return result, errors.Join(runErrors...)
 }
@@ -605,21 +606,21 @@ func (p *TokenClassificationPipeline) RunPipeline(inputs []string) (*TokenClassi
 // Each input is a slice of words representing a pretokenized sentence.
 // This is particularly useful when the user wants to control tokenization because of special tokens,
 // hashtags, or other domain-specific tokenization needs.
-func (p *TokenClassificationPipeline) RunWords(inputs [][]string) (*TokenClassificationOutput, error) {
+func (p *TokenClassificationPipeline) RunWords(ctx context.Context, inputs [][]string) (*TokenClassificationOutput, error) {
 	var runErrors []error
 	batch := backends.NewBatch(len(inputs))
 	defer func(*backends.PipelineBatch) {
 		runErrors = append(runErrors, batch.Destroy())
 	}(batch)
-	runErrors = append(runErrors, p.PreprocessWords(batch, inputs))
+	runErrors = append(runErrors, p.preprocessWords(batch, inputs))
 	if e := errors.Join(runErrors...); e != nil {
 		return nil, e
 	}
-	runErrors = append(runErrors, p.Forward(batch))
+	runErrors = append(runErrors, p.forward(ctx, batch))
 	if e := errors.Join(runErrors...); e != nil {
 		return nil, e
 	}
-	result, postErr := p.Postprocess(batch)
+	result, postErr := p.postprocess(batch)
 	runErrors = append(runErrors, postErr)
 	return result, errors.Join(runErrors...)
 }

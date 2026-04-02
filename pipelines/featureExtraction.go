@@ -1,6 +1,7 @@
 package pipelines
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"image"
@@ -84,8 +85,8 @@ func WithImageMode() backends.PipelineOption[*FeatureExtractionPipeline] {
 }
 
 // NewFeatureExtractionPipeline init a feature extraction pipeline.
-func NewFeatureExtractionPipeline(config backends.PipelineConfig[*FeatureExtractionPipeline], s *options.Options, model *backends.Model) (*FeatureExtractionPipeline, error) {
-	defaultPipeline, err := backends.NewBasePipeline(config, s, model)
+func NewFeatureExtractionPipeline(sessionContext context.Context, config backends.PipelineConfig[*FeatureExtractionPipeline], s *options.Options, model *backends.Model) (*FeatureExtractionPipeline, error) {
+	defaultPipeline, err := backends.NewBasePipeline(sessionContext, config, s, model)
 	if err != nil {
 		return nil, err
 	}
@@ -195,8 +196,8 @@ func (p *FeatureExtractionPipeline) Validate() error {
 	return errors.Join(validationErrors...)
 }
 
-// Preprocess tokenizes the input strings.
-func (p *FeatureExtractionPipeline) Preprocess(batch *backends.PipelineBatch, inputs []string) error {
+// preprocess tokenizes the input strings.
+func (p *FeatureExtractionPipeline) preprocess(batch *backends.PipelineBatch, inputs []string) error {
 	start := time.Now()
 	backends.TokenizeInputs(batch, p.Model.Tokenizer, inputs)
 	atomic.AddUint64(&p.Model.Tokenizer.TokenizerTimings.NumCalls, 1)
@@ -205,10 +206,10 @@ func (p *FeatureExtractionPipeline) Preprocess(batch *backends.PipelineBatch, in
 	return err
 }
 
-// Forward performs the forward inference of the feature extraction pipeline.
-func (p *FeatureExtractionPipeline) Forward(batch *backends.PipelineBatch) error {
+// forward performs the forward inference of the feature extraction pipeline.
+func (p *FeatureExtractionPipeline) forward(ctx context.Context, batch *backends.PipelineBatch) error {
 	start := time.Now()
-	err := backends.RunSessionOnBatch(batch, p.BasePipeline)
+	err := backends.RunSessionOnBatch(ctx, batch, p.BasePipeline)
 	if err != nil {
 		return err
 	}
@@ -217,8 +218,8 @@ func (p *FeatureExtractionPipeline) Forward(batch *backends.PipelineBatch) error
 	return nil
 }
 
-// Postprocess parses the first output from the network similar to the transformers' implementation.
-func (p *FeatureExtractionPipeline) Postprocess(batch *backends.PipelineBatch) (*FeatureExtractionOutput, error) {
+// postprocess parses the first output from the network similar to the transformers' implementation.
+func (p *FeatureExtractionPipeline) postprocess(batch *backends.PipelineBatch) (*FeatureExtractionOutput, error) {
 	// TODO: this works if token embeddings are returned or sentence embeddings are returned.
 	// in the former case embeddings are mean pooled. In the latter they are just returned.
 	// to make this more general for other pipelines and to allow return of raw token embeddings,
@@ -280,26 +281,26 @@ func meanPooling(tokens [][]float32, input backends.TokenizedInput, maxSequence 
 }
 
 // Run the pipeline on a batch of strings.
-func (p *FeatureExtractionPipeline) Run(inputs []string) (backends.PipelineBatchOutput, error) {
-	return p.RunPipeline(inputs)
+func (p *FeatureExtractionPipeline) Run(ctx context.Context, inputs []string) (backends.PipelineBatchOutput, error) {
+	return p.RunPipeline(ctx, inputs)
 }
 
 // RunPipeline is like Run, but returns the concrete feature extraction output type rather than the interface.
-func (p *FeatureExtractionPipeline) RunPipeline(inputs []string) (*FeatureExtractionOutput, error) {
+func (p *FeatureExtractionPipeline) RunPipeline(ctx context.Context, inputs []string) (*FeatureExtractionOutput, error) {
 	var runErrors []error
 	batch := backends.NewBatch(len(inputs))
 	defer func(*backends.PipelineBatch) {
 		runErrors = append(runErrors, batch.Destroy())
 	}(batch)
-	runErrors = append(runErrors, p.Preprocess(batch, inputs))
+	runErrors = append(runErrors, p.preprocess(batch, inputs))
 	if e := errors.Join(runErrors...); e != nil {
 		return nil, e
 	}
-	runErrors = append(runErrors, p.Forward(batch))
+	runErrors = append(runErrors, p.forward(ctx, batch))
 	if e := errors.Join(runErrors...); e != nil {
 		return nil, e
 	}
-	result, postErr := p.Postprocess(batch)
+	result, postErr := p.postprocess(batch)
 	runErrors = append(runErrors, postErr)
 	return result, errors.Join(runErrors...)
 }
@@ -317,7 +318,7 @@ func (p *FeatureExtractionPipeline) PreprocessImages(batch *backends.PipelineBat
 
 // RunWithImages runs the pipeline on a batch of images (for vision models).
 // Use this method when ImageMode is enabled.
-func (p *FeatureExtractionPipeline) RunWithImages(images []image.Image) (*FeatureExtractionOutput, error) {
+func (p *FeatureExtractionPipeline) RunWithImages(ctx context.Context, images []image.Image) (*FeatureExtractionOutput, error) {
 	if !p.imageMode {
 		return nil, fmt.Errorf("RunWithImages requires ImageMode to be enabled; use WithImageMode() option")
 	}
@@ -330,21 +331,21 @@ func (p *FeatureExtractionPipeline) RunWithImages(images []image.Image) (*Featur
 	if e := errors.Join(runErrors...); e != nil {
 		return nil, e
 	}
-	runErrors = append(runErrors, p.Forward(batch))
+	runErrors = append(runErrors, p.forward(ctx, batch))
 	if e := errors.Join(runErrors...); e != nil {
 		return nil, e
 	}
-	result, postErr := p.Postprocess(batch)
+	result, postErr := p.postprocess(batch)
 	runErrors = append(runErrors, postErr)
 	return result, errors.Join(runErrors...)
 }
 
 // RunWithImagePaths loads images from file paths and runs the pipeline.
 // Convenience method that combines image loading with RunWithImages.
-func (p *FeatureExtractionPipeline) RunWithImagePaths(paths []string) (*FeatureExtractionOutput, error) {
+func (p *FeatureExtractionPipeline) RunWithImagePaths(ctx context.Context, paths []string) (*FeatureExtractionOutput, error) {
 	images, err := imageutil.LoadImagesFromPaths(paths)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load images: %w", err)
 	}
-	return p.RunWithImages(images)
+	return p.RunWithImages(ctx, images)
 }

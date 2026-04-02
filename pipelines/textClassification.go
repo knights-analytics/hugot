@@ -1,6 +1,7 @@
 package pipelines
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"sync/atomic"
@@ -71,8 +72,8 @@ func WithFixedPadding(fixedPaddingLength int) backends.PipelineOption[*TextClass
 }
 
 // NewTextClassificationPipeline initializes a new text classification pipeline.
-func NewTextClassificationPipeline(config backends.PipelineConfig[*TextClassificationPipeline], s *options.Options, model *backends.Model) (*TextClassificationPipeline, error) {
-	defaultPipeline, err := backends.NewBasePipeline(config, s, model)
+func NewTextClassificationPipeline(sessionContext context.Context, config backends.PipelineConfig[*TextClassificationPipeline], s *options.Options, model *backends.Model) (*TextClassificationPipeline, error) {
+	defaultPipeline, err := backends.NewBasePipeline(sessionContext, config, s, model)
 	if err != nil {
 		return nil, err
 	}
@@ -168,8 +169,8 @@ func (p *TextClassificationPipeline) Validate() error {
 	return errors.Join(validationErrors...)
 }
 
-// Preprocess tokenizes the input strings.
-func (p *TextClassificationPipeline) Preprocess(batch *backends.PipelineBatch, inputs []string) error {
+// preprocess tokenizes the input strings.
+func (p *TextClassificationPipeline) preprocess(batch *backends.PipelineBatch, inputs []string) error {
 	start := time.Now()
 	backends.TokenizeInputs(batch, p.Model.Tokenizer, inputs)
 	atomic.AddUint64(&p.Model.Tokenizer.TokenizerTimings.NumCalls, 1)
@@ -183,9 +184,9 @@ func (p *TextClassificationPipeline) Preprocess(batch *backends.PipelineBatch, i
 	return err
 }
 
-func (p *TextClassificationPipeline) Forward(batch *backends.PipelineBatch) error {
+func (p *TextClassificationPipeline) forward(ctx context.Context, batch *backends.PipelineBatch) error {
 	start := time.Now()
-	err := backends.RunSessionOnBatch(batch, p.BasePipeline)
+	err := backends.RunSessionOnBatch(ctx, batch, p.BasePipeline)
 	if err != nil {
 		return err
 	}
@@ -194,7 +195,7 @@ func (p *TextClassificationPipeline) Forward(batch *backends.PipelineBatch) erro
 	return nil
 }
 
-func (p *TextClassificationPipeline) Postprocess(batch *backends.PipelineBatch) (*TextClassificationOutput, error) {
+func (p *TextClassificationPipeline) postprocess(batch *backends.PipelineBatch) (*TextClassificationOutput, error) {
 	var aggregationFunction func([]float32) []float32
 	switch p.AggregationFunctionName {
 	case "SIGMOID":
@@ -262,28 +263,28 @@ func (p *TextClassificationPipeline) Postprocess(batch *backends.PipelineBatch) 
 }
 
 // Run the pipeline on a string batch.
-func (p *TextClassificationPipeline) Run(inputs []string) (backends.PipelineBatchOutput, error) {
-	return p.RunPipeline(inputs)
+func (p *TextClassificationPipeline) Run(ctx context.Context, inputs []string) (backends.PipelineBatchOutput, error) {
+	return p.RunPipeline(ctx, inputs)
 }
 
-func (p *TextClassificationPipeline) RunPipeline(inputs []string) (*TextClassificationOutput, error) {
+func (p *TextClassificationPipeline) RunPipeline(ctx context.Context, inputs []string) (*TextClassificationOutput, error) {
 	var runErrors []error
 	batch := backends.NewBatch(len(inputs))
 	defer func(*backends.PipelineBatch) {
 		runErrors = append(runErrors, batch.Destroy())
 	}(batch)
 
-	runErrors = append(runErrors, p.Preprocess(batch, inputs))
+	runErrors = append(runErrors, p.preprocess(batch, inputs))
 	if e := errors.Join(runErrors...); e != nil {
 		return nil, e
 	}
 
-	runErrors = append(runErrors, p.Forward(batch))
+	runErrors = append(runErrors, p.forward(ctx, batch))
 	if e := errors.Join(runErrors...); e != nil {
 		return nil, e
 	}
 
-	result, postErr := p.Postprocess(batch)
+	result, postErr := p.postprocess(batch)
 	runErrors = append(runErrors, postErr)
 	return result, errors.Join(runErrors...)
 }

@@ -20,6 +20,7 @@ type BasePipeline struct {
 	PipelineTimings *timings
 	PipelineName    string
 	Runtime         string
+	SessionContext  context.Context
 }
 
 type InputOutputInfo struct {
@@ -61,12 +62,12 @@ type PipelineBatchOutput interface {
 
 // Pipeline is the interface that any pipeline must implement.
 type Pipeline interface {
-	GetStatistics() PipelineStatistics         // Get the pipeline running statistics
-	Validate() error                           // Validate the pipeline for correctness
-	GetMetadata() PipelineMetadata             // Return metadata information for the pipeline
-	GetModel() *Model                          // Return the model used by the pipeline
-	IsGenerative() bool                        // Return whether the pipeline is generative
-	Run([]string) (PipelineBatchOutput, error) // Run the pipeline on an input
+	GetStatistics() PipelineStatistics                          // Get the pipeline running statistics
+	Validate() error                                            // Validate the pipeline for correctness
+	GetMetadata() PipelineMetadata                              // Return metadata information for the pipeline
+	GetModel() *Model                                           // Return the model used by the pipeline
+	IsGenerative() bool                                         // Return whether the pipeline is generative
+	Run(context.Context, []string) (PipelineBatchOutput, error) // Run the pipeline on an input
 }
 
 type PipelineStatistics struct {
@@ -189,12 +190,12 @@ func GetNames(info []InputOutputInfo) []string {
 	return names
 }
 
-func RunSessionOnBatch(batch *PipelineBatch, p *BasePipeline) error {
+func RunSessionOnBatch(ctx context.Context, batch *PipelineBatch, p *BasePipeline) error {
 	switch p.Runtime {
 	case "ORT":
-		return runORTSessionOnBatch(batch, p)
+		return runORTSessionOnBatch(ctx, batch, p)
 	case "GO", "XLA":
-		return runGoMLXSessionOnBatch(batch, p)
+		return runGoMLXSessionOnBatch(ctx, batch, p)
 	}
 	return nil
 }
@@ -264,12 +265,13 @@ func CreateTabularTensors(batch *PipelineBatch, model *Model, features [][]float
 	}
 }
 
-func NewBasePipeline[T Pipeline](config PipelineConfig[T], s *options.Options, model *Model) (*BasePipeline, error) {
+func NewBasePipeline[T Pipeline](sessionContext context.Context, config PipelineConfig[T], s *options.Options, model *Model) (*BasePipeline, error) {
 	pipeline := &BasePipeline{}
 	pipeline.Runtime = s.Backend
 	pipeline.PipelineName = config.Name
 	pipeline.Model = model
 	pipeline.PipelineTimings = &timings{}
+	pipeline.SessionContext = sessionContext
 	return pipeline, nil
 }
 

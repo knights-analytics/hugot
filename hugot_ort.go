@@ -3,6 +3,7 @@
 package hugot
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"runtime"
@@ -13,12 +14,12 @@ import (
 	"github.com/knights-analytics/hugot/util/fileutil"
 )
 
-func NewORTSession(opts ...options.WithOption) (*Session, error) {
+func NewORTSession(ctx context.Context, opts ...options.WithOption) (*Session, error) {
 	if ort.IsInitialized() {
 		return nil, errors.New("another session is currently active, and only one session can be active at one time")
 	}
 
-	session, err := newSession("ORT", opts...)
+	session, err := newSession(ctx, "ORT", opts...)
 	if err != nil {
 		return nil, err
 	}

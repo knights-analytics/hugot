@@ -1,6 +1,7 @@
 package pipelines
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -94,8 +95,8 @@ func WithIDLabelMap(labels map[int]string) backends.PipelineOption[*TabularPipel
 }
 
 // NewTabularPipeline initializes the pipeline.
-func NewTabularPipeline(config backends.PipelineConfig[*TabularPipeline], s *options.Options, model *backends.Model) (*TabularPipeline, error) {
-	base, err := backends.NewBasePipeline(config, s, model)
+func NewTabularPipeline(sessionContext context.Context, config backends.PipelineConfig[*TabularPipeline], s *options.Options, model *backends.Model) (*TabularPipeline, error) {
+	base, err := backends.NewBasePipeline(sessionContext, config, s, model)
 	if err != nil {
 		return nil, err
 	}
@@ -208,8 +209,8 @@ func (p *TabularPipeline) Validate() error {
 	return errors.Join(errs...)
 }
 
-// Preprocess parses inputs strings into [][]float32 and builds tensors.
-func (p *TabularPipeline) Preprocess(batch *backends.PipelineBatch, inputs [][]float32) error {
+// preprocess parses inputs strings into [][]float32 and builds tensors.
+func (p *TabularPipeline) preprocess(batch *backends.PipelineBatch, inputs [][]float32) error {
 	start := time.Now()
 	// Build tensors
 	if err := backends.CreateTabularTensors(batch, p.Model, inputs, p.Runtime); err != nil {
@@ -219,9 +220,9 @@ func (p *TabularPipeline) Preprocess(batch *backends.PipelineBatch, inputs [][]f
 	return nil
 }
 
-func (p *TabularPipeline) Forward(batch *backends.PipelineBatch) error {
+func (p *TabularPipeline) forward(ctx context.Context, batch *backends.PipelineBatch) error {
 	start := time.Now()
-	if err := backends.RunSessionOnBatch(batch, p.BasePipeline); err != nil {
+	if err := backends.RunSessionOnBatch(ctx, batch, p.BasePipeline); err != nil {
 		return err
 	}
 	atomic.AddUint64(&p.PipelineTimings.NumCalls, 1)
@@ -229,7 +230,7 @@ func (p *TabularPipeline) Forward(batch *backends.PipelineBatch) error {
 	return nil
 }
 
-func (p *TabularPipeline) Postprocess(batch *backends.PipelineBatch) (*TabularOutput, error) {
+func (p *TabularPipeline) postprocess(batch *backends.PipelineBatch) (*TabularOutput, error) {
 	if p.ProblemType == "classification" {
 		results := make([]TabularClassificationOutput, batch.Size)
 		var agg func([]float32) []float32
@@ -320,32 +321,32 @@ func (p *TabularPipeline) Postprocess(batch *backends.PipelineBatch) (*TabularOu
 }
 
 // Run executes the pipeline over inputs.
-func (p *TabularPipeline) Run(inputs []string) (backends.PipelineBatchOutput, error) {
+func (p *TabularPipeline) Run(ctx context.Context, inputs []string) (backends.PipelineBatchOutput, error) {
 	features, err := parseFeatures(inputs)
 	if err != nil {
 		return nil, err
 	}
-	return p.RunPipeline(features)
+	return p.RunPipeline(ctx, features)
 }
 
-func (p *TabularPipeline) RunPipeline(inputs [][]float32) (*TabularOutput, error) {
+func (p *TabularPipeline) RunPipeline(ctx context.Context, inputs [][]float32) (*TabularOutput, error) {
 	var runErrors []error
 	batch := backends.NewBatch(len(inputs))
 	defer func(*backends.PipelineBatch) {
 		runErrors = append(runErrors, batch.Destroy())
 	}(batch)
 
-	runErrors = append(runErrors, p.Preprocess(batch, inputs))
+	runErrors = append(runErrors, p.preprocess(batch, inputs))
 	if e := errors.Join(runErrors...); e != nil {
 		return nil, e
 	}
 
-	runErrors = append(runErrors, p.Forward(batch))
+	runErrors = append(runErrors, p.forward(ctx, batch))
 	if e := errors.Join(runErrors...); e != nil {
 		return nil, e
 	}
 
-	result, postErr := p.Postprocess(batch)
+	result, postErr := p.postprocess(batch)
 	runErrors = append(runErrors, postErr)
 	return result, errors.Join(runErrors...)
 }

@@ -1,6 +1,7 @@
 package pipelines
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"image"
@@ -69,8 +70,8 @@ func WithTopK(topK int) backends.PipelineOption[*ImageClassificationPipeline] {
 }
 
 // NewImageClassificationPipeline initializes an image classification pipeline.
-func NewImageClassificationPipeline(config backends.PipelineConfig[*ImageClassificationPipeline], s *options.Options, model *backends.Model) (*ImageClassificationPipeline, error) {
-	defaultPipeline, err := backends.NewBasePipeline(config, s, model)
+func NewImageClassificationPipeline(sessionContext context.Context, config backends.PipelineConfig[*ImageClassificationPipeline], s *options.Options, model *backends.Model) (*ImageClassificationPipeline, error) {
+	defaultPipeline, err := backends.NewBasePipeline(sessionContext, config, s, model)
 	if err != nil {
 		return nil, err
 	}
@@ -131,9 +132,9 @@ func (p *ImageClassificationPipeline) Validate() error {
 	return errors.Join(validationErrors...)
 }
 
-// Preprocess decodes images from file paths or image.Image and creates input tensors.
-// Preprocess loads images from file paths and creates input tensors.
-func (p *ImageClassificationPipeline) Preprocess(batch *backends.PipelineBatch, inputs []image.Image) error {
+// preprocess decodes images from file paths or image.Image and creates input tensors.
+// preprocess loads images from file paths and creates input tensors.
+func (p *ImageClassificationPipeline) preprocess(batch *backends.PipelineBatch, inputs []image.Image) error {
 	preprocessed, err := backends.PreprocessImages(p.imageFormat, inputs, p.preprocessSteps, p.normalizationSteps)
 	if err != nil {
 		return fmt.Errorf("failed to preprocess images: %w", err)
@@ -141,10 +142,10 @@ func (p *ImageClassificationPipeline) Preprocess(batch *backends.PipelineBatch, 
 	return backends.CreateImageTensors(batch, p.Model, preprocessed, p.Runtime)
 }
 
-// Forward runs inference.
-func (p *ImageClassificationPipeline) Forward(batch *backends.PipelineBatch) error {
+// forward runs inference.
+func (p *ImageClassificationPipeline) forward(ctx context.Context, batch *backends.PipelineBatch) error {
 	start := time.Now()
-	if err := backends.RunSessionOnBatch(batch, p.BasePipeline); err != nil {
+	if err := backends.RunSessionOnBatch(ctx, batch, p.BasePipeline); err != nil {
 		return err
 	}
 	atomic.AddUint64(&p.PipelineTimings.NumCalls, 1)
@@ -152,8 +153,8 @@ func (p *ImageClassificationPipeline) Forward(batch *backends.PipelineBatch) err
 	return nil
 }
 
-// Postprocess parses logits and returns top-k predictions for each image.
-func (p *ImageClassificationPipeline) Postprocess(batch *backends.PipelineBatch) (*ImageClassificationOutput, error) {
+// postprocess parses logits and returns top-k predictions for each image.
+func (p *ImageClassificationPipeline) postprocess(batch *backends.PipelineBatch) (*ImageClassificationOutput, error) {
 	output := batch.OutputValues[0]
 	var batchPreds [][]ImageClassificationResult
 	logits, ok := output.([][]float32)
@@ -198,12 +199,12 @@ func getTopK(logits []float32, k int, labels map[int]string) []ImageClassificati
 }
 
 // Run runs the pipeline on a batch of image file paths.
-func (p *ImageClassificationPipeline) Run(inputs []string) (backends.PipelineBatchOutput, error) {
-	return p.RunPipeline(inputs)
+func (p *ImageClassificationPipeline) Run(ctx context.Context, inputs []string) (backends.PipelineBatchOutput, error) {
+	return p.RunPipeline(ctx, inputs)
 }
 
 // RunPipeline returns the concrete output type.
-func (p *ImageClassificationPipeline) RunPipeline(inputs []string) (*ImageClassificationOutput, error) {
+func (p *ImageClassificationPipeline) RunPipeline(ctx context.Context, inputs []string) (*ImageClassificationOutput, error) {
 	var runErrors []error
 	batch := backends.NewBatch(len(inputs))
 	defer func(*backends.PipelineBatch) {
@@ -213,34 +214,34 @@ func (p *ImageClassificationPipeline) RunPipeline(inputs []string) (*ImageClassi
 	if err != nil {
 		return nil, fmt.Errorf("failed to load images: %w", err)
 	}
-	runErrors = append(runErrors, p.Preprocess(batch, images))
+	runErrors = append(runErrors, p.preprocess(batch, images))
 	if e := errors.Join(runErrors...); e != nil {
 		return nil, e
 	}
-	runErrors = append(runErrors, p.Forward(batch))
+	runErrors = append(runErrors, p.forward(ctx, batch))
 	if e := errors.Join(runErrors...); e != nil {
 		return nil, e
 	}
-	result, postErr := p.Postprocess(batch)
+	result, postErr := p.postprocess(batch)
 	runErrors = append(runErrors, postErr)
 	return result, errors.Join(runErrors...)
 }
 
-func (p *ImageClassificationPipeline) RunWithImages(inputs []image.Image) (*ImageClassificationOutput, error) {
+func (p *ImageClassificationPipeline) RunWithImages(ctx context.Context, inputs []image.Image) (*ImageClassificationOutput, error) {
 	var runErrors []error
 	batch := backends.NewBatch(len(inputs))
 	defer func(*backends.PipelineBatch) {
 		runErrors = append(runErrors, batch.Destroy())
 	}(batch)
-	runErrors = append(runErrors, p.Preprocess(batch, inputs))
+	runErrors = append(runErrors, p.preprocess(batch, inputs))
 	if e := errors.Join(runErrors...); e != nil {
 		return nil, e
 	}
-	runErrors = append(runErrors, p.Forward(batch))
+	runErrors = append(runErrors, p.forward(ctx, batch))
 	if e := errors.Join(runErrors...); e != nil {
 		return nil, e
 	}
-	result, postErr := p.Postprocess(batch)
+	result, postErr := p.postprocess(batch)
 	runErrors = append(runErrors, postErr)
 	return result, errors.Join(runErrors...)
 }

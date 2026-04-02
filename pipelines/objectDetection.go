@@ -1,6 +1,7 @@
 package pipelines
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"image"
@@ -21,23 +22,23 @@ import (
 // It supports models that output bounding boxes and class scores.
 type ObjectDetectionPipeline struct {
 	*backends.BasePipeline
-	IDLabelMap     map[int]string
-	imageFormat    string
-	BoxesOutput    string
-	ScoresOutput   string
-	preprocess     []imageutil.PreprocessStep
-	normalize      []imageutil.NormalizationStep
-	TopK           int
-	ScoreThreshold float32
-	IouThreshold   float32
+	IDLabelMap      map[int]string
+	imageFormat     string
+	BoxesOutput     string
+	ScoresOutput    string
+	preprocessSteps []imageutil.PreprocessStep
+	normalizeSteps  []imageutil.NormalizationStep
+	TopK            int
+	ScoreThreshold  float32
+	IouThreshold    float32
 }
 
 func (p *ObjectDetectionPipeline) addPreprocessSteps(steps ...imageutil.PreprocessStep) {
-	p.preprocess = append(p.preprocess, steps...)
+	p.preprocessSteps = append(p.preprocessSteps, steps...)
 }
 
 func (p *ObjectDetectionPipeline) addNormalizationSteps(steps ...imageutil.NormalizationStep) {
-	p.normalize = append(p.normalize, steps...)
+	p.normalizeSteps = append(p.normalizeSteps, steps...)
 }
 
 func (p *ObjectDetectionPipeline) setImageFormat(format string) {
@@ -90,8 +91,8 @@ func WithDetectionTopK(k int) backends.PipelineOption[*ObjectDetectionPipeline] 
 }
 
 // NewObjectDetectionPipeline initializes an object detection pipeline.
-func NewObjectDetectionPipeline(config backends.PipelineConfig[*ObjectDetectionPipeline], s *options.Options, model *backends.Model) (*ObjectDetectionPipeline, error) {
-	base, err := backends.NewBasePipeline(config, s, model)
+func NewObjectDetectionPipeline(sessionContext context.Context, config backends.PipelineConfig[*ObjectDetectionPipeline], s *options.Options, model *backends.Model) (*ObjectDetectionPipeline, error) {
+	base, err := backends.NewBasePipeline(sessionContext, config, s, model)
 	if err != nil {
 		return nil, err
 	}
@@ -110,8 +111,8 @@ func NewObjectDetectionPipeline(config backends.PipelineConfig[*ObjectDetectionP
 		p.imageFormat = fmtDetected
 	}
 	// Set sensible default normalization for vision models (Rescale + ImageNet mean/std)
-	if len(p.normalize) == 0 {
-		p.normalize = []imageutil.NormalizationStep{
+	if len(p.normalizeSteps) == 0 {
+		p.normalizeSteps = []imageutil.NormalizationStep{
 			imageutil.RescaleStep(),
 			imageutil.ImagenetPixelNormalizationStep(),
 		}
@@ -179,19 +180,19 @@ func (p *ObjectDetectionPipeline) Validate() error {
 	return errors.Join(errs...)
 }
 
-// Preprocess images into tensors.
-func (p *ObjectDetectionPipeline) Preprocess(batch *backends.PipelineBatch, inputs []image.Image) error {
-	processed, err := backends.PreprocessImages(p.imageFormat, inputs, p.preprocess, p.normalize)
+// preprocess images into tensors.
+func (p *ObjectDetectionPipeline) preprocess(batch *backends.PipelineBatch, inputs []image.Image) error {
+	processed, err := backends.PreprocessImages(p.imageFormat, inputs, p.preprocessSteps, p.normalizeSteps)
 	if err != nil {
 		return err
 	}
 	return backends.CreateImageTensors(batch, p.Model, processed, p.Runtime)
 }
 
-// Forward inference.
-func (p *ObjectDetectionPipeline) Forward(batch *backends.PipelineBatch) error {
+// forward inference.
+func (p *ObjectDetectionPipeline) forward(ctx context.Context, batch *backends.PipelineBatch) error {
 	start := time.Now()
-	if err := backends.RunSessionOnBatch(batch, p.BasePipeline); err != nil {
+	if err := backends.RunSessionOnBatch(ctx, batch, p.BasePipeline); err != nil {
 		return err
 	}
 	atomic.AddUint64(&p.PipelineTimings.NumCalls, 1)
@@ -199,8 +200,8 @@ func (p *ObjectDetectionPipeline) Forward(batch *backends.PipelineBatch) error {
 	return nil
 }
 
-// Postprocess parses boxes/scores, applies thresholds and NMS.
-func (p *ObjectDetectionPipeline) Postprocess(batch *backends.PipelineBatch) (*ObjectDetectionOutput, error) {
+// postprocess parses boxes/scores, applies thresholds and NMS.
+func (p *ObjectDetectionPipeline) postprocess(batch *backends.PipelineBatch) (*ObjectDetectionOutput, error) {
 	// Locate outputs by name in OutputValues
 	// We assume order of Model.OutputsMeta corresponds to OutputValues
 	boxesIdx, scoresIdx := -1, -1
@@ -329,11 +330,11 @@ func nonMaxSuppress(dets []Detection, iouTh float32) []Detection {
 }
 
 // Run with file paths.
-func (p *ObjectDetectionPipeline) Run(inputs []string) (backends.PipelineBatchOutput, error) {
-	return p.RunPipeline(inputs)
+func (p *ObjectDetectionPipeline) Run(ctx context.Context, inputs []string) (backends.PipelineBatchOutput, error) {
+	return p.RunPipeline(ctx, inputs)
 }
 
-func (p *ObjectDetectionPipeline) RunPipeline(inputs []string) (*ObjectDetectionOutput, error) {
+func (p *ObjectDetectionPipeline) RunPipeline(ctx context.Context, inputs []string) (*ObjectDetectionOutput, error) {
 	var errs []error
 	batch := backends.NewBatch(len(inputs))
 	defer func(*backends.PipelineBatch) { errs = append(errs, batch.Destroy()) }(batch)
@@ -341,32 +342,32 @@ func (p *ObjectDetectionPipeline) RunPipeline(inputs []string) (*ObjectDetection
 	if err != nil {
 		return nil, fmt.Errorf("failed to load images: %w", err)
 	}
-	errs = append(errs, p.Preprocess(batch, imgs))
+	errs = append(errs, p.preprocess(batch, imgs))
 	if e := errors.Join(errs...); e != nil {
 		return nil, e
 	}
-	errs = append(errs, p.Forward(batch))
+	errs = append(errs, p.forward(ctx, batch))
 	if e := errors.Join(errs...); e != nil {
 		return nil, e
 	}
-	res, postErr := p.Postprocess(batch)
+	res, postErr := p.postprocess(batch)
 	errs = append(errs, postErr)
 	return res, errors.Join(errs...)
 }
 
-func (p *ObjectDetectionPipeline) RunWithImages(inputs []image.Image) (*ObjectDetectionOutput, error) {
+func (p *ObjectDetectionPipeline) RunWithImages(ctx context.Context, inputs []image.Image) (*ObjectDetectionOutput, error) {
 	var errs []error
 	batch := backends.NewBatch(len(inputs))
 	defer func(*backends.PipelineBatch) { errs = append(errs, batch.Destroy()) }(batch)
-	errs = append(errs, p.Preprocess(batch, inputs))
+	errs = append(errs, p.preprocess(batch, inputs))
 	if e := errors.Join(errs...); e != nil {
 		return nil, e
 	}
-	errs = append(errs, p.Forward(batch))
+	errs = append(errs, p.forward(ctx, batch))
 	if e := errors.Join(errs...); e != nil {
 		return nil, e
 	}
-	res, postErr := p.Postprocess(batch)
+	res, postErr := p.postprocess(batch)
 	errs = append(errs, postErr)
 	return res, errors.Join(errs...)
 }
