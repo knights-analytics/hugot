@@ -7,6 +7,7 @@ import (
 	"io"
 	"strings"
 
+	"github.com/gomlx/go-huggingface/tokenizers/bucket"
 	"github.com/gomlx/gomlx/backends"
 	"github.com/gomlx/gomlx/pkg/core/graph"
 	"github.com/gomlx/gomlx/pkg/core/tensors"
@@ -21,8 +22,8 @@ import (
 // Default shape buckets for batch size and sequence length.
 // These provide a good balance between padding overhead and JIT cache size.
 var (
-	defaultBatchBuckets    = []int{1, 8, 32}
-	defaultSequenceBuckets = []int{32, 128, 512}
+	defaultBatchBuckets    []int
+	defaultSequenceBuckets []int
 )
 
 type GoMLXModel struct {
@@ -134,10 +135,6 @@ func getCacheAndBucketSizes(options *options.Options, model *Model, backend stri
 		bucketsSpecified = true
 	} else {
 		sequenceBuckets = defaultSequenceBuckets
-		// Ensure that sequence buckets cover the max sequence length.
-		if sequenceBuckets[len(sequenceBuckets)-1] < model.MaxPositionEmbeddings {
-			sequenceBuckets = append(sequenceBuckets, model.MaxPositionEmbeddings)
-		}
 	}
 
 	// If using simpleGo, and user hasnt specified custom buckets, set max cache to unlimitted and disable bucketing
@@ -145,7 +142,10 @@ func getCacheAndBucketSizes(options *options.Options, model *Model, backend stri
 		return -1, []int{}, []int{}
 	}
 
-	maxCache := len(batchBuckets) * len(sequenceBuckets)
+	maxCache := 512
+	if bucketsSpecified {
+		maxCache = max(len(batchBuckets), 1) * max(len(sequenceBuckets), 1)
+	}
 	return maxCache, batchBuckets, sequenceBuckets
 }
 
@@ -363,26 +363,22 @@ func runGoMLXSessionOnBatch(ctx context.Context, batch *PipelineBatch, p *BasePi
 
 // shapeBucket quantizes input dimensions to coarse buckets to reduce JIT cache pressure.
 //
-// XLA compiles a separate program for each unique input shape. Using power-of-2 padding
-// creates up to 42 unique shapes per model (6 batch sizes × 7 sequence lengths), which
-// can consume 2-8GB of memory for cached compiled programs.
+// XLA compiles a separate program for each unique input shape.
 //
-// Coarse bucketing reduces this to just 9 shapes (3 batch × 3 sequence), significantly
-// reducing memory usage while maintaining reasonable padding overhead:
+// By default we use "two-bit" bucketing, which provides a good balance between
+// padding overhead and JIT cache size (approx. 1.41x increase between buckets).
 //
-//	Batch buckets:    1, 8, 32      (covers 1-32 batch sizes)
-//	Sequence buckets: 32, 128, 512  (covers 1-512 token sequences)
+//	Two-bit buckets: 1, 2, 3, 4, 6, 8, 12, 16, 24, 32, 48, 64, 96, 128, ...
 //
-// Trade-off: Slightly more padding waste for small inputs (e.g., batch=2 pads to 8),
+// Trade-off: Slightly more padding waste for small inputs (e.g., batch=5 pads to 6),
 // but dramatically fewer compiled programs in memory.
-//
-// Example memory savings with 2 models (embedder + reranker):
-//   - Power-of-2: 42 shapes × 2 models × 100MB avg = 8.4GB
-//   - Coarse buckets: 9 shapes × 2 models × 100MB avg = 1.8GB
 func shapeBucket(n int, buckets []int) (int, error) {
-	for _, bucket := range buckets {
-		if n <= bucket {
-			return bucket, nil
+	if len(buckets) == 0 {
+		return bucket.TwoBitBucketLen(n), nil
+	}
+	for _, b := range buckets {
+		if n <= b {
+			return b, nil
 		}
 	}
 	return 0, fmt.Errorf("input shape %d exceeds maximum bucket size %v", n, buckets)
