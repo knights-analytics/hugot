@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"sync"
 
 	"github.com/knights-analytics/hugot/backends"
 	"github.com/knights-analytics/hugot/options"
@@ -24,10 +25,46 @@ type Session struct {
 	tabularPipelines                pipelineMap[*pipelines.TabularPipeline]
 	questionAnsweringPipelines      pipelineMap[*pipelines.QuestionAnsweringPipeline]
 	models                          map[string]*backends.Model
+	modelLocks                      map[string]*sync.Mutex
+	modelLocksMu                    sync.Mutex
+	pipelineLocks                   map[string]*sync.Mutex
+	pipelineLocksMu                 sync.Mutex
 	options                         *options.Options
 	environmentDestroy              func() error
 	sessionContext                  context.Context
 	cancelSessionContext            context.CancelFunc
+}
+
+func (s *Session) getModelLock(modelID string) *sync.Mutex {
+	s.modelLocksMu.Lock()
+	defer s.modelLocksMu.Unlock()
+
+	if lock, ok := s.modelLocks[modelID]; ok {
+		return lock
+	}
+
+	lock := &sync.Mutex{}
+	s.modelLocks[modelID] = lock
+	return lock
+}
+
+func (s *Session) removeModelLock(modelID string) {
+	s.modelLocksMu.Lock()
+	delete(s.modelLocks, modelID)
+	s.modelLocksMu.Unlock()
+}
+
+func (s *Session) getPipelineLock(name string) *sync.Mutex {
+	s.pipelineLocksMu.Lock()
+	defer s.pipelineLocksMu.Unlock()
+
+	if lock, ok := s.pipelineLocks[name]; ok {
+		return lock
+	}
+
+	lock := &sync.Mutex{}
+	s.pipelineLocks[name] = lock
+	return lock
 }
 
 func newSession(ctx context.Context, backend string, opts ...options.WithOption) (*Session, error) {
@@ -58,6 +95,8 @@ func newSession(ctx context.Context, backend string, opts ...options.WithOption)
 		tabularPipelines:                map[string]*pipelines.TabularPipeline{},
 		questionAnsweringPipelines:      map[string]*pipelines.QuestionAnsweringPipeline{},
 		models:                          map[string]*backends.Model{},
+		modelLocks:                      map[string]*sync.Mutex{},
+		pipelineLocks:                   map[string]*sync.Mutex{},
 		options:                         parsedOptions,
 		environmentDestroy: func() error {
 			return nil
@@ -148,6 +187,10 @@ func NewPipeline[T backends.Pipeline](s *Session, pipelineConfig backends.Pipeli
 		return pipeline, errors.New("a name for the pipeline is required")
 	}
 
+	pipelineLock := s.getPipelineLock(pipelineConfig.Name)
+	pipelineLock.Lock()
+	defer pipelineLock.Unlock()
+
 	_, getError := GetPipeline[T](s, pipelineConfig.Name)
 	var notFoundError *pipelineNotFoundError
 	if getError == nil {
@@ -158,6 +201,10 @@ func NewPipeline[T backends.Pipeline](s *Session, pipelineConfig backends.Pipeli
 
 	// Load model if it has not been loaded already
 	modelID := pipelineConfig.ModelPath + ":" + pipelineConfig.OnnxFilename
+	modelLock := s.getModelLock(modelID)
+	modelLock.Lock()
+	defer modelLock.Unlock()
+
 	model, ok := s.models[modelID]
 
 	var err error
@@ -376,6 +423,7 @@ func ClosePipeline[T backends.Pipeline](s *Session, name string) error {
 			delete(model.Pipelines, name)
 			if len(model.Pipelines) == 0 {
 				delete(s.models, model.ID)
+				s.removeModelLock(model.ID)
 				return model.Destroy()
 			}
 		}
@@ -387,6 +435,7 @@ func ClosePipeline[T backends.Pipeline](s *Session, name string) error {
 			delete(model.Pipelines, name)
 			if len(model.Pipelines) == 0 {
 				delete(s.models, model.ID)
+				s.removeModelLock(model.ID)
 				return model.Destroy()
 			}
 		}
@@ -398,6 +447,7 @@ func ClosePipeline[T backends.Pipeline](s *Session, name string) error {
 			delete(model.Pipelines, name)
 			if len(model.Pipelines) == 0 {
 				delete(s.models, model.ID)
+				s.removeModelLock(model.ID)
 				return model.Destroy()
 			}
 		}
@@ -409,6 +459,7 @@ func ClosePipeline[T backends.Pipeline](s *Session, name string) error {
 			delete(model.Pipelines, name)
 			if len(model.Pipelines) == 0 {
 				delete(s.models, model.ID)
+				s.removeModelLock(model.ID)
 				return model.Destroy()
 			}
 		}
@@ -420,6 +471,7 @@ func ClosePipeline[T backends.Pipeline](s *Session, name string) error {
 			delete(model.Pipelines, name)
 			if len(model.Pipelines) == 0 {
 				delete(s.models, model.ID)
+				s.removeModelLock(model.ID)
 				return model.Destroy()
 			}
 		}
@@ -431,6 +483,7 @@ func ClosePipeline[T backends.Pipeline](s *Session, name string) error {
 			delete(model.Pipelines, name)
 			if len(model.Pipelines) == 0 {
 				delete(s.models, model.ID)
+				s.removeModelLock(model.ID)
 				return model.Destroy()
 			}
 		}
@@ -442,6 +495,7 @@ func ClosePipeline[T backends.Pipeline](s *Session, name string) error {
 			delete(model.Pipelines, name)
 			if len(model.Pipelines) == 0 {
 				delete(s.models, model.ID)
+				s.removeModelLock(model.ID)
 				return model.Destroy()
 			}
 		}
@@ -453,6 +507,7 @@ func ClosePipeline[T backends.Pipeline](s *Session, name string) error {
 			delete(model.Pipelines, name)
 			if len(model.Pipelines) == 0 {
 				delete(s.models, model.ID)
+				s.removeModelLock(model.ID)
 				return model.Destroy()
 			}
 		}
@@ -464,6 +519,7 @@ func ClosePipeline[T backends.Pipeline](s *Session, name string) error {
 			delete(model.Pipelines, name)
 			if len(model.Pipelines) == 0 {
 				delete(s.models, model.ID)
+				s.removeModelLock(model.ID)
 				return model.Destroy()
 			}
 		}
@@ -475,6 +531,7 @@ func ClosePipeline[T backends.Pipeline](s *Session, name string) error {
 			delete(model.Pipelines, name)
 			if len(model.Pipelines) == 0 {
 				delete(s.models, model.ID)
+				s.removeModelLock(model.ID)
 				return model.Destroy()
 			}
 		}

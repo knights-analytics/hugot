@@ -1,7 +1,7 @@
 # docker-bake.hcl
 
 # ---- Versions ----
-variable "GO_VERSION"                { default = "1.26.1" }
+variable "GO_VERSION"                { default = "1.26.2" }
 variable "GOTESTSUM_VERSION"         { default = "1.13.0" }
 variable "GOPJRT_VERSION"            { default = "0.98.0" }
 variable "ONNXRUNTIME_VERSION"       { default = "1.24.4" }
