@@ -45,7 +45,7 @@ func createGoMLXModelBackend(model *Model, options *options.Options) error {
 		modelParsed, err = parser.ParseReader(model.OnnxReader)
 	} else {
 		modelParsed, err = parser.ParseFile(fileutil.PathJoinSafe(model.Path, model.OnnxPath))
-		if err != nil {
+		if err != nil && modelParsed != nil {
 			modelParsed = modelParsed.WithBaseDir(model.Path)
 		}
 	}
@@ -97,7 +97,7 @@ func createGoMLXModelBackend(model *Model, options *options.Options) error {
 		return errors.Join(contextErr, modelParsed.Close())
 	}
 
-	maxCache, batchBuckets, sequenceBuckets := getCacheAndBucketSizes(options, model, config)
+	maxCache, batchBuckets, sequenceBuckets := getCacheAndBucketSizes(options, config)
 	exec.SetMaxCache(maxCache)
 
 	model.GoMLXModel = &GoMLXModel{
@@ -121,7 +121,7 @@ func createGoMLXModelBackend(model *Model, options *options.Options) error {
 	return err
 }
 
-func getCacheAndBucketSizes(options *options.Options, model *Model, backend string) (int, []int, []int) {
+func getCacheAndBucketSizes(options *options.Options, backend string) (int, []int, []int) {
 	bucketsSpecified := false
 	// Use configured buckets or fall back to defaults.
 	batchBuckets := defaultBatchBuckets

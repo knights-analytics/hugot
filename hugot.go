@@ -192,10 +192,9 @@ func NewPipeline[T backends.Pipeline](s *Session, pipelineConfig backends.Pipeli
 	defer pipelineLock.Unlock()
 
 	_, getError := GetPipeline[T](s, pipelineConfig.Name)
-	var notFoundError *pipelineNotFoundError
 	if getError == nil {
 		return pipeline, fmt.Errorf("pipeline %s has already been initialised", pipelineConfig.Name)
-	} else if !errors.As(getError, &notFoundError) {
+	} else if _, ok := errors.AsType[*pipelineNotFoundError](getError); !ok {
 		return pipeline, getError
 	}
 

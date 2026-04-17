@@ -6,7 +6,6 @@ import (
 	"context"
 	"errors"
 	"io"
-	"os"
 	"path/filepath"
 	"strings"
 
@@ -97,10 +96,6 @@ func WalkDir() func(ctx context.Context, URL string, handler storage.OnVisit, op
 
 func DeleteFile(filename string) error {
 	return fileSystem.Delete(context.Background(), filename)
-}
-
-func CreateFile(fileName string, isDir bool) error {
-	return fileSystem.Create(context.Background(), fileName, os.ModePerm, isDir)
 }
 
 func FileExists(filename string) (bool, error) {

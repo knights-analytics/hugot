@@ -147,15 +147,29 @@ func (p *TextGenerationPipeline) GetModel() *backends.Model {
 
 // GetStatistics returns the runtime statistics for the pipeline.
 func (p *TextGenerationPipeline) GetStatistics() backends.PipelineStatistics {
-	generativeStatistics := p.Model.ORTModel.GenerativeSession.GetStatistics()
-	return backends.PipelineStatistics{
-		AvgPrefillSeconds:              generativeStatistics.AvgPrefillSeconds,
-		TokensPerSecond:                generativeStatistics.TokensPerSecond,
-		CumulativePrefillSum:           generativeStatistics.CumulativePrefillSum,
-		CumulativePrefillCount:         generativeStatistics.CumulativePrefillCount,
-		CumulativeTokens:               generativeStatistics.CumulativeTokens,
-		CumulativeTokenDurationSeconds: generativeStatistics.CumulativeTokenDurationSeconds,
+	var stats backends.PipelineStatistics
+	if p.Model.ORTModel.GenerativeEngine != nil {
+		engineStats := p.Model.ORTModel.GenerativeEngine.GetStatistics()
+		stats = backends.PipelineStatistics{
+			AvgPrefillSeconds:              engineStats.AvgPrefillSeconds,
+			TokensPerSecond:                engineStats.TokensPerSecond,
+			CumulativePrefillSum:           engineStats.CumulativePrefillSum,
+			CumulativePrefillCount:         engineStats.CumulativePrefillCount,
+			CumulativeTokens:               engineStats.CumulativeTokens,
+			CumulativeTokenDurationSeconds: engineStats.CumulativeTokenDurationSeconds,
+		}
+	} else if p.Model.ORTModel.GenerativeSession != nil {
+		sessionStats := p.Model.ORTModel.GenerativeSession.GetStatistics()
+		stats = backends.PipelineStatistics{
+			AvgPrefillSeconds:              sessionStats.AvgPrefillSeconds,
+			TokensPerSecond:                sessionStats.TokensPerSecond,
+			CumulativePrefillSum:           sessionStats.CumulativePrefillSum,
+			CumulativePrefillCount:         sessionStats.CumulativePrefillCount,
+			CumulativeTokens:               sessionStats.CumulativeTokens,
+			CumulativeTokenDurationSeconds: sessionStats.CumulativeTokenDurationSeconds,
+		}
 	}
+	return stats
 }
 
 func (p *TextGenerationPipeline) Validate() error {
@@ -268,8 +282,7 @@ func collectResponses(tokenStream chan backends.SequenceDelta, errorStream chan 
 	responses := make([]string, batchSize)
 	var finalErrors []error
 	for delta := range tokenStream {
-		index := delta.Index
-		responses[index] += delta.Token
+		responses[delta.Sequence] += delta.Token
 	}
 	for err := range errorStream {
 		finalErrors = append(finalErrors, err)

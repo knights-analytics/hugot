@@ -331,9 +331,11 @@ func TestTextGenerationPipelineORTCuda(t *testing.T) {
 	if os.Getenv("CI") != "" {
 		t.SkipNow()
 	}
-	session, err := NewORTSession(t.Context(), options.WithCuda(map[string]string{
-		"device_id": "0",
-	}))
+	session, err := NewORTSession(t.Context(),
+		options.WithCuda(map[string]string{
+			"device_id": "0",
+		}),
+		options.WithUseEngine())
 	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()

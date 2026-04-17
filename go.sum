@@ -58,8 +58,8 @@ github.com/janpfeifer/go-benchmarks v0.1.1 h1:gLLy07/JrOKSnMWeUxSnjTdhkglgmrNR2I
 github.com/janpfeifer/go-benchmarks v0.1.1/go.mod h1:5AagXCOUzevvmYFQalcgoa4oWPyH1IkZNckolGWfiSM=
 github.com/janpfeifer/must v0.2.0 h1:yWy1CE5gtk1i2ICBvqAcMMXrCMqil9CJPkc7x81fRdQ=
 github.com/janpfeifer/must v0.2.0/go.mod h1:S6c5Yg/YSMR43cJw4zhIq7HFMci90a7kPY9XA4c8UIs=
-github.com/knights-analytics/ortgenai v0.2.0 h1:WOZAHxbvlHswydkDrBJi/XnqdzGT1kErUA4hnzoCajA=
-github.com/knights-analytics/ortgenai v0.2.0/go.mod h1:NsxP23iC77IP6q+gRTC+v79v3hyv7fKH1iSa7D+DoVk=
+github.com/knights-analytics/ortgenai v0.3.0 h1:ruHiWzxGnKVowlDQ4zKA3dafLLmFxus6R1vqA0rp6Ss=
+github.com/knights-analytics/ortgenai v0.3.0/go.mod h1:lSbQsRP5wY5NS+4W5CUGhdxjTzERQkR7WprAFxrBSt4=
 github.com/kr/pretty v0.3.1 h1:flRD4NNwYAUpkphVc1HcthR4KEIFJ65n8Mw5qdRn3LE=
 github.com/kr/pretty v0.3.1/go.mod h1:hoEshYVHaxMs3cyo3Yncou5ZscifuDolrwPKZanG3xk=
 github.com/kr/text v0.2.0 h1:5Nx0Ya0ZqY2ygV366QzturHI13Jq95ApcVaJBhpS+AY=

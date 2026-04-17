@@ -35,29 +35,6 @@ func Uint32SliceToIntSlice(input []uint32) []int {
 	return out
 }
 
-// IntOffsetsToUintPairs converts tokenizer offsets from [][]int to [][2]uint
-// with clamping of negative values to 0.
-func IntOffsetsToUintPairs(input [][]int) [][2]uint {
-	out := make([][2]uint, len(input))
-	for i, pair := range input {
-		var a, b int
-		if len(pair) > 0 {
-			a = pair[0]
-		}
-		if len(pair) > 1 {
-			b = pair[1]
-		}
-		if a < 0 {
-			a = 0
-		}
-		if b < 0 {
-			b = 0
-		}
-		out[i] = [2]uint{uint(a), uint(b)} // #nosec G115 both a and b are clamped to be non-negative above, so int->uint is safe here.
-	}
-	return out
-}
-
 // DurationToU64 converts a duration to an unsigned nanoseconds counter safely.
 // Negative durations are mapped to 0.
 func DurationToU64(d time.Duration) uint64 {

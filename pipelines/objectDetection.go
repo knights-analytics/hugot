@@ -70,6 +70,7 @@ func (o *ObjectDetectionOutput) GetOutput() []any {
 }
 
 // Options.
+
 func WithBoxesOutput(name string) backends.PipelineOption[*ObjectDetectionPipeline] {
 	return func(p *ObjectDetectionPipeline) error { p.BoxesOutput = name; return nil }
 }
@@ -124,7 +125,10 @@ func NewObjectDetectionPipeline(sessionContext context.Context, config backends.
 }
 
 // Interface implementations.
-func (p *ObjectDetectionPipeline) IsGenerative() bool { return false }
+
+func (p *ObjectDetectionPipeline) IsGenerative() bool {
+	return false
+}
 
 func (p *ObjectDetectionPipeline) GetModel() *backends.Model { return p.Model }
 

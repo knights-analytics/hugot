@@ -11,6 +11,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 
 	ort "github.com/yalue/onnxruntime_go"
 	"golang.org/x/sync/errgroup"
@@ -23,10 +24,13 @@ import (
 type ORTModel struct {
 	Session           *ort.DynamicAdvancedSession
 	GenerativeSession *ortgenai.Session
+	GenerativeEngine  *ortgenai.Engine
 	SessionOptions    *ort.SessionOptions
 	Options           *options.OrtOptions
 	Destroy           func() error
 }
+
+var generativeBackendMutex = sync.Mutex{}
 
 func mapORTOptions(options *options.Options) ([]string, map[string]map[string]string, error) {
 	if options == nil || options.ORTOptions == nil {
@@ -87,10 +91,53 @@ func mapORTOptions(options *options.Options) ([]string, map[string]map[string]st
 }
 
 func createORTGenerativeSession(model *Model, options *options.Options) error {
-
 	if strings.HasPrefix(model.Path, "s3:") {
 		return errors.New("ORT Gen AI does not support S3 paths. Please download the model to a local directory and try again")
 	}
+
+	err := initialiseORTGenAI(options)
+	if err != nil {
+		return err
+	}
+
+	providers, providerOptions, err := mapORTOptions(options)
+	if err != nil {
+		return fmt.Errorf("error mapping ORT options for generative session: %w", err)
+	}
+
+	if options.ORTOptions.UseEngine {
+		ortGenAiEngine, err := ortgenai.CreateEngineWithOptions(model.Path, providers, providerOptions)
+		if err != nil {
+			return fmt.Errorf("error creating ortgenai engine: %w", err)
+		}
+		model.ORTModel = &ORTModel{
+			GenerativeEngine: ortGenAiEngine,
+			Options:          options.ORTOptions,
+			Destroy: func() error {
+				ortGenAiEngine.Destroy()
+				return nil
+			},
+		}
+	} else {
+		ortGenAiSession, err := ortgenai.CreateSessionWithOptions(model.Path, providers, providerOptions)
+		if err != nil {
+			return fmt.Errorf("error creating ortgenai session: %w", err)
+		}
+		model.ORTModel = &ORTModel{
+			GenerativeSession: ortGenAiSession,
+			Options:           options.ORTOptions,
+			Destroy: func() error {
+				ortGenAiSession.Destroy()
+				return nil
+			},
+		}
+	}
+	return nil
+}
+
+func initialiseORTGenAI(options *options.Options) error {
+	generativeBackendMutex.Lock()
+	defer generativeBackendMutex.Unlock()
 
 	if !ortgenai.IsInitialized() {
 		if options == nil || options.ORTOptions == nil {
@@ -124,22 +171,6 @@ func createORTGenerativeSession(model *Model, options *options.Options) error {
 			return fmt.Errorf("error initializing the ort genai environment: %w", err)
 		}
 	}
-	providers, providerOptions, err := mapORTOptions(options)
-	if err != nil {
-		return fmt.Errorf("error mapping ORT options for generative session: %w", err)
-	}
-	ortGenAiSession, err := ortgenai.CreateSessionWithOptions(model.Path, providers, providerOptions)
-	if err != nil {
-		return fmt.Errorf("error creating ortgenai session: %w", err)
-	}
-	model.ORTModel = &ORTModel{
-		GenerativeSession: ortGenAiSession,
-		Options:           options.ORTOptions,
-		Destroy: func() error {
-			ortGenAiSession.Destroy()
-			return nil
-		},
-	}
 	return nil
 }
 
@@ -156,8 +187,9 @@ func runGenerativeORTSessionOnBatch(ctx context.Context, batch *PipelineBatch, p
 	}
 
 	session := p.Model.ORTModel.GenerativeSession
-	if session == nil {
-		return nil, nil, errors.New("ORT generative session is not initialized")
+	engine := p.Model.ORTModel.GenerativeEngine
+	if session == nil && engine == nil {
+		return nil, nil, errors.New("ORT generative session/engine is not initialized")
 	}
 
 	inputs, ok := batch.InputValues.([][]ortgenai.Message)
@@ -183,6 +215,10 @@ func runGenerativeORTSessionOnBatch(ctx context.Context, batch *PipelineBatch, p
 	generateCtx, cancel := context.WithCancel(ctx)
 
 	if batch.Images != nil {
+		if session == nil {
+			cancel()
+			return nil, nil, errors.New("multimodal generation requires a session, but only engine is initialized")
+		}
 		images, ok := batch.Images.(*ortgenai.Images)
 		if !ok {
 			cancel()
@@ -194,7 +230,11 @@ func runGenerativeORTSessionOnBatch(ctx context.Context, batch *PipelineBatch, p
 			return nil, nil, fmt.Errorf("error during multimodal generation start: %w", err)
 		}
 	} else {
-		ortTokenStream, ortErrorStream, err = session.Generate(generateCtx, inputs, tools, &ortgenai.GenerationOptions{MaxLength: maxLength, Temperature: temperature, TopP: topP, Seed: seed, Guidance: ortGuidance})
+		if engine != nil {
+			ortTokenStream, ortErrorStream, err = engine.Generate(generateCtx, inputs, tools, &ortgenai.GenerationOptions{MaxLength: maxLength, Temperature: temperature, TopP: topP, Seed: seed, Guidance: ortGuidance})
+		} else {
+			ortTokenStream, ortErrorStream, err = session.Generate(generateCtx, inputs, tools, &ortgenai.GenerationOptions{MaxLength: maxLength, Temperature: temperature, TopP: topP, Seed: seed, Guidance: ortGuidance})
+		}
 		if err != nil {
 			cancel()
 			return nil, nil, fmt.Errorf("error during generation start: %w", err)
@@ -237,14 +277,14 @@ func runGenerativeORTSessionOnBatch(ctx context.Context, batch *PipelineBatch, p
 				if !ok {
 					return
 				}
-				idx := tokenDelta.Sequence
-				if completeSequences[idx] {
+				sequence := tokenDelta.Sequence
+				if completeSequences[sequence] {
 					// Already complete; ignore further tokens for this sequence.
 					continue
 				}
 				if tokenDelta.EOSReached {
 					// EOS terminates sequence; no token content to forward.
-					completeSequences[idx] = true
+					completeSequences[sequence] = true
 					completedCount++
 					if completedCount == totalSequences {
 						cancel()
@@ -254,14 +294,14 @@ func runGenerativeORTSessionOnBatch(ctx context.Context, batch *PipelineBatch, p
 				}
 
 				// Forward token immediately.
-				tokenStream <- SequenceDelta{Token: tokenDelta.Token, Index: idx}
+				tokenStream <- SequenceDelta{Token: tokenDelta.Token, Sequence: sequence}
 
 				// Detect stop sequences using a bounded rolling window.
 				// Window size is maxStopLen + len(current token) to catch:
 				//  - stops spanning the boundary between previous tail and this token
 				//  - stops fully contained inside a single (possibly long) token
 				if len(filteredStops) > 0 && maxStopLen > 0 {
-					tail := tails[idx] + tokenDelta.Token
+					tail := tails[sequence] + tokenDelta.Token
 					keep := maxStopLen + len(tokenDelta.Token)
 					if keep < maxStopLen {
 						keep = maxStopLen
@@ -269,11 +309,11 @@ func runGenerativeORTSessionOnBatch(ctx context.Context, batch *PipelineBatch, p
 					if len(tail) > keep {
 						tail = tail[len(tail)-keep:]
 					}
-					tails[idx] = tail
+					tails[sequence] = tail
 
 					for _, s := range filteredStops {
 						if strings.Contains(tail, s) {
-							completeSequences[idx] = true
+							completeSequences[sequence] = true
 							completedCount++
 							if completedCount == totalSequences {
 								cancel()

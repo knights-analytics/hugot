@@ -131,7 +131,10 @@ func NewTabularPipeline(sessionContext context.Context, config backends.Pipeline
 
 // Interface implementation
 
-func (p *TabularPipeline) IsGenerative() bool        { return false }
+func (p *TabularPipeline) IsGenerative() bool {
+	return false
+}
+
 func (p *TabularPipeline) GetModel() *backends.Model { return p.Model }
 
 func (p *TabularPipeline) GetMetadata() backends.PipelineMetadata {

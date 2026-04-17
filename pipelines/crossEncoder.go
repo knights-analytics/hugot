@@ -90,6 +90,7 @@ func NewCrossEncoderPipeline(sessionContext context.Context, config backends.Pip
 }
 
 // INTERFACE IMPLEMENTATIONS.
+
 func (p *CrossEncoderPipeline) IsGenerative() bool {
 	return false
 }

@@ -11,7 +11,8 @@ import (
 
 type ORTModel struct {
 	Destroy           func() error
-	GenerativeSession disabledGenerativeSession // placeholder when ORT disabled
+	GenerativeSession *disabledGenerativeSession // placeholder when ORT disabled
+	GenerativeEngine  *disabledGenerativeEngine  // placeholder when ORT disabled
 }
 
 func createORTModelBackend(_ *Model, _ *options.Options) error {
@@ -46,9 +47,16 @@ func CreateMessagesORT(_ *PipelineBatch, _ any, _ string) error {
 	return errors.New("ORT is not enabled")
 }
 
-type disabledGenerativeSession struct{}
+type (
+	disabledGenerativeSession struct{}
+	disabledGenerativeEngine  struct{}
+)
 
 func (*disabledGenerativeSession) GetStatistics() disabledStatistics {
+	return disabledStatistics{}
+}
+
+func (*disabledGenerativeEngine) GetStatistics() disabledStatistics {
 	return disabledStatistics{}
 }
 

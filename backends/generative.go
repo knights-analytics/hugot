@@ -1,5 +1,7 @@
 package backends
 
+import "context"
+
 // GuidanceType specifies the constrained-generation strategy.
 type GuidanceType string
 
@@ -19,8 +21,8 @@ type Guidance struct {
 }
 
 type SequenceDelta struct {
-	Token string
-	Index int
+	Token    string
+	Sequence int
 }
 
 // Message represents a single message in a conversation.
@@ -29,4 +31,20 @@ type Message struct {
 	Role      string   `json:"role"`
 	Content   string   `json:"content"`
 	ImageURLs []string `json:"image_urls,omitempty"` // File paths or data URIs for multimodal support
+}
+
+// GenerativeModel abstracts either a generative session or engine.
+type GenerativeModel interface {
+	Generate(ctx context.Context, inputs [][]Message, tools []string, options *GenerativeOptions) (chan SequenceDelta, chan error, error)
+	GetStatistics() PipelineStatistics
+	Destroy() error
+}
+
+// GenerativeOptions contains settings for text generation.
+type GenerativeOptions struct {
+	MaxLength   int
+	Temperature *float64
+	TopP        *float64
+	Seed        *int
+	Guidance    *Guidance
 }

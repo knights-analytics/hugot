@@ -42,7 +42,20 @@ func LoadModel(path string, onnxFilename string, options *options.Options, isGen
 		IsGenerative: isGenerative,
 	}
 
-	if !isGenerative {
+	if isGenerative {
+		// creation of the session. Only one output (either token or sentence embedding).
+		if options.Backend != "ORT" {
+			return nil, fmt.Errorf("generative models are only supported with ORT backend currently")
+		}
+		if onnxFilename != "" {
+			return nil, fmt.Errorf("onnx filename should not be provided for generative models as we currently rely on genai_config for the onnx backend")
+		}
+
+		err := createORTGenerativeSession(model, options)
+		if err != nil {
+			return nil, err
+		}
+	} else {
 		err := loadModelConfig(model)
 		if err != nil {
 			return nil, err
@@ -54,18 +67,6 @@ func LoadModel(path string, onnxFilename string, options *options.Options, isGen
 		tkErr := LoadTokenizer(model, options)
 		if tkErr != nil {
 			return nil, tkErr
-		}
-	} else {
-		// creation of the session. Only one output (either token or sentence embedding).
-		if options.Backend != "ORT" {
-			return nil, fmt.Errorf("generative models are only supported with ORT backend currently")
-		}
-		if onnxFilename != "" {
-			return nil, fmt.Errorf("onnx filename should not be provided for generative models as we currently rely on genai_config for the onnx backend")
-		}
-		err := createORTGenerativeSession(model, options)
-		if err != nil {
-			return nil, err
 		}
 	}
 

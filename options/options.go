@@ -83,6 +83,7 @@ type OrtOptions struct {
 	OptimizedModelFilePath  *string
 	ProfilingEnabled        *bool
 	ProfilingFilePrefix     *string
+	UseEngine               bool
 }
 
 type ExtraExecutionProvider struct {
@@ -119,7 +120,6 @@ func WithOnnxLibraryPath(ortLibraryPath string) WithOption {
 			}
 
 			libraryName, _, _ := getDefaultLibraryPaths()
-			ortLibraryFullPath := fileutil.PathJoinSafe(ortLibraryPath, libraryName)
 			exists, err := fileutil.FileExists(ortLibraryPath)
 			if err != nil {
 				return fmt.Errorf("error checking for existence of ONNX Runtime library file: %w", err)
@@ -127,7 +127,7 @@ func WithOnnxLibraryPath(ortLibraryPath string) WithOption {
 			if !exists {
 				return fmt.Errorf("ONNX Runtime library %s does not exist at %q", libraryName, ortLibraryPath)
 			}
-			o.ORTOptions.LibraryPath = &ortLibraryFullPath
+			o.ORTOptions.LibraryPath = new(fileutil.PathJoinSafe(ortLibraryPath, libraryName))
 			o.ORTOptions.LibraryDir = &ortLibraryPath
 			return nil
 		}
@@ -139,8 +139,7 @@ func WithOnnxLibraryPath(ortLibraryPath string) WithOption {
 func WithTelemetry() WithOption {
 	return func(o *Options) error {
 		if o.Backend == "ORT" {
-			enabled := true
-			o.ORTOptions.Telemetry = &enabled
+			o.ORTOptions.Telemetry = new(true)
 			return nil
 		}
 		return fmt.Errorf("WithTelemetry is only supported for ORT backend")
@@ -434,5 +433,16 @@ func WithProfiling(enabled bool, filePrefix string) WithOption {
 			return nil
 		}
 		return fmt.Errorf("WithProfiling is only supported for ORT backend")
+	}
+}
+
+// WithUseEngine uses an ORT Engine for dynamic batching and asynchronous request support.
+func WithUseEngine() WithOption {
+	return func(o *Options) error {
+		if o.Backend == "ORT" {
+			o.ORTOptions.UseEngine = true
+			return nil
+		}
+		return fmt.Errorf("WithUseEngine is only supported for ORT backend")
 	}
 }
