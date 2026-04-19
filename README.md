@@ -174,24 +174,26 @@ Hugot uses the [Onnx Runtime Generative AI](https://onnxruntime.ai/generative-ai
 
 We currently support generative models only within the text generation pipeline. Please look at the [ORT tests](hugot_ort_test.go) for an example of its usage.
 
+To use the experimental Engine support for concurrent requests and inference batching, use the `WithGenerativeEngine()` option when creating a session.
+
 ## Hardware acceleration 🚀
 
 Hugot now also supports the following accelerator backends for your inference:
  - CUDA (tested on Onnx Runtime and XLA). See below for setup instructions.
  - TPU (XLA only)
- - TensorRT (untested, available in Onnx Runtime only)
- - DirectML (untested, available in Onnx Runtime only)
- - CoreML (untested, available in Onnx Runtime only)
- - OpenVINO (untested, available in Onnx Runtime only)
+ - TensorRT (available in Onnx Runtime only)
+ - DirectML (available in Onnx Runtime only)
+ - CoreML (available in Onnx Runtime only)
+ - OpenVINO (available in Onnx Runtime only)
 
-Please help us out by testing the untested options above and providing feedback, good or bad!
+Please provide feedback if encountering any issues with the accelerators above!
 
 To use Hugot with Nvidia gpu acceleration, you need to have the following:
 
 - The Nvidia driver for your graphics card (if running in Docker and WSL2, starting with --gpus all should inherit the drivers from the host OS)
 - ONNX Runtime:
     - The cuda gpu version of ONNX Runtime on the machine/docker container. You can see how we get that by looking at the [Dockerfile](./Dockerfile). You can also get the ONNX Runtime libraries that we use for testing from the release. Just download the gpu .so libraries and put them in /usr/lib.
-    - The required CUDA libraries installed on your system that are compatible with the ONNX Runtime gpu version you use. See [here](https://onnxruntime.ai/docs/execution-providers/CUDA-ExecutionProvider.html). For instance, for onnxruntime-gpu 1.23.2, we need CUDA 12.x (any minor version should be compatible) and cuDNN 9.x.
+    - The required CUDA libraries installed on your system that are compatible with the ONNX Runtime gpu version you use. See [here](https://onnxruntime.ai/docs/execution-providers/CUDA-ExecutionProvider.html). For instance, for onnxruntime-gpu 1.24.4, we need CUDA 12.x (any minor version should be compatible) and cuDNN 9.x.
     - Start a session with the following:
       ```
       opts := []options.WithOption{

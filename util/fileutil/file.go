@@ -19,8 +19,8 @@ var fileSystem = afs.New()
 
 const partSize = 64 * 1024 * 1024
 
-func ReadFileBytes(filename string) ([]byte, error) {
-	file, err := fileSystem.OpenURL(context.Background(), filename)
+func ReadFileBytes(ctx context.Context, filename string) ([]byte, error) {
+	file, err := fileSystem.OpenURL(ctx, filename)
 	if err != nil {
 		return nil, err
 	}
@@ -47,8 +47,8 @@ func GetPathType(path string) string {
 	return "os"
 }
 
-func OpenFile(filename string) (io.ReadCloser, error) {
-	return fileSystem.OpenURL(context.Background(), filename)
+func OpenFile(ctx context.Context, filename string) (io.ReadCloser, error) {
+	return fileSystem.OpenURL(ctx, filename)
 }
 
 // ReadLine returns a single line (without the ending \n)
@@ -94,31 +94,31 @@ func WalkDir() func(ctx context.Context, URL string, handler storage.OnVisit, op
 	return fileSystem.Walk
 }
 
-func DeleteFile(filename string) error {
-	return fileSystem.Delete(context.Background(), filename)
+func DeleteFile(ctx context.Context, filename string) error {
+	return fileSystem.Delete(ctx, filename)
 }
 
-func FileExists(filename string) (bool, error) {
-	return fileSystem.Exists(context.Background(), filename)
+func FileExists(ctx context.Context, filename string) (bool, error) {
+	return fileSystem.Exists(ctx, filename)
 }
 
-func FileStats(filename string) (storage.Object, error) {
-	return fileSystem.Object(context.Background(), filename)
+func FileStats(ctx context.Context, filename string) (storage.Object, error) {
+	return fileSystem.Object(ctx, filename)
 }
 
-func NewFileWriter(filename string, contentType string) (io.WriteCloser, error) {
-	exists, err := FileExists(filename)
+func NewFileWriter(ctx context.Context, filename string, contentType string) (io.WriteCloser, error) {
+	exists, err := FileExists(ctx, filename)
 	if err != nil {
 		return nil, err
 	}
 	if exists {
-		err = fileSystem.Delete(context.Background(), filename)
+		err = fileSystem.Delete(ctx, filename)
 		if err != nil {
 			return nil, err
 		}
 	}
 	if contentType != "" {
-		return fileSystem.NewWriter(context.Background(), filename, 0o644, content.NewMeta(content.Type, contentType), option.NewSkipChecksum(true))
+		return fileSystem.NewWriter(ctx, filename, 0o644, content.NewMeta(content.Type, contentType), option.NewSkipChecksum(true))
 	}
-	return fileSystem.NewWriter(context.Background(), filename, 0o644, option.NewSkipChecksum(true))
+	return fileSystem.NewWriter(ctx, filename, 0o644, option.NewSkipChecksum(true))
 }

@@ -130,7 +130,7 @@ func featureExtractionPipeline(t *testing.T, session *Session) {
 	for i, embedding := range normalizedEmbedding.Embeddings {
 		e := floatsEqual(embedding, testResults[i])
 		if e != nil {
-			t.Fatalf("Normalization test failed: %s", normalizationStrings[i])
+			t.Fatalf("Normalization test failed: %s", normalizationStrings)
 		}
 	}
 
@@ -1252,7 +1252,7 @@ func textGenerationPipeline(t *testing.T, session *Session) {
 	// Execute tests
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			batchResult, err := textGenPipeline.RunMessages(context.Background(), tt.input)
+			batchResult, err := textGenPipeline.RunMessages(t.Context(), tt.input)
 			checkT(t, err)
 			outputs := batchResult.GetOutput()
 			for i := range len(outputs) {
@@ -1284,7 +1284,7 @@ func textGenerationPipeline(t *testing.T, session *Session) {
 				{Role: "user", Content: "Solve this equation: 2 + 2 = ? Be very brief in your explanation."},
 			},
 		}
-		output, err := streamingPipeline.RunMessages(context.Background(), input)
+		output, err := streamingPipeline.RunMessages(t.Context(), input)
 		var fullAnswer strings.Builder
 		for token := range output.TokenStream {
 			fullAnswer.WriteString(token.Token)

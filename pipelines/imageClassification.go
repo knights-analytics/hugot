@@ -210,7 +210,7 @@ func (p *ImageClassificationPipeline) RunPipeline(ctx context.Context, inputs []
 	defer func(*backends.PipelineBatch) {
 		runErrors = append(runErrors, batch.Destroy())
 	}(batch)
-	images, err := imageutil.LoadImagesFromPaths(inputs)
+	images, err := imageutil.LoadImagesFromPaths(ctx, inputs)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load images: %w", err)
 	}

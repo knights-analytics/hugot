@@ -25,7 +25,7 @@ func NewORTSession(ctx context.Context, opts ...options.WithOption) (*Session, e
 	}
 
 	// set session options and initialise
-	if initialised, ortErr := session.initialiseORT(); ortErr != nil {
+	if initialised, ortErr := session.initialiseORT(ctx); ortErr != nil {
 		if initialised {
 			destroyErr := session.Destroy()
 			envErr := ort.DestroyEnvironment()
@@ -44,11 +44,11 @@ func NewORTSession(ctx context.Context, opts ...options.WithOption) (*Session, e
 	return session, err
 }
 
-func (s *Session) initialiseORT() (bool, error) {
+func (s *Session) initialiseORT(ctx context.Context) (bool, error) {
 	o := s.options.ORTOptions
 	// Set pre-initialisation options
 	if o.LibraryPath != nil {
-		ortPathExists, err := fileutil.FileExists(*o.LibraryPath)
+		ortPathExists, err := fileutil.FileExists(ctx, *o.LibraryPath)
 		if err != nil {
 			return false, err
 		}

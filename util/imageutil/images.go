@@ -2,6 +2,7 @@ package imageutil
 
 import (
 	"bytes"
+	"context"
 	"image"
 
 	_ "image/gif"  // adds gif support
@@ -12,11 +13,11 @@ import (
 	_ "golang.org/x/image/webp" // adds webp support
 )
 
-func LoadImagesFromPaths(paths []string) ([]image.Image, error) {
+func LoadImagesFromPaths(ctx context.Context, paths []string) ([]image.Image, error) {
 	images := make([]image.Image, 0, len(paths))
 
 	for _, path := range paths {
-		b, err := fileutil.ReadFileBytes(path)
+		b, err := fileutil.ReadFileBytes(ctx, path)
 		if err != nil {
 			return nil, err
 		}

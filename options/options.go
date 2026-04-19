@@ -1,6 +1,7 @@
 package options
 
 import (
+	"context"
 	"fmt"
 	"runtime"
 
@@ -111,7 +112,8 @@ type WithOption func(o *Options) error
 func WithOnnxLibraryPath(ortLibraryPath string) WithOption {
 	return func(o *Options) error {
 		if o.Backend == "ORT" {
-			object, err := fileutil.FileStats(ortLibraryPath)
+			ctx := context.Background()
+			object, err := fileutil.FileStats(ctx, ortLibraryPath)
 			if err != nil {
 				return fmt.Errorf("failed to access ONNX Runtime library path %q: %w", ortLibraryPath, err)
 			}
@@ -120,7 +122,7 @@ func WithOnnxLibraryPath(ortLibraryPath string) WithOption {
 			}
 
 			libraryName, _, _ := getDefaultLibraryPaths()
-			exists, err := fileutil.FileExists(ortLibraryPath)
+			exists, err := fileutil.FileExists(ctx, ortLibraryPath)
 			if err != nil {
 				return fmt.Errorf("error checking for existence of ONNX Runtime library file: %w", err)
 			}
@@ -436,8 +438,9 @@ func WithProfiling(enabled bool, filePrefix string) WithOption {
 	}
 }
 
-// WithUseEngine uses an ORT Engine for dynamic batching and asynchronous request support.
-func WithUseEngine() WithOption {
+// WithGenerativeEngine for generative models, uses an ORT Gen AI Engine for dynamic batching and concurrent request support.
+// Note: currently does not support image tensors in the upstream project.
+func WithGenerativeEngine() WithOption {
 	return func(o *Options) error {
 		if o.Backend == "ORT" {
 			o.ORTOptions.UseEngine = true

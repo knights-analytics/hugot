@@ -130,15 +130,6 @@ func NewZeroShotClassificationPipeline(sessionContext context.Context, config ba
 	return pipeline, err
 }
 
-func (p *ZeroShotClassificationPipeline) preprocess(batch *backends.PipelineBatch, inputs []string) error {
-	start := time.Now()
-	backends.TokenizeInputs(batch, p.Model.Tokenizer, inputs)
-	atomic.AddUint64(&p.Model.Tokenizer.TokenizerTimings.NumCalls, 1)
-	atomic.AddUint64(&p.Model.Tokenizer.TokenizerTimings.TotalNS, safeconv.DurationToU64(time.Since(start)))
-	err := backends.CreateInputTensors(batch, p.Model, p.Runtime)
-	return err
-}
-
 func (p *ZeroShotClassificationPipeline) preprocessPairs(batch *backends.PipelineBatch, inputs [][2]string) error {
 	start := time.Now()
 	backends.TokenizeInputPairs(batch, p.Model.Tokenizer, inputs, p.Model.SeparatorToken)
@@ -159,7 +150,7 @@ func (p *ZeroShotClassificationPipeline) forward(ctx context.Context, batch *bac
 	return nil
 }
 
-func (p *ZeroShotClassificationPipeline) postprocess(outputTensors [][][]float32, labels []string, sequences []string) (*ZeroShotOutput, error) {
+func (p *ZeroShotClassificationPipeline) postprocess(outputTensors [][][]float32, labels []string, sequences []string) *ZeroShotOutput {
 	classificationOutputs := make([]ZeroShotClassificationOutput, 0, len(sequences))
 	LabelLikelihood := make(map[string]float64)
 	if p.Multilabel || len(p.Labels) == 1 {
@@ -213,7 +204,7 @@ func (p *ZeroShotClassificationPipeline) postprocess(outputTensors [][][]float32
 		}
 		return &ZeroShotOutput{
 			ClassificationOutputs: classificationOutputs,
-		}, nil
+		}
 	}
 	for ind, sequence := range outputTensors {
 		output := ZeroShotClassificationOutput{}
@@ -261,7 +252,7 @@ func (p *ZeroShotClassificationPipeline) postprocess(outputTensors [][][]float32
 	}
 	return &ZeroShotOutput{
 		ClassificationOutputs: classificationOutputs,
-	}, nil
+	}
 }
 
 func (p *ZeroShotClassificationPipeline) RunPipeline(ctx context.Context, inputs []string) (*ZeroShotOutput, error) {
@@ -275,22 +266,20 @@ func (p *ZeroShotClassificationPipeline) RunPipeline(ctx context.Context, inputs
 		var sequenceTensors [][]float32
 		for _, pair := range sequence {
 			batch := backends.NewBatch(len(inputs))
-			if err := p.preprocessPairs(batch, [][2]string{{pair[0], pair[1]}}); err != nil {
+			if err = p.preprocessPairs(batch, [][2]string{{pair[0], pair[1]}}); err != nil {
 				return nil, errors.Join(err, batch.Destroy())
 			}
-			if err := p.forward(ctx, batch); err != nil {
+			if err = p.forward(ctx, batch); err != nil {
 				return nil, errors.Join(err, batch.Destroy())
 			}
 			sequenceTensors = append(sequenceTensors, batch.OutputValues[0].([][]float32)[0])
-			if err := batch.Destroy(); err != nil {
+			if err = batch.Destroy(); err != nil {
 				return nil, err
 			}
 		}
 		outputTensors = append(outputTensors, sequenceTensors)
 	}
-	outputs, err := p.postprocess(outputTensors, p.Labels, inputs)
-	runErrors = append(runErrors, err)
-	return outputs, errors.Join(runErrors...)
+	return p.postprocess(outputTensors, p.Labels, inputs), errors.Join(runErrors...)
 }
 
 // PIPELINE INTERFACE IMPLEMENTATION

@@ -44,7 +44,8 @@ var extraFiles = []struct {
 }
 
 func main() {
-	if ok, err := fileutil.FileExists("./models"); err == nil {
+	ctx := context.Background()
+	if ok, err := fileutil.FileExists(ctx, "./models"); err == nil {
 		if !ok {
 			err = os.MkdirAll("./models", os.ModePerm)
 			if err != nil {
@@ -56,13 +57,13 @@ func main() {
 				continue // skipping this model for cicd
 			}
 
-			if ok, err = fileutil.FileExists("./models/" + strings.ReplaceAll(model.name, "/", "_")); err == nil {
+			if ok, err = fileutil.FileExists(ctx, "./models/"+strings.ReplaceAll(model.name, "/", "_")); err == nil {
 				if !ok {
 					options := hugot.NewDownloadOptions()
 					options.OnnxFilePath = model.onnxFilePath
 					options.ExternalDataPath = model.externalDataPath
 					fmt.Printf("Downloading %s\n", model.name)
-					outPath, dlErr := hugot.DownloadModel(model.name, "./models", options)
+					outPath, dlErr := hugot.DownloadModel(ctx, model.name, "./models", options)
 					if dlErr != nil {
 						panic(dlErr)
 					}
@@ -77,7 +78,7 @@ func main() {
 	}
 
 	// Download extra files (images, labels)
-	if ok, err := fileutil.FileExists("./models/imageData"); err == nil {
+	if ok, err := fileutil.FileExists(ctx, "./models/imageData"); err == nil {
 		if !ok {
 			err = os.MkdirAll("./models/imageData", os.ModePerm)
 			if err != nil {
@@ -85,8 +86,8 @@ func main() {
 			}
 		}
 		for _, f := range extraFiles {
-			if exists, _ := fileutil.FileExists(f.dest); !exists {
-				if err = downloadFile(context.Background(), f.url, f.dest); err != nil {
+			if exists, _ := fileutil.FileExists(ctx, f.dest); !exists {
+				if err = downloadFile(ctx, f.url, f.dest); err != nil {
 					panic(err)
 				}
 			}

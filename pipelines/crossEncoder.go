@@ -159,15 +159,6 @@ func (p *CrossEncoderPipeline) Validate() error {
 	return errors.Join(validationErrors...)
 }
 
-func (p *CrossEncoderPipeline) preprocess(batch *backends.PipelineBatch, inputs []string) error {
-	start := time.Now()
-	backends.TokenizeInputs(batch, p.Model.Tokenizer, inputs)
-	atomic.AddUint64(&p.Model.Tokenizer.TokenizerTimings.NumCalls, 1)
-	atomic.AddUint64(&p.Model.Tokenizer.TokenizerTimings.TotalNS, safeconv.DurationToU64(time.Since(start)))
-	err := backends.CreateInputTensors(batch, p.Model, p.Runtime)
-	return err
-}
-
 func (p *CrossEncoderPipeline) preprocessPairs(batch *backends.PipelineBatch, inputs [][2]string) error {
 	start := time.Now()
 	backends.TokenizeInputPairs(batch, p.Model.Tokenizer, inputs, p.Model.SeparatorToken)

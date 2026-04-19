@@ -43,14 +43,15 @@ func createGoMLXModelBackend(model *Model, options *options.Options) error {
 	var err error
 	if model.OnnxReader != nil {
 		modelParsed, err = parser.ParseReader(model.OnnxReader)
+		if err != nil {
+			return err
+		}
 	} else {
 		modelParsed, err = parser.ParseFile(fileutil.PathJoinSafe(model.Path, model.OnnxPath))
-		if err != nil && modelParsed != nil {
-			modelParsed = modelParsed.WithBaseDir(model.Path)
+		if err != nil {
+			return err
 		}
-	}
-	if err != nil {
-		return err
+		modelParsed = modelParsed.WithBaseDir(model.Path)
 	}
 
 	inputs, outputs := loadInputOutputMetaGoMLX(modelParsed)

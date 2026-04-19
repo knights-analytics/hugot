@@ -342,7 +342,7 @@ func (p *ObjectDetectionPipeline) RunPipeline(ctx context.Context, inputs []stri
 	var errs []error
 	batch := backends.NewBatch(len(inputs))
 	defer func(*backends.PipelineBatch) { errs = append(errs, batch.Destroy()) }(batch)
-	imgs, err := imageutil.LoadImagesFromPaths(inputs)
+	imgs, err := imageutil.LoadImagesFromPaths(ctx, inputs)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load images: %w", err)
 	}

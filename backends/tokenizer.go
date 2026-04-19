@@ -1,6 +1,7 @@
 package backends
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/knights-analytics/hugot/options"
@@ -16,10 +17,10 @@ type Tokenizer struct {
 	MaxAllowedTokens int
 }
 
-func LoadTokenizer(model *Model, s *options.Options) error {
-	if exists, err := fileutil.FileExists(fileutil.PathJoinSafe(model.Path, "tokenizer.json")); err == nil {
+func LoadTokenizer(ctx context.Context, model *Model, s *options.Options) error {
+	if exists, err := fileutil.FileExists(ctx, fileutil.PathJoinSafe(model.Path, "tokenizer.json")); err == nil {
 		if exists {
-			tokenizerBytes, err := fileutil.ReadFileBytes(fileutil.PathJoinSafe(model.Path, "tokenizer.json"))
+			tokenizerBytes, err := fileutil.ReadFileBytes(ctx, fileutil.PathJoinSafe(model.Path, "tokenizer.json"))
 			if err != nil {
 				return err
 			}

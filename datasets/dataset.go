@@ -2,6 +2,7 @@ package datasets
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -54,7 +55,7 @@ type ExamplePreprocessFunc func([]SemanticSimilarityExample) ([]SemanticSimilari
 // The score is a float value between 0 and 1.
 // preprocessFunc here must be a function that takes a slice of SemanticSimilarityExample and returns a slice of SemanticSimilarityExample.
 // This function can be used to apply any custom preprocessing to the example batch before they are passed to the model.
-func NewSemanticSimilarityDataset(trainingPath string, batchSize int, preprocessFunc ExamplePreprocessFunc) (*SemanticSimilarityDataset, error) {
+func NewSemanticSimilarityDataset(ctx context.Context, trainingPath string, batchSize int, preprocessFunc ExamplePreprocessFunc) (*SemanticSimilarityDataset, error) {
 	d := &SemanticSimilarityDataset{
 		trainingPath:   trainingPath,
 		batchSize:      batchSize,
@@ -63,7 +64,7 @@ func NewSemanticSimilarityDataset(trainingPath string, batchSize int, preprocess
 	if err := d.Validate(); err != nil {
 		return nil, err
 	}
-	sourceReadCloser, err := fileutil.OpenFile(trainingPath)
+	sourceReadCloser, err := fileutil.OpenFile(ctx, trainingPath)
 	if err != nil {
 		return nil, err
 	}
@@ -97,7 +98,7 @@ func (s *SemanticSimilarityDataset) Reset() {
 		if err := s.sourceFile.Close(); err != nil {
 			panic(err)
 		}
-		sourceReadCloser, err := fileutil.OpenFile(s.trainingPath)
+		sourceReadCloser, err := fileutil.OpenFile(context.Background(), s.trainingPath)
 		if err != nil {
 			panic(err) // note: these panics will be catched later with the TryExcept
 		}

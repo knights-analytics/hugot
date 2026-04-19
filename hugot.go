@@ -210,7 +210,7 @@ func NewPipeline[T backends.Pipeline](s *Session, pipelineConfig backends.Pipeli
 	var name string
 
 	if !ok {
-		model, err = backends.LoadModel(pipelineConfig.ModelPath, pipelineConfig.OnnxFilename, s.options, pipeline.IsGenerative())
+		model, err = backends.LoadModel(s.sessionContext, pipelineConfig.ModelPath, pipelineConfig.OnnxFilename, s.options, pipeline.IsGenerative())
 		if err != nil {
 			return pipeline, err
 		}

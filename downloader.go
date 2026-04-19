@@ -41,7 +41,7 @@ func NewDownloadOptions() DownloadOptions {
 
 // DownloadModel can be used to download a model directly from huggingface. Before the model is downloaded,
 // validation occurs to ensure there is an .onnx and tokenizers.json file. Hugot only works with onnx models.
-func DownloadModel(modelName string, destination string, options DownloadOptions) (string, error) {
+func DownloadModel(ctx context.Context, modelName string, destination string, options DownloadOptions) (string, error) {
 	// replicates code in hf downloader
 	modelP := modelName
 	if strings.Contains(modelP, ":") {
@@ -73,7 +73,6 @@ func DownloadModel(modelName string, destination string, options DownloadOptions
 		return "", err
 	}
 
-	ctx := context.Background()
 	for i := 0; i < options.MaxRetries; i++ {
 		downloadPaths, downloadErr := repo.DownloadFiles(downloadFiles...)
 		if downloadErr != nil {

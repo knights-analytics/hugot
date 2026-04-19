@@ -142,7 +142,7 @@ func newTrainingSession[T backends.Pipeline](sessionContext context.Context, bac
 	if session.maxEpochs <= 0 {
 		session.maxEpochs = 100 // default to 100 epochs if not set
 	}
-	model, err = backends.LoadModel(config.ModelPath, config.OnnxFilename, opts, false)
+	model, err = backends.LoadModel(sessionContext, config.ModelPath, config.OnnxFilename, opts, false)
 	if err != nil {
 		return nil, err
 	}
@@ -206,12 +206,12 @@ func (s *TrainingSession) Train() error {
 // Save serializes the trained model as an onnx model.
 // If a tokenizer is present, the tokenizer files are copied from the untrained model directory to the trained model.
 // Path is the full path to the directory where the model will be saved.
-func (s *TrainingSession) Save(path string) error {
+func (s *TrainingSession) Save(ctx context.Context, path string) error {
 	if path == "" {
 		return fmt.Errorf("path is required")
 	}
 	var writeErr error
-	statisticsWriter, err := fileutil.NewFileWriter(fileutil.PathJoinSafe(path, "statistics.txt"), "")
+	statisticsWriter, err := fileutil.NewFileWriter(ctx, fileutil.PathJoinSafe(path, "statistics.txt"), "")
 	if err != nil {
 		return err
 	}
@@ -230,7 +230,7 @@ func (s *TrainingSession) Save(path string) error {
 		if s.backend == "GO" || s.backend == "XLA" {
 			goMLXModel := model.GoMLXModel
 			if goMLXModel != nil {
-				modelWriter, err := fileutil.NewFileWriter(fileutil.PathJoinSafe(path, "model.onnx"), "")
+				modelWriter, err := fileutil.NewFileWriter(ctx, fileutil.PathJoinSafe(path, "model.onnx"), "")
 				if err != nil {
 					return err
 				}
@@ -240,7 +240,7 @@ func (s *TrainingSession) Save(path string) error {
 				writeErr = errors.Join(writeErr, goMLXModel.Save(modelWriter))
 				if model.Tokenizer != nil {
 					// copy tokenizer files from original model
-					writeErr = errors.Join(writeErr, copyTokenizer(model.Path, path))
+					writeErr = errors.Join(writeErr, copyTokenizer(ctx, model.Path, path))
 				}
 			} else {
 				return fmt.Errorf("gomlx model is nil")
@@ -254,7 +254,7 @@ func (s *TrainingSession) Save(path string) error {
 	return writeErr
 }
 
-func copyTokenizer(from, to string) error {
+func copyTokenizer(ctx context.Context, from, to string) error {
 	toCopy := map[string]bool{
 		"special_tokens_map.json": true,
 		"tokenizer_config.json":   true,
@@ -262,6 +262,9 @@ func copyTokenizer(from, to string) error {
 		"vocab.txt":               true,
 	}
 	walker := func(ctx context.Context, _ string, parent string, info os.FileInfo, _ io.Reader) (toContinue bool, err error) {
+		if ctx.Err() != nil {
+			return false, ctx.Err()
+		}
 		if toCopy[info.Name()] {
 			if err = fileutil.CopyFile(ctx, fileutil.PathJoinSafe(from, parent, info.Name()), to); err != nil {
 				return false, err
@@ -269,5 +272,5 @@ func copyTokenizer(from, to string) error {
 		}
 		return true, nil
 	}
-	return fileutil.WalkDir()(context.Background(), from, walker)
+	return fileutil.WalkDir()(ctx, from, walker)
 }

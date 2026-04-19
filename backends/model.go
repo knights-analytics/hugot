@@ -33,7 +33,7 @@ type Model struct {
 	IsGenerative          bool
 }
 
-func LoadModel(path string, onnxFilename string, options *options.Options, isGenerative bool) (*Model, error) {
+func LoadModel(ctx context.Context, path string, onnxFilename string, options *options.Options, isGenerative bool) (*Model, error) {
 	model := &Model{
 		ID:           path + ":" + onnxFilename,
 		Path:         path,
@@ -51,20 +51,20 @@ func LoadModel(path string, onnxFilename string, options *options.Options, isGen
 			return nil, fmt.Errorf("onnx filename should not be provided for generative models as we currently rely on genai_config for the onnx backend")
 		}
 
-		err := createORTGenerativeSession(model, options)
+		err := createORTGenerativeSession(ctx, model, options)
 		if err != nil {
 			return nil, err
 		}
 	} else {
-		err := loadModelConfig(model)
+		err := loadModelConfig(ctx, model)
 		if err != nil {
 			return nil, err
 		}
-		err = CreateModelBackend(model, options)
+		err = CreateModelBackend(ctx, model, options)
 		if err != nil {
 			return nil, err
 		}
-		tkErr := LoadTokenizer(model, options)
+		tkErr := LoadTokenizer(ctx, model, options)
 		if tkErr != nil {
 			return nil, tkErr
 		}
@@ -88,8 +88,8 @@ func LoadModel(path string, onnxFilename string, options *options.Options, isGen
 	return model, nil
 }
 
-func GetOnnxModelPath(model *Model) error {
-	onnxFiles, err := getOnnxFiles(model.Path)
+func GetOnnxModelPath(ctx context.Context, model *Model) error {
+	onnxFiles, err := getOnnxFiles(ctx, model.Path)
 	if err != nil {
 		return err
 	}
@@ -112,27 +112,30 @@ func GetOnnxModelPath(model *Model) error {
 	return nil
 }
 
-func getOnnxFiles(path string) ([][]string, error) {
+func getOnnxFiles(ctx context.Context, path string) ([][]string, error) {
 	var onnxFiles [][]string
-	walker := func(_ context.Context, _ string, parent string, info os.FileInfo, _ io.Reader) (toContinue bool, err error) {
+	walker := func(ctx context.Context, _ string, parent string, info os.FileInfo, _ io.Reader) (toContinue bool, err error) {
+		if ctx.Err() != nil {
+			return false, ctx.Err()
+		}
 		if strings.HasSuffix(info.Name(), ".onnx") {
 			onnxFiles = append(onnxFiles, []string{parent, info.Name()})
 		}
 		return true, nil
 	}
-	err := fileutil.WalkDir()(context.Background(), path, walker)
+	err := fileutil.WalkDir()(ctx, path, walker)
 	return onnxFiles, err
 }
 
-func loadModelConfig(model *Model) error {
+func loadModelConfig(ctx context.Context, model *Model) error {
 	// load config.json if it exists, to determine max_position_embeddings
 	configPath := fileutil.PathJoinSafe(model.Path, "config.json")
-	exists, err := fileutil.FileExists(configPath)
+	exists, err := fileutil.FileExists(ctx, configPath)
 	if err != nil {
 		return err
 	}
 	if exists {
-		configBytes, readErr := fileutil.ReadFileBytes(configPath)
+		configBytes, readErr := fileutil.ReadFileBytes(ctx, configPath)
 		if readErr != nil {
 			return readErr
 		}
@@ -163,12 +166,12 @@ func loadModelConfig(model *Model) error {
 		}
 	}
 	specialTokensPath := fileutil.PathJoinSafe(model.Path, "special_tokens_map.json")
-	exists, err = fileutil.FileExists(specialTokensPath)
+	exists, err = fileutil.FileExists(ctx, specialTokensPath)
 	if err != nil {
 		return err
 	}
 	if exists {
-		configBytes, readErr := fileutil.ReadFileBytes(specialTokensPath)
+		configBytes, readErr := fileutil.ReadFileBytes(ctx, specialTokensPath)
 		if readErr != nil {
 			return readErr
 		}
@@ -199,12 +202,12 @@ func loadModelConfig(model *Model) error {
 	// Fallback 1: tokenizer_config.json may contain sep_token (common in HF models).
 	if model.SeparatorToken == "" {
 		tokenizerConfigPath := fileutil.PathJoinSafe(model.Path, "tokenizer_config.json")
-		tcExists, tcErr := fileutil.FileExists(tokenizerConfigPath)
+		tcExists, tcErr := fileutil.FileExists(ctx, tokenizerConfigPath)
 		if tcErr != nil {
 			return tcErr
 		}
 		if tcExists {
-			tcBytes, tcReadErr := fileutil.ReadFileBytes(tokenizerConfigPath)
+			tcBytes, tcReadErr := fileutil.ReadFileBytes(ctx, tokenizerConfigPath)
 			if tcReadErr != nil {
 				return tcReadErr
 			}
@@ -223,12 +226,12 @@ func loadModelConfig(model *Model) error {
 	// We recognise the two canonical HF separators: [SEP] (BERT family) and </s> (RoBERTa family).
 	if model.SeparatorToken == "" {
 		tokenizerPath := fileutil.PathJoinSafe(model.Path, "tokenizer.json")
-		tjExists, tjErr := fileutil.FileExists(tokenizerPath)
+		tjExists, tjErr := fileutil.FileExists(ctx, tokenizerPath)
 		if tjErr != nil {
 			return tjErr
 		}
 		if tjExists {
-			tjBytes, tjReadErr := fileutil.ReadFileBytes(tokenizerPath)
+			tjBytes, tjReadErr := fileutil.ReadFileBytes(ctx, tokenizerPath)
 			if tjReadErr != nil {
 				return tjReadErr
 			}

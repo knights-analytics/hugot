@@ -275,14 +275,14 @@ func NewBasePipeline[T Pipeline](sessionContext context.Context, config Pipeline
 	return pipeline, nil
 }
 
-func CreateModelBackend(model *Model, s *options.Options) error {
-	err := GetOnnxModelPath(model)
+func CreateModelBackend(ctx context.Context, model *Model, s *options.Options) error {
+	err := GetOnnxModelPath(ctx, model)
 	if err != nil {
 		return err
 	}
 
 	if strings.HasPrefix(model.Path, "s3:") {
-		reader, readErr := fileutil.OpenFile(fileutil.PathJoinSafe(model.Path, model.OnnxPath))
+		reader, readErr := fileutil.OpenFile(ctx, fileutil.PathJoinSafe(model.Path, model.OnnxPath))
 		if readErr != nil {
 			return readErr
 		}

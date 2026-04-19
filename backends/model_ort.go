@@ -90,12 +90,12 @@ func mapORTOptions(options *options.Options) ([]string, map[string]map[string]st
 	return providers, providerOptions, nil
 }
 
-func createORTGenerativeSession(model *Model, options *options.Options) error {
+func createORTGenerativeSession(ctx context.Context, model *Model, options *options.Options) error {
 	if strings.HasPrefix(model.Path, "s3:") {
 		return errors.New("ORT Gen AI does not support S3 paths. Please download the model to a local directory and try again")
 	}
 
-	err := initialiseORTGenAI(options)
+	err := initialiseORTGenAI(ctx, options)
 	if err != nil {
 		return err
 	}
@@ -135,7 +135,7 @@ func createORTGenerativeSession(model *Model, options *options.Options) error {
 	return nil
 }
 
-func initialiseORTGenAI(options *options.Options) error {
+func initialiseORTGenAI(ctx context.Context, options *options.Options) error {
 	generativeBackendMutex.Lock()
 	defer generativeBackendMutex.Unlock()
 
@@ -158,7 +158,7 @@ func initialiseORTGenAI(options *options.Options) error {
 			libraryFileName = "libonnxruntime-genai.so"
 		}
 		libraryPath := fileutil.PathJoinSafe(*LibraryDir, libraryFileName)
-		exists, err := fileutil.FileExists(libraryPath)
+		exists, err := fileutil.FileExists(ctx, libraryPath)
 		if err != nil {
 			return fmt.Errorf("error checking ortgenai library path: %w", err)
 		}
@@ -268,7 +268,12 @@ func runGenerativeORTSessionOnBatch(ctx context.Context, batch *PipelineBatch, p
 
 	go func() {
 		defer close(tokenStream)
-		defer batch.Destroy()
+		defer func() {
+			destroyErr := batch.Destroy()
+			if destroyErr != nil {
+				errorStream <- destroyErr
+			}
+		}()
 		for {
 			select {
 			case <-ctx.Done():

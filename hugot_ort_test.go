@@ -335,7 +335,7 @@ func TestTextGenerationPipelineORTCuda(t *testing.T) {
 		options.WithCuda(map[string]string{
 			"device_id": "0",
 		}),
-		options.WithUseEngine())
+		options.WithGenerativeEngine())
 	checkT(t, err)
 	defer func(session *Session) {
 		destroyErr := session.Destroy()
