@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
+## [0.7.1] - 2026-04-19
+
+###  Changed
+
+- Breaking: Added context.Context to many functions for graceful cancellation
+- Experimental: Added WithGenerativeEngine to ORT, to enable concurrent inferencing and intelligent batching 
+- Added locks to protect against concurrent model and pipeline initialisations
+- Added 2-bit bucketing to XLA backend for reduced padding overhead
+- Upgraded to GoMLX v0.27.3
+- Upgraded to ORT v1.24.4
+- Upgraded to ORT GenAI v0.13.1
+
 ## [0.7.0] - 2026-03-30
 
 ###  Changed
@@ -18,7 +30,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
   - Supports Pair Tokenization
   - Further reduces dependencies
 - Fix: Allow use of SOFTMAX in TextClassificationPipeline
-- Breaking: Remove CLI to simplify dependencies (can be reintroduced as a separate library on request) 
+- Breaking: Remove CLI to simplify dependencies (can be reintroduced as a separate library on request)
 
 ## [0.6.5] - 2026-03-17
 
