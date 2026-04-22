@@ -7,7 +7,7 @@ require (
 	github.com/gomlx/go-huggingface v0.3.5
 	github.com/gomlx/gomlx v0.27.3
 	github.com/gomlx/onnx-gomlx v0.4.2
-	github.com/knights-analytics/ortgenai v0.3.0
+	github.com/knights-analytics/ortgenai v0.3.1
 	github.com/stretchr/testify v1.11.1
 	github.com/viant/afs v1.30.0
 	github.com/yalue/onnxruntime_go v1.28.0

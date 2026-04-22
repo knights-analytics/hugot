@@ -144,6 +144,12 @@ func loadModelConfig(ctx context.Context, model *Model) error {
 		if readErr != nil {
 			return readErr
 		}
+		// Some multimodal models store text model config under text_config, so standardise that now
+		if tc, ok := configMap["text_config"].(map[string]any); ok {
+			for k, v := range tc {
+				configMap[k] = v
+			}
+		}
 		if maxPositionEmbeddingsRaw, existsOk := configMap["max_position_embeddings"]; existsOk {
 			if maxPositionEmbeddings, castOk := maxPositionEmbeddingsRaw.(float64); castOk {
 				model.MaxPositionEmbeddings = int(maxPositionEmbeddings)
@@ -180,6 +186,7 @@ func loadModelConfig(ctx context.Context, model *Model) error {
 		if readErr != nil {
 			return readErr
 		}
+
 		if sepToken, exists := configMap["sep_token"]; exists {
 			switch v := sepToken.(type) {
 			case map[string]interface{}:
