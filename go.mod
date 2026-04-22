@@ -10,7 +10,7 @@ require (
 	github.com/knights-analytics/ortgenai v0.3.0
 	github.com/stretchr/testify v1.11.1
 	github.com/viant/afs v1.30.0
-	github.com/yalue/onnxruntime_go v1.27.0
+	github.com/yalue/onnxruntime_go v1.28.0
 	golang.org/x/image v0.39.0
 	golang.org/x/sync v0.20.0
 )
