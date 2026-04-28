@@ -89,6 +89,7 @@ To use Hugot as a library in your application, you can directly import it and fo
 
 ```go
 session, err := NewORTSession(
+    ctx,
     options.WithOnnxLibraryPath("/path/to/my/lib/directory"),
 )
 ```
@@ -108,7 +109,8 @@ package main
 
 import (
     "github.com/knights-analytics/hugot"
-    "encoding/json"
+    "context"
+	"encoding/json"
     "fmt"
 )
 
@@ -119,20 +121,22 @@ func check(err error) {
 }
 
 func main() {
+    // all sessions require context.Context
+    ctx := context.Background()
     // start a new session
-    session, err := hugot.NewGoSession()
+    session, err := hugot.NewGoSession(ctx)
 	// For XLA (requires go build tags "XLA" or "ALL"):
-	// session, err := hugot.NewXLASession()
+	// session, err := hugot.NewXLASession(ctx)
 	// For ORT (requires go build tags "ORT" or "ALL"):
-	// session, err := hugot.NewORTSession()
+	// session, err := hugot.NewORTSession(ctx)
 	// This looks for the libonnxruntime.so library in its default path, e.g. /usr/lib
     // If your libonnxruntime.so is somewhere else, you can explicitly set it by using WithOnnxLibraryPath
-    // session, err := hugot.NewORTSession(WithOnnxLibraryPath("/path/to/my/lib/directory"))
+    // session, err := hugot.NewORTSession(ctx, WithOnnxLibraryPath("/path/to/my/lib/directory"))
 	check(err)
 	
     // A successfully created hugot session needs to be destroyed when you're done
     defer func (session *hugot.Session) {
-    err := session.Destroy()
+    err = session.Destroy()
     check(err)
     }(session)
 
@@ -155,7 +159,7 @@ func main() {
 
     // we can now use the pipeline for prediction on a batch of strings
     batch := []string{"This movie is disgustingly good !", "The director tried too much"}
-    batchResult, err := sentimentPipeline.RunPipeline(batch)
+    batchResult, err := sentimentPipeline.RunPipeline(ctx, batch)
     check(err)
 
     // and do whatever we want with it :)
@@ -196,23 +200,25 @@ To use Hugot with Nvidia gpu acceleration, you need to have the following:
     - The required CUDA libraries installed on your system that are compatible with the ONNX Runtime gpu version you use. See [here](https://onnxruntime.ai/docs/execution-providers/CUDA-ExecutionProvider.html). For instance, for onnxruntime-gpu 1.24.4, we need CUDA 12.x (any minor version should be compatible) and cuDNN 9.x.
     - Start a session with the following:
       ```go
+      ctx := context.Background()
       opts := []options.WithOption{
         options.WithCuda(map[string]string{
           "device_id": "0",
         }),
       }
-      session, err := NewORTSession(opts...)
+      session, err := NewORTSession(ctx, opts...)
       ```
 - OpenXLA
     - Install CUDA support via the command `GOPROXY=direct go run github.com/gomlx/go-xla/cmd/pjrt_installer@latest -plugin=cuda13 -version=${JAX_CUDA_VERSION} -path=/usr/local/lib/go-xla`
     - Start a session with the following:
       ```go
+      ctx := context.Background()
       opts := []options.WithOption{
         options.WithCuda(map[string]string{
           "device_id": "0",
         }),
       }
-      session, err := NewXLASession(opts...)
+      session, err := NewXLASession(ctx, opts...)
       ```
 
 For the ONNX Runtime Cuda libraries, you can install CUDA 12.x by installing the full cuda toolkit, but that's quite a big package. In our testing on awslinux/fedora, we have been able to limit the libraries needed to run Hugot with Nvidia gpu acceleration to just these:
@@ -252,6 +258,7 @@ For maximum throughput, it is best to call a single shared Hugot pipeline from m
 
 ```go
 session, err := hugot.NewORTSession(
+	context.Background(),
 	hugot.WithInterOpNumThreads(1),
 	hugot.WithIntraOpNumThreads(1),
 	hugot.WithCpuMemArena(false),
