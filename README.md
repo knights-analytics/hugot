@@ -87,7 +87,7 @@ To use Hugot as a library in your application, you can directly import it and fo
 
 - if using Onnx Runtime, the libonnxruntime.so file should be obtained from the releases section of this page. If you want to use other architectures than `linux/amd64` you will have to download it from [the ONNX Runtime releases page](https://github.com/microsoft/onnxruntime/releases/), see the [dockerfile](./Dockerfile) as an example. Hugot looks for this file at /usr/lib/libonnxruntime.so by default. A different location can be specified by passing the `WithOnnxLibraryPath()` option to `NewORTSession()`, e.g:
 
-```
+```go
 session, err := NewORTSession(
     options.WithOnnxLibraryPath("/path/to/my/lib/directory"),
 )
@@ -195,7 +195,7 @@ To use Hugot with Nvidia gpu acceleration, you need to have the following:
     - The cuda gpu version of ONNX Runtime on the machine/docker container. You can see how we get that by looking at the [Dockerfile](./Dockerfile). You can also get the ONNX Runtime libraries that we use for testing from the release. Just download the gpu .so libraries and put them in /usr/lib.
     - The required CUDA libraries installed on your system that are compatible with the ONNX Runtime gpu version you use. See [here](https://onnxruntime.ai/docs/execution-providers/CUDA-ExecutionProvider.html). For instance, for onnxruntime-gpu 1.24.4, we need CUDA 12.x (any minor version should be compatible) and cuDNN 9.x.
     - Start a session with the following:
-      ```
+      ```go
       opts := []options.WithOption{
         options.WithCuda(map[string]string{
           "device_id": "0",
@@ -206,7 +206,7 @@ To use Hugot with Nvidia gpu acceleration, you need to have the following:
 - OpenXLA
     - Install CUDA support via the command `GOPROXY=direct go run github.com/gomlx/go-xla/cmd/pjrt_installer@latest -plugin=cuda13 -version=${JAX_CUDA_VERSION} -path=/usr/local/lib/go-xla`
     - Start a session with the following:
-      ```
+      ```go
       opts := []options.WithOption{
         options.WithCuda(map[string]string{
           "device_id": "0",
@@ -228,7 +228,7 @@ scenes for training/fine-tuning: the onnx model will be loaded, converted to xla
 
 This is currently supported only for the **FeatureExtractionPipeline**. This can be used to fine-tune the vector embeddings for e.g. semantic textual similarity (for applications like RAG and semantic search). In order to fine-tune the feature extraction pipeline for semantic search you will need to collect a training dataset in the following format:
 
-```
+```js
 {"sentence1": "The quick brown fox jumps over the lazy dog", "sentence2": "A quick brown fox jumps over a lazy dog", "score": 1}
 {"sentence1": "The quick brown fox jumps over the lazy dog", "sentence2": "A quick brown cow jumps over a lazy caterpillar", "score": 0.5}
 ```
