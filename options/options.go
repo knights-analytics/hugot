@@ -12,6 +12,7 @@ type Options struct {
 	BackendOptions any
 	ORTOptions     *OrtOptions
 	GoMLXOptions   *GoMLXOptions
+	YZMAOptions    *YZMAOptions
 	Destroy        func() error
 	Backend        string
 }
@@ -24,6 +25,7 @@ func Defaults() *Options {
 			LibraryPath: &libraryPathDefault,
 		},
 		GoMLXOptions: &GoMLXOptions{},
+		YZMAOptions:  &YZMAOptions{},
 		Destroy: func() error {
 			return nil
 		},
@@ -103,6 +105,47 @@ type GoMLXOptions struct {
 	Cuda            bool
 	XLA             bool
 	TPU             bool
+}
+
+// YZMAOptions controls configuration for the YZMA (llama.cpp via yzma) backend.
+type YZMAOptions struct {
+	// LibPath is the path to the directory containing the llama.cpp shared library.
+	// If nil, yzma's default search path is used (e.g. YZMA_LIB env variable).
+	LibPath *string
+	// NGpuLayers is the number of model layers to offload to GPU. 0 means CPU-only.
+	NGpuLayers int32
+	// NCtx is the context window size. 0 means use the model's trained context size.
+	NCtx uint32
+	// NThreads is the number of threads used for token generation. 0 means auto-detect.
+	NThreads int32
+}
+
+// WithYZMALibraryPath sets the path to the directory containing the llama.cpp shared library.
+func WithYZMALibraryPath(libPath string) WithOption {
+	return func(o *Options) error {
+		if o.Backend != "YZMA" {
+			return fmt.Errorf("WithYZMALibraryPath is only supported for YZMA backend")
+		}
+		if o.YZMAOptions == nil {
+			o.YZMAOptions = &YZMAOptions{}
+		}
+		o.YZMAOptions.LibPath = &libPath
+		return nil
+	}
+}
+
+// WithYZMAGPULayers sets the number of model layers to offload to GPU for the YZMA backend.
+func WithYZMAGPULayers(n int32) WithOption {
+	return func(o *Options) error {
+		if o.Backend != "YZMA" {
+			return fmt.Errorf("WithYZMAGPULayers is only supported for YZMA backend")
+		}
+		if o.YZMAOptions == nil {
+			o.YZMAOptions = &YZMAOptions{}
+		}
+		o.YZMAOptions.NGpuLayers = n
+		return nil
+	}
 }
 
 // WithOption is the interface for all option functions.

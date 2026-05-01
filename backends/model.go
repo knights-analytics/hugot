@@ -18,6 +18,7 @@ type Model struct {
 	ID                    string
 	ORTModel              *ORTModel
 	GoMLXModel            *GoMLXModel
+	YZMAModel             *YZMAModel
 	Tokenizer             *Tokenizer
 	Destroy               func() error
 	Pipelines             map[string]Pipeline
@@ -44,16 +45,23 @@ func LoadModel(ctx context.Context, path string, onnxFilename string, options *o
 
 	if isGenerative {
 		// creation of the session. Only one output (either token or sentence embedding).
-		if options.Backend != "ORT" {
-			return nil, fmt.Errorf("generative models are only supported with ORT backend currently")
-		}
-		if onnxFilename != "" {
-			return nil, fmt.Errorf("onnx filename should not be provided for generative models as we currently rely on genai_config for the onnx backend")
-		}
-
-		err := createORTGenerativeSession(ctx, model, options)
-		if err != nil {
-			return nil, err
+		switch options.Backend {
+		case "ORT":
+			if onnxFilename != "" {
+				return nil, fmt.Errorf("onnx filename should not be provided for generative models as we currently rely on genai_config for the onnx backend")
+			}
+			if err := createORTGenerativeSession(ctx, model, options); err != nil {
+				return nil, err
+			}
+		case "YZMA":
+			if onnxFilename != "" {
+				return nil, fmt.Errorf("onnx filename should not be provided for YZMA generative models")
+			}
+			if err := createYZMAGenerativeSession(ctx, model, options); err != nil {
+				return nil, err
+			}
+		default:
+			return nil, fmt.Errorf("generative models are only supported with ORT and YZMA backends, got %q", options.Backend)
 		}
 	} else {
 		err := loadModelConfig(ctx, model)
@@ -82,6 +90,9 @@ func LoadModel(ctx context.Context, path string, onnxFilename string, options *o
 		case "GO", "XLA":
 			model.GoMLXModel.Destroy()
 			model.GoMLXModel = nil
+		case "YZMA":
+			destroyErr = errors.Join(destroyErr, model.YZMAModel.Destroy())
+			model.YZMAModel = nil
 		}
 		return destroyErr
 	}

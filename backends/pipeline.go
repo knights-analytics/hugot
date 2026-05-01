@@ -204,6 +204,8 @@ func RunGenerativeSessionOnBatch(ctx context.Context, batch *PipelineBatch, p *B
 	switch p.Runtime {
 	case "ORT":
 		return runGenerativeORTSessionOnBatch(ctx, batch, p, maxLength, stopSequences, temperature, topP, seed, tools, guidance)
+	case "YZMA":
+		return runGenerativeYZMAOnBatch(ctx, batch, p, maxLength, stopSequences, temperature, topP, seed, tools, guidance)
 	case "GO":
 		return nil, nil, errors.New("GO backend is not yet implemented for generative models")
 	case "XLA":
@@ -217,6 +219,8 @@ func CreateMessages(batch *PipelineBatch, p *BasePipeline, inputs any, systemPro
 	switch p.Runtime {
 	case "ORT":
 		return CreateMessagesORT(batch, inputs, systemPrompt)
+	case "YZMA":
+		return CreateMessagesYZMA(batch, inputs, systemPrompt)
 	case "GO", "XLA":
 		return fmt.Errorf("not implemented")
 	}

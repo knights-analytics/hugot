@@ -148,6 +148,14 @@ func (p *TextGenerationPipeline) GetModel() *backends.Model {
 // GetStatistics returns the runtime statistics for the pipeline.
 func (p *TextGenerationPipeline) GetStatistics() backends.PipelineStatistics {
 	var stats backends.PipelineStatistics
+
+	if p.Model.YZMAModel != nil {
+		return p.Model.YZMAModel.GetStatistics()
+	}
+
+	if p.Model.ORTModel == nil {
+		return stats
+	}
 	if p.Model.ORTModel.GenerativeEngine != nil {
 		engineStats := p.Model.ORTModel.GenerativeEngine.GetStatistics()
 		stats = backends.PipelineStatistics{
