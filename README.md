@@ -58,8 +58,6 @@ Hugot can be used both as a library and as a command-line application. See below
 
 ## Installation and usage
 
-Hugot can be used in two ways: as a library in your go application, or as a command-line binary.
-
 ### Choosing a backend
 
 Hugot supports pluggable backends to perform the tokenization and run the ONNX models. Currently, we support the following backends:
