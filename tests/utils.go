@@ -1,4 +1,4 @@
-package hugot
+package testutil
 
 import (
 	"context"
@@ -14,43 +14,46 @@ import (
 	"github.com/gomlx/go-huggingface/hub"
 	"github.com/stretchr/testify/assert"
 
+	"github.com/knights-analytics/hugot"
 	"github.com/knights-analytics/hugot/backends"
 	"github.com/knights-analytics/hugot/pipelines"
 	"github.com/knights-analytics/hugot/testcases/embedded"
 	"github.com/knights-analytics/hugot/util/imageutil"
 )
 
+const modelsFolder = "../../models/"
+
 // test download validation
 
 func TestDownloadValidation(t *testing.T) {
-	downloadOptions := NewDownloadOptions()
+	downloadOptions := hugot.NewDownloadOptions()
 
 	// a model with the required files in a subfolder should not error
-	_, err := validateDownloadedHFModel(hub.New("KnightsAnalytics/distilbert-base-uncased-finetuned-sst-2-english"), downloadOptions)
+	_, err := hugot.ValidateDownloadedHFModel(hub.New("KnightsAnalytics/distilbert-base-uncased-finetuned-sst-2-english"), downloadOptions)
 	assert.NoError(t, err)
 	// a model without tokenizer.json or .onnx model should error
-	_, err = validateDownloadedHFModel(hub.New("ByteDance/SDXL-Lightning"), downloadOptions)
+	_, err = hugot.ValidateDownloadedHFModel(hub.New("ByteDance/SDXL-Lightning"), downloadOptions)
 	assert.Error(t, err)
 }
 
 // FEATURE EXTRACTION
 
-func featureExtractionPipeline(t *testing.T, session *Session) {
+func FeatureExtractionPipeline(t *testing.T, session *hugot.Session) {
 	t.Helper()
 
-	modelPath := "./models/KnightsAnalytics_all-MiniLM-L6-v2"
+	modelPath := modelsFolder + "KnightsAnalytics_all-MiniLM-L6-v2"
 
-	config := FeatureExtractionConfig{
+	config := hugot.FeatureExtractionConfig{
 		ModelPath:    modelPath,
 		Name:         "testPipeline",
 		OnnxFilename: "model.onnx",
 	}
-	pipeline, err := NewPipeline(session, config)
-	checkT(t, err)
+	pipeline, err := hugot.NewPipeline(session, config)
+	CheckT(t, err)
 
 	var expectedResults map[string][][]float32
 	err = json.Unmarshal(embedded.ResultsByte, &expectedResults)
-	checkT(t, err)
+	CheckT(t, err)
 	var testResults [][]float32
 
 	// test 'robert smith'
@@ -90,11 +93,11 @@ func featureExtractionPipeline(t *testing.T, session *Session) {
 	for k, sentencePair := range testPairs {
 		// these vectors should be the same
 		firstBatchResult, err2 := pipeline.RunPipeline(t.Context(), sentencePair[0])
-		checkT(t, err2)
+		CheckT(t, err2)
 		firstEmbedding := firstBatchResult.Embeddings[0]
 
 		secondBatchResult, err3 := pipeline.RunPipeline(t.Context(), sentencePair[1])
-		checkT(t, err3)
+		CheckT(t, err3)
 		secondEmbedding := secondBatchResult.Embeddings[0]
 		e := floatsEqual(firstEmbedding, secondEmbedding)
 		if e != nil {
@@ -113,20 +116,20 @@ func featureExtractionPipeline(t *testing.T, session *Session) {
 
 	// test normalization
 	testResults = expectedResults["normalizedOutput"]
-	config = FeatureExtractionConfig{
+	config = hugot.FeatureExtractionConfig{
 		ModelPath:    modelPath,
 		Name:         "testPipelineNormalise",
 		OnnxFilename: "model.onnx",
-		Options: []FeatureExtractionOption{
+		Options: []hugot.FeatureExtractionOption{
 			pipelines.WithNormalization(),
 		},
 	}
-	pipeline, err = NewPipeline(session, config)
-	checkT(t, err)
+	pipeline, err = hugot.NewPipeline(session, config)
+	CheckT(t, err)
 
 	normalizationStrings := []string{"Onnxruntime is a great inference backend"}
 	normalizedEmbedding, err := pipeline.RunPipeline(t.Context(), normalizationStrings)
-	checkT(t, err)
+	CheckT(t, err)
 	for i, embedding := range normalizedEmbedding.Embeddings {
 		e := floatsEqual(embedding, testResults[i])
 		if e != nil {
@@ -135,43 +138,43 @@ func featureExtractionPipeline(t *testing.T, session *Session) {
 	}
 
 	// test getting output by name
-	configSentence := FeatureExtractionConfig{
+	configSentence := hugot.FeatureExtractionConfig{
 		ModelPath:    modelPath,
 		Name:         "testPipelineSentence",
 		OnnxFilename: "model.onnx",
-		Options:      []FeatureExtractionOption{pipelines.WithOutputName("last_hidden_state")},
+		Options:      []hugot.FeatureExtractionOption{pipelines.WithOutputName("last_hidden_state")},
 	}
-	pipelineSentence, err := NewPipeline(session, configSentence)
-	checkT(t, err)
+	pipelineSentence, err := hugot.NewPipeline(session, configSentence)
+	CheckT(t, err)
 
 	_, err = pipelineSentence.RunPipeline(t.Context(), []string{"Onnxruntime is a great inference backend"})
 	if err != nil {
 		t.FailNow()
 	}
-	configSentence = FeatureExtractionConfig{
+	configSentence = hugot.FeatureExtractionConfig{
 		ModelPath:    modelPath,
 		Name:         "testPipelineToken",
 		OnnxFilename: "model.onnx",
 	}
-	pipelineToken, err := NewPipeline(session, configSentence)
-	checkT(t, err)
+	pipelineToken, err := hugot.NewPipeline(session, configSentence)
+	CheckT(t, err)
 	_, err = pipelineToken.RunPipeline(t.Context(), []string{"Onnxruntime is a great inference backend"})
 	if err != nil {
 		t.FailNow()
 	}
 }
 
-func featureExtractionPipelineValidation(t *testing.T, session *Session) {
+func FeatureExtractionPipelineValidation(t *testing.T, session *hugot.Session) {
 	t.Helper()
 
-	modelPath := "./models/KnightsAnalytics_all-MiniLM-L6-v2"
-	config := FeatureExtractionConfig{
+	modelPath := modelsFolder + "KnightsAnalytics_all-MiniLM-L6-v2"
+	config := hugot.FeatureExtractionConfig{
 		ModelPath:    modelPath,
 		OnnxFilename: "model.onnx",
 		Name:         "testPipeline",
 	}
-	pipeline, err := NewPipeline(session, config)
-	checkT(t, err)
+	pipeline, err := hugot.NewPipeline(session, config)
+	CheckT(t, err)
 
 	pipeline.Model.InputsMeta[0].Dimensions = backends.NewShape(-1, -1, -1)
 
@@ -185,20 +188,20 @@ func featureExtractionPipelineValidation(t *testing.T, session *Session) {
 
 // Text classification
 
-func textClassificationPipeline(t *testing.T, session *Session) {
+func TextClassificationPipeline(t *testing.T, session *hugot.Session) {
 	t.Helper()
 
-	modelPath := "./models/KnightsAnalytics_distilbert-base-uncased-finetuned-sst-2-english"
+	modelPath := modelsFolder + "KnightsAnalytics_distilbert-base-uncased-finetuned-sst-2-english"
 
-	config := TextClassificationConfig{
+	config := hugot.TextClassificationConfig{
 		ModelPath: modelPath,
 		Name:      "testPipelineSimple",
-		Options: []TextClassificationOption{
+		Options: []hugot.TextClassificationOption{
 			pipelines.WithSoftmax(),
 		},
 	}
-	sentimentPipeline, err := NewPipeline(session, config)
-	checkT(t, err)
+	sentimentPipeline, err := hugot.NewPipeline(session, config)
+	CheckT(t, err)
 
 	test := struct {
 		pipeline *pipelines.TextClassificationPipeline
@@ -229,7 +232,7 @@ func textClassificationPipeline(t *testing.T, session *Session) {
 
 	t.Run(test.name, func(t *testing.T) {
 		batchResult, err := test.pipeline.RunPipeline(t.Context(), test.strings)
-		checkT(t, err)
+		CheckT(t, err)
 		for i, expected := range test.expected.ClassificationOutputs {
 			checkClassificationOutput(t, expected, batchResult.ClassificationOutputs[i])
 		}
@@ -239,23 +242,23 @@ func textClassificationPipeline(t *testing.T, session *Session) {
 	session.PrintStatistics()
 }
 
-func textClassificationPipelineMulti(t *testing.T, session *Session) {
+func TextClassificationPipelineMulti(t *testing.T, session *hugot.Session) {
 	t.Helper()
 
-	modelPathMulti := "./models/KnightsAnalytics_roberta-base-go_emotions"
+	modelPathMulti := modelsFolder + "KnightsAnalytics_roberta-base-go_emotions"
 
-	configMulti := TextClassificationConfig{
+	configMulti := hugot.TextClassificationConfig{
 		ModelPath:    modelPathMulti,
 		Name:         "testPipelineSimpleMulti",
 		OnnxFilename: "model.onnx",
-		Options: []TextClassificationOption{
+		Options: []hugot.TextClassificationOption{
 			pipelines.WithMultiLabel(),
 			pipelines.WithSigmoid(),
 			pipelines.WithFixedPadding(128),
 		},
 	}
-	sentimentPipelineMulti, err := NewPipeline(session, configMulti)
-	checkT(t, err)
+	sentimentPipelineMulti, err := hugot.NewPipeline(session, configMulti)
+	CheckT(t, err)
 
 	test := struct {
 		pipeline *pipelines.TextClassificationPipeline
@@ -388,7 +391,7 @@ func textClassificationPipelineMulti(t *testing.T, session *Session) {
 
 	t.Run(test.name, func(t *testing.T) {
 		batchResult, err := test.pipeline.RunPipeline(t.Context(), test.strings)
-		checkT(t, err)
+		CheckT(t, err)
 		for i, expected := range test.expected.ClassificationOutputs {
 			checkClassificationOutput(t, expected, batchResult.ClassificationOutputs[i])
 		}
@@ -402,20 +405,20 @@ func textClassificationPipelineMulti(t *testing.T, session *Session) {
 	}
 }
 
-func textClassificationPipelineValidation(t *testing.T, session *Session) {
+func TextClassificationPipelineValidation(t *testing.T, session *hugot.Session) {
 	t.Helper()
 
-	modelPath := "./models/KnightsAnalytics_distilbert-base-uncased-finetuned-sst-2-english"
+	modelPath := modelsFolder + "KnightsAnalytics_distilbert-base-uncased-finetuned-sst-2-english"
 
-	config := TextClassificationConfig{
+	config := hugot.TextClassificationConfig{
 		ModelPath: modelPath,
 		Name:      "testPipelineSimple",
-		Options: []TextClassificationOption{
+		Options: []hugot.TextClassificationOption{
 			pipelines.WithSingleLabel(),
 		},
 	}
-	sentimentPipeline, err := NewPipeline(session, config)
-	checkT(t, err)
+	sentimentPipeline, err := hugot.NewPipeline(session, config)
+	CheckT(t, err)
 
 	t.Run("id-label-map", func(t *testing.T) {
 		labelMapInitial := sentimentPipeline.Model.IDLabelMap
@@ -440,12 +443,12 @@ func textClassificationPipelineValidation(t *testing.T, session *Session) {
 
 // Zero shot
 
-func zeroShotClassificationPipeline(t *testing.T, session *Session) {
+func ZeroShotClassificationPipeline(t *testing.T, session *hugot.Session) {
 	t.Helper()
 
-	modelPath := "./models/KnightsAnalytics_deberta-v3-base-zeroshot-v1"
+	modelPath := modelsFolder + "KnightsAnalytics_deberta-v3-base-zeroshot-v1"
 
-	config := ZeroShotClassificationConfig{
+	config := hugot.ZeroShotClassificationConfig{
 		ModelPath: modelPath,
 		Name:      "testPipeline",
 		Options: []backends.PipelineOption[*pipelines.ZeroShotClassificationPipeline]{
@@ -455,8 +458,8 @@ func zeroShotClassificationPipeline(t *testing.T, session *Session) {
 		},
 	}
 
-	classificationPipeline, err := NewPipeline(session, config)
-	checkT(t, err)
+	classificationPipeline, err := hugot.NewPipeline(session, config)
+	CheckT(t, err)
 
 	tests := []struct {
 		pipeline   *pipelines.ZeroShotClassificationPipeline
@@ -648,7 +651,7 @@ func zeroShotClassificationPipeline(t *testing.T, session *Session) {
 			classificationPipeline.Labels = tt.labels
 			classificationPipeline.Multilabel = tt.multilabel
 			batchResult, err := tt.pipeline.RunPipeline(t.Context(), tt.sequences)
-			checkT(t, err)
+			CheckT(t, err)
 			assert.Equal(t, len(batchResult.GetOutput()), len(tt.expected.ClassificationOutputs))
 
 			for ind, expected := range tt.expected.ClassificationOutputs {
@@ -664,17 +667,17 @@ func zeroShotClassificationPipeline(t *testing.T, session *Session) {
 	}
 }
 
-func zeroShotClassificationPipelineValidation(t *testing.T, session *Session) {
+func ZeroShotClassificationPipelineValidation(t *testing.T, session *hugot.Session) {
 	t.Helper()
 
-	modelPath := "./models/KnightsAnalytics_deberta-v3-base-zeroshot-v1"
+	modelPath := modelsFolder + "KnightsAnalytics_deberta-v3-base-zeroshot-v1"
 
-	config := TextClassificationConfig{
+	config := hugot.TextClassificationConfig{
 		ModelPath: modelPath,
 		Name:      "testPipelineSimple",
 	}
-	sentimentPipeline, err := NewPipeline(session, config)
-	checkT(t, err)
+	sentimentPipeline, err := hugot.NewPipeline(session, config)
+	CheckT(t, err)
 
 	t.Run("id-label-map", func(t *testing.T) {
 		labelMapInitial := sentimentPipeline.Model.IDLabelMap
@@ -699,47 +702,47 @@ func zeroShotClassificationPipelineValidation(t *testing.T, session *Session) {
 
 // Token classification
 
-func tokenClassificationPipeline(t *testing.T, session *Session) {
+func TokenClassificationPipeline(t *testing.T, session *hugot.Session) {
 	t.Helper()
 
-	modelPath := "./models/KnightsAnalytics_distilbert-NER"
-	configSimple := TokenClassificationConfig{
+	modelPath := modelsFolder + "KnightsAnalytics_distilbert-NER"
+	configSimple := hugot.TokenClassificationConfig{
 		ModelPath: modelPath,
 		Name:      "testPipelineSimple",
-		Options: []TokenClassificationOption{
+		Options: []hugot.TokenClassificationOption{
 			pipelines.WithSimpleAggregation(),
 			pipelines.WithIgnoreLabels([]string{"O"}),
 		},
 	}
-	pipelineSimple, err2 := NewPipeline(session, configSimple)
-	checkT(t, err2)
+	pipelineSimple, err2 := hugot.NewPipeline(session, configSimple)
+	CheckT(t, err2)
 
-	configNone := TokenClassificationConfig{
+	configNone := hugot.TokenClassificationConfig{
 		ModelPath: modelPath,
 		Name:      "testPipelineNone",
-		Options: []TokenClassificationOption{
+		Options: []hugot.TokenClassificationOption{
 			pipelines.WithoutAggregation(),
 		},
 	}
-	pipelineNone, err3 := NewPipeline(session, configNone)
-	checkT(t, err3)
+	pipelineNone, err3 := hugot.NewPipeline(session, configNone)
+	CheckT(t, err3)
 
 	// Split-words enabled pipeline
-	configSplit := TokenClassificationConfig{
+	configSplit := hugot.TokenClassificationConfig{
 		ModelPath: modelPath,
 		Name:      "testPipelineSplitWords",
-		Options: []TokenClassificationOption{
+		Options: []hugot.TokenClassificationOption{
 			pipelines.WithSimpleAggregation(),
 			pipelines.WithIgnoreLabels([]string{"O"}),
 			pipelines.WithSplitWords(),
 		},
 	}
-	pipelineSplit, errSplit := NewPipeline(session, configSplit)
-	checkT(t, errSplit)
+	pipelineSplit, errSplit := hugot.NewPipeline(session, configSplit)
+	CheckT(t, errSplit)
 
 	var expectedResults map[int]pipelines.TokenClassificationOutput
 	err4 := json.Unmarshal(embedded.TokenExpectedByte, &expectedResults)
-	checkT(t, err4)
+	CheckT(t, err4)
 
 	tests := []struct {
 		pipeline *pipelines.TokenClassificationPipeline
@@ -770,7 +773,7 @@ func tokenClassificationPipeline(t *testing.T, session *Session) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			batchResult, err := tt.pipeline.RunPipeline(t.Context(), tt.strings)
-			checkT(t, err)
+			CheckT(t, err)
 			printTokenEntities(batchResult)
 			for i, predictedEntities := range batchResult.Entities {
 				assert.Equal(t, len(tt.expected.Entities[i]), len(predictedEntities))
@@ -787,7 +790,7 @@ func tokenClassificationPipeline(t *testing.T, session *Session) {
 	t.Run("Split words aggregation", func(t *testing.T) {
 		words := [][]string{{"My", "name", "is", "Wolfgang", "and", "I", "live", "in", "Berlin", "."}}
 		batchResult, err := pipelineSplit.RunWords(t.Context(), words)
-		checkT(t, err)
+		CheckT(t, err)
 		printTokenEntities(batchResult)
 		expected := expectedResults[0]
 		for i, predictedEntities := range batchResult.Entities {
@@ -806,9 +809,9 @@ func tokenClassificationPipeline(t *testing.T, session *Session) {
 		splitWords := [][]string{{"New", "York", "is", "great", "."}}
 
 		resNonSplit, errNon := pipelineSimple.RunPipeline(t.Context(), nonSplit)
-		checkT(t, errNon)
+		CheckT(t, errNon)
 		resSplit, errSplitRun := pipelineSplit.RunWords(t.Context(), splitWords)
-		checkT(t, errSplitRun)
+		CheckT(t, errSplitRun)
 
 		// Compare first sequence: entity words may match, but offsets should differ due to space normalization.
 		if len(resNonSplit.Entities) > 0 && len(resSplit.Entities) > 0 && len(resNonSplit.Entities[0]) > 0 && len(resSplit.Entities[0]) > 0 {
@@ -824,9 +827,9 @@ func tokenClassificationPipeline(t *testing.T, session *Session) {
 		split := [][]string{{"Berlin is", "beautiful", "."}}
 
 		resNonSplit, errNS := pipelineSimple.RunPipeline(t.Context(), nonSplit)
-		checkT(t, errNS)
+		CheckT(t, errNS)
 		resSplit, errSW := pipelineSplit.RunWords(t.Context(), split)
-		checkT(t, errSW)
+		CheckT(t, errSW)
 
 		gotA := resNonSplit.Entities[0]
 		gotB := resSplit.Entities[0]
@@ -843,20 +846,20 @@ func tokenClassificationPipeline(t *testing.T, session *Session) {
 	})
 }
 
-func tokenClassificationPipelineValidation(t *testing.T, session *Session) {
+func TokenClassificationPipelineValidation(t *testing.T, session *hugot.Session) {
 	t.Helper()
 
-	modelPath := "./models/KnightsAnalytics_distilbert-NER"
-	configSimple := TokenClassificationConfig{
+	modelPath := modelsFolder + "KnightsAnalytics_distilbert-NER"
+	configSimple := hugot.TokenClassificationConfig{
 		ModelPath: modelPath,
 		Name:      "testPipelineSimple",
-		Options: []TokenClassificationOption{
+		Options: []hugot.TokenClassificationOption{
 			pipelines.WithSimpleAggregation(),
 			pipelines.WithIgnoreLabels([]string{"O"}),
 		},
 	}
-	pipelineSimple, err2 := NewPipeline(session, configSimple)
-	checkT(t, err2)
+	pipelineSimple, err2 := hugot.NewPipeline(session, configSimple)
+	CheckT(t, err2)
 
 	t.Run("id-label-map", func(t *testing.T) {
 		labelMapInitial := pipelineSimple.IDLabelMap
@@ -881,14 +884,14 @@ func tokenClassificationPipelineValidation(t *testing.T, session *Session) {
 
 // Cross Encoder
 
-func crossEncoderPipeline(t *testing.T, session *Session) {
+func CrossEncoderPipeline(t *testing.T, session *hugot.Session) {
 	t.Helper()
-	config := CrossEncoderConfig{
-		ModelPath: "./models/KnightsAnalytics_jina-reranker-v1-tiny-en",
+	config := hugot.CrossEncoderConfig{
+		ModelPath: modelsFolder + "KnightsAnalytics_jina-reranker-v1-tiny-en",
 		Name:      "test-cross-encoder",
 	}
-	pipeline, err := NewPipeline(session, config)
-	checkT(t, err)
+	pipeline, err := hugot.NewPipeline(session, config)
+	CheckT(t, err)
 
 	query := "Organic skincare products for sensitive skin"
 	documents := []string{
@@ -924,7 +927,7 @@ func crossEncoderPipeline(t *testing.T, session *Session) {
 
 	inputs := append([]string{query}, documents...)
 	output, err := pipeline.Run(t.Context(), inputs)
-	checkT(t, err)
+	CheckT(t, err)
 	results := output.(*pipelines.CrossEncoderOutput).Results
 
 	for i, expected := range expectedRoberta {
@@ -937,13 +940,13 @@ func crossEncoderPipeline(t *testing.T, session *Session) {
 	}
 }
 
-func crossEncoderPipelineValidation(t *testing.T, session *Session) {
+func CrossEncoderPipelineValidation(t *testing.T, session *hugot.Session) {
 	t.Helper()
-	config := CrossEncoderConfig{
-		ModelPath: "./models/KnightsAnalytics_jina-reranker-v1-tiny-en",
+	config := hugot.CrossEncoderConfig{
+		ModelPath: modelsFolder + "KnightsAnalytics_jina-reranker-v1-tiny-en",
 		Name:      "test-cross-encoder-validation",
 	}
-	pipeline, err := NewPipeline(session, config)
+	pipeline, err := hugot.NewPipeline(session, config)
 	if err != nil {
 		t.Fatalf("Failed to create pipeline: %v", err)
 	}
@@ -971,17 +974,17 @@ func crossEncoderPipelineValidation(t *testing.T, session *Session) {
 }
 
 // Image classification test using HuggingFace SqueezeNet and a sample image.
-func imageClassificationPipeline(t *testing.T, session *Session) {
+func ImageClassificationPipeline(t *testing.T, session *hugot.Session) {
 	t.Helper()
 
-	modelPath := "./models/KnightsAnalytics_resnet50"
-	imagePath := "./models/imageData/cat.jpg"
+	modelPath := modelsFolder + "/KnightsAnalytics_resnet50"
+	imagePath := modelsFolder + "/imageData/cat.jpg"
 
-	config := ImageClassificationConfig{
+	config := hugot.ImageClassificationConfig{
 		ModelPath:    modelPath,
 		Name:         "testImageClassification",
 		OnnxFilename: "squeezenet1.1.onnx",
-		Options: []ImageClassificationOption{
+		Options: []hugot.ImageClassificationOption{
 			pipelines.WithTopK(3),
 			pipelines.WithPreprocessSteps[*pipelines.ImageClassificationPipeline](
 				imageutil.ResizeStep(224),
@@ -993,11 +996,11 @@ func imageClassificationPipeline(t *testing.T, session *Session) {
 			),
 		},
 	}
-	pipeline, err := NewPipeline(session, config)
-	checkT(t, err)
+	pipeline, err := hugot.NewPipeline(session, config)
+	CheckT(t, err)
 
 	result, err := pipeline.RunPipeline(t.Context(), []string{imagePath, imagePath})
-	checkT(t, err)
+	CheckT(t, err)
 
 	for i, pred := range result.Predictions[0] {
 		fmt.Printf("%d: %s (score: %.4f)\n", i+1, pred.Label, pred.Score)
@@ -1007,16 +1010,16 @@ func imageClassificationPipeline(t *testing.T, session *Session) {
 	}
 }
 
-func imageClassificationPipelineValidation(t *testing.T, session *Session) {
+func ImageClassificationPipelineValidation(t *testing.T, session *hugot.Session) {
 	t.Helper()
 
-	modelPath := "./models/KnightsAnalytics_resnet50"
-	config := ImageClassificationConfig{
+	modelPath := modelsFolder + "/KnightsAnalytics_resnet50"
+	config := hugot.ImageClassificationConfig{
 		ModelPath: modelPath,
 		Name:      "testImageClassification",
 	}
-	pipeline, err := NewPipeline(session, config)
-	checkT(t, err)
+	pipeline, err := hugot.NewPipeline(session, config)
+	CheckT(t, err)
 
 	pipeline.Model.InputsMeta[0].Dimensions = backends.NewShape(-1, -1, -1)
 
@@ -1026,11 +1029,11 @@ func imageClassificationPipelineValidation(t *testing.T, session *Session) {
 
 // object detection
 
-func objectDetectionPipeline(t *testing.T, session *Session) {
+func ObjectDetectionPipeline(t *testing.T, session *hugot.Session) {
 	t.Helper()
 
 	config := backends.PipelineConfig[*pipelines.ObjectDetectionPipeline]{
-		ModelPath: "./models/KnightsAnalytics_detr-resnet-50",
+		ModelPath: modelsFolder + "/KnightsAnalytics_detr-resnet-50",
 		Name:      "testObjectDetection",
 		Options: []backends.PipelineOption[*pipelines.ObjectDetectionPipeline]{
 			pipelines.WithNCHWFormat[*pipelines.ObjectDetectionPipeline](),
@@ -1040,13 +1043,13 @@ func objectDetectionPipeline(t *testing.T, session *Session) {
 		},
 	}
 
-	pipeline, err := NewPipeline(session, config)
-	checkT(t, err)
+	pipeline, err := hugot.NewPipeline(session, config)
+	CheckT(t, err)
 
 	// Use a simple cat image similar to classification test style
 	inputs := []string{"models/imageData/cat.jpg"}
 	result, err := pipeline.RunPipeline(t.Context(), inputs)
-	checkT(t, err)
+	CheckT(t, err)
 
 	if len(result.Detections) == 0 || len(result.Detections[0]) == 0 {
 		t.Fatalf("no detections returned")
@@ -1074,15 +1077,15 @@ func objectDetectionPipeline(t *testing.T, session *Session) {
 	}
 }
 
-func objectDetectionPipelineValidation(t *testing.T, session *Session) {
+func ObjectDetectionPipelineValidation(t *testing.T, session *hugot.Session) {
 	t.Helper()
 
 	config := backends.PipelineConfig[*pipelines.ObjectDetectionPipeline]{
-		ModelPath: "./models/KnightsAnalytics_detr-resnet-50",
+		ModelPath: modelsFolder + "/KnightsAnalytics_detr-resnet-50",
 		Name:      "testObjectDetectionValidation",
 	}
-	pipeline, err := NewPipeline(session, config)
-	checkT(t, err)
+	pipeline, err := hugot.NewPipeline(session, config)
+	CheckT(t, err)
 
 	t.Run("input-4d-required", func(t *testing.T) {
 		// Corrupt the primary image input to have invalid dims
@@ -1132,74 +1135,76 @@ func objectDetectionPipelineValidation(t *testing.T, session *Session) {
 
 // No same name
 
-func noSameNamePipeline(t *testing.T, session *Session) {
+func NoSameNamePipeline(t *testing.T, session *hugot.Session) {
 	t.Helper()
-	modelPath := "./models/KnightsAnalytics_distilbert-NER"
-	configSimple := TokenClassificationConfig{
+	modelPath := modelsFolder + "/KnightsAnalytics_distilbert-NER"
+	configSimple := hugot.TokenClassificationConfig{
 		ModelPath: modelPath,
 		Name:      "testPipelineSimple",
-		Options: []TokenClassificationOption{
+		Options: []hugot.TokenClassificationOption{
 			pipelines.WithSimpleAggregation(),
 			pipelines.WithIgnoreLabels([]string{"O"}),
 		},
 	}
-	_, err2 := NewPipeline(session, configSimple)
+	_, err2 := hugot.NewPipeline(session, configSimple)
 	if err2 != nil {
 		t.FailNow()
 	}
-	_, err3 := NewPipeline(session, configSimple)
+	_, err3 := hugot.NewPipeline(session, configSimple)
 	assert.Error(t, err3)
 }
 
-func destroyPipelines(t *testing.T, session *Session) {
+func DestroyPipelines(t *testing.T, session *hugot.Session) {
 	t.Helper()
 
-	modelPath := "./models/KnightsAnalytics_distilbert-NER"
-	configSimple := TokenClassificationConfig{
+	modelPath := modelsFolder + "/KnightsAnalytics_distilbert-NER"
+	configSimple := hugot.TokenClassificationConfig{
 		ModelPath: modelPath,
 		Name:      "testClosePipeline",
-		Options: []TokenClassificationOption{
+		Options: []hugot.TokenClassificationOption{
 			pipelines.WithSimpleAggregation(),
 			pipelines.WithIgnoreLabels([]string{"O"}),
 		},
 	}
-	_, err := NewPipeline(session, configSimple)
-	checkT(t, err)
+	_, err := hugot.NewPipeline(session, configSimple)
+	CheckT(t, err)
 
-	if len(session.models) != 1 {
+	if len(session.GetModels()) != 1 {
 		t.Fatal("Session should have 1 model")
 	}
 
-	for _, model := range session.models {
+	for _, model := range session.GetModels() {
 		if _, ok := model.Pipelines["testClosePipeline"]; !ok {
 			t.Fatal("Pipeline alias was not added to the model")
 		}
 	}
 
-	if err := ClosePipeline[*pipelines.TokenClassificationPipeline](session, "testClosePipeline"); err != nil {
+	if err := hugot.ClosePipeline[*pipelines.TokenClassificationPipeline](session, "testClosePipeline"); err != nil {
 		t.Fatal(err)
 	}
 
-	if len(session.models) != 0 {
+	if len(session.GetModels()) != 0 {
 		t.Fatal("Session should have 0 models")
 	}
-	if len(session.tokenClassificationPipelines) != 0 {
+	pipelines, err := hugot.GetPipelines[*pipelines.TokenClassificationPipeline](session)
+	CheckT(t, err)
+	if len(pipelines) != 0 {
 		t.Fatal("Session should have 0 token classification pipelines")
 	}
 }
 
 // Text Generation.
-func textGenerationPipeline(t *testing.T, session *Session) {
+func TextGenerationPipeline(t *testing.T, session *hugot.Session) {
 	t.Helper()
-	modelPath := "./models/KnightsAnalytics_qwen3-4B-int4"
+	modelPath := modelsFolder + "/KnightsAnalytics_qwen3-4B-int4"
 
-	defer func(session *Session) {
+	defer func(session *hugot.Session) {
 		err := session.Destroy()
-		checkT(t, err)
+		CheckT(t, err)
 	}(session)
 
 	// Configure the text generation pipeline
-	config := TextGenerationConfig{
+	config := hugot.TextGenerationConfig{
 		ModelPath: modelPath,
 		Name:      "testPipeline",
 		Options: []backends.PipelineOption[*pipelines.TextGenerationPipeline]{
@@ -1209,8 +1214,8 @@ func textGenerationPipeline(t *testing.T, session *Session) {
 	}
 
 	// Create the pipeline
-	textGenPipeline, err := NewPipeline(session, config)
-	checkT(t, err)
+	textGenPipeline, err := hugot.NewPipeline(session, config)
+	CheckT(t, err)
 
 	tests := []struct {
 		name             string
@@ -1253,7 +1258,7 @@ func textGenerationPipeline(t *testing.T, session *Session) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			batchResult, err := textGenPipeline.RunMessages(t.Context(), tt.input)
-			checkT(t, err)
+			CheckT(t, err)
 			outputs := batchResult.GetOutput()
 			for i := range len(outputs) {
 				generatedString := outputs[i].(string)
@@ -1266,7 +1271,7 @@ func textGenerationPipeline(t *testing.T, session *Session) {
 	}
 
 	// streaming test
-	streamingConfig := TextGenerationConfig{
+	streamingConfig := hugot.TextGenerationConfig{
 		ModelPath: modelPath,
 		Name:      "testPipelineStreaming",
 		Options: []backends.PipelineOption[*pipelines.TextGenerationPipeline]{
@@ -1274,8 +1279,8 @@ func textGenerationPipeline(t *testing.T, session *Session) {
 			pipelines.WithStreaming(),
 		},
 	}
-	streamingPipeline, err := NewPipeline(session, streamingConfig)
-	checkT(t, err)
+	streamingPipeline, err := hugot.NewPipeline(session, streamingConfig)
+	CheckT(t, err)
 
 	t.Run("streaming test", func(t *testing.T) {
 		input := [][]backends.Message{
@@ -1292,7 +1297,7 @@ func textGenerationPipeline(t *testing.T, session *Session) {
 		if !strings.Contains(fullAnswer.String(), "4") {
 			t.Fatalf("Expected answer to contain '4', got '%s'", fullAnswer.String())
 		}
-		checkT(t, err)
+		CheckT(t, err)
 	})
 
 	// tools test
@@ -1319,7 +1324,7 @@ tool_json: %json {"anyOf": [` +
 			EnableFFTokens: true,
 		}
 
-		config = TextGenerationConfig{
+		config = hugot.TextGenerationConfig{
 			ModelPath: modelPath,
 			Name:      "testPipelineWithTools",
 			Options: []backends.PipelineOption[*pipelines.TextGenerationPipeline]{
@@ -1330,8 +1335,8 @@ tool_json: %json {"anyOf": [` +
 		}
 
 		// Create the pipeline
-		textGenPipeline, err = NewPipeline(session, config)
-		checkT(t, err)
+		textGenPipeline, err = hugot.NewPipeline(session, config)
+		CheckT(t, err)
 
 		// Two minimal Hermes-style tool definitions.
 		tools := []string{
@@ -1376,27 +1381,27 @@ tool_json: %json {"anyOf": [` +
 		defer cancel()
 
 		toolOutput, err := textGenPipeline.RunMessagesWithOverrides(ctx, messages, tools, nil)
-		checkT(t, err)
-		checkToolCalls(t, toolOutput.Responses[0])
+		CheckT(t, err)
+		CheckToolCalls(t, toolOutput.Responses[0])
 	})
 }
 
-func textGenerationPipelineValidation(t *testing.T, session *Session) {
+func TextGenerationPipelineValidation(t *testing.T, session *hugot.Session) {
 	t.Helper()
 
-	defer func(session *Session) {
+	defer func(session *hugot.Session) {
 		err := session.Destroy()
-		checkT(t, err)
+		CheckT(t, err)
 	}(session)
 
 	// Configure the text generation pipeline
-	config := TextGenerationConfig{
-		ModelPath: "./models/KnightsAnalytics_qwen3-4B-int4",
+	config := hugot.TextGenerationConfig{
+		ModelPath: modelsFolder + "/KnightsAnalytics_qwen3-4B-int4",
 		Name:      "testPipeline",
 		Options:   []backends.PipelineOption[*pipelines.TextGenerationPipeline]{},
 	}
-	pipeline, err := NewPipeline(session, config)
-	checkT(t, err)
+	pipeline, err := hugot.NewPipeline(session, config)
+	CheckT(t, err)
 	pipeline.MaxLength = -100
 	err = pipeline.Validate()
 	assert.Error(t, err)
@@ -1404,17 +1409,17 @@ func textGenerationPipelineValidation(t *testing.T, session *Session) {
 
 // QUESTION ANSWERING
 
-func questionAnsweringPipeline(t *testing.T, session *Session) {
+func QuestionAnsweringPipeline(t *testing.T, session *hugot.Session) {
 	t.Helper()
 
-	modelPath := "./models/KnightsAnalytics_distilbert-onnx"
+	modelPath := modelsFolder + "/KnightsAnalytics_distilbert-onnx"
 
-	config := QuestionAnsweringConfig{
+	config := hugot.QuestionAnsweringConfig{
 		ModelPath: modelPath,
 		Name:      "testQAPipeline",
 	}
-	pipeline, err := NewPipeline(session, config)
-	checkT(t, err)
+	pipeline, err := hugot.NewPipeline(session, config)
+	CheckT(t, err)
 
 	// Context is a JSON document; questions target specific property values.
 	contextJSON := `{"product": "coffee maker", "brand": "Acme", "price": 49.99, "currency": "USD", "in_stock": true}`
@@ -1425,7 +1430,7 @@ func questionAnsweringPipeline(t *testing.T, session *Session) {
 	}
 
 	result, err := pipeline.RunPipeline(t.Context(), inputs)
-	checkT(t, err)
+	CheckT(t, err)
 
 	assert.Equal(t, 2, len(result.Outputs), "expected one result per input")
 
@@ -1447,18 +1452,18 @@ func questionAnsweringPipeline(t *testing.T, session *Session) {
 		{Question: "What is the brand?", Context: contextJSON},
 		{Question: "What is the currency?", Context: contextJSON},
 	}
-	configTopK := QuestionAnsweringConfig{
+	configTopK := hugot.QuestionAnsweringConfig{
 		ModelPath: modelPath,
 		Name:      "testQAPipelineTopK",
-		Options: []QuestionAnsweringOption{
+		Options: []hugot.QuestionAnsweringOption{
 			pipelines.WithTopKAnswers(2),
 		},
 	}
-	pipelineTopK, err := NewPipeline(session, configTopK)
-	checkT(t, err)
+	pipelineTopK, err := hugot.NewPipeline(session, configTopK)
+	CheckT(t, err)
 
 	resultTopK, err := pipelineTopK.RunPipeline(t.Context(), inputs)
-	checkT(t, err)
+	CheckT(t, err)
 
 	assert.Equal(t, 2, len(resultTopK.Outputs), "expected one result set per input")
 	for inputIdx, answers := range resultTopK.Outputs {
@@ -1472,10 +1477,10 @@ func questionAnsweringPipeline(t *testing.T, session *Session) {
 
 // TABULAR
 
-func tabularPipeline(t *testing.T, session *Session) {
+func TabularPipeline(t *testing.T, session *hugot.Session) {
 	t.Helper()
 	config := backends.PipelineConfig[*pipelines.TabularPipeline]{
-		ModelPath: "./models/KnightsAnalytics_iris-decision-tree",
+		ModelPath: modelsFolder + "/KnightsAnalytics_iris-decision-tree",
 		Name:      "testTabularClassification",
 		Options: []backends.PipelineOption[*pipelines.TabularPipeline]{
 			pipelines.WithIDLabelMap(map[int]string{
@@ -1486,13 +1491,13 @@ func tabularPipeline(t *testing.T, session *Session) {
 		},
 	}
 
-	pipeline, err := NewPipeline(session, config)
-	checkT(t, err)
+	pipeline, err := hugot.NewPipeline(session, config)
+	CheckT(t, err)
 
 	// Iris classification for an example
 	inputs := []string{"[6.1, 2.8, 4.7, 1.2]"}
 	result, err := pipeline.Run(t.Context(), inputs)
-	checkT(t, err)
+	CheckT(t, err)
 	output := result.GetOutput()
 	classification := output[0].(pipelines.TabularClassificationOutput)
 	if classification.PredictedClass != "versicolor" {
@@ -1509,24 +1514,24 @@ func tabularPipeline(t *testing.T, session *Session) {
 
 // Thread safety
 
-func threadSafety(t *testing.T, session *Session, numEmbeddings int) {
+func ThreadSafety(t *testing.T, session *hugot.Session, numEmbeddings int) {
 	t.Helper()
 	numWorkers := min(runtime.NumCPU(), 6)
 	numResults := numWorkers * numEmbeddings
 
 	t.Helper()
-	modelPath := "./models/KnightsAnalytics_all-MiniLM-L6-v2"
-	config := FeatureExtractionConfig{
+	modelPath := modelsFolder + "/KnightsAnalytics_all-MiniLM-L6-v2"
+	config := hugot.FeatureExtractionConfig{
 		ModelPath:    modelPath,
 		Name:         "testPipeline",
 		OnnxFilename: "model.onnx",
 	}
-	pipeline, err := NewPipeline(session, config)
-	checkT(t, err)
+	pipeline, err := hugot.NewPipeline(session, config)
+	CheckT(t, err)
 
 	var expectedResults map[string][][]float32
 	err = json.Unmarshal(embedded.ResultsByte, &expectedResults)
-	checkT(t, err)
+	CheckT(t, err)
 	expectedResult1 := expectedResults["test1output"]
 	expectedResult2 := expectedResults["test2output"]
 
@@ -1620,7 +1625,7 @@ func almostEqual(a, b float64) bool {
 	return math.Abs(a-b) <= 0.0007
 }
 
-func checkT(t *testing.T, err error) {
+func CheckT(t *testing.T, err error) {
 	t.Helper()
 	if err != nil {
 		t.Fatalf("Test failed with error %s", err.Error())
@@ -1660,7 +1665,7 @@ func parseToolCalls(s string) []toolCall {
 	return calls
 }
 
-func checkToolCalls(t *testing.T, output string) {
+func CheckToolCalls(t *testing.T, output string) {
 	t.Helper()
 	calls := parseToolCalls(output)
 	if len(calls) < 2 {

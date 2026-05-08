@@ -35,6 +35,10 @@ type Session struct {
 	cancelSessionContext            context.CancelFunc
 }
 
+func (s *Session) GetModels() map[string]*backends.Model {
+	return s.models
+}
+
 func (s *Session) getModelLock(modelID string) *sync.Mutex {
 	s.modelLocksMu.Lock()
 	defer s.modelLocksMu.Unlock()
@@ -409,6 +413,55 @@ func GetPipeline[T backends.Pipeline](s *Session, name string) (T, error) {
 	default:
 		return pipeline, errors.New("pipeline type not supported")
 	}
+}
+
+func GetPipelines[T backends.Pipeline](s *Session) (map[string]T, error) {
+	result := map[string]T{}
+	switch any(*new(T)).(type) {
+	case *pipelines.TokenClassificationPipeline:
+		for name, p := range s.tokenClassificationPipelines {
+			result[name] = any(p).(T)
+		}
+	case *pipelines.TextClassificationPipeline:
+		for name, p := range s.textClassificationPipelines {
+			result[name] = any(p).(T)
+		}
+	case *pipelines.FeatureExtractionPipeline:
+		for name, p := range s.featureExtractionPipelines {
+			result[name] = any(p).(T)
+		}
+	case *pipelines.ZeroShotClassificationPipeline:
+		for name, p := range s.zeroShotClassificationPipelines {
+			result[name] = any(p).(T)
+		}
+	case *pipelines.CrossEncoderPipeline:
+		for name, p := range s.crossEncoderPipelines {
+			result[name] = any(p).(T)
+		}
+	case *pipelines.ImageClassificationPipeline:
+		for name, p := range s.imageClassificationPipelines {
+			result[name] = any(p).(T)
+		}
+	case *pipelines.ObjectDetectionPipeline:
+		for name, p := range s.objectDetectionPipelines {
+			result[name] = any(p).(T)
+		}
+	case *pipelines.TextGenerationPipeline:
+		for name, p := range s.textGenerationPipelines {
+			result[name] = any(p).(T)
+		}
+	case *pipelines.TabularPipeline:
+		for name, p := range s.tabularPipelines {
+			result[name] = any(p).(T)
+		}
+	case *pipelines.QuestionAnsweringPipeline:
+		for name, p := range s.questionAnsweringPipelines {
+			result[name] = any(p).(T)
+		}
+	default:
+		return nil, errors.New("pipeline type not supported")
+	}
+	return result, nil
 }
 
 func ClosePipeline[T backends.Pipeline](s *Session, name string) error {

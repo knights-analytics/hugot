@@ -28,16 +28,13 @@ echo "Training tests completed."
 
 # echo "Running simplego tests..."
 
-# gotestsum --format testname --junitfile=$folder/unit-go.xml --jsonfile=$folder/unit-go.json -- -tags=GO -timeout 60m
+gotestsum --format testname --junitfile=$folder/unit-go.xml --jsonfile=$folder/unit-go.json -- -tags=GO -timeout 60m
 
 # echo "simplego tests completed."
 
 echo "merging coverage files"
 head -n 1 $folder/cover-ort.out > $folder/cover.out
-tail -n +2 $folder/cover-ort.out >> $folder/cover.out
-tail -n +2 $folder/cover-xla.out >> $folder/cover.out
-tail -n +2 $folder/cover-training.out >> $folder/cover.out
-# tail -n +2 $folder/cover-go.out >> $folder/cover.out
+{ tail -n +2 $folder/cover-ort.out; tail -n +2 $folder/cover-xla.out; tail -n +2 $folder/cover-training.out; tail -n +2 $folder/cover-go.out; } >> $folder/cover.out
 
 head -n 1 $folder/cover.out > $folder/cover.dedup.out
 tail -n +2 $folder/cover.out | sort | uniq >> $folder/cover.dedup.out

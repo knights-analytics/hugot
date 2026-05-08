@@ -1,247 +1,250 @@
 //go:build (GO || ALL) && !TRAINING
 
-package hugot
+package go_test
 
 import (
 	"encoding/json"
 	"fmt"
 	"os"
 	"testing"
+
+	"github.com/knights-analytics/hugot"
+	testutil "github.com/knights-analytics/hugot/tests"
 )
 
 // FEATURE EXTRACTION
 
 func TestFeatureExtractionPipelineGo(t *testing.T) {
-	session, err := NewGoSession(t.Context())
-	checkT(t, err)
-	defer func(session *Session) {
+	session, err := hugot.NewGoSession(t.Context())
+	testutil.CheckT(t, err)
+	defer func(session *hugot.Session) {
 		destroyErr := session.Destroy()
-		checkT(t, destroyErr)
+		testutil.CheckT(t, destroyErr)
 	}(session)
-	featureExtractionPipeline(t, session)
+	testutil.FeatureExtractionPipeline(t, session)
 }
 
 func TestFeatureExtractionPipelineValidationGo(t *testing.T) {
-	session, err := NewGoSession(t.Context())
-	checkT(t, err)
-	defer func(session *Session) {
+	session, err := hugot.NewGoSession(t.Context())
+	testutil.CheckT(t, err)
+	defer func(session *hugot.Session) {
 		destroyErr := session.Destroy()
-		checkT(t, destroyErr)
+		testutil.CheckT(t, destroyErr)
 	}(session)
-	featureExtractionPipelineValidation(t, session)
+	testutil.FeatureExtractionPipelineValidation(t, session)
 }
 
 // Text classification
 
 func TestTextClassificationPipelineGo(t *testing.T) {
-	session, err := NewGoSession(t.Context())
-	checkT(t, err)
-	defer func(session *Session) {
+	session, err := hugot.NewGoSession(t.Context())
+	testutil.CheckT(t, err)
+	defer func(session *hugot.Session) {
 		destroyErr := session.Destroy()
-		checkT(t, destroyErr)
+		testutil.CheckT(t, destroyErr)
 	}(session)
-	textClassificationPipeline(t, session)
+	testutil.TextClassificationPipeline(t, session)
 }
 
 func TestTextClassificationPipelineMultiGo(t *testing.T) {
-	session, err := NewGoSession(t.Context())
-	checkT(t, err)
-	defer func(session *Session) {
+	session, err := hugot.NewGoSession(t.Context())
+	testutil.CheckT(t, err)
+	defer func(session *hugot.Session) {
 		destroyErr := session.Destroy()
-		checkT(t, destroyErr)
+		testutil.CheckT(t, destroyErr)
 	}(session)
-	textClassificationPipelineMulti(t, session)
+	testutil.TextClassificationPipelineMulti(t, session)
 }
 
 func TestTextClassificationPipelineValidationGo(t *testing.T) {
-	session, err := NewGoSession(t.Context())
-	checkT(t, err)
-	defer func(session *Session) {
+	session, err := hugot.NewGoSession(t.Context())
+	testutil.CheckT(t, err)
+	defer func(session *hugot.Session) {
 		destroyErr := session.Destroy()
-		checkT(t, destroyErr)
+		testutil.CheckT(t, destroyErr)
 	}(session)
-	textClassificationPipelineValidation(t, session)
+	testutil.TextClassificationPipelineValidation(t, session)
 }
 
 // Token classification
 
 func TestTokenClassificationPipelineGo(t *testing.T) {
-	session, err := NewGoSession(t.Context())
-	checkT(t, err)
-	defer func(session *Session) {
+	session, err := hugot.NewGoSession(t.Context())
+	testutil.CheckT(t, err)
+	defer func(session *hugot.Session) {
 		destroyErr := session.Destroy()
-		checkT(t, destroyErr)
+		testutil.CheckT(t, destroyErr)
 	}(session)
-	tokenClassificationPipeline(t, session)
+	testutil.TokenClassificationPipeline(t, session)
 }
 
 func TestTokenClassificationPipelineValidationGo(t *testing.T) {
-	session, err := NewGoSession(t.Context())
-	checkT(t, err)
-	defer func(session *Session) {
+	session, err := hugot.NewGoSession(t.Context())
+	testutil.CheckT(t, err)
+	defer func(session *hugot.Session) {
 		destroyErr := session.Destroy()
-		checkT(t, destroyErr)
+		testutil.CheckT(t, destroyErr)
 	}(session)
-	tokenClassificationPipelineValidation(t, session)
+	testutil.TokenClassificationPipelineValidation(t, session)
 }
 
 // Zero shot
 
 func TestZeroShotClassificationPipelineGo(t *testing.T) {
-	session, err := NewGoSession(t.Context())
-	checkT(t, err)
-	defer func(session *Session) {
+	session, err := hugot.NewGoSession(t.Context())
+	testutil.CheckT(t, err)
+	defer func(session *hugot.Session) {
 		destroyErr := session.Destroy()
-		checkT(t, destroyErr)
+		testutil.CheckT(t, destroyErr)
 	}(session)
-	zeroShotClassificationPipeline(t, session)
+	testutil.ZeroShotClassificationPipeline(t, session)
 }
 
 func TestZeroShotClassificationPipelineValidationGo(t *testing.T) {
-	session, err := NewGoSession(t.Context())
-	checkT(t, err)
-	defer func(session *Session) {
+	session, err := hugot.NewGoSession(t.Context())
+	testutil.CheckT(t, err)
+	defer func(session *hugot.Session) {
 		destroyErr := session.Destroy()
-		checkT(t, destroyErr)
+		testutil.CheckT(t, destroyErr)
 	}(session)
-	zeroShotClassificationPipelineValidation(t, session)
+	testutil.ZeroShotClassificationPipelineValidation(t, session)
 }
 
 // Cross Encoder
 
 func TestCrossEncoderPipelineGo(t *testing.T) {
-	session, err := NewGoSession(t.Context())
-	checkT(t, err)
-	defer func(session *Session) {
+	session, err := hugot.NewGoSession(t.Context())
+	testutil.CheckT(t, err)
+	defer func(session *hugot.Session) {
 		destroyErr := session.Destroy()
-		checkT(t, destroyErr)
+		testutil.CheckT(t, destroyErr)
 	}(session)
-	crossEncoderPipeline(t, session)
+	testutil.CrossEncoderPipeline(t, session)
 }
 
 func TestCrossEncoderPipelineValidationGo(t *testing.T) {
-	session, err := NewGoSession(t.Context())
-	checkT(t, err)
-	defer func(session *Session) {
+	session, err := hugot.NewGoSession(t.Context())
+	testutil.CheckT(t, err)
+	defer func(session *hugot.Session) {
 		destroyErr := session.Destroy()
-		checkT(t, destroyErr)
+		testutil.CheckT(t, destroyErr)
 	}(session)
-	crossEncoderPipelineValidation(t, session)
+	testutil.CrossEncoderPipelineValidation(t, session)
 }
 
 // Image classification
 
 func TestImageClassificationPipelineGo(t *testing.T) {
-	session, err := NewGoSession(t.Context())
-	checkT(t, err)
-	defer func(session *Session) {
+	session, err := hugot.NewGoSession(t.Context())
+	testutil.CheckT(t, err)
+	defer func(session *hugot.Session) {
 		destroyErr := session.Destroy()
-		checkT(t, destroyErr)
+		testutil.CheckT(t, destroyErr)
 	}(session)
-	imageClassificationPipeline(t, session)
+	testutil.ImageClassificationPipeline(t, session)
 }
 
 func TestImageClassificationPipelineValidationGo(t *testing.T) {
-	session, err := NewGoSession(t.Context())
-	checkT(t, err)
-	defer func(session *Session) {
+	session, err := hugot.NewGoSession(t.Context())
+	testutil.CheckT(t, err)
+	defer func(session *hugot.Session) {
 		destroyErr := session.Destroy()
-		checkT(t, destroyErr)
+		testutil.CheckT(t, destroyErr)
 	}(session)
-	imageClassificationPipelineValidation(t, session)
+	testutil.ImageClassificationPipelineValidation(t, session)
 }
 
 // Object detection
 
 func TestObjectDetectionPipelineGo(t *testing.T) {
-	session, err := NewGoSession(t.Context())
-	checkT(t, err)
-	defer func(session *Session) {
+	session, err := hugot.NewGoSession(t.Context())
+	testutil.CheckT(t, err)
+	defer func(session *hugot.Session) {
 		destroyErr := session.Destroy()
-		checkT(t, destroyErr)
+		testutil.CheckT(t, destroyErr)
 	}(session)
-	objectDetectionPipeline(t, session)
+	testutil.ObjectDetectionPipeline(t, session)
 }
 
 func TestObjectDetectionPipelineValidationGo(t *testing.T) {
-	session, err := NewGoSession(t.Context())
-	checkT(t, err)
-	defer func(session *Session) {
+	session, err := hugot.NewGoSession(t.Context())
+	testutil.CheckT(t, err)
+	defer func(session *hugot.Session) {
 		destroyErr := session.Destroy()
-		checkT(t, destroyErr)
+		testutil.CheckT(t, destroyErr)
 	}(session)
-	objectDetectionPipelineValidation(t, session)
+	testutil.ObjectDetectionPipelineValidation(t, session)
 }
 
 // text generation
 
 func TestTextGenerationPipelineGo(t *testing.T) {
 	t.Skip("Generative models are not supported yet for Go")
-	session, err := NewGoSession(t.Context())
-	checkT(t, err)
-	defer func(session *Session) {
+	session, err := hugot.NewGoSession(t.Context())
+	testutil.CheckT(t, err)
+	defer func(session *hugot.Session) {
 		destroyErr := session.Destroy()
-		checkT(t, destroyErr)
+		testutil.CheckT(t, destroyErr)
 	}(session)
-	textGenerationPipeline(t, session)
+	testutil.TextGenerationPipeline(t, session)
 }
 
 func TestTextGenerationPipelineValidationGo(t *testing.T) {
 	t.Skip("Generative models are not supported yet for Go")
-	session, err := NewGoSession(t.Context())
-	checkT(t, err)
-	defer func(session *Session) {
+	session, err := hugot.NewGoSession(t.Context())
+	testutil.CheckT(t, err)
+	defer func(session *hugot.Session) {
 		destroyErr := session.Destroy()
-		checkT(t, destroyErr)
+		testutil.CheckT(t, destroyErr)
 	}(session)
-	textGenerationPipelineValidation(t, session)
+	testutil.TextGenerationPipelineValidation(t, session)
 }
 
 // Tabular
 
 func TestTabularPipelineGo(t *testing.T) {
 	t.Skip("Currently missing TreeEnsembleClassifier ONNX operator")
-	session, err := NewGoSession(t.Context())
-	checkT(t, err)
-	defer func(session *Session) {
+	session, err := hugot.NewGoSession(t.Context())
+	testutil.CheckT(t, err)
+	defer func(session *hugot.Session) {
 		destroyErr := session.Destroy()
-		checkT(t, destroyErr)
+		testutil.CheckT(t, destroyErr)
 	}(session)
-	tabularPipeline(t, session)
+	testutil.TabularPipeline(t, session)
 }
 
 // QA
 
 func TestQAPipelineGo(t *testing.T) {
-	session, err := NewGoSession(t.Context())
-	checkT(t, err)
-	defer func(session *Session) {
+	session, err := hugot.NewGoSession(t.Context())
+	testutil.CheckT(t, err)
+	defer func(session *hugot.Session) {
 		destroyErr := session.Destroy()
-		checkT(t, destroyErr)
+		testutil.CheckT(t, destroyErr)
 	}(session)
-	questionAnsweringPipeline(t, session)
+	testutil.QuestionAnsweringPipeline(t, session)
 }
 
 // No same name
 
 func TestNoSameNamePipelineGo(t *testing.T) {
-	session, err := NewGoSession(t.Context())
-	checkT(t, err)
-	defer func(session *Session) {
+	session, err := hugot.NewGoSession(t.Context())
+	testutil.CheckT(t, err)
+	defer func(session *hugot.Session) {
 		destroyErr := session.Destroy()
-		checkT(t, destroyErr)
+		testutil.CheckT(t, destroyErr)
 	}(session)
-	noSameNamePipeline(t, session)
+	testutil.NoSameNamePipeline(t, session)
 }
 
 func TestDestroyPipelineGo(t *testing.T) {
-	session, err := NewGoSession(t.Context())
-	checkT(t, err)
-	defer func(session *Session) {
+	session, err := hugot.NewGoSession(t.Context())
+	testutil.CheckT(t, err)
+	defer func(session *hugot.Session) {
 		destroyErr := session.Destroy()
-		checkT(t, destroyErr)
+		testutil.CheckT(t, destroyErr)
 	}(session)
-	destroyPipelines(t, session)
+	testutil.DestroyPipelines(t, session)
 }
 
 // Thread safety
@@ -250,13 +253,13 @@ func TestThreadSafetyGo(t *testing.T) {
 	if os.Getenv("CI") != "" {
 		t.SkipNow()
 	}
-	session, err := NewGoSession(t.Context())
-	checkT(t, err)
-	defer func(session *Session) {
+	session, err := hugot.NewGoSession(t.Context())
+	testutil.CheckT(t, err)
+	defer func(session *hugot.Session) {
 		destroyErr := session.Destroy()
-		checkT(t, destroyErr)
+		testutil.CheckT(t, destroyErr)
 	}(session)
-	threadSafety(t, session, 20)
+	testutil.ThreadSafety(t, session, 20)
 }
 
 // README: test the readme examples
@@ -270,7 +273,7 @@ func TestReadmeExample(t *testing.T) {
 	}
 
 	// start a new session
-	session, err := NewGoSession(t.Context())
+	session, err := hugot.NewGoSession(t.Context())
 	// For XLA (requires go build tags "XLA" or "ALL"):
 	// session, err := NewXLASession()
 	// For ORT (requires go build tags "ORT" or "ALL"):
@@ -281,7 +284,7 @@ func TestReadmeExample(t *testing.T) {
 	check(err)
 
 	// A successfully created hugot session needs to be destroyed when you're done
-	defer func(session *Session) {
+	defer func(session *hugot.Session) {
 		err := session.Destroy()
 		check(err)
 	}(session)
@@ -296,13 +299,13 @@ func TestReadmeExample(t *testing.T) {
 
 	// we now create the configuration for the text classification pipeline we want to create.
 	// Options to the pipeline can be set here using the Options field
-	config := TextClassificationConfig{
+	config := hugot.TextClassificationConfig{
 		ModelPath: modelPath,
 		Name:      "testPipeline",
 	}
 	// then we create out pipeline.
 	// Note: the pipeline will also be added to the session object so all pipelines can be destroyed at once
-	sentimentPipeline, err := NewPipeline(session, config)
+	sentimentPipeline, err := hugot.NewPipeline(session, config)
 	check(err)
 
 	// we can now use the pipeline for prediction on a batch of strings
