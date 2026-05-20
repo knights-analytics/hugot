@@ -74,14 +74,19 @@ func LoadModel(ctx context.Context, path string, onnxFilename string, options *o
 		var destroyErr error
 		if model.Tokenizer != nil {
 			destroyErr = model.Tokenizer.Destroy()
+			model.Tokenizer = nil
 		}
 		switch options.Backend {
 		case "ORT":
-			destroyErr = errors.Join(destroyErr, model.ORTModel.Destroy())
-			model.ORTModel = nil
+			if model.ORTModel != nil {
+				destroyErr = errors.Join(destroyErr, model.ORTModel.Destroy())
+				model.ORTModel = nil
+			}
 		case "GO", "XLA":
-			model.GoMLXModel.Destroy()
-			model.GoMLXModel = nil
+			if model.GoMLXModel != nil {
+				model.GoMLXModel.Destroy()
+				model.GoMLXModel = nil
+			}
 		}
 		return destroyErr
 	}
