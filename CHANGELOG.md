@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
+## [0.7.3] - 2026-05-20
+
+###  Changed
+
+- Fix panic on double-close (thanks @sananguliyev) 
+- Upgraded to ORT v1.25.1
+- Test structure improvements
+- Documentation and examples improvements (thanks @kepae)
+
 ## [0.7.2] - 2026-04-22
 
 ###  Changed
