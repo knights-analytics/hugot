@@ -488,7 +488,7 @@ func runBenchmarkEmbedding(ctx context.Context, strings *[]string, cuda bool) {
 		}
 	}(session)
 
-	modelPath := "./models/KnightsAnalytics_all-MiniLM-L6-v2"
+	modelPath := testutil.ModelsFolder + "KnightsAnalytics_all-MiniLM-L6-v2"
 	config := hugot.FeatureExtractionConfig{
 		ModelPath: modelPath,
 		Name:      "benchmarkEmbedding",

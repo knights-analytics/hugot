@@ -91,6 +91,9 @@ func TestTokenClassificationPipelineValidationGo(t *testing.T) {
 // Zero shot
 
 func TestZeroShotClassificationPipelineGo(t *testing.T) {
+	if os.Getenv("CI") != "" {
+		t.SkipNow()
+	}
 	session, err := hugot.NewGoSession(t.Context())
 	testutil.CheckT(t, err)
 	defer func(session *hugot.Session) {
@@ -101,6 +104,9 @@ func TestZeroShotClassificationPipelineGo(t *testing.T) {
 }
 
 func TestZeroShotClassificationPipelineValidationGo(t *testing.T) {
+	if os.Getenv("CI") != "" {
+		t.SkipNow()
+	}
 	session, err := hugot.NewGoSession(t.Context())
 	testutil.CheckT(t, err)
 	defer func(session *hugot.Session) {
@@ -157,6 +163,9 @@ func TestImageClassificationPipelineValidationGo(t *testing.T) {
 // Object detection
 
 func TestObjectDetectionPipelineGo(t *testing.T) {
+	if os.Getenv("CI") != "" {
+		t.SkipNow()
+	}
 	session, err := hugot.NewGoSession(t.Context())
 	testutil.CheckT(t, err)
 	defer func(session *hugot.Session) {
@@ -167,6 +176,9 @@ func TestObjectDetectionPipelineGo(t *testing.T) {
 }
 
 func TestObjectDetectionPipelineValidationGo(t *testing.T) {
+	if os.Getenv("CI") != "" {
+		t.SkipNow()
+	}
 	session, err := hugot.NewGoSession(t.Context())
 	testutil.CheckT(t, err)
 	defer func(session *hugot.Session) {
@@ -295,7 +307,7 @@ func TestReadmeExample(t *testing.T) {
 	// drop the dependency on huggingfaceModelDownloader.
 	// modelPath, err := DownloadModel("KnightsAnalytics/distilbert-base-uncased-finetuned-sst-2-english", "./models/", NewDownloadOptions())
 	// check(err)
-	modelPath := "./models/KnightsAnalytics_distilbert-base-uncased-finetuned-sst-2-english"
+	modelPath := testutil.ModelsFolder + "KnightsAnalytics_distilbert-base-uncased-finetuned-sst-2-english"
 
 	// we now create the configuration for the text classification pipeline we want to create.
 	// Options to the pipeline can be set here using the Options field

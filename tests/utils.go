@@ -21,7 +21,8 @@ import (
 	"github.com/knights-analytics/hugot/util/imageutil"
 )
 
-const modelsFolder = "../../models/"
+const ModelsFolder = "../../models/"
+const TestCasesFolder = "../../testcases/"
 
 // test download validation
 
@@ -41,7 +42,7 @@ func TestDownloadValidation(t *testing.T) {
 func FeatureExtractionPipeline(t *testing.T, session *hugot.Session) {
 	t.Helper()
 
-	modelPath := modelsFolder + "KnightsAnalytics_all-MiniLM-L6-v2"
+	modelPath := ModelsFolder + "KnightsAnalytics_all-MiniLM-L6-v2"
 
 	config := hugot.FeatureExtractionConfig{
 		ModelPath:    modelPath,
@@ -167,7 +168,7 @@ func FeatureExtractionPipeline(t *testing.T, session *hugot.Session) {
 func FeatureExtractionPipelineValidation(t *testing.T, session *hugot.Session) {
 	t.Helper()
 
-	modelPath := modelsFolder + "KnightsAnalytics_all-MiniLM-L6-v2"
+	modelPath := ModelsFolder + "KnightsAnalytics_all-MiniLM-L6-v2"
 	config := hugot.FeatureExtractionConfig{
 		ModelPath:    modelPath,
 		OnnxFilename: "model.onnx",
@@ -191,7 +192,7 @@ func FeatureExtractionPipelineValidation(t *testing.T, session *hugot.Session) {
 func TextClassificationPipeline(t *testing.T, session *hugot.Session) {
 	t.Helper()
 
-	modelPath := modelsFolder + "KnightsAnalytics_distilbert-base-uncased-finetuned-sst-2-english"
+	modelPath := ModelsFolder + "KnightsAnalytics_distilbert-base-uncased-finetuned-sst-2-english"
 
 	config := hugot.TextClassificationConfig{
 		ModelPath: modelPath,
@@ -245,7 +246,7 @@ func TextClassificationPipeline(t *testing.T, session *hugot.Session) {
 func TextClassificationPipelineMulti(t *testing.T, session *hugot.Session) {
 	t.Helper()
 
-	modelPathMulti := modelsFolder + "KnightsAnalytics_roberta-base-go_emotions"
+	modelPathMulti := ModelsFolder + "KnightsAnalytics_roberta-base-go_emotions"
 
 	configMulti := hugot.TextClassificationConfig{
 		ModelPath:    modelPathMulti,
@@ -408,7 +409,7 @@ func TextClassificationPipelineMulti(t *testing.T, session *hugot.Session) {
 func TextClassificationPipelineValidation(t *testing.T, session *hugot.Session) {
 	t.Helper()
 
-	modelPath := modelsFolder + "KnightsAnalytics_distilbert-base-uncased-finetuned-sst-2-english"
+	modelPath := ModelsFolder + "KnightsAnalytics_distilbert-base-uncased-finetuned-sst-2-english"
 
 	config := hugot.TextClassificationConfig{
 		ModelPath: modelPath,
@@ -446,7 +447,7 @@ func TextClassificationPipelineValidation(t *testing.T, session *hugot.Session) 
 func ZeroShotClassificationPipeline(t *testing.T, session *hugot.Session) {
 	t.Helper()
 
-	modelPath := modelsFolder + "KnightsAnalytics_deberta-v3-base-zeroshot-v1"
+	modelPath := ModelsFolder + "KnightsAnalytics_deberta-v3-base-zeroshot-v1"
 
 	config := hugot.ZeroShotClassificationConfig{
 		ModelPath: modelPath,
@@ -670,7 +671,7 @@ func ZeroShotClassificationPipeline(t *testing.T, session *hugot.Session) {
 func ZeroShotClassificationPipelineValidation(t *testing.T, session *hugot.Session) {
 	t.Helper()
 
-	modelPath := modelsFolder + "KnightsAnalytics_deberta-v3-base-zeroshot-v1"
+	modelPath := ModelsFolder + "KnightsAnalytics_deberta-v3-base-zeroshot-v1"
 
 	config := hugot.TextClassificationConfig{
 		ModelPath: modelPath,
@@ -705,7 +706,7 @@ func ZeroShotClassificationPipelineValidation(t *testing.T, session *hugot.Sessi
 func TokenClassificationPipeline(t *testing.T, session *hugot.Session) {
 	t.Helper()
 
-	modelPath := modelsFolder + "KnightsAnalytics_distilbert-NER"
+	modelPath := ModelsFolder + "KnightsAnalytics_distilbert-NER"
 	configSimple := hugot.TokenClassificationConfig{
 		ModelPath: modelPath,
 		Name:      "testPipelineSimple",
@@ -849,7 +850,7 @@ func TokenClassificationPipeline(t *testing.T, session *hugot.Session) {
 func TokenClassificationPipelineValidation(t *testing.T, session *hugot.Session) {
 	t.Helper()
 
-	modelPath := modelsFolder + "KnightsAnalytics_distilbert-NER"
+	modelPath := ModelsFolder + "KnightsAnalytics_distilbert-NER"
 	configSimple := hugot.TokenClassificationConfig{
 		ModelPath: modelPath,
 		Name:      "testPipelineSimple",
@@ -887,7 +888,7 @@ func TokenClassificationPipelineValidation(t *testing.T, session *hugot.Session)
 func CrossEncoderPipeline(t *testing.T, session *hugot.Session) {
 	t.Helper()
 	config := hugot.CrossEncoderConfig{
-		ModelPath: modelsFolder + "KnightsAnalytics_jina-reranker-v1-tiny-en",
+		ModelPath: ModelsFolder + "KnightsAnalytics_jina-reranker-v1-tiny-en",
 		Name:      "test-cross-encoder",
 	}
 	pipeline, err := hugot.NewPipeline(session, config)
@@ -943,7 +944,7 @@ func CrossEncoderPipeline(t *testing.T, session *hugot.Session) {
 func CrossEncoderPipelineValidation(t *testing.T, session *hugot.Session) {
 	t.Helper()
 	config := hugot.CrossEncoderConfig{
-		ModelPath: modelsFolder + "KnightsAnalytics_jina-reranker-v1-tiny-en",
+		ModelPath: ModelsFolder + "KnightsAnalytics_jina-reranker-v1-tiny-en",
 		Name:      "test-cross-encoder-validation",
 	}
 	pipeline, err := hugot.NewPipeline(session, config)
@@ -977,8 +978,8 @@ func CrossEncoderPipelineValidation(t *testing.T, session *hugot.Session) {
 func ImageClassificationPipeline(t *testing.T, session *hugot.Session) {
 	t.Helper()
 
-	modelPath := modelsFolder + "/KnightsAnalytics_resnet50"
-	imagePath := modelsFolder + "/imageData/cat.jpg"
+	modelPath := ModelsFolder + "KnightsAnalytics_resnet50"
+	imagePath := ModelsFolder + "imageData/cat.jpg"
 
 	config := hugot.ImageClassificationConfig{
 		ModelPath:    modelPath,
@@ -1013,7 +1014,7 @@ func ImageClassificationPipeline(t *testing.T, session *hugot.Session) {
 func ImageClassificationPipelineValidation(t *testing.T, session *hugot.Session) {
 	t.Helper()
 
-	modelPath := modelsFolder + "/KnightsAnalytics_resnet50"
+	modelPath := ModelsFolder + "/KnightsAnalytics_resnet50"
 	config := hugot.ImageClassificationConfig{
 		ModelPath: modelPath,
 		Name:      "testImageClassification",
@@ -1033,7 +1034,7 @@ func ObjectDetectionPipeline(t *testing.T, session *hugot.Session) {
 	t.Helper()
 
 	config := backends.PipelineConfig[*pipelines.ObjectDetectionPipeline]{
-		ModelPath: modelsFolder + "/KnightsAnalytics_detr-resnet-50",
+		ModelPath: ModelsFolder + "KnightsAnalytics_detr-resnet-50",
 		Name:      "testObjectDetection",
 		Options: []backends.PipelineOption[*pipelines.ObjectDetectionPipeline]{
 			pipelines.WithNCHWFormat[*pipelines.ObjectDetectionPipeline](),
@@ -1047,7 +1048,7 @@ func ObjectDetectionPipeline(t *testing.T, session *hugot.Session) {
 	CheckT(t, err)
 
 	// Use a simple cat image similar to classification test style
-	inputs := []string{"models/imageData/cat.jpg"}
+	inputs := []string{ModelsFolder + "imageData/cat.jpg"}
 	result, err := pipeline.RunPipeline(t.Context(), inputs)
 	CheckT(t, err)
 
@@ -1081,7 +1082,7 @@ func ObjectDetectionPipelineValidation(t *testing.T, session *hugot.Session) {
 	t.Helper()
 
 	config := backends.PipelineConfig[*pipelines.ObjectDetectionPipeline]{
-		ModelPath: modelsFolder + "/KnightsAnalytics_detr-resnet-50",
+		ModelPath: ModelsFolder + "KnightsAnalytics_detr-resnet-50",
 		Name:      "testObjectDetectionValidation",
 	}
 	pipeline, err := hugot.NewPipeline(session, config)
@@ -1137,7 +1138,7 @@ func ObjectDetectionPipelineValidation(t *testing.T, session *hugot.Session) {
 
 func NoSameNamePipeline(t *testing.T, session *hugot.Session) {
 	t.Helper()
-	modelPath := modelsFolder + "/KnightsAnalytics_distilbert-NER"
+	modelPath := ModelsFolder + "/KnightsAnalytics_distilbert-NER"
 	configSimple := hugot.TokenClassificationConfig{
 		ModelPath: modelPath,
 		Name:      "testPipelineSimple",
@@ -1157,7 +1158,7 @@ func NoSameNamePipeline(t *testing.T, session *hugot.Session) {
 func DestroyPipelines(t *testing.T, session *hugot.Session) {
 	t.Helper()
 
-	modelPath := modelsFolder + "/KnightsAnalytics_distilbert-NER"
+	modelPath := ModelsFolder + "/KnightsAnalytics_distilbert-NER"
 	configSimple := hugot.TokenClassificationConfig{
 		ModelPath: modelPath,
 		Name:      "testClosePipeline",
@@ -1196,7 +1197,7 @@ func DestroyPipelines(t *testing.T, session *hugot.Session) {
 // Text Generation.
 func TextGenerationPipeline(t *testing.T, session *hugot.Session) {
 	t.Helper()
-	modelPath := modelsFolder + "/KnightsAnalytics_qwen3-4B-int4"
+	modelPath := ModelsFolder + "/KnightsAnalytics_qwen3-4B-int4"
 
 	defer func(session *hugot.Session) {
 		err := session.Destroy()
@@ -1396,7 +1397,7 @@ func TextGenerationPipelineValidation(t *testing.T, session *hugot.Session) {
 
 	// Configure the text generation pipeline
 	config := hugot.TextGenerationConfig{
-		ModelPath: modelsFolder + "/KnightsAnalytics_qwen3-4B-int4",
+		ModelPath: ModelsFolder + "/KnightsAnalytics_qwen3-4B-int4",
 		Name:      "testPipeline",
 		Options:   []backends.PipelineOption[*pipelines.TextGenerationPipeline]{},
 	}
@@ -1412,7 +1413,7 @@ func TextGenerationPipelineValidation(t *testing.T, session *hugot.Session) {
 func QuestionAnsweringPipeline(t *testing.T, session *hugot.Session) {
 	t.Helper()
 
-	modelPath := modelsFolder + "/KnightsAnalytics_distilbert-onnx"
+	modelPath := ModelsFolder + "/KnightsAnalytics_distilbert-onnx"
 
 	config := hugot.QuestionAnsweringConfig{
 		ModelPath: modelPath,
@@ -1480,7 +1481,7 @@ func QuestionAnsweringPipeline(t *testing.T, session *hugot.Session) {
 func TabularPipeline(t *testing.T, session *hugot.Session) {
 	t.Helper()
 	config := backends.PipelineConfig[*pipelines.TabularPipeline]{
-		ModelPath: modelsFolder + "/KnightsAnalytics_iris-decision-tree",
+		ModelPath: ModelsFolder + "/KnightsAnalytics_iris-decision-tree",
 		Name:      "testTabularClassification",
 		Options: []backends.PipelineOption[*pipelines.TabularPipeline]{
 			pipelines.WithIDLabelMap(map[int]string{
@@ -1520,7 +1521,7 @@ func ThreadSafety(t *testing.T, session *hugot.Session, numEmbeddings int) {
 	numResults := numWorkers * numEmbeddings
 
 	t.Helper()
-	modelPath := modelsFolder + "/KnightsAnalytics_all-MiniLM-L6-v2"
+	modelPath := ModelsFolder + "/KnightsAnalytics_all-MiniLM-L6-v2"
 	config := hugot.FeatureExtractionConfig{
 		ModelPath:    modelPath,
 		Name:         "testPipeline",

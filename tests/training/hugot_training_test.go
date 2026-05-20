@@ -109,29 +109,29 @@ func trainSimilarity(t *testing.T,
 	// we now write the fine-tuned pipeline back to disk as an onnx model.
 	// This will also copy the tokenizer files for you. If your models are on s3
 	// this can also work (see documentation).
-	if e := trainingSession.Save(t.Context(), "./models/testTrain"); e != nil {
+	if e := trainingSession.Save(t.Context(), testutil.ModelsFolder + "testTrain"); e != nil {
 		t.Fatal(e)
 	}
-	if _, err := os.Stat("./models/testTrain"); err != nil {
+	if _, err := os.Stat(testutil.ModelsFolder + "testTrain"); err != nil {
 		t.Fatal(err)
 	}
 
 	defer func() {
-		if err = os.RemoveAll("./models/testTrain"); err != nil {
+		if err = os.RemoveAll(testutil.ModelsFolder + "testTrain"); err != nil {
 			t.Fatal(err)
 		}
 	}()
 
 	// we now load the newly trained onnx model and generate the predictions with onnxruntime backend
-	return runModel(t, "ORT", examplesLHS, examplesRHS, "./models/testTrain")
+	return runModel(t, "ORT", examplesLHS, examplesRHS, testutil.ModelsFolder + "testTrain")
 }
 
 func TestTrainSemanticSimilarity(t *testing.T) {
-	modelPath := "./models/KnightsAnalytics_all-MiniLM-L6-v2"
+	modelPath := testutil.ModelsFolder + "KnightsAnalytics_all-MiniLM-L6-v2"
 
 	// each line in this dataset is an example. In training we will use the dataset object but for inference
 	// we just load the strings here.
-	data, err := os.ReadFile("./testcases/semanticSimilarityTest.jsonl")
+	data, err := os.ReadFile(testutil.TestCasesFolder + "semanticSimilarityTest.jsonl")
 	testutil.CheckT(t, err)
 	lines := bytes.Split(data, []byte("\n"))
 
@@ -167,7 +167,7 @@ func TestTrainSemanticSimilarity(t *testing.T) {
 	// The datasets.NewSemanticSimilarityDataset function also accepts a custom function that will be applied
 	// to all examples in a batch before they are passed to the model. This can be used to apply whatever preprocessing
 	// you need.
-	trainDataset, err := datasets.NewSemanticSimilarityDataset(t.Context(), "./testcases/semanticSimilarityTest.jsonl", 1, nil)
+	trainDataset, err := datasets.NewSemanticSimilarityDataset(t.Context(), testutil.TestCasesFolder + "semanticSimilarityTest.jsonl", 1, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -175,7 +175,7 @@ func TestTrainSemanticSimilarity(t *testing.T) {
 	// next we create a trainEvalDataset. This is the same as the train dataset, but it will be used to evaluate the model on
 	// in-sample data at the end of each epoch.
 	// We can also specify an eval dataset with early stopping (see test below).
-	trainEvalDataset, err := datasets.NewSemanticSimilarityDataset(t.Context(), "./testcases/semanticSimilarityTest.jsonl", 1, nil)
+	trainEvalDataset, err := datasets.NewSemanticSimilarityDataset(t.Context(), testutil.TestCasesFolder + "semanticSimilarityTest.jsonl", 1, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -246,12 +246,12 @@ func TestTrainSemanticSimilarityCuda(t *testing.T) {
 		t.SkipNow()
 	}
 
-	dataset, err := datasets.NewSemanticSimilarityDataset(t.Context(), "./testcases/semanticSimilarityTest.jsonl", 32, nil)
+	dataset, err := datasets.NewSemanticSimilarityDataset(t.Context(), testutil.TestCasesFolder + "semanticSimilarityTest.jsonl", 32, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	modelPath := "./models/KnightsAnalytics_all-MiniLM-L6-v2"
+	modelPath := testutil.ModelsFolder + "KnightsAnalytics_all-MiniLM-L6-v2"
 
 	session, err := hugot.NewXLATrainingSession[*pipelines.FeatureExtractionPipeline](
 		t.Context(),
@@ -275,15 +275,15 @@ func TestTrainSemanticSimilarityCuda(t *testing.T) {
 	}
 
 	// we now write the fine-tuned pipeline back to disk as an onnx model
-	if e := session.Save(t.Context(), "./models/testTrain"); e != nil {
+	if e := session.Save(t.Context(), testutil.ModelsFolder + "testTrain"); e != nil {
 		t.Fatal(e)
 	}
-	if exists, existsErr := fileutil.FileExists(t.Context(), "./models/testTrain"); existsErr != nil {
+	if exists, existsErr := fileutil.FileExists(t.Context(), testutil.ModelsFolder + "testTrain"); existsErr != nil {
 		t.Fatal(err)
 	} else if !exists {
-		t.Fatal("model file ./models/testTrain does not exist")
+		t.Fatal("model file " + testutil.ModelsFolder + "testTrain does not exist")
 	}
-	if err = fileutil.DeleteFile(t.Context(), "./models/testTrain"); err != nil {
+	if err = fileutil.DeleteFile(t.Context(), testutil.ModelsFolder + "testTrain"); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -293,12 +293,12 @@ func TestTrainSemanticSimilarityGo(t *testing.T) {
 		t.SkipNow()
 	}
 
-	dataset, err := datasets.NewSemanticSimilarityDataset(t.Context(), "./testcases/semanticSimilarityTest.jsonl", 1, nil)
+	dataset, err := datasets.NewSemanticSimilarityDataset(t.Context(), testutil.TestCasesFolder + "semanticSimilarityTest.jsonl", 1, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	modelPath := "./models/KnightsAnalytics_all-MiniLM-L6-v2"
+	modelPath := testutil.ModelsFolder + "KnightsAnalytics_all-MiniLM-L6-v2"
 
 	session, err := hugot.NewGoTrainingSession[*pipelines.FeatureExtractionPipeline](
 		t.Context(),
@@ -321,33 +321,33 @@ func TestTrainSemanticSimilarityGo(t *testing.T) {
 	}
 
 	// we now write the fine-tuned pipeline back to disk as an onnx model
-	if e := session.Save(t.Context(), "./models/testTrain"); e != nil {
+	if e := session.Save(t.Context(), testutil.ModelsFolder + "testTrain"); e != nil {
 		t.Fatal(e)
 	}
-	if exists, existsErr := fileutil.FileExists(t.Context(), "./models/testTrain"); existsErr != nil {
+	if exists, existsErr := fileutil.FileExists(t.Context(), testutil.ModelsFolder + "testTrain"); existsErr != nil {
 		t.Fatal(err)
 	} else if !exists {
-		t.Fatal("model file ./models/testTrain does not exist")
+		t.Fatal("model file " + testutil.ModelsFolder + "testTrain does not exist")
 	}
-	if err = fileutil.DeleteFile(t.Context(), "./models/testTrain"); err != nil {
+	if err = fileutil.DeleteFile(t.Context(), testutil.ModelsFolder + "testTrain"); err != nil {
 		t.Fatal(err)
 	}
 }
 
 func TestEarlyStopping(t *testing.T) {
-	modelPath := "./models/KnightsAnalytics_all-MiniLM-L6-v2"
+	modelPath := testutil.ModelsFolder + "KnightsAnalytics_all-MiniLM-L6-v2"
 
-	trainDataset, err := datasets.NewSemanticSimilarityDataset(t.Context(), "./testcases/semanticSimilarityTest.jsonl", 1, nil)
+	trainDataset, err := datasets.NewSemanticSimilarityDataset(t.Context(), testutil.TestCasesFolder + "semanticSimilarityTest.jsonl", 1, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	evalDataset, err := datasets.NewSemanticSimilarityDataset(t.Context(), "./testcases/semanticSimilarityTestEval.jsonl", 1, nil)
+	evalDataset, err := datasets.NewSemanticSimilarityDataset(t.Context(), testutil.TestCasesFolder + "semanticSimilarityTestEval.jsonl", 1, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	defer func() {
-		err := os.RemoveAll("./models/testTrainEval")
+ 	err := os.RemoveAll(testutil.ModelsFolder + "testTrainEval")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -377,7 +377,7 @@ func TestEarlyStopping(t *testing.T) {
 	}
 
 	// save the model
-	if saveErr := trainingSession.Save(t.Context(), "./models/testTrainEval"); saveErr != nil {
+	if saveErr := trainingSession.Save(t.Context(), testutil.ModelsFolder + "testTrainEval"); saveErr != nil {
 		t.Fatal(saveErr)
 	}
 }
