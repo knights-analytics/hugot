@@ -1,6 +1,6 @@
 module github.com/knights-analytics/hugot
 
-go 1.26.0
+go 1.26
 
 require (
 	github.com/daulet/tokenizers v1.27.0
