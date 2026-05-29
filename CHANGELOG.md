@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
+## [0.7.5] - 2026-06-05
+
+###  Changed
+
+- Upgraded to ORT v1.26.0
+- Upgraded to ORT GenAI v0.14.0
+
 ## [0.7.4] - 2026-05-24
 
 ###  Changed

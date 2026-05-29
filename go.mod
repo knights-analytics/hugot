@@ -10,7 +10,7 @@ require (
 	github.com/knights-analytics/ortgenai v0.3.1
 	github.com/stretchr/testify v1.11.1
 	github.com/viant/afs v1.30.0
-	github.com/yalue/onnxruntime_go v1.30.1
+	github.com/yalue/onnxruntime_go v1.31.0
 	golang.org/x/image v0.41.0
 	golang.org/x/sync v0.20.0
 )
@@ -28,7 +28,7 @@ require (
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	golang.org/x/crypto v0.52.0 // indirect
-	golang.org/x/exp v0.0.0-20260508232706-74f9aab9d74a // indirect
+	golang.org/x/exp v0.0.0-20260603202125-055de637280b // indirect
 	golang.org/x/sys v0.45.0 // indirect
 	golang.org/x/term v0.43.0 // indirect
 	golang.org/x/text v0.37.0 // indirect
