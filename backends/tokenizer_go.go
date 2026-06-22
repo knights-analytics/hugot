@@ -38,7 +38,6 @@ func loadGoTokenizer(tokenizerBytes []byte, model *Model) error {
 			TypeIDs:       typeIDs,
 			AttentionMask: attentionMask,
 		},
-		TokenizerTimings: &timings{},
 		MaxAllowedTokens: model.MaxPositionEmbeddings,
 		Destroy: func() error {
 			return nil

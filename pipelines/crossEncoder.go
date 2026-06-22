@@ -116,8 +116,10 @@ func (p *CrossEncoderPipeline) GetStatistics() backends.PipelineStatistics {
 		avgLatency = time.Duration(float64(p.statistics.AverageLatency) / float64(p.statistics.TotalQueries))
 	}
 	statistics := backends.PipelineStatistics{}
-	statistics.ComputeTokenizerStatistics(p.Model.Tokenizer.TokenizerTimings)
-	statistics.ComputeOnnxStatistics(p.PipelineTimings)
+	if p.TokenizerTimings != nil {
+		statistics.ComputeTokenizerStatistics(p.TokenizerTimings)
+	}
+	statistics.ComputeOnnxStatistics(p.ONNXTimings)
 	statistics.TotalQueries = p.statistics.TotalQueries
 	statistics.TotalDocuments = p.statistics.TotalDocuments
 	statistics.AverageLatency = avgLatency
@@ -162,8 +164,8 @@ func (p *CrossEncoderPipeline) Validate() error {
 func (p *CrossEncoderPipeline) preprocessPairs(batch *backends.PipelineBatch, inputs [][2]string) error {
 	start := time.Now()
 	backends.TokenizeInputPairs(batch, p.Model.Tokenizer, inputs, p.Model.SeparatorToken)
-	atomic.AddUint64(&p.Model.Tokenizer.TokenizerTimings.NumCalls, 1)
-	atomic.AddUint64(&p.Model.Tokenizer.TokenizerTimings.TotalNS, safeconv.DurationToU64(time.Since(start)))
+	atomic.AddUint64(&p.TokenizerTimings.NumCalls, 1)
+	atomic.AddUint64(&p.TokenizerTimings.TotalNS, safeconv.DurationToU64(time.Since(start)))
 	err := backends.CreateInputTensors(batch, p.Model, p.Runtime)
 	return err
 }
@@ -177,8 +179,8 @@ func (p *CrossEncoderPipeline) forward(ctx context.Context, batch *backends.Pipe
 	if err != nil {
 		return err
 	}
-	atomic.AddUint64(&p.PipelineTimings.NumCalls, 1)
-	atomic.AddUint64(&p.PipelineTimings.TotalNS, safeconv.DurationToU64(time.Since(start)))
+	atomic.AddUint64(&p.ONNXTimings.NumCalls, 1)
+	atomic.AddUint64(&p.ONNXTimings.TotalNS, safeconv.DurationToU64(time.Since(start)))
 	return nil
 }
 

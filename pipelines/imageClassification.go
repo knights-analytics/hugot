@@ -117,7 +117,7 @@ func (p *ImageClassificationPipeline) GetMetadata() backends.PipelineMetadata {
 
 func (p *ImageClassificationPipeline) GetStatistics() backends.PipelineStatistics {
 	statistics := backends.PipelineStatistics{}
-	statistics.ComputeOnnxStatistics(p.PipelineTimings)
+	statistics.ComputeOnnxStatistics(p.ONNXTimings)
 	return statistics
 }
 
@@ -148,8 +148,8 @@ func (p *ImageClassificationPipeline) forward(ctx context.Context, batch *backen
 	if err := backends.RunSessionOnBatch(ctx, batch, p.BasePipeline); err != nil {
 		return err
 	}
-	atomic.AddUint64(&p.PipelineTimings.NumCalls, 1)
-	atomic.AddUint64(&p.PipelineTimings.TotalNS, safeconv.DurationToU64(time.Since(start)))
+	atomic.AddUint64(&p.ONNXTimings.NumCalls, 1)
+	atomic.AddUint64(&p.ONNXTimings.TotalNS, safeconv.DurationToU64(time.Since(start)))
 	return nil
 }
 

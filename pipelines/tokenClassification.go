@@ -168,8 +168,10 @@ func (p *TokenClassificationPipeline) GetMetadata() backends.PipelineMetadata {
 // GetStatistics returns the runtime statistics for the pipeline.
 func (p *TokenClassificationPipeline) GetStatistics() backends.PipelineStatistics {
 	statistics := backends.PipelineStatistics{}
-	statistics.ComputeTokenizerStatistics(p.Model.Tokenizer.TokenizerTimings)
-	statistics.ComputeOnnxStatistics(p.PipelineTimings)
+	if p.TokenizerTimings != nil {
+		statistics.ComputeTokenizerStatistics(p.TokenizerTimings)
+	}
+	statistics.ComputeOnnxStatistics(p.ONNXTimings)
 	return statistics
 }
 
@@ -201,8 +203,8 @@ func (p *TokenClassificationPipeline) preprocess(batch *backends.PipelineBatch, 
 	}
 	start := time.Now()
 	backends.TokenizeInputs(batch, p.Model.Tokenizer, inputs)
-	atomic.AddUint64(&p.Model.Tokenizer.TokenizerTimings.NumCalls, 1)
-	atomic.AddUint64(&p.Model.Tokenizer.TokenizerTimings.TotalNS, safeconv.DurationToU64(time.Since(start)))
+	atomic.AddUint64(&p.TokenizerTimings.NumCalls, 1)
+	atomic.AddUint64(&p.TokenizerTimings.TotalNS, safeconv.DurationToU64(time.Since(start)))
 	err := backends.CreateInputTensors(batch, p.Model, p.Runtime)
 	return err
 }
@@ -247,8 +249,8 @@ func (p *TokenClassificationPipeline) preprocessWords(batch *backends.PipelineBa
 		wordBoundaries[i] = boundaries
 	}
 	backends.TokenizeInputs(batch, p.Model.Tokenizer, joined)
-	atomic.AddUint64(&p.Model.Tokenizer.TokenizerTimings.NumCalls, 1)
-	atomic.AddUint64(&p.Model.Tokenizer.TokenizerTimings.TotalNS, safeconv.DurationToU64(time.Since(start)))
+	atomic.AddUint64(&p.TokenizerTimings.NumCalls, 1)
+	atomic.AddUint64(&p.TokenizerTimings.TotalNS, safeconv.DurationToU64(time.Since(start)))
 
 	for i := range batch.Input {
 		// set raw to joined string for offsets consistency
@@ -264,8 +266,8 @@ func (p *TokenClassificationPipeline) forward(ctx context.Context, batch *backen
 	if err != nil {
 		return err
 	}
-	atomic.AddUint64(&p.PipelineTimings.NumCalls, 1)
-	atomic.AddUint64(&p.PipelineTimings.TotalNS, safeconv.DurationToU64(time.Since(start)))
+	atomic.AddUint64(&p.ONNXTimings.NumCalls, 1)
+	atomic.AddUint64(&p.ONNXTimings.TotalNS, safeconv.DurationToU64(time.Since(start)))
 	return nil
 }
 

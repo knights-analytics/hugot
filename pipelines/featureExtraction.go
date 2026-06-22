@@ -157,10 +157,10 @@ func (p *FeatureExtractionPipeline) GetMetadata() backends.PipelineMetadata {
 // GetStatistics returns the runtime statistics for the pipeline.
 func (p *FeatureExtractionPipeline) GetStatistics() backends.PipelineStatistics {
 	statistics := backends.PipelineStatistics{}
-	if p.Model.Tokenizer != nil && p.Model.Tokenizer.TokenizerTimings != nil {
-		statistics.ComputeTokenizerStatistics(p.Model.Tokenizer.TokenizerTimings)
+	if p.TokenizerTimings != nil {
+		statistics.ComputeTokenizerStatistics(p.TokenizerTimings)
 	}
-	statistics.ComputeOnnxStatistics(p.PipelineTimings)
+	statistics.ComputeOnnxStatistics(p.ONNXTimings)
 	return statistics
 }
 
@@ -200,8 +200,8 @@ func (p *FeatureExtractionPipeline) Validate() error {
 func (p *FeatureExtractionPipeline) preprocess(batch *backends.PipelineBatch, inputs []string) error {
 	start := time.Now()
 	backends.TokenizeInputs(batch, p.Model.Tokenizer, inputs)
-	atomic.AddUint64(&p.Model.Tokenizer.TokenizerTimings.NumCalls, 1)
-	atomic.AddUint64(&p.Model.Tokenizer.TokenizerTimings.TotalNS, safeconv.DurationToU64(time.Since(start)))
+	atomic.AddUint64(&p.TokenizerTimings.NumCalls, 1)
+	atomic.AddUint64(&p.TokenizerTimings.TotalNS, safeconv.DurationToU64(time.Since(start)))
 	err := backends.CreateInputTensors(batch, p.Model, p.Runtime)
 	return err
 }
@@ -213,8 +213,8 @@ func (p *FeatureExtractionPipeline) forward(ctx context.Context, batch *backends
 	if err != nil {
 		return err
 	}
-	atomic.AddUint64(&p.PipelineTimings.NumCalls, 1)
-	atomic.AddUint64(&p.PipelineTimings.TotalNS, safeconv.DurationToU64(time.Since(start)))
+	atomic.AddUint64(&p.ONNXTimings.NumCalls, 1)
+	atomic.AddUint64(&p.ONNXTimings.TotalNS, safeconv.DurationToU64(time.Since(start)))
 	return nil
 }
 

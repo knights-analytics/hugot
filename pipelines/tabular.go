@@ -148,7 +148,7 @@ func (p *TabularPipeline) GetMetadata() backends.PipelineMetadata {
 
 func (p *TabularPipeline) GetStatistics() backends.PipelineStatistics {
 	stats := backends.PipelineStatistics{}
-	stats.ComputeOnnxStatistics(p.PipelineTimings)
+	stats.ComputeOnnxStatistics(p.ONNXTimings)
 	return stats
 }
 
@@ -228,8 +228,8 @@ func (p *TabularPipeline) forward(ctx context.Context, batch *backends.PipelineB
 	if err := backends.RunSessionOnBatch(ctx, batch, p.BasePipeline); err != nil {
 		return err
 	}
-	atomic.AddUint64(&p.PipelineTimings.NumCalls, 1)
-	atomic.AddUint64(&p.PipelineTimings.TotalNS, safeconv.DurationToU64(time.Since(start)))
+	atomic.AddUint64(&p.ONNXTimings.NumCalls, 1)
+	atomic.AddUint64(&p.ONNXTimings.TotalNS, safeconv.DurationToU64(time.Since(start)))
 	return nil
 }
 

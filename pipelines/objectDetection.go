@@ -47,7 +47,7 @@ func (p *ObjectDetectionPipeline) setImageFormat(format string) {
 
 func (p *ObjectDetectionPipeline) GetStatistics() backends.PipelineStatistics {
 	statistics := backends.PipelineStatistics{}
-	statistics.ComputeOnnxStatistics(p.PipelineTimings)
+	statistics.ComputeOnnxStatistics(p.ONNXTimings)
 	return statistics
 }
 
@@ -144,9 +144,9 @@ func (p *ObjectDetectionPipeline) GetStats() []string {
 	return []string{
 		fmt.Sprintf("Statistics for pipeline: %s", p.PipelineName),
 		fmt.Sprintf("ONNX: Total time=%s, Execution count=%d, Average query time=%s",
-			safeconv.U64ToDuration(p.PipelineTimings.TotalNS),
-			p.PipelineTimings.NumCalls,
-			time.Duration(float64(p.PipelineTimings.TotalNS)/math.Max(1, float64(p.PipelineTimings.NumCalls)))),
+			safeconv.U64ToDuration(p.ONNXTimings.TotalNS),
+			p.ONNXTimings.NumCalls,
+			time.Duration(float64(p.ONNXTimings.TotalNS)/math.Max(1, float64(p.ONNXTimings.NumCalls)))),
 	}
 }
 
@@ -199,8 +199,8 @@ func (p *ObjectDetectionPipeline) forward(ctx context.Context, batch *backends.P
 	if err := backends.RunSessionOnBatch(ctx, batch, p.BasePipeline); err != nil {
 		return err
 	}
-	atomic.AddUint64(&p.PipelineTimings.NumCalls, 1)
-	atomic.AddUint64(&p.PipelineTimings.TotalNS, safeconv.DurationToU64(time.Since(start)))
+	atomic.AddUint64(&p.ONNXTimings.NumCalls, 1)
+	atomic.AddUint64(&p.ONNXTimings.TotalNS, safeconv.DurationToU64(time.Since(start)))
 	return nil
 }
 

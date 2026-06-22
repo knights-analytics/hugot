@@ -26,7 +26,7 @@ func loadRustTokenizer(tokenizerBytes []byte, model *Model) error {
 	if optErr != nil {
 		return errors.Join(optErr, tk.Close())
 	}
-	model.Tokenizer = &Tokenizer{Runtime: "RUST", RustTokenizer: &RustTokenizer{Tokenizer: tk, Options: rustOptions}, TokenizerTimings: &timings{}, MaxAllowedTokens: model.MaxPositionEmbeddings, Destroy: func() error {
+	model.Tokenizer = &Tokenizer{Runtime: "RUST", RustTokenizer: &RustTokenizer{Tokenizer: tk, Options: rustOptions}, MaxAllowedTokens: model.MaxPositionEmbeddings, Destroy: func() error {
 		return tk.Close()
 	}}
 	return nil

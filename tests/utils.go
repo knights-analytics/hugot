@@ -21,8 +21,10 @@ import (
 	"github.com/knights-analytics/hugot/util/imageutil"
 )
 
-const ModelsFolder = "../../models/"
-const TestCasesFolder = "../../testcases/"
+const (
+	ModelsFolder    = "../../models/"
+	TestCasesFolder = "../../testcases/"
+)
 
 // test download validation
 
@@ -110,10 +112,10 @@ func FeatureExtractionPipeline(t *testing.T, session *hugot.Session) {
 	}
 
 	zero := uint64(0)
-	assert.Greater(t, pipeline.PipelineTimings.NumCalls, zero, "PipelineTimings.NumCalls should be greater than 0")
-	assert.Greater(t, pipeline.PipelineTimings.TotalNS, zero, "PipelineTimings.TotalNS should be greater than 0")
-	assert.Greater(t, pipeline.Model.Tokenizer.TokenizerTimings.NumCalls, zero, "TokenizerTimings.NumCalls should be greater than 0")
-	assert.Greater(t, pipeline.Model.Tokenizer.TokenizerTimings.TotalNS, zero, "TokenizerTimings.TotalNS should be greater than 0")
+	assert.Greater(t, pipeline.ONNXTimings.NumCalls, zero, "PipelineTimings.NumCalls should be greater than 0")
+	assert.Greater(t, pipeline.ONNXTimings.TotalNS, zero, "PipelineTimings.TotalNS should be greater than 0")
+	assert.Greater(t, pipeline.TokenizerTimings.NumCalls, zero, "TokenizerTimings.NumCalls should be greater than 0")
+	assert.Greater(t, pipeline.TokenizerTimings.TotalNS, zero, "TokenizerTimings.TotalNS should be greater than 0")
 
 	// test normalization
 	testResults = expectedResults["normalizedOutput"]
@@ -974,7 +976,7 @@ func CrossEncoderPipelineValidation(t *testing.T, session *hugot.Session) {
 	}
 }
 
-// Image classification test using HuggingFace SqueezeNet and a sample image.
+// ImageClassificationPipeline test using HuggingFace SqueezeNet and a sample image.
 func ImageClassificationPipeline(t *testing.T, session *hugot.Session) {
 	t.Helper()
 
@@ -1180,21 +1182,20 @@ func DestroyPipelines(t *testing.T, session *hugot.Session) {
 		}
 	}
 
-	if err := hugot.ClosePipeline[*pipelines.TokenClassificationPipeline](session, "testClosePipeline"); err != nil {
+	if err = hugot.ClosePipeline[*pipelines.TokenClassificationPipeline](session, "testClosePipeline"); err != nil {
 		t.Fatal(err)
 	}
 
 	if len(session.GetModels()) != 0 {
 		t.Fatal("Session should have 0 models")
 	}
-	pipelines, err := hugot.GetPipelines[*pipelines.TokenClassificationPipeline](session)
+	p, err := hugot.GetPipelines[*pipelines.TokenClassificationPipeline](session)
 	CheckT(t, err)
-	if len(pipelines) != 0 {
+	if len(p) != 0 {
 		t.Fatal("Session should have 0 token classification pipelines")
 	}
 }
 
-// Text Generation.
 func TextGenerationPipeline(t *testing.T, session *hugot.Session) {
 	t.Helper()
 	modelPath := ModelsFolder + "/KnightsAnalytics_qwen3-4B-int4"

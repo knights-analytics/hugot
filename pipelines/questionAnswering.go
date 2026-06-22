@@ -141,10 +141,10 @@ func (p *QuestionAnsweringPipeline) GetMetadata() backends.PipelineMetadata {
 // GetStatistics returns runtime statistics for the pipeline.
 func (p *QuestionAnsweringPipeline) GetStatistics() backends.PipelineStatistics {
 	stats := backends.PipelineStatistics{}
-	if p.Model.Tokenizer != nil && p.Model.Tokenizer.TokenizerTimings != nil {
-		stats.ComputeTokenizerStatistics(p.Model.Tokenizer.TokenizerTimings)
+	if p.TokenizerTimings != nil {
+		stats.ComputeTokenizerStatistics(p.TokenizerTimings)
 	}
-	stats.ComputeOnnxStatistics(p.PipelineTimings)
+	stats.ComputeOnnxStatistics(p.ONNXTimings)
 	return stats
 }
 
@@ -183,8 +183,8 @@ func (p *QuestionAnsweringPipeline) preprocess(batch *backends.PipelineBatch, in
 		inputPairs = append(inputPairs, [2]string{in.Question, in.Context})
 	}
 	backends.TokenizeInputPairs(batch, p.Model.Tokenizer, inputPairs, p.Model.SeparatorToken)
-	atomic.AddUint64(&p.Model.Tokenizer.TokenizerTimings.NumCalls, 1)
-	atomic.AddUint64(&p.Model.Tokenizer.TokenizerTimings.TotalNS, safeconv.DurationToU64(time.Since(start)))
+	atomic.AddUint64(&p.TokenizerTimings.NumCalls, 1)
+	atomic.AddUint64(&p.TokenizerTimings.TotalNS, safeconv.DurationToU64(time.Since(start)))
 	err := backends.CreateInputTensors(batch, p.Model, p.Runtime)
 	return err
 }
@@ -195,8 +195,8 @@ func (p *QuestionAnsweringPipeline) forward(ctx context.Context, batch *backends
 	if err := backends.RunSessionOnBatch(ctx, batch, p.BasePipeline); err != nil {
 		return err
 	}
-	atomic.AddUint64(&p.PipelineTimings.NumCalls, 1)
-	atomic.AddUint64(&p.PipelineTimings.TotalNS, safeconv.DurationToU64(time.Since(start)))
+	atomic.AddUint64(&p.ONNXTimings.NumCalls, 1)
+	atomic.AddUint64(&p.ONNXTimings.TotalNS, safeconv.DurationToU64(time.Since(start)))
 	return nil
 }
 

@@ -16,11 +16,12 @@ import (
 
 // BasePipeline can be embedded by a pipeline.
 type BasePipeline struct {
-	Model           *Model
-	PipelineTimings *timings
-	PipelineName    string
-	Runtime         string
-	SessionContext  context.Context
+	Model            *Model
+	ONNXTimings      *timings
+	TokenizerTimings *timings
+	PipelineName     string
+	Runtime          string
+	SessionContext   context.Context
 }
 
 type InputOutputInfo struct {
@@ -270,7 +271,8 @@ func NewBasePipeline[T Pipeline](sessionContext context.Context, config Pipeline
 	pipeline.Runtime = s.Backend
 	pipeline.PipelineName = config.Name
 	pipeline.Model = model
-	pipeline.PipelineTimings = &timings{}
+	pipeline.ONNXTimings = &timings{}
+	pipeline.TokenizerTimings = &timings{}
 	pipeline.SessionContext = sessionContext
 	return pipeline, nil
 }

@@ -11,7 +11,6 @@ import (
 type Tokenizer struct {
 	RustTokenizer    *RustTokenizer
 	GoTokenizer      *GoTokenizer
-	TokenizerTimings *timings
 	Destroy          func() error
 	Runtime          string
 	MaxAllowedTokens int
