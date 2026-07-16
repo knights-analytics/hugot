@@ -21,6 +21,7 @@ type TokenClassificationPipeline struct {
 	*backends.BasePipeline
 	IDLabelMap          map[int]string
 	AggregationStrategy string
+	UnkToken            string
 	IgnoreLabels        []string
 	SplitWords          bool
 }
@@ -123,6 +124,7 @@ func NewTokenClassificationPipeline(sessionContext context.Context, config backe
 	}
 	// Id label map
 	pipeline.IDLabelMap = model.IDLabelMap
+	pipeline.UnkToken = model.UnkToken
 	// default strategies if not set
 	if pipeline.AggregationStrategy == "" {
 		pipeline.AggregationStrategy = "SIMPLE"
@@ -328,10 +330,8 @@ func (p *TokenClassificationPipeline) gatherPreEntities(input backends.Tokenized
 		startInd := input.Offsets[j][0]
 		endInd := input.Offsets[j][1]
 		wordRef := sentence[startInd:endInd]
-		isSubword := len(word) != len(wordRef)
+		isSubword := len(word) != len(wordRef) || (p.UnkToken != "" && word == p.UnkToken)
 		// In split-words mode, grouping will use offsets between tokens rather than IsSubword.
-		// TODO: check for unknown token here, it's in the config and can be loaded and compared with the token
-		// in that case set the subword as in the python code
 		preEntities = append(preEntities, Entity{
 			Word:      word,
 			TokenIDs:  []uint32{tokenID},
