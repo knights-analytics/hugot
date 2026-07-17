@@ -27,7 +27,7 @@ type Model struct {
 	OnnxFilename          string
 	OnnxPath              string
 	OnnxReader            io.ReadCloser
-	UnkToken              string
+	UnknownToken          string
 	InputsMeta            []InputOutputInfo
 	OutputsMeta           []InputOutputInfo
 	MaxPositionEmbeddings int
@@ -233,10 +233,8 @@ func loadModelConfig(ctx context.Context, model *Model) error {
 					model.SeparatorToken = s
 				}
 			}
-			if unkToken, ok := tcMap["unk_token"]; ok {
-				if s, isStr := unkToken.(string); isStr && s != "" {
-					model.UnkToken = s
-				}
+			if unknownToken, ok := tcMap["unk_token"].(string); ok && unknownToken != "" {
+				model.UnknownToken = unknownToken
 			}
 		}
 	}
