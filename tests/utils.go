@@ -1157,6 +1157,32 @@ func NoSameNamePipeline(t *testing.T, session *hugot.Session) {
 	assert.Error(t, err3)
 }
 
+// NoSameNameAcrossTypesPipeline verifies that pipeline names are unique per session across
+// pipeline types, not only within a single type. Creating a second pipeline of a different type
+// under an already-used name must fail.
+func NoSameNameAcrossTypesPipeline(t *testing.T, session *hugot.Session) {
+	t.Helper()
+
+	tokenConfig := hugot.TokenClassificationConfig{
+		ModelPath: ModelsFolder + "KnightsAnalytics_distilbert-NER",
+		Name:      "sharedName",
+		Options: []hugot.TokenClassificationOption{
+			pipelines.WithSimpleAggregation(),
+			pipelines.WithIgnoreLabels([]string{"O"}),
+		},
+	}
+	if _, err := hugot.NewPipeline(session, tokenConfig); err != nil {
+		t.Fatalf("failed to create token classification pipeline: %s", err)
+	}
+
+	textConfig := hugot.TextClassificationConfig{
+		ModelPath: ModelsFolder + "KnightsAnalytics_distilbert-base-uncased-finetuned-sst-2-english",
+		Name:      "sharedName",
+	}
+	_, err := hugot.NewPipeline(session, textConfig)
+	assert.Error(t, err, "expected an error creating a different pipeline type under an already-used name")
+}
+
 func DestroyPipelines(t *testing.T, session *hugot.Session) {
 	t.Helper()
 

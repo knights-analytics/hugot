@@ -249,6 +249,16 @@ func TestNoSameNamePipelineGo(t *testing.T) {
 	testutil.NoSameNamePipeline(t, session)
 }
 
+func TestNoSameNameAcrossTypesPipelineGo(t *testing.T) {
+	session, err := hugot.NewGoSession(t.Context())
+	testutil.CheckT(t, err)
+	defer func(session *hugot.Session) {
+		destroyErr := session.Destroy()
+		testutil.CheckT(t, destroyErr)
+	}(session)
+	testutil.NoSameNameAcrossTypesPipeline(t, session)
+}
+
 func TestDestroyPipelineGo(t *testing.T) {
 	session, err := hugot.NewGoSession(t.Context())
 	testutil.CheckT(t, err)
