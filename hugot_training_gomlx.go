@@ -10,21 +10,20 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/gomlx/gomlx/pkg/core/graph"
-	"github.com/gomlx/gomlx/pkg/core/tensors"
-	gomlxcontext "github.com/gomlx/gomlx/pkg/ml/context"
-	"github.com/gomlx/gomlx/pkg/ml/train"
-	"github.com/gomlx/gomlx/pkg/ml/train/losses"
-	"github.com/gomlx/gomlx/pkg/ml/train/optimizers"
-
-	"github.com/gomlx/gomlx/pkg/core/dtypes"
+	"github.com/gomlx/compute/dtypes"
+	"github.com/gomlx/gomlx/core/graph"
+	"github.com/gomlx/gomlx/core/tensors"
+	mlmodel "github.com/gomlx/gomlx/ml/model"
+	"github.com/gomlx/gomlx/ml/train"
+	"github.com/gomlx/gomlx/ml/train/loss"
+	"github.com/gomlx/gomlx/ml/train/optimizer"
 	"github.com/knights-analytics/hugot/backends"
 	"github.com/knights-analytics/hugot/pipelines"
 )
 
 type GOMLXTrainingOptions struct {
-	Optimizer optimizers.Interface
-	Loss      losses.LossFn
+	Optimizer optimizer.Interface
+	Loss      loss.LossFn
 }
 
 type stoppingError struct{}
@@ -62,10 +61,10 @@ func newGoMLXTrainingSession(s *TrainingSession) (*TrainingSession, error) {
 			s.config.GOMLXTrainingOptions = &GOMLXTrainingOptions{}
 		}
 		if s.config.GOMLXTrainingOptions.Optimizer == nil {
-			s.config.GOMLXTrainingOptions.Optimizer = optimizers.StochasticGradientDescent()
+			s.config.GOMLXTrainingOptions.Optimizer = optimizer.StochasticGradientDescent()
 		}
 		if s.config.GOMLXTrainingOptions.Loss == nil {
-			s.config.GOMLXTrainingOptions.Loss = losses.MeanSquaredError
+			s.config.GOMLXTrainingOptions.Loss = loss.MeanSquaredError
 		}
 	default:
 		return nil, fmt.Errorf("loss function is required")
@@ -76,15 +75,15 @@ func newGoMLXTrainingSession(s *TrainingSession) (*TrainingSession, error) {
 func TrainGoMLX(s *TrainingSession) error {
 	switch p := s.pipeline.(type) {
 	case *pipelines.FeatureExtractionPipeline:
-		GoMLXModel := p.Model.GoMLXModel
-		backend := GoMLXModel.Backend
-		ctx := GoMLXModel.Ctx
+		goMLXModel := p.Model.GoMLXModel
+		backend := goMLXModel.Backend
+		store := goMLXModel.Store
 
 		// freeze the layers if requested
 		freezeAllButLast := slices.Contains(s.freezeLayers, -1)
 		re := regexp.MustCompile(`layer\.(\d+)`) // identify the layer number in the variable name
 
-		for v := range ctx.IterVariables() {
+		for v := range store.IterVariables() {
 			name := v.Name()
 			if (s.freezeEmbeddings || freezeAllButLast) && strings.HasPrefix(name, "embeddings") {
 				v.SetTrainable(false)
@@ -104,12 +103,12 @@ func TrainGoMLX(s *TrainingSession) error {
 			}
 		}
 
-		modelFn := func(ctx *gomlxcontext.Context, _ any, inputs []*gomlxcontext.Node) []*gomlxcontext.Node {
+		modelFn := func(scope *mlmodel.Scope, _ any, inputs []*mlmodel.Node) []*mlmodel.Node {
 			inputsLHS := inputs[:3] // inputIDs, attentionMask, tokenTypeIDs if present
 			inputsRHS := inputs[3:]
 
-			embeddingLHS := GoMLXModel.Call(ctx.Reuse(), inputsLHS)[0]
-			embeddingRHS := GoMLXModel.Call(ctx.Reuse(), inputsRHS)[0]
+			embeddingLHS := goMLXModel.Call(scope, inputsLHS)[0]
+			embeddingRHS := goMLXModel.Call(scope, inputsRHS)[0]
 
 			// we mean pool the results if needed e.g. if dimensions are [batch, seq, hidden]
 			if len(embeddingLHS.Shape().Dimensions) > 2 {
@@ -125,11 +124,11 @@ func TrainGoMLX(s *TrainingSession) error {
 				embeddingRHS = graph.MaskedReduceMean(embeddingRHS, maskRHS, 1)
 			}
 			cosineSimilarity := graph.CosineSimilarity(embeddingLHS, embeddingRHS, -1)
-			return []*gomlxcontext.Node{cosineSimilarity}
+			return []*mlmodel.Node{cosineSimilarity}
 		}
 
 		gomlxTrainer := train.NewTrainer(backend,
-			ctx,
+			store,
 			modelFn,
 			s.config.GOMLXTrainingOptions.Loss,
 			s.config.GOMLXTrainingOptions.Optimizer,
@@ -164,7 +163,7 @@ func TrainGoMLX(s *TrainingSession) error {
 					if err != nil {
 						return err
 					}
-					meanTrainLoss := lossAndMetrics[1].Value().(float32)
+					meanTrainLoss := lossAndMetrics[0].Value().(float32)
 					trainLosses = append(trainLosses, meanTrainLoss)
 				}
 
@@ -176,7 +175,7 @@ func TrainGoMLX(s *TrainingSession) error {
 					if err != nil {
 						return err
 					}
-					meanLoss := lossAndMetrics[1].Value().(float32)
+					meanLoss := lossAndMetrics[0].Value().(float32)
 					evalLosses = append(evalLosses, meanLoss)
 
 					if bestLoss-meanLoss > s.earlyStopping.tolerance {

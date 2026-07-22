@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"strconv"
 	"strings"
@@ -152,9 +153,7 @@ func loadModelConfig(ctx context.Context, model *Model) error {
 		}
 		// Some multimodal models store text model config under text_config, so standardise that now
 		if tc, ok := configMap["text_config"].(map[string]any); ok {
-			for k, v := range tc {
-				configMap[k] = v
-			}
+			maps.Copy(configMap, tc)
 		}
 		if maxPositionEmbeddingsRaw, existsOk := configMap["max_position_embeddings"]; existsOk {
 			if maxPositionEmbeddings, castOk := maxPositionEmbeddingsRaw.(float64); castOk {
@@ -187,7 +186,7 @@ func loadModelConfig(ctx context.Context, model *Model) error {
 		if readErr != nil {
 			return readErr
 		}
-		var configMap map[string]interface{}
+		var configMap map[string]any
 		readErr = json.Unmarshal(configBytes, &configMap)
 		if readErr != nil {
 			return readErr
@@ -195,7 +194,7 @@ func loadModelConfig(ctx context.Context, model *Model) error {
 
 		if sepToken, exists := configMap["sep_token"]; exists {
 			switch v := sepToken.(type) {
-			case map[string]interface{}:
+			case map[string]any:
 				t, contentOk := v["content"]
 				if !contentOk {
 					return fmt.Errorf("sep_token is map but no content field is available")
@@ -224,7 +223,7 @@ func loadModelConfig(ctx context.Context, model *Model) error {
 			if tcReadErr != nil {
 				return tcReadErr
 			}
-			var tcMap map[string]interface{}
+			var tcMap map[string]any
 			if tcReadErr = json.Unmarshal(tcBytes, &tcMap); tcReadErr != nil {
 				return tcReadErr
 			}
@@ -251,12 +250,12 @@ func loadModelConfig(ctx context.Context, model *Model) error {
 			if tjReadErr != nil {
 				return tjReadErr
 			}
-			var tjMap map[string]interface{}
+			var tjMap map[string]any
 			if tjReadErr = json.Unmarshal(tjBytes, &tjMap); tjReadErr != nil {
 				return tjReadErr
 			}
-			if pp, ok := tjMap["post_processor"].(map[string]interface{}); ok {
-				if specialTokens, ok := pp["special_tokens"].(map[string]interface{}); ok {
+			if pp, ok := tjMap["post_processor"].(map[string]any); ok {
+				if specialTokens, ok := pp["special_tokens"].(map[string]any); ok {
 					for _, candidate := range []string{"[SEP]", "</s>"} {
 						if _, found := specialTokens[candidate]; found {
 							model.SeparatorToken = candidate
@@ -328,7 +327,7 @@ func flatDataTo3D[T float32 | int64 | int32](input []T, paddingMask [][]bool, se
 			}
 			// valid token, create embedding
 			embedding := make([]T, dimension)
-			for i := 0; i < dimension; i++ {
+			for i := range dimension {
 				embedding[i] = input[counter]
 				counter++
 			}
@@ -377,11 +376,11 @@ func flatDataTo4D[T float32 | int64 | int32](input []T, paddingMask [][]bool, gr
 	sequenceLength := len(paddingMask[0]) // S
 	output := make([][][][]T, batchSize)
 	counter := 0
-	for b := 0; b < batchSize; b++ {
+	for b := range batchSize {
 		group := make([][][]T, groupSize) // A
-		for a := 0; a < groupSize; a++ {
+		for a := range groupSize {
 			sequence := make([][]T, sequenceLength)
-			for s := 0; s < sequenceLength; s++ {
+			for s := range sequenceLength {
 				if !paddingMask[b][s] {
 					// skip this entire vector
 					counter += dimension
@@ -389,7 +388,7 @@ func flatDataTo4D[T float32 | int64 | int32](input []T, paddingMask [][]bool, gr
 					continue
 				}
 				vector := make([]T, dimension)
-				for d := 0; d < dimension; d++ {
+				for d := range dimension {
 					vector[d] = input[counter]
 					counter++
 				}

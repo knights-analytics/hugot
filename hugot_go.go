@@ -3,7 +3,7 @@ package hugot
 import (
 	"context"
 
-	_ "github.com/gomlx/gomlx/backends/simplego" // Import simplego backend
+	_ "github.com/gomlx/compute/gobackend" // Import gobackend
 
 	"github.com/knights-analytics/hugot/options"
 )

@@ -5,7 +5,7 @@ package hugot
 import (
 	"context"
 
-	"github.com/gomlx/gomlx/backends/xla" // import XLA backend
+	"github.com/gomlx/go-xla/compute/xla" // import XLA backend
 
 	"github.com/knights-analytics/hugot/options"
 )
