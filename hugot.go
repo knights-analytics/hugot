@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"maps"
+	"reflect"
 	"sync"
 
 	"github.com/knights-analytics/hugot/backends"
@@ -14,25 +14,16 @@ import (
 
 // Session allows for the creation of new pipelines and holds the pipeline already created.
 type Session struct {
-	featureExtractionPipelines      pipelineMap[*pipelines.FeatureExtractionPipeline]
-	tokenClassificationPipelines    pipelineMap[*pipelines.TokenClassificationPipeline]
-	textClassificationPipelines     pipelineMap[*pipelines.TextClassificationPipeline]
-	zeroShotClassificationPipelines pipelineMap[*pipelines.ZeroShotClassificationPipeline]
-	crossEncoderPipelines           pipelineMap[*pipelines.CrossEncoderPipeline]
-	imageClassificationPipelines    pipelineMap[*pipelines.ImageClassificationPipeline]
-	objectDetectionPipelines        pipelineMap[*pipelines.ObjectDetectionPipeline]
-	textGenerationPipelines         pipelineMap[*pipelines.TextGenerationPipeline]
-	tabularPipelines                pipelineMap[*pipelines.TabularPipeline]
-	questionAnsweringPipelines      pipelineMap[*pipelines.QuestionAnsweringPipeline]
-	models                          map[string]*backends.Model
-	modelLocks                      map[string]*sync.Mutex
-	modelLocksMu                    sync.Mutex
-	pipelineLocks                   map[string]*sync.Mutex
-	pipelineLocksMu                 sync.Mutex
-	options                         *options.Options
-	environmentDestroy              func() error
-	sessionContext                  context.Context
-	cancelSessionContext            context.CancelFunc
+	pipelines            map[string]backends.Pipeline
+	models               map[string]*backends.Model
+	modelLocks           map[string]*sync.Mutex
+	modelLocksMu         sync.Mutex
+	pipelineLocks        map[string]*sync.Mutex
+	pipelineLocksMu      sync.Mutex
+	options              *options.Options
+	environmentDestroy   func() error
+	sessionContext       context.Context
+	cancelSessionContext context.CancelFunc
 }
 
 func (s *Session) GetModels() map[string]*backends.Model {
@@ -88,20 +79,11 @@ func newSession(ctx context.Context, backend string, opts ...options.WithOption)
 	sessionContext, cancelSessionContext := context.WithCancel(ctx)
 
 	session := &Session{
-		featureExtractionPipelines:      map[string]*pipelines.FeatureExtractionPipeline{},
-		textClassificationPipelines:     map[string]*pipelines.TextClassificationPipeline{},
-		tokenClassificationPipelines:    map[string]*pipelines.TokenClassificationPipeline{},
-		zeroShotClassificationPipelines: map[string]*pipelines.ZeroShotClassificationPipeline{},
-		crossEncoderPipelines:           map[string]*pipelines.CrossEncoderPipeline{},
-		imageClassificationPipelines:    map[string]*pipelines.ImageClassificationPipeline{},
-		objectDetectionPipelines:        map[string]*pipelines.ObjectDetectionPipeline{},
-		textGenerationPipelines:         map[string]*pipelines.TextGenerationPipeline{},
-		tabularPipelines:                map[string]*pipelines.TabularPipeline{},
-		questionAnsweringPipelines:      map[string]*pipelines.QuestionAnsweringPipeline{},
-		models:                          map[string]*backends.Model{},
-		modelLocks:                      map[string]*sync.Mutex{},
-		pipelineLocks:                   map[string]*sync.Mutex{},
-		options:                         parsedOptions,
+		pipelines:     map[string]backends.Pipeline{},
+		models:        map[string]*backends.Model{},
+		modelLocks:    map[string]*sync.Mutex{},
+		pipelineLocks: map[string]*sync.Mutex{},
+		options:       parsedOptions,
 		environmentDestroy: func() error {
 			return nil
 		},
@@ -112,14 +94,38 @@ func newSession(ctx context.Context, backend string, opts ...options.WithOption)
 	return session, nil
 }
 
-type pipelineMap[T backends.Pipeline] map[string]T
+// pipelineConstructor builds a pipeline of some concrete type from an untyped config.
+type pipelineConstructor func(ctx context.Context, config any, opts *options.Options, model *backends.Model) (backends.Pipeline, error)
 
-func (m pipelineMap[T]) GetStatistics() map[string]backends.PipelineStatistics {
-	statistics := map[string]backends.PipelineStatistics{}
-	for pipelineName, p := range m {
-		statistics[pipelineName] = p.GetStatistics()
+// pipelineConstructors maps each concrete pipeline type to the constructor that builds it.
+// To support a new pipeline type, register it once in the init() below instead of extending
+// a set of parallel type switches.
+var pipelineConstructors = map[reflect.Type]pipelineConstructor{}
+
+// registerPipeline adapts a typed pipeline constructor into the untyped registry entry, keyed
+// by the pipeline's concrete type.
+func registerPipeline[T backends.Pipeline](construct func(context.Context, backends.PipelineConfig[T], *options.Options, *backends.Model) (T, error)) {
+	var zero T
+	pipelineConstructors[reflect.TypeOf(zero)] = func(ctx context.Context, config any, opts *options.Options, model *backends.Model) (backends.Pipeline, error) {
+		typedConfig, ok := config.(backends.PipelineConfig[T])
+		if !ok {
+			return nil, fmt.Errorf("invalid config type %T for pipeline %T", config, zero)
+		}
+		return construct(ctx, typedConfig, opts, model)
 	}
-	return statistics
+}
+
+func init() {
+	registerPipeline(pipelines.NewTokenClassificationPipeline)
+	registerPipeline(pipelines.NewTextClassificationPipeline)
+	registerPipeline(pipelines.NewFeatureExtractionPipeline)
+	registerPipeline(pipelines.NewZeroShotClassificationPipeline)
+	registerPipeline(pipelines.NewCrossEncoderPipeline)
+	registerPipeline(pipelines.NewImageClassificationPipeline)
+	registerPipeline(pipelines.NewObjectDetectionPipeline)
+	registerPipeline(pipelines.NewTextGenerationPipeline)
+	registerPipeline(pipelines.NewTabularPipeline)
+	registerPipeline(pipelines.NewQuestionAnsweringPipeline)
 }
 
 // FeatureExtractionConfig is the configuration for a feature extraction pipeline.
@@ -195,11 +201,13 @@ func NewPipeline[T backends.Pipeline](s *Session, pipelineConfig backends.Pipeli
 	pipelineLock.Lock()
 	defer pipelineLock.Unlock()
 
-	_, getError := GetPipeline[T](s, pipelineConfig.Name)
-	if getError == nil {
+	if _, exists := s.pipelines[pipelineConfig.Name]; exists {
 		return pipeline, fmt.Errorf("pipeline %s has already been initialised", pipelineConfig.Name)
-	} else if _, ok := errors.AsType[*pipelineNotFoundError](getError); !ok {
-		return pipeline, getError
+	}
+
+	constructor, ok := pipelineConstructors[reflect.TypeOf(pipeline)]
+	if !ok {
+		return pipeline, fmt.Errorf("pipeline type not supported: %T", pipeline)
 	}
 
 	// Load model if it has not been loaded already
@@ -209,11 +217,8 @@ func NewPipeline[T backends.Pipeline](s *Session, pipelineConfig backends.Pipeli
 	defer modelLock.Unlock()
 
 	model, ok := s.models[modelID]
-
-	var err error
-	var name string
-
 	if !ok {
+		var err error
 		model, err = backends.LoadModel(s.sessionContext, pipelineConfig.ModelPath, pipelineConfig.OnnxFilename, s.options, pipeline.IsGenerative())
 		if err != nil {
 			return pipeline, err
@@ -221,374 +226,77 @@ func NewPipeline[T backends.Pipeline](s *Session, pipelineConfig backends.Pipeli
 		s.models[modelID] = model
 	}
 
-	pipeline, name, err = initializePipeline(s.sessionContext, pipeline, pipelineConfig, s.options, model)
+	created, err := constructor(s.sessionContext, pipelineConfig, s.options, model)
 	if err != nil {
 		return pipeline, err
 	}
 
-	switch typedPipeline := any(pipeline).(type) {
-	case *pipelines.TokenClassificationPipeline:
-		s.tokenClassificationPipelines[name] = typedPipeline
-	case *pipelines.TextClassificationPipeline:
-		s.textClassificationPipelines[name] = typedPipeline
-	case *pipelines.FeatureExtractionPipeline:
-		s.featureExtractionPipelines[name] = typedPipeline
-	case *pipelines.ZeroShotClassificationPipeline:
-		s.zeroShotClassificationPipelines[name] = typedPipeline
-	case *pipelines.CrossEncoderPipeline:
-		s.crossEncoderPipelines[name] = typedPipeline
-	case *pipelines.ImageClassificationPipeline:
-		s.imageClassificationPipelines[name] = typedPipeline
-	case *pipelines.ObjectDetectionPipeline:
-		s.objectDetectionPipelines[name] = typedPipeline
-	case *pipelines.TextGenerationPipeline:
-		s.textGenerationPipelines[name] = typedPipeline
-	case *pipelines.TabularPipeline:
-		s.tabularPipelines[name] = typedPipeline
-	case *pipelines.QuestionAnsweringPipeline:
-		s.questionAnsweringPipelines[name] = typedPipeline
-	default:
-		return pipeline, fmt.Errorf("pipeline type not supported: %T", typedPipeline)
-	}
-	return pipeline, nil
+	name := pipelineConfig.Name
+	model.Pipelines[name] = created
+	s.pipelines[name] = created
+
+	return created.(T), nil
 }
 
-func initializePipeline[T backends.Pipeline](sessionContext context.Context, p T, pipelineConfig backends.PipelineConfig[T], options *options.Options, model *backends.Model) (T, string, error) {
-	var pipeline T
-	var name string
-
-	switch any(p).(type) {
-	case *pipelines.TokenClassificationPipeline:
-		config := any(pipelineConfig).(backends.PipelineConfig[*pipelines.TokenClassificationPipeline])
-		pipelineInitialised, err := pipelines.NewTokenClassificationPipeline(sessionContext, config, options, model)
-		if err != nil {
-			return pipeline, name, err
-		}
-		pipeline = any(pipelineInitialised).(T)
-		name = config.Name
-	case *pipelines.TextClassificationPipeline:
-		config := any(pipelineConfig).(backends.PipelineConfig[*pipelines.TextClassificationPipeline])
-		pipelineInitialised, err := pipelines.NewTextClassificationPipeline(sessionContext, config, options, model)
-		if err != nil {
-			return pipeline, name, err
-		}
-		pipeline = any(pipelineInitialised).(T)
-		name = config.Name
-	case *pipelines.FeatureExtractionPipeline:
-		config := any(pipelineConfig).(backends.PipelineConfig[*pipelines.FeatureExtractionPipeline])
-		pipelineInitialised, err := pipelines.NewFeatureExtractionPipeline(sessionContext, config, options, model)
-		if err != nil {
-			return pipeline, name, err
-		}
-		pipeline = any(pipelineInitialised).(T)
-		name = config.Name
-	case *pipelines.ZeroShotClassificationPipeline:
-		config := any(pipelineConfig).(backends.PipelineConfig[*pipelines.ZeroShotClassificationPipeline])
-		pipelineInitialised, err := pipelines.NewZeroShotClassificationPipeline(sessionContext, config, options, model)
-		if err != nil {
-			return pipeline, name, err
-		}
-		pipeline = any(pipelineInitialised).(T)
-		name = config.Name
-	case *pipelines.CrossEncoderPipeline:
-		config := any(pipelineConfig).(backends.PipelineConfig[*pipelines.CrossEncoderPipeline])
-		pipelineInitialised, err := pipelines.NewCrossEncoderPipeline(sessionContext, config, options, model)
-		if err != nil {
-			return pipeline, name, err
-		}
-		pipeline = any(pipelineInitialised).(T)
-		name = config.Name
-	case *pipelines.ImageClassificationPipeline:
-		config := any(pipelineConfig).(backends.PipelineConfig[*pipelines.ImageClassificationPipeline])
-		pipelineInitialised, err := pipelines.NewImageClassificationPipeline(sessionContext, config, options, model)
-		if err != nil {
-			return pipeline, name, err
-		}
-		pipeline = any(pipelineInitialised).(T)
-		name = config.Name
-	case *pipelines.ObjectDetectionPipeline:
-		config := any(pipelineConfig).(backends.PipelineConfig[*pipelines.ObjectDetectionPipeline])
-		pipelineInitialised, err := pipelines.NewObjectDetectionPipeline(sessionContext, config, options, model)
-		if err != nil {
-			return pipeline, name, err
-		}
-		pipeline = any(pipelineInitialised).(T)
-		name = config.Name
-	case *pipelines.TextGenerationPipeline:
-		config := any(pipelineConfig).(backends.PipelineConfig[*pipelines.TextGenerationPipeline])
-		pipelineInitialised, err := pipelines.NewTextGenerationPipeline(sessionContext, config, options, model)
-		if err != nil {
-			return pipeline, name, err
-		}
-		pipeline = any(pipelineInitialised).(T)
-		name = config.Name
-	case *pipelines.TabularPipeline:
-		config := any(pipelineConfig).(backends.PipelineConfig[*pipelines.TabularPipeline])
-		pipelineInitialised, err := pipelines.NewTabularPipeline(sessionContext, config, options, model)
-		if err != nil {
-			return pipeline, name, err
-		}
-		pipeline = any(pipelineInitialised).(T)
-		name = config.Name
-	case *pipelines.QuestionAnsweringPipeline:
-		config := any(pipelineConfig).(backends.PipelineConfig[*pipelines.QuestionAnsweringPipeline])
-		pipelineInitialised, err := pipelines.NewQuestionAnsweringPipeline(sessionContext, config, options, model)
-		if err != nil {
-			return pipeline, name, err
-		}
-		pipeline = any(pipelineInitialised).(T)
-		name = config.Name
-	default:
-		return pipeline, name, fmt.Errorf("not implemented")
+// initializePipeline constructs a pipeline of type T from its config using the registered
+// constructor, without storing it in a Session. Used by flows (e.g. training) that manage the
+// pipeline lifecycle themselves.
+func initializePipeline[T backends.Pipeline](sessionContext context.Context, config backends.PipelineConfig[T], opts *options.Options, model *backends.Model) (T, string, error) {
+	var zero T
+	constructor, ok := pipelineConstructors[reflect.TypeOf(zero)]
+	if !ok {
+		return zero, "", fmt.Errorf("pipeline type not supported: %T", zero)
 	}
-
-	model.Pipelines[name] = pipeline
-	return pipeline, name, nil
+	created, err := constructor(sessionContext, config, opts, model)
+	if err != nil {
+		return zero, "", err
+	}
+	return created.(T), config.Name, nil
 }
 
 // GetPipeline can be used to retrieve a pipeline of type T with the given name from the session.
 func GetPipeline[T backends.Pipeline](s *Session, name string) (T, error) {
-	var pipeline T
-	switch any(pipeline).(type) {
-	case *pipelines.TokenClassificationPipeline:
-		p, ok := s.tokenClassificationPipelines[name]
-		if !ok {
-			return pipeline, &pipelineNotFoundError{pipelineName: name}
-		}
-		return any(p).(T), nil
-	case *pipelines.TextClassificationPipeline:
-		p, ok := s.textClassificationPipelines[name]
-		if !ok {
-			return pipeline, &pipelineNotFoundError{pipelineName: name}
-		}
-		return any(p).(T), nil
-	case *pipelines.FeatureExtractionPipeline:
-		p, ok := s.featureExtractionPipelines[name]
-		if !ok {
-			return pipeline, &pipelineNotFoundError{pipelineName: name}
-		}
-		return any(p).(T), nil
-	case *pipelines.ZeroShotClassificationPipeline:
-		p, ok := s.zeroShotClassificationPipelines[name]
-		if !ok {
-			return pipeline, &pipelineNotFoundError{pipelineName: name}
-		}
-		return any(p).(T), nil
-	case *pipelines.CrossEncoderPipeline:
-		p, ok := s.crossEncoderPipelines[name]
-		if !ok {
-			return pipeline, &pipelineNotFoundError{pipelineName: name}
-		}
-		return any(p).(T), nil
-	case *pipelines.ImageClassificationPipeline:
-		p, ok := s.imageClassificationPipelines[name]
-		if !ok {
-			return pipeline, &pipelineNotFoundError{pipelineName: name}
-		}
-		return any(p).(T), nil
-	case *pipelines.ObjectDetectionPipeline:
-		p, ok := s.objectDetectionPipelines[name]
-		if !ok {
-			return pipeline, &pipelineNotFoundError{pipelineName: name}
-		}
-		return any(p).(T), nil
-	case *pipelines.TextGenerationPipeline:
-		p, ok := s.textGenerationPipelines[name]
-		if !ok {
-			return pipeline, &pipelineNotFoundError{pipelineName: name}
-		}
-		return any(p).(T), nil
-	case *pipelines.TabularPipeline:
-		p, ok := s.tabularPipelines[name]
-		if !ok {
-			return pipeline, &pipelineNotFoundError{pipelineName: name}
-		}
-		return any(p).(T), nil
-	case *pipelines.QuestionAnsweringPipeline:
-		p, ok := s.questionAnsweringPipelines[name]
-		if !ok {
-			return pipeline, &pipelineNotFoundError{pipelineName: name}
-		}
-		return any(p).(T), nil
-	default:
-		return pipeline, errors.New("pipeline type not supported")
+	var zero T
+	p, ok := s.pipelines[name]
+	if !ok {
+		return zero, &pipelineNotFoundError{pipelineName: name}
 	}
+	typed, ok := p.(T)
+	if !ok {
+		return zero, fmt.Errorf("pipeline %s is not of the requested type %T", name, zero)
+	}
+	return typed, nil
 }
 
+// GetPipelines returns all pipelines of type T currently held by the session, keyed by name.
 func GetPipelines[T backends.Pipeline](s *Session) (map[string]T, error) {
 	result := map[string]T{}
-	switch any(*new(T)).(type) {
-	case *pipelines.TokenClassificationPipeline:
-		for name, p := range s.tokenClassificationPipelines {
-			result[name] = any(p).(T)
+	for name, p := range s.pipelines {
+		if typed, ok := p.(T); ok {
+			result[name] = typed
 		}
-	case *pipelines.TextClassificationPipeline:
-		for name, p := range s.textClassificationPipelines {
-			result[name] = any(p).(T)
-		}
-	case *pipelines.FeatureExtractionPipeline:
-		for name, p := range s.featureExtractionPipelines {
-			result[name] = any(p).(T)
-		}
-	case *pipelines.ZeroShotClassificationPipeline:
-		for name, p := range s.zeroShotClassificationPipelines {
-			result[name] = any(p).(T)
-		}
-	case *pipelines.CrossEncoderPipeline:
-		for name, p := range s.crossEncoderPipelines {
-			result[name] = any(p).(T)
-		}
-	case *pipelines.ImageClassificationPipeline:
-		for name, p := range s.imageClassificationPipelines {
-			result[name] = any(p).(T)
-		}
-	case *pipelines.ObjectDetectionPipeline:
-		for name, p := range s.objectDetectionPipelines {
-			result[name] = any(p).(T)
-		}
-	case *pipelines.TextGenerationPipeline:
-		for name, p := range s.textGenerationPipelines {
-			result[name] = any(p).(T)
-		}
-	case *pipelines.TabularPipeline:
-		for name, p := range s.tabularPipelines {
-			result[name] = any(p).(T)
-		}
-	case *pipelines.QuestionAnsweringPipeline:
-		for name, p := range s.questionAnsweringPipelines {
-			result[name] = any(p).(T)
-		}
-	default:
-		return nil, errors.New("pipeline type not supported")
 	}
 	return result, nil
 }
 
+// ClosePipeline removes the pipeline of type T with the given name from the session, tearing down
+// the underlying model when no other pipeline depends on it.
 func ClosePipeline[T backends.Pipeline](s *Session, name string) error {
-	var pipeline T
-	switch any(pipeline).(type) {
-	case *pipelines.TokenClassificationPipeline:
-		p, ok := s.tokenClassificationPipelines[name]
-		if ok {
-			model := p.Model
-			delete(s.tokenClassificationPipelines, name)
-			delete(model.Pipelines, name)
-			if len(model.Pipelines) == 0 {
-				delete(s.models, model.ID)
-				s.removeModelLock(model.ID)
-				return model.Destroy()
-			}
-		}
-	case *pipelines.TextClassificationPipeline:
-		p, ok := s.textClassificationPipelines[name]
-		if ok {
-			model := p.Model
-			delete(s.textClassificationPipelines, name)
-			delete(model.Pipelines, name)
-			if len(model.Pipelines) == 0 {
-				delete(s.models, model.ID)
-				s.removeModelLock(model.ID)
-				return model.Destroy()
-			}
-		}
-	case *pipelines.FeatureExtractionPipeline:
-		p, ok := s.featureExtractionPipelines[name]
-		if ok {
-			model := p.Model
-			delete(s.featureExtractionPipelines, name)
-			delete(model.Pipelines, name)
-			if len(model.Pipelines) == 0 {
-				delete(s.models, model.ID)
-				s.removeModelLock(model.ID)
-				return model.Destroy()
-			}
-		}
-	case *pipelines.ZeroShotClassificationPipeline:
-		p, ok := s.zeroShotClassificationPipelines[name]
-		if ok {
-			model := p.Model
-			delete(s.zeroShotClassificationPipelines, name)
-			delete(model.Pipelines, name)
-			if len(model.Pipelines) == 0 {
-				delete(s.models, model.ID)
-				s.removeModelLock(model.ID)
-				return model.Destroy()
-			}
-		}
-	case *pipelines.CrossEncoderPipeline:
-		p, ok := s.crossEncoderPipelines[name]
-		if ok {
-			model := p.Model
-			delete(s.crossEncoderPipelines, name)
-			delete(model.Pipelines, name)
-			if len(model.Pipelines) == 0 {
-				delete(s.models, model.ID)
-				s.removeModelLock(model.ID)
-				return model.Destroy()
-			}
-		}
-	case *pipelines.ImageClassificationPipeline:
-		p, ok := s.imageClassificationPipelines[name]
-		if ok {
-			model := p.Model
-			delete(s.imageClassificationPipelines, name)
-			delete(model.Pipelines, name)
-			if len(model.Pipelines) == 0 {
-				delete(s.models, model.ID)
-				s.removeModelLock(model.ID)
-				return model.Destroy()
-			}
-		}
-	case *pipelines.ObjectDetectionPipeline:
-		p, ok := s.objectDetectionPipelines[name]
-		if ok {
-			model := p.Model
-			delete(s.objectDetectionPipelines, name)
-			delete(model.Pipelines, name)
-			if len(model.Pipelines) == 0 {
-				delete(s.models, model.ID)
-				s.removeModelLock(model.ID)
-				return model.Destroy()
-			}
-		}
-	case *pipelines.TextGenerationPipeline:
-		p, ok := s.textGenerationPipelines[name]
-		if ok {
-			model := p.Model
-			delete(s.textGenerationPipelines, name)
-			delete(model.Pipelines, name)
-			if len(model.Pipelines) == 0 {
-				delete(s.models, model.ID)
-				s.removeModelLock(model.ID)
-				return model.Destroy()
-			}
-		}
-	case *pipelines.TabularPipeline:
-		p, ok := s.tabularPipelines[name]
-		if ok {
-			model := p.Model
-			delete(s.tabularPipelines, name)
-			delete(model.Pipelines, name)
-			if len(model.Pipelines) == 0 {
-				delete(s.models, model.ID)
-				s.removeModelLock(model.ID)
-				return model.Destroy()
-			}
-		}
-	case *pipelines.QuestionAnsweringPipeline:
-		p, ok := s.questionAnsweringPipelines[name]
-		if ok {
-			model := p.Model
-			delete(s.questionAnsweringPipelines, name)
-			delete(model.Pipelines, name)
-			if len(model.Pipelines) == 0 {
-				delete(s.models, model.ID)
-				s.removeModelLock(model.ID)
-				return model.Destroy()
-			}
-		}
-	default:
-		return errors.New("pipeline type not supported")
+	p, ok := s.pipelines[name]
+	if !ok {
+		return nil
+	}
+	if _, ok := p.(T); !ok {
+		return nil
+	}
+
+	model := p.GetModel()
+	delete(s.pipelines, name)
+	delete(model.Pipelines, name)
+	if len(model.Pipelines) == 0 {
+		delete(s.models, model.ID)
+		s.removeModelLock(model.ID)
+		return model.Destroy()
 	}
 	return nil
 }
@@ -610,14 +318,9 @@ func (e *pipelineNotFoundError) Error() string {
 // the average time per onnxruntime inference batch call.
 func (s *Session) GetStatistics() map[string]backends.PipelineStatistics {
 	statistics := map[string]backends.PipelineStatistics{}
-	maps.Copy(statistics, s.tokenClassificationPipelines.GetStatistics())
-	maps.Copy(statistics, s.textClassificationPipelines.GetStatistics())
-	maps.Copy(statistics, s.featureExtractionPipelines.GetStatistics())
-	maps.Copy(statistics, s.imageClassificationPipelines.GetStatistics())
-	maps.Copy(statistics, s.zeroShotClassificationPipelines.GetStatistics())
-	maps.Copy(statistics, s.crossEncoderPipelines.GetStatistics())
-	maps.Copy(statistics, s.textGenerationPipelines.GetStatistics())
-	maps.Copy(statistics, s.tabularPipelines.GetStatistics())
+	for name, p := range s.pipelines {
+		statistics[name] = p.GetStatistics()
+	}
 	return statistics
 }
 
@@ -638,15 +341,7 @@ func (s *Session) Destroy() error {
 		err = errors.Join(err, model.Destroy())
 	}
 	s.models = nil
-	s.featureExtractionPipelines = nil
-	s.tokenClassificationPipelines = nil
-	s.textClassificationPipelines = nil
-	s.imageClassificationPipelines = nil
-	s.zeroShotClassificationPipelines = nil
-	s.textGenerationPipelines = nil
-	s.crossEncoderPipelines = nil
-	s.tabularPipelines = nil
-	s.objectDetectionPipelines = nil
+	s.pipelines = nil
 
 	if s.options != nil {
 		err = errors.Join(err, s.options.Destroy())

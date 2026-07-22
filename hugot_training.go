@@ -149,8 +149,7 @@ func newTrainingSession[T backends.Pipeline](sessionContext context.Context, bac
 	switch any(trainingPipeline).(type) {
 	case *pipelines.FeatureExtractionPipeline:
 		pipelineConfig := FeatureExtractionConfig{}
-		pipeline := any(trainingPipeline).(*pipelines.FeatureExtractionPipeline)
-		pipeline, _, err = initializePipeline(sessionContext, pipeline, pipelineConfig, opts, model)
+		pipeline, _, err := initializePipeline(sessionContext, pipelineConfig, opts, model)
 		if err != nil {
 			return nil, err
 		}

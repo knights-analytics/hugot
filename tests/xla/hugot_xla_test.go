@@ -403,6 +403,16 @@ func TestNoSameNamePipelineXLA(t *testing.T) {
 	testutil.NoSameNamePipeline(t, session)
 }
 
+func TestNoSameNameAcrossTypesPipelineXLA(t *testing.T) {
+	session, err := hugot.NewXLASession(t.Context())
+	testutil.CheckT(t, err)
+	defer func(session *hugot.Session) {
+		destroyErr := session.Destroy()
+		testutil.CheckT(t, destroyErr)
+	}(session)
+	testutil.NoSameNameAcrossTypesPipeline(t, session)
+}
+
 func TestDestroyPipelineXLA(t *testing.T) {
 	session, err := hugot.NewXLASession(t.Context())
 	testutil.CheckT(t, err)
