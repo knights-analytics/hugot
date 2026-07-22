@@ -70,7 +70,7 @@ func (t *ZeroShotOutput) GetOutput() []any {
 }
 
 // create all pairs between input sequences and labels.
-func createSequencePairs(sequences interface{}, labels []string, hypothesisTemplate string) ([][][]string, []string, error) {
+func createSequencePairs(sequences any, labels []string, hypothesisTemplate string) ([][][]string, []string, error) {
 	// Check if labels or sequences are empty
 	if len(labels) == 0 || sequences == nil {
 		return nil, nil, errors.New("you must include at least one label and at least one sequence")

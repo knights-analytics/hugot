@@ -100,7 +100,7 @@ func (s *SemanticSimilarityDataset) Reset() {
 		}
 		sourceReadCloser, err := fileutil.OpenFile(context.Background(), s.trainingPath)
 		if err != nil {
-			panic(err) // note: these panics will be catched later with the TryExcept
+			panic(err) // note: these panics will be caught later with the TryExcept
 		}
 		s.sourceFile = sourceReadCloser
 		// restart the reader

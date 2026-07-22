@@ -96,7 +96,7 @@ jobs:
           targets: hugot
           set: |
             hugot.tags=${{ join(fromJson(steps.meta.outputs.json).tags, ',') }}
-            hugot.labels=${{ steps.meta.outputs.labels }}
+            hugot.labels=${{ join(fromJson(steps.meta.outputs.json).labels, ',') }}
             hugot.output=type=registry
 
       - name: Generate artifact attestation
