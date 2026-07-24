@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
+## [0.7.6] - 2026-07-24
+
+###  Changed
+
+- Upgraded to GoMLX [v0.28.0](https://github.com/gomlx/gomlx/releases/tag/v0.28.0)
+  - Includes experimental SIMD for significant performance improvements for the Go backend
+- Refactor/simplification of pipeline management and lifecycle
+- Token Classification pipeline correctly handles unknown tokens (thanks @ohhmkar)
+- Fixes tokenizer timings reporting per pipeline
+
 ## [0.7.5] - 2026-06-05
 
 ###  Changed
