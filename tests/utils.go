@@ -1865,3 +1865,44 @@ func SelectedOutputRejectedOnGoBackend(t *testing.T, session *hugot.Session) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "only supported for non-generative ORT models")
 }
+
+// NativeInt8FeatureExtractionConstruction verifies construction-time requirements for the
+// native INT8 feature-extraction pipeline using an existing downloaded Hugot model.
+func NativeInt8FeatureExtractionConstruction(t *testing.T, session *hugot.Session) {
+	t.Helper()
+
+	modelPath := ModelsFolder + "KnightsAnalytics_all-MiniLM-L6-v2"
+	allPipeline, err := hugot.NewPipeline(session, hugot.FeatureExtractionConfig{
+		ModelPath:    modelPath,
+		Name:         "nativeInt8ProbeAll",
+		OnnxFilename: "model.onnx",
+	})
+	CheckT(t, err)
+	require.NotEmpty(t, allPipeline.Model.OutputsMeta)
+	firstOutput := allPipeline.Model.OutputsMeta[0].Name
+
+	_, err = hugot.NewPipeline(session, hugot.NativeInt8FeatureExtractionConfig{
+		ModelPath:       modelPath,
+		Name:            "nativeInt8ZeroOutputs",
+		OnnxFilename:    "model.onnx",
+		OnnxOutputNames: nil,
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "exactly one")
+
+	_, err = hugot.NewPipeline(session, hugot.NativeInt8FeatureExtractionConfig{
+		ModelPath:       modelPath,
+		Name:            "nativeInt8ValidConstruction",
+		OnnxFilename:    "model.onnx",
+		OnnxOutputNames: []string{firstOutput},
+	})
+	// MiniLM emits float outputs, so session construction with a single selected output
+	// succeeds, but a later Run would fail type validation. Construction itself must pass.
+	require.NoError(t, err)
+
+	pipeline, err := hugot.GetPipeline[*pipelines.NativeInt8FeatureExtractionPipeline](session, "nativeInt8ValidConstruction")
+	require.NoError(t, err)
+	assert.Equal(t, firstOutput, pipeline.Output.Name)
+	assert.Equal(t, []string{firstOutput}, pipeline.Model.OnnxOutputNames)
+	assert.Len(t, pipeline.Model.OutputsMeta, 1)
+}

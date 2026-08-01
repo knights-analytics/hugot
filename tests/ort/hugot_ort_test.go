@@ -455,6 +455,16 @@ func TestSelectedOutputORT(t *testing.T) {
 	testutil.SelectedOutputPipeline(t, session)
 }
 
+func TestNativeInt8FeatureExtractionConstructionORT(t *testing.T) {
+	session, err := hugot.NewORTSession(t.Context())
+	testutil.CheckT(t, err)
+	defer func(session *hugot.Session) {
+		destroyErr := session.Destroy()
+		testutil.CheckT(t, destroyErr)
+	}(session)
+	testutil.NativeInt8FeatureExtractionConstruction(t, session)
+}
+
 // Thread safety
 
 func TestThreadSafetyORT(t *testing.T) {

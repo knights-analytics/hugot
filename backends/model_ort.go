@@ -551,6 +551,15 @@ func createInputTensorsORT(batch *PipelineBatch, model *Model) error {
 	return nil
 }
 
+// runORTSessionOnBatch executes one completed ORT inference against batch.
+//
+// On success it converts supported output tensors into Go-owned values and destroys
+// every non-nil auto-allocated ORT output. On conversion failure after a completed run
+// it still destroys those outputs. If the call or session context is cancelled while ORT
+// is running, this function waits for the ORT goroutine to finish and destroys any
+// allocated outputs before returning the cancellation error, because ORT cannot be
+// interrupted safely and callers must not free inputs while the native run may still
+// reference them.
 func runORTSessionOnBatch(ctx context.Context, batch *PipelineBatch, p *BasePipeline) error {
 	if p.SessionContext == nil {
 		return errors.New("no session context")
@@ -580,23 +589,41 @@ func runORTSessionOnBatch(ctx context.Context, batch *PipelineBatch, p *BasePipe
 
 	select {
 	case <-ctx.Done():
-		return ctx.Err()
+		// ORT cannot be interrupted safely. Retain ownership until the run
+		// goroutine finishes, then destroy any auto-allocated outputs before
+		// returning so callers do not free inputs while ORT still uses them.
+		waitErr := eg.Wait()
+		return errors.Join(ctx.Err(), waitErr, destroyORTOutputs(outputTensors))
 	case <-p.SessionContext.Done():
-		return p.SessionContext.Err()
+		waitErr := eg.Wait()
+		return errors.Join(p.SessionContext.Err(), waitErr, destroyORTOutputs(outputTensors))
 	case <-doneChannel:
 		if err := eg.Wait(); err != nil {
-			return err
+			return errors.Join(err, destroyORTOutputs(outputTensors))
 		}
 	}
 
 	convertedOutput := make([]any, len(outputTensors))
 	for i, t := range outputTensors {
+		if t == nil {
+			continue
+		}
+		outputName := p.Model.OutputsMeta[i].Name
 		switch v := t.(type) {
 		case *ort.Tensor[float32]:
 			convertedOutput[i] = ReshapeOutput(v.GetData(), p.Model.OutputsMeta[i], batch.Size, batch.PaddingMask, batch.MaxSequenceLength)
 		case *ort.Tensor[int64]:
 			convertedOutput[i] = ReshapeOutput(v.GetData(), p.Model.OutputsMeta[i], batch.Size, batch.PaddingMask, batch.MaxSequenceLength)
+		case *ort.Tensor[int8]:
+			converted, convertErr := convertRankTwoInt8Tensor(v, outputName, batch.Size)
+			if convertErr != nil {
+				return errors.Join(convertErr, destroyORTOutputs(outputTensors))
+			}
+			convertedOutput[i] = converted
 		}
+	}
+	if err := destroyORTOutputs(outputTensors); err != nil {
+		return err
 	}
 	// store resulting tensors
 	batch.OutputValues = convertedOutput

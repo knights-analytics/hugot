@@ -119,6 +119,7 @@ func init() {
 	registerPipeline(pipelines.NewTokenClassificationPipeline)
 	registerPipeline(pipelines.NewTextClassificationPipeline)
 	registerPipeline(pipelines.NewFeatureExtractionPipeline)
+	registerPipeline(pipelines.NewNativeInt8FeatureExtractionPipeline)
 	registerPipeline(pipelines.NewZeroShotClassificationPipeline)
 	registerPipeline(pipelines.NewCrossEncoderPipeline)
 	registerPipeline(pipelines.NewImageClassificationPipeline)
@@ -133,6 +134,12 @@ type FeatureExtractionConfig = backends.PipelineConfig[*pipelines.FeatureExtract
 
 // FeatureExtractionOption is an option for a feature extraction pipeline.
 type FeatureExtractionOption = backends.PipelineOption[*pipelines.FeatureExtractionPipeline]
+
+// NativeInt8FeatureExtractionConfig is the configuration for a native INT8 feature extraction pipeline.
+type NativeInt8FeatureExtractionConfig = backends.PipelineConfig[*pipelines.NativeInt8FeatureExtractionPipeline]
+
+// NativeInt8FeatureExtractionOption is an option for a native INT8 feature extraction pipeline.
+type NativeInt8FeatureExtractionOption = backends.PipelineOption[*pipelines.NativeInt8FeatureExtractionPipeline]
 
 // TextClassificationConfig is the configuration for a text classification pipeline.
 type TextClassificationConfig = backends.PipelineConfig[*pipelines.TextClassificationPipeline]
