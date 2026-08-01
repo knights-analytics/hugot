@@ -195,7 +195,7 @@ To use Hugot with Nvidia gpu acceleration, you need to have the following:
 - The Nvidia driver for your graphics card (if running in Docker and WSL2, starting with --gpus all should inherit the drivers from the host OS)
 - ONNX Runtime:
     - The cuda gpu version of ONNX Runtime on the machine/docker container. You can see how we get that by looking at the [Dockerfile](./Dockerfile). You can also get the ONNX Runtime libraries that we use for testing from the release. Just download the gpu .so libraries and put them in /usr/lib.
-    - The required CUDA libraries installed on your system that are compatible with the ONNX Runtime gpu version you use. See [here](https://onnxruntime.ai/docs/execution-providers/CUDA-ExecutionProvider.html). For instance, for onnxruntime-gpu 1.24.4, we need CUDA 12.x (any minor version should be compatible) and cuDNN 9.x.
+    - The required CUDA libraries installed on your system that are compatible with the ONNX Runtime gpu version you use. See [here](https://onnxruntime.ai/docs/execution-providers/CUDA-ExecutionProvider.html). For instance, for onnxruntime 1.28.0, we need CUDA 13.x (any minor version should be compatible) and cuDNN 9.x.
     - Start a session with the following:
       ```go
       ctx := context.Background()
@@ -219,9 +219,11 @@ To use Hugot with Nvidia gpu acceleration, you need to have the following:
       session, err := NewXLASession(ctx, opts...)
       ```
 
-For the ONNX Runtime Cuda libraries, you can install CUDA 12.x by installing the full cuda toolkit, but that's quite a big package. In our testing on awslinux/fedora, we have been able to limit the libraries needed to run Hugot with Nvidia gpu acceleration to just these:
+For the ONNX Runtime Cuda libraries, you can install CUDA 13.x by installing the full cuda toolkit, but that's quite a big package. In our testing on awslinux/fedora, we have been able to limit the libraries needed to run Hugot with Nvidia gpu acceleration to just these:
 
-- cuda-cudart-12-9 cuda-nvrtc-12-9 libcublas-12-9 libcurand-12-9 libcufft-12-9 libcudnn9-cuda-12
+- cuda-cudart-13-3 libcublas-13-3 libcurand-13-3 libcufft-13-3 libcudnn9-cuda-13
+
+libcufft and libcudnn9 are lazy loaded when needed, so may be skippable depending on the models you load.
 
 On different distros (e.g. Ubuntu), you should be able to install the equivalent packages.
 

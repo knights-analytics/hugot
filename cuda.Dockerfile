@@ -29,23 +29,23 @@ RUN --mount=src=./go.mod,dst=/go.mod \
     rpm -Uvh --nodeps --force glibc-2.42-4.fc43.x86_64.rpm && \
     rm glibc-2.42-4.fc43.x86_64.rpm && \
     dnf install -y 'dnf-command(config-manager)' && \
-    # from rhel
+    # from rhel \
     dnf config-manager --add-repo https://developer.download.nvidia.com/compute/cuda/repos/rhel9/x86_64/cuda-rhel9.repo && \
-    dnf install -y cuda-cudart-12-9 cuda-nvrtc-12-9 libcublas-12-9 libcurand-12-9 libcufft-12-9 libcudnn9-cuda-12 && \
+    dnf install -y cuda-cudart-13-3 libcublas-13-3 libcurand-13-3 libcufft-13-3 libcudnn9-cuda-13 && \
     dnf clean all && \
-   # go
+   # go \
     curl -LO https://golang.org/dl/go${GO_VERSION}.linux-amd64.tar.gz && \
     tar -C /usr/local -xzf go${GO_VERSION}.linux-amd64.tar.gz && \
     rm go${GO_VERSION}.linux-amd64.tar.gz && \
-    # tokenizers
+    # tokenizers \
     sed -i 's/\r//g' /download-tokenizers.sh && chmod +x /download-tokenizers.sh && \
     ./download-tokenizers.sh && \
-    # onnxruntime cpu and gpu
+    # onnxruntime cpu and gpu \
     sed -i 's/\r//g' /download-onnxruntime.sh && chmod +x /download-onnxruntime.sh && \
     /download-onnxruntime.sh --onnxruntime-version=${ONNXRUNTIME_VERSION} --cuda && \
     sed -i 's/\r//g' /download-onnxruntime-genai.sh && chmod +x /download-onnxruntime-genai.sh && \
     /download-onnxruntime-genai.sh --onnxruntime-genai-version=${ONNXRUNTIME_GENAI_VERSION} --cuda && \
-    # XLA/goMLX
+    # XLA/goMLX \
     GOPROXY=direct go run github.com/gomlx/go-xla/cmd/pjrt_installer@latest -plugin=linux -version=v${GOPJRT_VERSION} -path=/usr/local/lib/go-xla && \
     GOPROXY=direct go run github.com/gomlx/go-xla/cmd/pjrt_installer@latest -plugin=cuda13 -version=${JAX_CUDA_VERSION} -path=/usr/local/lib/go-xla && \
     # NON-PRIVILEGED USER

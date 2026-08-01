@@ -4,15 +4,15 @@ go 1.26.5
 
 require (
 	github.com/daulet/tokenizers v1.27.0
-	github.com/gomlx/compute v0.1.0
+	github.com/gomlx/compute v0.1.2
 	github.com/gomlx/go-huggingface v0.4.1
-	github.com/gomlx/go-xla v0.4.0
-	github.com/gomlx/gomlx v0.28.1
-	github.com/gomlx/onnx-gomlx v0.5.1
-	github.com/knights-analytics/ortgenai v0.3.1
+	github.com/gomlx/go-xla v0.4.1
+	github.com/gomlx/gomlx v0.28.2
+	github.com/gomlx/onnx-gomlx v0.5.2
+	github.com/knights-analytics/ortgenai v0.3.2
 	github.com/stretchr/testify v1.11.1
 	github.com/viant/afs v1.30.0
-	github.com/yalue/onnxruntime_go v1.31.0
+	github.com/yalue/onnxruntime_go v1.32.0
 	golang.org/x/image v0.44.0
 	golang.org/x/sync v0.22.0
 )

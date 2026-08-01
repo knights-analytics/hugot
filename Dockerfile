@@ -28,20 +28,20 @@ RUN --mount=src=./go.mod,dst=/go.mod \
     rm glibc-2.42-4.fc43.x86_64.rpm && \
     ln -s /usr/lib64/libstdc++.so.6 /usr/lib64/libstdc++.so && \
     dnf clean all && \
-    # go
+    # go \
     curl -LO https://golang.org/dl/go${GO_VERSION}.linux-amd64.tar.gz && \
     tar -C /usr/local -xzf go${GO_VERSION}.linux-amd64.tar.gz && \
     rm go${GO_VERSION}.linux-amd64.tar.gz && \
-    # tokenizers
+    # tokenizers \
     sed -i 's/\r//g' /download-tokenizers.sh && chmod +x /download-tokenizers.sh && \
     ./download-tokenizers.sh && \
-    # onnxruntime cpu
+    # onnxruntime cpu \
     sed -i 's/\r//g' /download-onnxruntime.sh && chmod +x /download-onnxruntime.sh && \
     /download-onnxruntime.sh --onnxruntime-version=${ONNXRUNTIME_VERSION} && \
-    # onnxruntime genai
+    # onnxruntime genai \
     sed -i 's/\r//g' /download-onnxruntime-genai.sh && chmod +x /download-onnxruntime-genai.sh && \
     /download-onnxruntime-genai.sh --onnxruntime-genai-version=${ONNXRUNTIME_GENAI_VERSION} && \
-    # XLA/goMLX
+    # XLA/goMLX \
     GOPROXY=direct go run github.com/gomlx/go-xla/cmd/pjrt_installer@latest -plugin=linux -version=v${GOPJRT_VERSION} -path=/usr/local/lib/go-xla && \
     # NON-PRIVILEGED USER
     # create non-privileged testuser with id: 1000

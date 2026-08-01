@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
+## [0.7.7] - 2026-08-03
+
+###  Changed
+
+- Upgraded to CUDA 13
+- Upgraded to ORT v1.28.0
+- Upgraded to ORT GenAI v0.15.0
+- Upgraded to GoMLX v0.28.2
+- Fixes go tokenizer FIRST/MAX/AVERAGE aggregation (thanks @luanlorenzo)
+
 ## [0.7.6] - 2026-07-24
 
 ###  Changed
