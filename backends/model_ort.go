@@ -351,13 +351,38 @@ func runGenerativeORTSessionOnBatch(ctx context.Context, batch *PipelineBatch, p
 	return tokenStream, errorStream, nil
 }
 
-func createORTModelBackend(model *Model, options *options.Options) error {
+// createORTModelBackend creates a non-generative ORT DynamicAdvancedSession for model.
+//
+// It discovers the complete graph input/output metadata first, validates any requested
+// OnnxOutputNames against that metadata, then constructs the session with only the selected
+// outputs. Empty selection preserves all-output behavior. For filesystem models with
+// external data, the process working directory is changed to the model directory and
+// restored on every return path, including metadata and selection validation failures.
+//
+// model: Hugot model whose Path/OnnxPath/OnnxOutputNames describe the ORT session contract.
+// options: Hugot options whose BackendOptions carry the ORT SessionOptions.
+//
+// Returns an error if metadata loading, output selection, session creation, or cwd restore fails.
+func createORTModelBackend(model *Model, options *options.Options) (err error) {
 	sessionOptions := options.BackendOptions.(*ort.SessionOptions)
 
 	var inputs, outputs []InputOutputInfo
 	var cwd string
-	var err error
 	var onnxBytes []byte
+	cwdRestored := true
+
+	restoreCwd := func() error {
+		if cwd == "" || cwdRestored {
+			return nil
+		}
+		cwdRestored = true
+		return os.Chdir(cwd)
+	}
+	defer func() {
+		if restoreErr := restoreCwd(); restoreErr != nil {
+			err = errors.Join(err, restoreErr)
+		}
+	}()
 
 	if model.OnnxReader != nil {
 		onnxBytes, err = io.ReadAll(model.OnnxReader)
@@ -375,6 +400,7 @@ func createORTModelBackend(model *Model, options *options.Options) error {
 		if err != nil {
 			return err
 		}
+		cwdRestored = false
 
 		inputs, outputs, err = loadInputOutputMetaORTFile(model.OnnxPath)
 	}
@@ -382,13 +408,14 @@ func createORTModelBackend(model *Model, options *options.Options) error {
 		return err
 	}
 
+	selectedOutputs, outputNames, err := SelectOnnxOutputs(outputs, model.OnnxOutputNames)
+	if err != nil {
+		return err
+	}
+
 	inputNames := make([]string, len(inputs))
-	outputNames := make([]string, len(outputs))
 	for i, v := range inputs {
 		inputNames[i] = v.Name
-	}
-	for i, v := range outputs {
-		outputNames[i] = v.Name
 	}
 
 	var session *ort.DynamicAdvancedSession
@@ -420,12 +447,8 @@ func createORTModelBackend(model *Model, options *options.Options) error {
 		},
 	}
 	model.InputsMeta = inputs
-	model.OutputsMeta = outputs
-	if cwd != "" {
-		err = os.Chdir(cwd)
-	}
-
-	return err
+	model.OutputsMeta = selectedOutputs
+	return restoreCwd()
 }
 
 func loadInputOutputMetaORTReader(onnxBytes []byte) ([]InputOutputInfo, []InputOutputInfo, error) {

@@ -34,6 +34,16 @@ func TestFeatureExtractionPipelineValidationGo(t *testing.T) {
 	testutil.FeatureExtractionPipelineValidation(t, session)
 }
 
+func TestSelectedOutputRejectedGo(t *testing.T) {
+	session, err := hugot.NewGoSession(t.Context())
+	testutil.CheckT(t, err)
+	defer func(session *hugot.Session) {
+		destroyErr := session.Destroy()
+		testutil.CheckT(t, destroyErr)
+	}(session)
+	testutil.SelectedOutputRejectedOnGoBackend(t, session)
+}
+
 // Text classification
 
 func TestTextClassificationPipelineGo(t *testing.T) {

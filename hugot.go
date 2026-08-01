@@ -210,8 +210,9 @@ func NewPipeline[T backends.Pipeline](s *Session, pipelineConfig backends.Pipeli
 		return pipeline, fmt.Errorf("pipeline type not supported: %T", pipeline)
 	}
 
-	// Load model if it has not been loaded already
-	modelID := pipelineConfig.ModelPath + ":" + pipelineConfig.OnnxFilename
+	// Load model if it has not been loaded already. Output selection participates in
+	// identity so pipelines with incompatible ORT output contracts cannot share a session.
+	modelID := backends.ModelIdentity(pipelineConfig.ModelPath, pipelineConfig.OnnxFilename, pipelineConfig.OnnxOutputNames)
 	modelLock := s.getModelLock(modelID)
 	modelLock.Lock()
 	defer modelLock.Unlock()
@@ -219,7 +220,14 @@ func NewPipeline[T backends.Pipeline](s *Session, pipelineConfig backends.Pipeli
 	model, ok := s.models[modelID]
 	if !ok {
 		var err error
-		model, err = backends.LoadModel(s.sessionContext, pipelineConfig.ModelPath, pipelineConfig.OnnxFilename, s.options, pipeline.IsGenerative())
+		model, err = backends.LoadModelWithOutputs(
+			s.sessionContext,
+			pipelineConfig.ModelPath,
+			pipelineConfig.OnnxFilename,
+			pipelineConfig.OnnxOutputNames,
+			s.options,
+			pipeline.IsGenerative(),
+		)
 		if err != nil {
 			return pipeline, err
 		}

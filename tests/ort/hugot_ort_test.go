@@ -445,6 +445,16 @@ func TestClosePipelineORT(t *testing.T) {
 	testutil.DestroyPipelines(t, session)
 }
 
+func TestSelectedOutputORT(t *testing.T) {
+	session, err := hugot.NewORTSession(t.Context())
+	testutil.CheckT(t, err)
+	defer func(session *hugot.Session) {
+		destroyErr := session.Destroy()
+		testutil.CheckT(t, destroyErr)
+	}(session)
+	testutil.SelectedOutputPipeline(t, session)
+}
+
 // Thread safety
 
 func TestThreadSafetyORT(t *testing.T) {

@@ -2,8 +2,13 @@
 .history
 .cache
 .idea
+.local-ort
+.local-tokenizers
+.local-pplx
 models
 testTarget
 artifacts
 data
 _data
+scripts/pplx/.venv
+scripts/pplx/__pycache__/

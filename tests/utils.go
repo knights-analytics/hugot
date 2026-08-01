@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"os"
 	"regexp"
 	"runtime"
 	"strings"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/gomlx/go-huggingface/hub"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/knights-analytics/hugot"
 	"github.com/knights-analytics/hugot/backends"
@@ -1718,4 +1720,148 @@ func CheckToolCalls(t *testing.T, output string) {
 			}
 		}
 	}
+}
+
+// SelectedOutputPipeline exercises construction-time OnnxOutputNames selection for ORT models.
+//
+// It verifies empty/all-output compatibility, single-output sessions, invalid selections,
+// defensive copy semantics, cache identity reuse/isolation, ClosePipeline teardown for a
+// selected model, and working-directory restoration after a filesystem selection failure.
+func SelectedOutputPipeline(t *testing.T, session *hugot.Session) {
+	t.Helper()
+
+	modelPath := ModelsFolder + "KnightsAnalytics_all-MiniLM-L6-v2"
+	cwdBefore, err := os.Getwd()
+	CheckT(t, err)
+
+	allConfig := hugot.FeatureExtractionConfig{
+		ModelPath:    modelPath,
+		Name:         "selectedOutputAll",
+		OnnxFilename: "model.onnx",
+	}
+	allPipeline, err := hugot.NewPipeline(session, allConfig)
+	CheckT(t, err)
+	require.NotEmpty(t, allPipeline.Model.OutputsMeta)
+	allOutputNames := backends.GetNames(allPipeline.Model.OutputsMeta)
+	allModelID := allPipeline.Model.ID
+	assert.Equal(t, backends.ModelIdentity(modelPath, "model.onnx", nil), allModelID)
+
+	firstOutput := allOutputNames[0]
+	selectedNames := []string{firstOutput}
+	selectedConfig := hugot.FeatureExtractionConfig{
+		ModelPath:       modelPath,
+		Name:            "selectedOutputOne",
+		OnnxFilename:    "model.onnx",
+		OnnxOutputNames: selectedNames,
+	}
+	selectedPipeline, err := hugot.NewPipeline(session, selectedConfig)
+	CheckT(t, err)
+	assert.Equal(t, []string{firstOutput}, backends.GetNames(selectedPipeline.Model.OutputsMeta))
+	assert.Equal(t, []string{firstOutput}, selectedPipeline.Model.OnnxOutputNames)
+	assert.NotEqual(t, allModelID, selectedPipeline.Model.ID)
+
+	// Caller mutation must not change the stored selection or model identity.
+	selectedNames[0] = "mutated"
+	assert.Equal(t, []string{firstOutput}, selectedPipeline.Model.OnnxOutputNames)
+	assert.Equal(t, backends.ModelIdentity(modelPath, "model.onnx", []string{firstOutput}), selectedPipeline.Model.ID)
+
+	reuseConfig := hugot.FeatureExtractionConfig{
+		ModelPath:       modelPath,
+		Name:            "selectedOutputReuse",
+		OnnxFilename:    "model.onnx",
+		OnnxOutputNames: []string{firstOutput},
+	}
+	reusePipeline, err := hugot.NewPipeline(session, reuseConfig)
+	CheckT(t, err)
+	assert.Same(t, selectedPipeline.Model, reusePipeline.Model)
+
+	if len(allOutputNames) >= 2 {
+		orderedA := []string{allOutputNames[0], allOutputNames[1]}
+		orderedB := []string{allOutputNames[1], allOutputNames[0]}
+		multiA, err := hugot.NewPipeline(session, hugot.FeatureExtractionConfig{
+			ModelPath:       modelPath,
+			Name:            "selectedOutputMultiA",
+			OnnxFilename:    "model.onnx",
+			OnnxOutputNames: orderedA,
+		})
+		CheckT(t, err)
+		assert.Equal(t, orderedA, backends.GetNames(multiA.Model.OutputsMeta))
+
+		multiB, err := hugot.NewPipeline(session, hugot.FeatureExtractionConfig{
+			ModelPath:       modelPath,
+			Name:            "selectedOutputMultiB",
+			OnnxFilename:    "model.onnx",
+			OnnxOutputNames: orderedB,
+		})
+		CheckT(t, err)
+		assert.Equal(t, orderedB, backends.GetNames(multiB.Model.OutputsMeta))
+		assert.NotEqual(t, multiA.Model.ID, multiB.Model.ID)
+		assert.NotSame(t, multiA.Model, multiB.Model)
+	}
+
+	_, err = hugot.NewPipeline(session, hugot.FeatureExtractionConfig{
+		ModelPath:       modelPath,
+		Name:            "selectedOutputBlank",
+		OnnxFilename:    "model.onnx",
+		OnnxOutputNames: []string{" "},
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "blank")
+
+	_, err = hugot.NewPipeline(session, hugot.FeatureExtractionConfig{
+		ModelPath:       modelPath,
+		Name:            "selectedOutputDuplicate",
+		OnnxFilename:    "model.onnx",
+		OnnxOutputNames: []string{firstOutput, firstOutput},
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "duplicate")
+
+	_, err = hugot.NewPipeline(session, hugot.FeatureExtractionConfig{
+		ModelPath:       modelPath,
+		Name:            "selectedOutputUnknown",
+		OnnxFilename:    "model.onnx",
+		OnnxOutputNames: []string{"definitely_missing_output"},
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unknown ONNX output")
+	assert.Contains(t, err.Error(), firstOutput)
+
+	cwdAfterFailure, err := os.Getwd()
+	CheckT(t, err)
+	assert.Equal(t, cwdBefore, cwdAfterFailure)
+
+	selectedModelID := selectedPipeline.Model.ID
+	require.NoError(t, hugot.ClosePipeline[*pipelines.FeatureExtractionPipeline](session, "selectedOutputReuse"))
+	require.NoError(t, hugot.ClosePipeline[*pipelines.FeatureExtractionPipeline](session, "selectedOutputOne"))
+	_, stillPresent := session.GetModels()[selectedModelID]
+	assert.False(t, stillPresent)
+	_, allStillPresent := session.GetModels()[allModelID]
+	assert.True(t, allStillPresent)
+
+	// Existing WithOutputName remains valid against an all-output session.
+	namedConfig := hugot.FeatureExtractionConfig{
+		ModelPath:    modelPath,
+		Name:         "selectedOutputWithOutputName",
+		OnnxFilename: "model.onnx",
+		Options:      []hugot.FeatureExtractionOption{pipelines.WithOutputName(firstOutput)},
+	}
+	namedPipeline, err := hugot.NewPipeline(session, namedConfig)
+	CheckT(t, err)
+	assert.Equal(t, allModelID, namedPipeline.Model.ID)
+	assert.Equal(t, firstOutput, namedPipeline.Output.Name)
+}
+
+// SelectedOutputRejectedOnGoBackend verifies non-ORT backends reject OnnxOutputNames.
+func SelectedOutputRejectedOnGoBackend(t *testing.T, session *hugot.Session) {
+	t.Helper()
+
+	_, err := hugot.NewPipeline(session, hugot.FeatureExtractionConfig{
+		ModelPath:       ModelsFolder + "KnightsAnalytics_all-MiniLM-L6-v2",
+		Name:            "selectedOutputGoReject",
+		OnnxFilename:    "model.onnx",
+		OnnxOutputNames: []string{"last_hidden_state"},
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "only supported for non-generative ORT models")
 }

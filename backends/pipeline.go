@@ -122,7 +122,12 @@ type PipelineConfig[T Pipeline] struct {
 	ModelPath    string
 	Name         string
 	OnnxFilename string
-	Options      []PipelineOption[T]
+	// OnnxOutputNames is an ordered subset of ONNX graph outputs to request when creating
+	// the ORT session. Nil or empty preserves Hugot's existing all-output session behavior.
+	// A non-empty selection is valid only for non-generative ORT models, participates in
+	// model cache identity, and is stored on Model.OutputsMeta in the requested order.
+	OnnxOutputNames []string
+	Options         []PipelineOption[T]
 }
 type timings struct {
 	NumCalls uint64
@@ -278,6 +283,10 @@ func NewBasePipeline[T Pipeline](sessionContext context.Context, config Pipeline
 }
 
 func CreateModelBackend(ctx context.Context, model *Model, s *options.Options) error {
+	if len(model.OnnxOutputNames) > 0 && s.Backend != "ORT" {
+		return fmt.Errorf("OnnxOutputNames is only supported for non-generative ORT models")
+	}
+
 	err := GetOnnxModelPath(ctx, model)
 	if err != nil {
 		return err

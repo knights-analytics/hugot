@@ -16,18 +16,21 @@ import (
 )
 
 type Model struct {
-	ID                    string
-	ORTModel              *ORTModel
-	GoMLXModel            *GoMLXModel
-	Tokenizer             *Tokenizer
-	Destroy               func() error
-	Pipelines             map[string]Pipeline
-	IDLabelMap            map[int]string
-	SeparatorToken        string
-	Path                  string
-	OnnxFilename          string
-	OnnxPath              string
-	OnnxReader            io.ReadCloser
+	ID             string
+	ORTModel       *ORTModel
+	GoMLXModel     *GoMLXModel
+	Tokenizer      *Tokenizer
+	Destroy        func() error
+	Pipelines      map[string]Pipeline
+	IDLabelMap     map[int]string
+	SeparatorToken string
+	Path           string
+	OnnxFilename   string
+	OnnxPath       string
+	OnnxReader     io.ReadCloser
+	// OnnxOutputNames is the ordered ORT session output selection copied at load time.
+	// Nil or empty means the session requests every graph output.
+	OnnxOutputNames       []string
 	UnknownToken          string
 	InputsMeta            []InputOutputInfo
 	OutputsMeta           []InputOutputInfo
@@ -35,13 +38,56 @@ type Model struct {
 	IsGenerative          bool
 }
 
+// LoadModel loads a model with Hugot's legacy all-output ORT session contract.
+//
+// It preserves the historical exported signature and delegates to LoadModelWithOutputs
+// with a nil ONNX output selection.
+//
+// ctx: cancellation and deadline context for filesystem and backend setup.
+// path: model directory containing the ONNX graph and supporting files.
+// onnxFilename: optional ONNX filename when the directory contains multiple .onnx files.
+// options: backend options, including the selected runtime backend.
+// isGenerative: whether to initialize an ORT GenAI session instead of a standard ORT model.
+//
+// Returns the loaded model or an error from backend/tokenizer initialization.
 func LoadModel(ctx context.Context, path string, onnxFilename string, options *options.Options, isGenerative bool) (*Model, error) {
+	return LoadModelWithOutputs(ctx, path, onnxFilename, nil, options, isGenerative)
+}
+
+// LoadModelWithOutputs loads a model and optionally restricts the ORT session to an ordered
+// subset of ONNX graph outputs.
+//
+// Nil or empty onnxOutputNames preserve the existing all-output behavior. A non-empty
+// selection is copied before storage, participates in Model.ID, and is rejected for
+// generative models and non-ORT backends. Blank, duplicate, and unknown names fail before
+// the ORT session is created.
+//
+// ctx: cancellation and deadline context for filesystem and backend setup.
+// path: model directory containing the ONNX graph and supporting files.
+// onnxFilename: optional ONNX filename when the directory contains multiple .onnx files.
+// onnxOutputNames: ordered ONNX outputs to request; nil or empty means all graph outputs.
+// options: backend options, including the selected runtime backend.
+// isGenerative: whether to initialize an ORT GenAI session instead of a standard ORT model.
+//
+// Returns the loaded model or an actionable validation/backend error.
+func LoadModelWithOutputs(ctx context.Context, path string, onnxFilename string, onnxOutputNames []string, options *options.Options, isGenerative bool) (*Model, error) {
+	copiedOutputs := CopyOnnxOutputNames(onnxOutputNames)
+	if err := ValidateOnnxOutputNameList(copiedOutputs); err != nil {
+		return nil, err
+	}
+	if len(copiedOutputs) > 0 {
+		if isGenerative || options.Backend != "ORT" {
+			return nil, fmt.Errorf("OnnxOutputNames is only supported for non-generative ORT models")
+		}
+	}
+
 	model := &Model{
-		ID:           path + ":" + onnxFilename,
-		Path:         path,
-		OnnxFilename: onnxFilename,
-		Pipelines:    map[string]Pipeline{},
-		IsGenerative: isGenerative,
+		ID:              ModelIdentity(path, onnxFilename, copiedOutputs),
+		Path:            path,
+		OnnxFilename:    onnxFilename,
+		OnnxOutputNames: copiedOutputs,
+		Pipelines:       map[string]Pipeline{},
+		IsGenerative:    isGenerative,
 	}
 
 	if isGenerative {
