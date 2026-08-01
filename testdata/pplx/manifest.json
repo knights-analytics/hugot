@@ -1,0 +1,51 @@
+{
+  "model_id": "pplx-embed-v1-0.6B-q4-int8",
+  "repository": "perplexity-ai/pplx-embed-v1-0.6B",
+  "revision": "2c4d510dd4a732063c31a0f70193e35067b51fd8",
+  "source_url": "https://huggingface.co/perplexity-ai/pplx-embed-v1-0.6B",
+  "license_url": "https://huggingface.co/perplexity-ai/pplx-embed-v1-0.6B",
+  "graph": {
+    "path": "model_q4.onnx",
+    "sha256": "4fa24bd4b52fe1f5d09e777c24fb18bd5539a9e4d5adc328d318f26afd14f7de",
+    "size": 609421
+  },
+  "external_data": [
+    {
+      "path": "model_q4.onnx_data",
+      "sha256": "ce29c8d68888a0fc83a2dad08f156c4689445babddfec8581c76e0e49125fae8",
+      "size": 398813184
+    }
+  ],
+  "tokenizer_files": [
+    {
+      "path": "tokenizer.json",
+      "sha256": "c6fb5c5bbba5fa5f8332edfb6d8aa67bd7fb3d75365b1765f108201698eaebf5",
+      "size": 11422837
+    },
+    {
+      "path": "tokenizer_config.json",
+      "sha256": "29282daeff3615d49f86c9e6c6fefb3a798a516da39f9297f3fcb2a8b39e0180",
+      "size": 5638
+    },
+    {
+      "path": "special_tokens_map.json",
+      "sha256": "3c6243480cd551ae25a1c3430fd1b6fe650cd66a70c407200f114f7151a7aaa3",
+      "size": 902
+    },
+    {
+      "path": "config.json",
+      "sha256": "f7865547ecc1c077c5b1f83913fb9816a6586c676ccf3e0f7f00105a1b0c1c6c",
+      "size": 1782
+    }
+  ],
+  "selected_output": "pooler_output_int8",
+  "output_element_type": "INT8",
+  "dimension": 1024,
+  "max_context_tokens": 8192,
+  "ort_version": "1.26.0",
+  "manifest_digest_algorithm": "sha256 of UTF-8 canonical JSON (sort_keys, separators=(',',':')) with manifest_digest omitted",
+  "query_instruction_prefix": null,
+  "post_processing": null,
+  "notes": "Pinned artifacts and metadata for the PPLX Q4 native INT8 qualification harness. Model files are not committed; only hashes and golden metadata are.",
+  "manifest_digest": "9bf6d141e445297e273951ccc69e7e2b01b373126cfcea900e4c2cfed77e2fcb"
+}

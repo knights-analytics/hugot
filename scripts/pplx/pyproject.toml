@@ -1,0 +1,14 @@
+[project]
+name = "pplx-int8-parity"
+version = "0.1.0"
+description = "Python ONNX Runtime reference verifier for PPLX Q4 pooler_output_int8 byte parity."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "numpy>=2.5.1",
+    "onnxruntime==1.26.0",
+    "tokenizers>=0.23.1",
+]
+
+[project.scripts]
+verify-pplx-int8-parity = "verify_pplx_int8_parity:main"
