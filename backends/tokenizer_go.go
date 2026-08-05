@@ -10,7 +10,7 @@ import (
 )
 
 type GoTokenizer struct {
-	Tokenizer     api.Tokenizer
+	Tokenizer     *hftokenizer.Tokenizer
 	TypeIDs       bool
 	AttentionMask bool
 }
@@ -149,8 +149,13 @@ func decodeGo(tokens []uint32, tokenizer *Tokenizer) string {
 
 func getGoTokens(ids []int, tokenizer *Tokenizer) []string {
 	tokens := make([]string, len(ids))
+	tk := tokenizer.GoTokenizer.Tokenizer
 	for i, id := range ids {
-		tokens[i] = tokenizer.GoTokenizer.Tokenizer.Decode([]int{id})
+		if tok, found := tk.IDToToken(id); found {
+			tokens[i] = tok
+		} else {
+			tokens[i] = tk.Decode([]int{id})
+		}
 	}
 	return tokens
 }

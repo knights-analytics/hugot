@@ -29,7 +29,7 @@ fi
 
 version=""
 if [[ -n $cuda ]]; then
-    version="-gpu"
+    version="-gpu_cuda13"
 fi
 
 url="https://github.com/microsoft/onnxruntime/releases/download/v${onnxruntime_version}/onnxruntime-linux-x64${version}-${onnxruntime_version}.tgz"

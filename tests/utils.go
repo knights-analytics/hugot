@@ -849,6 +849,32 @@ func TokenClassificationPipeline(t *testing.T, session *hugot.Session) {
 		}
 		assert.True(t, !hasBerlin(gotA) || len(gotA) < len(gotB), "expected split-words to surface 'Berlin' or increase entity count")
 	})
+
+	t.Run("Word-aggregating strategies merge subwords", func(t *testing.T) {
+		for _, tc := range []struct {
+			name string
+			opt  hugot.TokenClassificationOption
+		}{
+			{"FIRST", pipelines.WithFirstAggregation()},
+			{"MAX", pipelines.WithMaxAggregation()},
+			{"AVERAGE", pipelines.WithAverageAggregation()},
+		} {
+			p, err := hugot.NewPipeline(session, hugot.TokenClassificationConfig{
+				ModelPath: modelPath,
+				Name:      "repro-" + tc.name,
+				Options:   []hugot.TokenClassificationOption{tc.opt, pipelines.WithIgnoreLabels([]string{"O"})},
+			})
+			CheckT(t, err)
+			out, err := p.RunPipeline(t.Context(), []string{"Luan Lorenzo"})
+			CheckT(t, err)
+			assert.NotEmpty(t, out.Entities)
+			for _, ents := range out.Entities {
+				for _, e := range ents {
+					assert.NotEqual(t, "Lu", e.Word)
+				}
+			}
+		}
+	})
 }
 
 func TokenClassificationPipelineValidation(t *testing.T, session *hugot.Session) {

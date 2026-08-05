@@ -323,10 +323,8 @@ func (p *TokenClassificationPipeline) gatherPreEntities(input backends.Tokenized
 		if input.SpecialTokensMask[j] > 0.0 {
 			continue
 		}
-		// TODO: the python code uses id_to_token to get the token here which is a method on the rust tokenizer, check if it's better
 		word := input.Tokens[j]
 		tokenID := input.TokenIDs[j]
-		// TODO: the determination of subword can probably be better done by exporting the words field from the tokenizer directly
 		startInd := input.Offsets[j][0]
 		endInd := input.Offsets[j][1]
 		wordRef := sentence[startInd:endInd]

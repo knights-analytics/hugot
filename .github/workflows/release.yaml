@@ -85,6 +85,7 @@ jobs:
         uses: docker/metadata-action@9ec57ed1fcdbf14dcef7dfbe97b2010124a938b7
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          target: hugot
 
       - name: Build and push
         id: bake
@@ -93,10 +94,9 @@ jobs:
           push: true
           files: |
             docker-bake.hcl
+            ${{ steps.meta.outputs.bake-file }}
           targets: hugot
           set: |
-            hugot.tags=${{ join(fromJson(steps.meta.outputs.json).tags, ',') }}
-            hugot.labels=${{ join(fromJson(steps.meta.outputs.json).labels, ',') }}
             hugot.output=type=registry
 
       - name: Generate artifact attestation
