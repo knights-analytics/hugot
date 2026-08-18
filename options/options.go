@@ -12,6 +12,7 @@ type Options struct {
 	BackendOptions any
 	ORTOptions     *OrtOptions
 	GoMLXOptions   *GoMLXOptions
+	UseGoMLX       bool
 	Destroy        func() error
 	Backend        string
 }
@@ -107,6 +108,17 @@ type GoMLXOptions struct {
 
 // WithOption is the interface for all option functions.
 type WithOption func(o *Options) error
+
+// WithGoMLX (ORT only) uses GoMLX with ONNX Runtime as the execution backend.
+func WithGoMLX() WithOption {
+	return func(o *Options) error {
+		if o.Backend == "ORT" {
+			o.UseGoMLX = true
+			return nil
+		}
+		return fmt.Errorf("WithGoMLX is only supported for ORT backend")
+	}
+}
 
 // WithOnnxLibraryPath (ORT only) Use this function to set the path to the "libonnxuntime.so", "libonnxuntime.dylib" or "onnxruntime.dll" files.
 func WithOnnxLibraryPath(ortLibraryPath string) WithOption {
