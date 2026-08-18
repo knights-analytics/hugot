@@ -8,34 +8,80 @@ import (
 
 // Mean of a float32 vector.
 func Mean(vector []float32) float32 {
-	n := 0
-	sum := float32(0.0)
-	for _, v := range vector {
-		sum = sum + v
-		n++
+	n := len(vector)
+	if n == 0 {
+		return float32(math.NaN())
+	}
+
+	var s0, s1, s2, s3 float32
+	i := 0
+	for ; i+3 < n; i += 4 {
+		s0 += vector[i]
+		s1 += vector[i+1]
+		s2 += vector[i+2]
+		s3 += vector[i+3]
+	}
+	sum := (s0 + s1) + (s2 + s3)
+	for ; i < n; i++ {
+		sum += vector[i]
 	}
 	return sum / float32(n)
 }
 
 // SoftMax take a vector and calculate softmax scores of its values.
 func SoftMax(vector []float32) []float32 {
-	maxLogit := slices.Max(vector)
-	shiftedExp := make([]float64, len(vector))
-	for i, logit := range vector {
-		shiftedExp[i] = math.Exp(float64(logit - maxLogit))
+	if len(vector) == 0 {
+		return []float32{}
 	}
-	sumExp := SumSlice(shiftedExp)
+
+	maxLogit := slices.Max(vector)
 	scores := make([]float32, len(vector))
-	for i, exp := range shiftedExp {
-		scores[i] = float32(exp / sumExp)
+
+	var s0, s1, s2, s3 float64
+	i := 0
+	for ; i+3 < len(vector); i += 4 {
+		e0 := math.Exp(float64(vector[i] - maxLogit))
+		e1 := math.Exp(float64(vector[i+1] - maxLogit))
+		e2 := math.Exp(float64(vector[i+2] - maxLogit))
+		e3 := math.Exp(float64(vector[i+3] - maxLogit))
+
+		scores[i] = float32(e0)
+		scores[i+1] = float32(e1)
+		scores[i+2] = float32(e2)
+		scores[i+3] = float32(e3)
+
+		s0 += e0
+		s1 += e1
+		s2 += e2
+		s3 += e3
+	}
+	sumExp := (s0 + s1) + (s2 + s3)
+
+	for ; i < len(vector); i++ {
+		e := math.Exp(float64(vector[i] - maxLogit))
+		scores[i] = float32(e)
+		sumExp += e
+	}
+
+	inverseSum := float32(1 / sumExp)
+	for i := range scores {
+		scores[i] *= inverseSum
 	}
 	return scores
 }
 
 func SumSlice(s []float64) float64 {
-	sum := 0.0
-	for _, v := range s {
-		sum += v
+	var s0, s1, s2, s3 float64
+	i := 0
+	for ; i+3 < len(s); i += 4 {
+		s0 += s[i]
+		s1 += s[i+1]
+		s2 += s[i+2]
+		s3 += s[i+3]
+	}
+	sum := (s0 + s1) + (s2 + s3)
+	for ; i < len(s); i++ {
+		sum += s[i]
 	}
 	return sum
 }
@@ -47,9 +93,9 @@ func ArgMax(s []float32) (int, float32, error) {
 	}
 	maxIndex := 0
 	maxValue := s[0]
-	for i, v := range s {
-		if v > maxValue {
-			maxValue = v
+	for i := 1; i < len(s); i++ {
+		if s[i] > maxValue {
+			maxValue = s[i]
 			maxIndex = i
 		}
 	}
@@ -57,34 +103,55 @@ func ArgMax(s []float32) (int, float32, error) {
 }
 
 func Sigmoid(s []float32) []float32 {
-	sigmoid := make([]float32, 0, len(s))
-
-	for _, v := range s {
-		v64 := float64(v)
-		sigmoid = append(sigmoid, float32(1.0/(1.0+math.Exp(-v64))))
+	sigmoid := make([]float32, len(s))
+	for i, v := range s {
+		sigmoid[i] = float32(1 / (1 + math.Exp(-float64(v))))
 	}
 	return sigmoid
 }
 
 // Norm of a vector.
 func Norm(v []float32, p int) float64 {
+	if p <= 0 {
+		return math.NaN()
+	}
+
+	if p == 2 {
+		var s0, s1, s2, s3 float64
+		i := 0
+		for ; i+3 < len(v); i += 4 {
+			v0 := float64(v[i])
+			v1 := float64(v[i+1])
+			v2 := float64(v[i+2])
+			v3 := float64(v[i+3])
+			s0 += v0 * v0
+			s1 += v1 * v1
+			s2 += v2 * v2
+			s3 += v3 * v3
+		}
+
+		sum := (s0 + s1) + (s2 + s3)
+		for ; i < len(v); i++ {
+			x := float64(v[i])
+			sum += x * x
+		}
+		return math.Sqrt(sum)
+	}
+
 	sum := 0.0
 	pNorm := float64(p)
 	for _, e := range v {
-		sum += math.Pow(float64(e), pNorm)
+		sum += math.Pow(math.Abs(float64(e)), pNorm)
 	}
-	return math.Sqrt(sum)
+	return math.Pow(sum, 1/pNorm)
 }
 
 // Normalize single vector according to: https://pytorch.org/docs/stable/generated/torch.nn.functional.normalize.html
 func Normalize(embedding []float32, p int) []float32 {
-	var normalizeDenominator float32 = 1e-12
-	embeddingNorm := float32(Norm(embedding, p))
-	if embeddingNorm > normalizeDenominator {
-		normalizeDenominator = embeddingNorm
-	}
-	for i, v := range embedding {
-		embedding[i] = v / normalizeDenominator
+	denominator := max(float32(Norm(embedding, p)), 1e-12)
+	inverseDenominator := 1 / denominator
+	for i := range embedding {
+		embedding[i] *= inverseDenominator
 	}
 	return embedding
 }

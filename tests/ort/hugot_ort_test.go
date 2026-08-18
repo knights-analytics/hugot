@@ -25,6 +25,16 @@ func TestFeatureExtractionPipelineORT(t *testing.T) {
 	testutil.FeatureExtractionPipeline(t, session)
 }
 
+func TestFeatureExtractionPipelineORTGoMLX(t *testing.T) {
+	session, err := hugot.NewORTSession(t.Context(), options.WithGoMLX())
+	testutil.CheckT(t, err)
+	defer func(session *hugot.Session) {
+		destroyErr := session.Destroy()
+		testutil.CheckT(t, destroyErr)
+	}(session)
+	testutil.FeatureExtractionPipeline(t, session)
+}
+
 func TestFeatureExtractionPipelineORTCuda(t *testing.T) {
 	if os.Getenv("CI") != "" {
 		t.SkipNow()
@@ -70,6 +80,25 @@ func TestTextClassificationPipelineORT(t *testing.T) {
 	testutil.TextClassificationPipeline(t, session)
 }
 
+func TestTextClassificationPipelineORTGoMLX(t *testing.T) {
+	opts := []options.WithOption{
+		options.WithOnnxLibraryPath("/usr/lib"),
+		options.WithTelemetry(),
+		options.WithCPUMemArena(true),
+		options.WithMemPattern(true),
+		options.WithIntraOpNumThreads(1),
+		options.WithInterOpNumThreads(1),
+		options.WithGoMLX(),
+	}
+	session, err := hugot.NewORTSession(t.Context(), opts...)
+	testutil.CheckT(t, err)
+	defer func(session *hugot.Session) {
+		destroyErr := session.Destroy()
+		testutil.CheckT(t, destroyErr)
+	}(session)
+	testutil.TextClassificationPipeline(t, session)
+}
+
 func TestTextClassificationPipelineORTCuda(t *testing.T) {
 	if os.Getenv("CI") != "" {
 		t.SkipNow()
@@ -93,6 +122,25 @@ func TestTextClassificationPipelineMultiORT(t *testing.T) {
 		options.WithMemPattern(true),
 		options.WithIntraOpNumThreads(1),
 		options.WithInterOpNumThreads(1),
+	}
+	session, err := hugot.NewORTSession(t.Context(), opts...)
+	testutil.CheckT(t, err)
+	defer func(session *hugot.Session) {
+		destroyErr := session.Destroy()
+		testutil.CheckT(t, destroyErr)
+	}(session)
+	testutil.TextClassificationPipelineMulti(t, session)
+}
+
+func TestTextClassificationPipelineMultiGoMLX(t *testing.T) {
+	opts := []options.WithOption{
+		options.WithOnnxLibraryPath("/usr/lib"),
+		options.WithTelemetry(),
+		options.WithCPUMemArena(true),
+		options.WithMemPattern(true),
+		options.WithIntraOpNumThreads(1),
+		options.WithInterOpNumThreads(1),
+		options.WithGoMLX(),
 	}
 	session, err := hugot.NewORTSession(t.Context(), opts...)
 	testutil.CheckT(t, err)
@@ -140,6 +188,16 @@ func TestTokenClassificationPipelineORT(t *testing.T) {
 	testutil.TokenClassificationPipeline(t, session)
 }
 
+func TestTokenClassificationPipelineORTGoMLX(t *testing.T) {
+	session, err := hugot.NewORTSession(t.Context(), options.WithGoMLX())
+	testutil.CheckT(t, err)
+	defer func(session *hugot.Session) {
+		destroyErr := session.Destroy()
+		testutil.CheckT(t, destroyErr)
+	}(session)
+	testutil.TokenClassificationPipeline(t, session)
+}
+
 func TestTokenClassificationPipelineORTCuda(t *testing.T) {
 	if os.Getenv("CI") != "" {
 		t.SkipNow()
@@ -169,6 +227,16 @@ func TestTokenClassificationPipelineValidationORT(t *testing.T) {
 
 func TestZeroShotClassificationPipelineORT(t *testing.T) {
 	session, err := hugot.NewORTSession(t.Context())
+	testutil.CheckT(t, err)
+	defer func(session *hugot.Session) {
+		destroyErr := session.Destroy()
+		testutil.CheckT(t, destroyErr)
+	}(session)
+	testutil.ZeroShotClassificationPipeline(t, session)
+}
+
+func TestZeroShotClassificationPipelineORTGoMLX(t *testing.T) {
+	session, err := hugot.NewORTSession(t.Context(), options.WithGoMLX())
 	testutil.CheckT(t, err)
 	defer func(session *hugot.Session) {
 		destroyErr := session.Destroy()
@@ -214,6 +282,16 @@ func TestCrossEncoderPipelineORT(t *testing.T) {
 	testutil.CrossEncoderPipeline(t, session)
 }
 
+func TestCrossEncoderPipelineORTGoMLX(t *testing.T) {
+	session, err := hugot.NewORTSession(t.Context(), options.WithGoMLX())
+	testutil.CheckT(t, err)
+	defer func(session *hugot.Session) {
+		destroyErr := session.Destroy()
+		testutil.CheckT(t, destroyErr)
+	}(session)
+	testutil.CrossEncoderPipeline(t, session)
+}
+
 func TestCrossEncoderPipelineORTCuda(t *testing.T) {
 	if os.Getenv("CI") != "" {
 		t.SkipNow()
@@ -251,6 +329,16 @@ func TestImageClassificationPipelineORT(t *testing.T) {
 	testutil.ImageClassificationPipeline(t, session)
 }
 
+func TestImageClassificationPipelineORTGoMLX(t *testing.T) {
+	session, err := hugot.NewORTSession(t.Context(), options.WithGoMLX())
+	testutil.CheckT(t, err)
+	defer func(session *hugot.Session) {
+		destroyErr := session.Destroy()
+		testutil.CheckT(t, destroyErr)
+	}(session)
+	testutil.ImageClassificationPipeline(t, session)
+}
+
 func TestImageClassificationPipelineORTCuda(t *testing.T) {
 	if os.Getenv("CI") != "" {
 		t.SkipNow()
@@ -280,6 +368,16 @@ func TestImageClassificationPipelineValidationORT(t *testing.T) {
 
 func TestObjectDetectionPipelineORT(t *testing.T) {
 	session, err := hugot.NewORTSession(t.Context())
+	testutil.CheckT(t, err)
+	defer func(session *hugot.Session) {
+		destroyErr := session.Destroy()
+		testutil.CheckT(t, destroyErr)
+	}(session)
+	testutil.ObjectDetectionPipeline(t, session)
+}
+
+func TestObjectDetectionPipelineORTGoMLX(t *testing.T) {
+	session, err := hugot.NewORTSession(t.Context(), options.WithGoMLX())
 	testutil.CheckT(t, err)
 	defer func(session *hugot.Session) {
 		destroyErr := session.Destroy()
@@ -371,6 +469,16 @@ func TestQAPipelineORT(t *testing.T) {
 	testutil.QuestionAnsweringPipeline(t, session)
 }
 
+func TestQAPipelineORTGoMLX(t *testing.T) {
+	session, err := hugot.NewORTSession(t.Context(), options.WithGoMLX())
+	testutil.CheckT(t, err)
+	defer func(session *hugot.Session) {
+		destroyErr := session.Destroy()
+		testutil.CheckT(t, destroyErr)
+	}(session)
+	testutil.QuestionAnsweringPipeline(t, session)
+}
+
 func TestQAPipelineORTCuda(t *testing.T) {
 	if os.Getenv("CI") != "" {
 		t.SkipNow()
@@ -390,6 +498,17 @@ func TestQAPipelineORTCuda(t *testing.T) {
 
 func TestTabularPipelineORT(t *testing.T) {
 	session, err := hugot.NewORTSession(t.Context())
+	testutil.CheckT(t, err)
+	defer func(session *hugot.Session) {
+		destroyErr := session.Destroy()
+		testutil.CheckT(t, destroyErr)
+	}(session)
+	testutil.TabularPipeline(t, session)
+}
+
+func TestTabularPipelineORTGoMLX(t *testing.T) {
+	t.Skip("Currently missing TreeEnsembleClassifier ONNX operator")
+	session, err := hugot.NewORTSession(t.Context(), options.WithGoMLX())
 	testutil.CheckT(t, err)
 	defer func(session *hugot.Session) {
 		destroyErr := session.Destroy()
@@ -448,6 +567,16 @@ func TestClosePipelineORT(t *testing.T) {
 // Thread safety
 
 func TestThreadSafetyORT(t *testing.T) {
+	session, err := hugot.NewORTSession(t.Context())
+	testutil.CheckT(t, err)
+	defer func(session *hugot.Session) {
+		destroyErr := session.Destroy()
+		testutil.CheckT(t, destroyErr)
+	}(session)
+	testutil.ThreadSafety(t, session, 250)
+}
+
+func TestThreadSafetyGoMLX(t *testing.T) {
 	session, err := hugot.NewORTSession(t.Context())
 	testutil.CheckT(t, err)
 	defer func(session *hugot.Session) {

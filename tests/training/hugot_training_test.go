@@ -92,7 +92,7 @@ func trainSimilarity(t *testing.T,
 	// Create a new GoMLX training session. Currently, training is only possible by loading an onnx model
 	// into GoMLX, fine-tuning it, and then writing it back to onnx. Hugot deals with the details
 	// for you here.
-	trainingSession, err := hugot.NewXLATrainingSession[*pipelines.FeatureExtractionPipeline](t.Context(), config)
+	trainingSession, err := hugot.NewORTTrainingSession[*pipelines.FeatureExtractionPipeline](t.Context(), config)
 	if err != nil {
 		t.Fatal(err)
 	}

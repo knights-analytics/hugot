@@ -71,7 +71,12 @@ func createGoMLXModelBackend(model *Model, options *options.Options) error {
 	}
 
 	config := "go"
-	if options.GoMLXOptions.TPU {
+	if options.UseGoMLX {
+		if options.ORTOptions == nil || options.ORTOptions.LibraryPath == nil {
+			return errors.Join(errors.New("ONNX Runtime library path is not configured"), modelParsed.Close())
+		}
+		config = "onnx:" + *options.ORTOptions.LibraryPath
+	} else if options.GoMLXOptions.TPU {
 		config = "xla:tpu"
 	} else if options.GoMLXOptions.Cuda {
 		config = "xla:cuda"
