@@ -1,37 +1,36 @@
 module github.com/knights-analytics/hugot
 
-go 1.26.5
+go 1.26.6
 
 require (
 	github.com/daulet/tokenizers v1.27.0
-	github.com/gomlx/compute v0.1.2
+	github.com/gomlx/compute v0.1.3
+	github.com/gomlx/compute-onnx v0.1.3
 	github.com/gomlx/go-huggingface v0.4.1
-	github.com/gomlx/go-xla v0.4.1
-	github.com/gomlx/gomlx v0.28.2
-	github.com/gomlx/onnx-gomlx v0.5.2
+	github.com/gomlx/go-xla v0.4.2
+	github.com/gomlx/gomlx v0.28.4
+	github.com/gomlx/onnx-gomlx v0.5.3-0.20260817124313-7d15c1a04b02
 	github.com/knights-analytics/ortgenai v0.3.2
-	github.com/stretchr/testify v1.11.1
+	github.com/stretchr/testify v1.12.1
 	github.com/viant/afs v1.30.0
-	github.com/yalue/onnxruntime_go v1.32.0
-	golang.org/x/image v0.44.0
+	github.com/yalue/onnxruntime_go v1.35.0
+	golang.org/x/image v0.45.0
 	golang.org/x/sync v0.22.0
 )
 
 require (
-	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/go-errors/errors v1.5.1 // indirect
 	github.com/go-logr/logr v1.4.4 // indirect
 	github.com/gofrs/flock v0.13.0 // indirect
 	github.com/gomlx/exceptions v0.0.3 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
-	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
-	golang.org/x/crypto v0.54.0 // indirect
-	golang.org/x/exp v0.0.0-20260727155853-b88d891fe743 // indirect
+	go.yaml.in/yaml/v3 v3.0.5 // indirect
+	golang.org/x/crypto v0.55.0 // indirect
+	golang.org/x/exp v0.0.0-20260820142414-ca536658362e // indirect
 	golang.org/x/sys v0.47.0 // indirect
 	golang.org/x/term v0.45.0 // indirect
-	golang.org/x/text v0.40.0 // indirect
-	google.golang.org/protobuf v1.36.11 // indirect
-	gopkg.in/yaml.v3 v3.0.1 // indirect
+	golang.org/x/text v0.41.0 // indirect
+	google.golang.org/protobuf v1.36.12 // indirect
 	k8s.io/klog/v2 v2.140.0 // indirect
 )

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"runtime"
 
+	_ "github.com/gomlx/compute-onnx"
 	ort "github.com/yalue/onnxruntime_go"
 
 	"github.com/knights-analytics/hugot/options"
@@ -22,6 +23,9 @@ func NewORTSession(ctx context.Context, opts ...options.WithOption) (*Session, e
 	session, err := newSession(ctx, "ORT", opts...)
 	if err != nil {
 		return nil, err
+	}
+	if session.options.UseGoMLX {
+		return session, nil
 	}
 
 	// set session options and initialise

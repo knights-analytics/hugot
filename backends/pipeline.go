@@ -269,6 +269,9 @@ func CreateTabularTensors(batch *PipelineBatch, model *Model, features [][]float
 func NewBasePipeline[T Pipeline](sessionContext context.Context, config PipelineConfig[T], s *options.Options, model *Model) (*BasePipeline, error) {
 	pipeline := &BasePipeline{}
 	pipeline.Runtime = s.Backend
+	if s.Backend == "ORT" && s.UseGoMLX {
+		pipeline.Runtime = "GO"
+	}
 	pipeline.PipelineName = config.Name
 	pipeline.Model = model
 	pipeline.ONNXTimings = &timings{}
@@ -293,7 +296,11 @@ func CreateModelBackend(ctx context.Context, model *Model, s *options.Options) e
 
 	switch s.Backend {
 	case "ORT":
-		err = createORTModelBackend(model, s)
+		if s.UseGoMLX {
+			err = createGoMLXModelBackend(model, s)
+		} else {
+			err = createORTModelBackend(model, s)
+		}
 	case "GO", "XLA":
 		err = createGoMLXModelBackend(model, s)
 	}

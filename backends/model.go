@@ -80,6 +80,13 @@ func LoadModel(ctx context.Context, path string, onnxFilename string, options *o
 		}
 		switch options.Backend {
 		case "ORT":
+			if options.UseGoMLX {
+				if model.GoMLXModel != nil {
+					model.GoMLXModel.Destroy()
+					model.GoMLXModel = nil
+				}
+				break
+			}
 			if model.ORTModel != nil {
 				destroyErr = errors.Join(destroyErr, model.ORTModel.Destroy())
 				model.ORTModel = nil
