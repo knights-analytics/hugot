@@ -151,7 +151,6 @@ func TestTextClassificationPipelineMultiGoMLX(t *testing.T) {
 	testutil.TextClassificationPipelineMulti(t, session)
 }
 
-
 func TestTextClassificationPipelineORTMultiCuda(t *testing.T) {
 	if os.Getenv("CI") != "" {
 		t.SkipNow()
@@ -480,7 +479,6 @@ func TestQAPipelineORTGoMLX(t *testing.T) {
 	testutil.QuestionAnsweringPipeline(t, session)
 }
 
-
 func TestQAPipelineORTCuda(t *testing.T) {
 	if os.Getenv("CI") != "" {
 		t.SkipNow()
@@ -509,6 +507,7 @@ func TestTabularPipelineORT(t *testing.T) {
 }
 
 func TestTabularPipelineORTGoMLX(t *testing.T) {
+	t.Skip("Currently missing TreeEnsembleClassifier ONNX operator")
 	session, err := hugot.NewORTSession(t.Context(), options.WithGoMLX())
 	testutil.CheckT(t, err)
 	defer func(session *hugot.Session) {

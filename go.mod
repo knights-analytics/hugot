@@ -1,13 +1,13 @@
 module github.com/knights-analytics/hugot
 
-go 1.26.6
+go 1.27.0
 
 require (
 	github.com/daulet/tokenizers v1.27.0
-	github.com/gomlx/compute v0.1.3
-	github.com/gomlx/compute-onnx v0.1.3
+	github.com/gomlx/compute v0.1.4
+	github.com/gomlx/compute-onnx v0.1.4-0.20260825110411-ae8e344872d2
 	github.com/gomlx/go-huggingface v0.4.1
-	github.com/gomlx/go-xla v0.4.2
+	github.com/gomlx/go-xla v0.4.3
 	github.com/gomlx/gomlx v0.28.4
 	github.com/gomlx/onnx-gomlx v0.5.3-0.20260817124313-7d15c1a04b02
 	github.com/knights-analytics/ortgenai v0.3.2
@@ -27,7 +27,7 @@ require (
 	github.com/pkg/errors v0.9.1 // indirect
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
 	golang.org/x/crypto v0.55.0 // indirect
-	golang.org/x/exp v0.0.0-20260820142414-ca536658362e // indirect
+	golang.org/x/exp v0.0.0-20260824195058-e88cd73687aa // indirect
 	golang.org/x/sys v0.47.0 // indirect
 	golang.org/x/term v0.45.0 // indirect
 	golang.org/x/text v0.41.0 // indirect

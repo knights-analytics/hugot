@@ -135,6 +135,8 @@ func newTrainingSession[T backends.Pipeline](sessionContext context.Context, bac
 	case "XLA":
 		opts.GoMLXOptions.XLA = true
 		opts.GoMLXOptions.Cuda = session.cuda
+	case "ORT":
+		opts.UseGoMLX = true
 	case "GO":
 	default:
 		return nil, fmt.Errorf("runtime %s is not supported", backend)
@@ -195,7 +197,7 @@ func newTrainingSession[T backends.Pipeline](sessionContext context.Context, bac
 
 func (s *TrainingSession) Train() error {
 	switch s.backend {
-	case "GO", "XLA":
+	case "GO", "XLA", "ORT":
 		return TrainGoMLX(s)
 	default:
 		return fmt.Errorf("training runtime %s is not supported", s.backend)
@@ -226,7 +228,7 @@ func (s *TrainingSession) Save(ctx context.Context, path string) error {
 	}
 	model := s.pipeline.GetModel()
 	if model != nil {
-		if s.backend == "GO" || s.backend == "XLA" {
+		if s.backend == "GO" || s.backend == "XLA" || s.backend == "ORT" {
 			goMLXModel := model.GoMLXModel
 			if goMLXModel != nil {
 				modelWriter, err := fileutil.NewFileWriter(ctx, fileutil.PathJoinSafe(path, "model.onnx"), "")
