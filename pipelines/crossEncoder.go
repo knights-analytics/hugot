@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/knights-analytics/hugot/backends"
-	"github.com/knights-analytics/hugot/options"
 	"github.com/knights-analytics/hugot/util/safeconv"
 	"github.com/knights-analytics/hugot/util/vectorutil"
 )
@@ -66,23 +65,20 @@ func (t *CrossEncoderOutput) GetOutput() []any {
 	return out
 }
 
-func NewCrossEncoderPipeline(sessionContext context.Context, config backends.PipelineConfig[*CrossEncoderPipeline], s *options.Options, model *backends.Model) (*CrossEncoderPipeline, error) {
-	defaultPipeline, err := backends.NewBasePipeline(sessionContext, config, s, model)
-	if err != nil {
-		return nil, err
-	}
+func NewCrossEncoderPipeline(sessionContext context.Context, config backends.PipelineConfig[*CrossEncoderPipeline], model *backends.Model) (*CrossEncoderPipeline, error) {
+	defaultPipeline := backends.NewBasePipeline(sessionContext, config, model)
 	pipeline := &CrossEncoderPipeline{
 		BasePipeline: defaultPipeline,
 		batchSize:    1,
 		sortResults:  true,
 	}
 	for _, o := range config.Options {
-		err = o(pipeline)
+		err := o(pipeline)
 		if err != nil {
 			return nil, err
 		}
 	}
-	err = pipeline.Validate()
+	err := pipeline.Validate()
 	if err != nil {
 		return nil, err
 	}
@@ -166,7 +162,7 @@ func (p *CrossEncoderPipeline) preprocessPairs(batch *backends.PipelineBatch, in
 	backends.TokenizeInputPairs(batch, p.Model.Tokenizer, inputs, p.Model.SeparatorToken)
 	atomic.AddUint64(&p.TokenizerTimings.NumCalls, 1)
 	atomic.AddUint64(&p.TokenizerTimings.TotalNS, safeconv.DurationToU64(time.Since(start)))
-	err := backends.CreateInputTensors(batch, p.Model, p.Runtime)
+	err := backends.CreateInputTensors(batch, p.Model)
 	return err
 }
 
@@ -257,29 +253,19 @@ func (p *CrossEncoderPipeline) RunPipeline(ctx context.Context, query string, do
 }
 
 func (p *CrossEncoderPipeline) runBatch(ctx context.Context, query string, documents []string, startIndex int) (*CrossEncoderOutput, error) {
-	var runErrors []error
 	inputs := make([][2]string, len(documents))
 	for i, doc := range documents {
 		inputs[i] = [2]string{query, doc}
 	}
-	batch := backends.NewBatch(len(inputs))
-	defer func(*backends.PipelineBatch) {
-		runErrors = append(runErrors, batch.Destroy())
-	}(batch)
-	runErrors = append(runErrors, p.preprocessPairs(batch, inputs))
-	if e := errors.Join(runErrors...); e != nil {
-		return nil, e
-	}
-	runErrors = append(runErrors, p.forward(ctx, batch))
-	if e := errors.Join(runErrors...); e != nil {
-		return nil, e
-	}
-	result, postErr := p.postprocess(batch, documents)
-	runErrors = append(runErrors, postErr)
+	result, err := backends.RunPipeline(ctx, len(inputs), func(batch *backends.PipelineBatch) error {
+		return p.preprocessPairs(batch, inputs)
+	}, p.forward, func(batch *backends.PipelineBatch) (*CrossEncoderOutput, error) {
+		return p.postprocess(batch, documents)
+	})
 	if result != nil {
 		for i := range result.Results {
 			result.Results[i].Index += startIndex
 		}
 	}
-	return result, errors.Join(runErrors...)
+	return result, err
 }

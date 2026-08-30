@@ -18,6 +18,7 @@ import (
 	"github.com/gomlx/gomlx/ml/train/loss"
 	"github.com/gomlx/gomlx/ml/train/optimizer"
 	"github.com/knights-analytics/hugot/backends"
+	"github.com/knights-analytics/hugot/options"
 	"github.com/knights-analytics/hugot/pipelines"
 )
 
@@ -33,7 +34,7 @@ func (e stoppingError) Error() string {
 }
 
 func NewGoTrainingSession[T backends.Pipeline](ctx context.Context, config TrainingConfig) (*TrainingSession, error) {
-	s, err := newTrainingSession[T](ctx, "GO", config)
+	s, err := newTrainingSession[T](ctx, options.BackendGo, config)
 	if err != nil {
 		return nil, err
 	}
@@ -42,10 +43,7 @@ func NewGoTrainingSession[T backends.Pipeline](ctx context.Context, config Train
 }
 
 func NewXLATrainingSession[T backends.Pipeline](ctx context.Context, config TrainingConfig) (*TrainingSession, error) {
-	// Disabled for now until we have auto installs globally
-	xlaDisableAutoInstall()
-
-	s, err := newTrainingSession[T](ctx, "XLA", config)
+	s, err := newTrainingSession[T](ctx, options.BackendXLA, config)
 	if err != nil {
 		return nil, err
 	}

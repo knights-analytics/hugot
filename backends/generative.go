@@ -42,9 +42,9 @@ type GenerativeModel interface {
 
 // GenerativeOptions contains settings for text generation.
 type GenerativeOptions struct {
-	MaxLength   int
 	Temperature *float64
 	TopP        *float64
 	Seed        *int
 	Guidance    *Guidance
+	MaxLength   int
 }

@@ -34,7 +34,12 @@ func (osFileSystem) CopyFile(ctx context.Context, from string, to string) error 
 }
 
 func (osFileSystem) Walk(ctx context.Context, URL string, handler OnVisit) error {
-	return filepath.Walk(URL, func(path string, info os.FileInfo, err error) error {
+	root, err := os.OpenRoot(URL)
+	if err != nil {
+		return err
+	}
+
+	walkErr := filepath.Walk(URL, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
@@ -50,7 +55,11 @@ func (osFileSystem) Walk(ctx context.Context, URL string, handler OnVisit) error
 		}
 		var reader io.Reader
 		if !info.IsDir() {
-			file, openErr := os.Open(path)
+			relativePath, relErr := filepath.Rel(URL, path)
+			if relErr != nil {
+				return relErr
+			}
+			file, openErr := root.Open(relativePath)
 			if openErr != nil {
 				return openErr
 			}
@@ -74,6 +83,8 @@ func (osFileSystem) Walk(ctx context.Context, URL string, handler OnVisit) error
 		}
 		return nil
 	})
+
+	return errors.Join(walkErr, root.Close())
 }
 
 func (osFileSystem) DeleteFile(ctx context.Context, filename string) error {
@@ -103,6 +114,9 @@ func (osFileSystem) FileStats(ctx context.Context, filename string) (os.FileInfo
 
 func (osFileSystem) NewFileWriter(ctx context.Context, filename string, _ string) (io.WriteCloser, error) {
 	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if err := os.MkdirAll(filepath.Dir(filename), 0o755); err != nil {
 		return nil, err
 	}
 	return os.OpenFile(filename, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o644)

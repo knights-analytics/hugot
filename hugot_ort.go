@@ -6,13 +6,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"runtime"
 
 	_ "github.com/gomlx/compute-onnx"
 	ort "github.com/yalue/onnxruntime_go"
 
 	"github.com/knights-analytics/hugot/options"
-	"github.com/knights-analytics/hugot/util/fileutil"
 )
 
 func NewORTSession(ctx context.Context, opts ...options.WithOption) (*Session, error) {
@@ -20,7 +20,7 @@ func NewORTSession(ctx context.Context, opts ...options.WithOption) (*Session, e
 		return nil, errors.New("another session is currently active, and only one session can be active at one time")
 	}
 
-	session, err := newSession(ctx, "ORT", opts...)
+	session, err := newSession(ctx, options.BackendORT, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -29,7 +29,7 @@ func NewORTSession(ctx context.Context, opts ...options.WithOption) (*Session, e
 	}
 
 	// set session options and initialise
-	if initialised, ortErr := session.initialiseORT(ctx); ortErr != nil {
+	if initialised, ortErr := session.initialiseORT(); ortErr != nil {
 		if initialised {
 			destroyErr := session.Destroy()
 			envErr := ort.DestroyEnvironment()
@@ -48,15 +48,13 @@ func NewORTSession(ctx context.Context, opts ...options.WithOption) (*Session, e
 	return session, err
 }
 
-func (s *Session) initialiseORT(ctx context.Context) (bool, error) {
+func (s *Session) initialiseORT() (bool, error) {
 	o := s.options.ORTOptions
 	// Set pre-initialisation options
 	if o.LibraryPath != nil {
-		ortPathExists, err := fileutil.FileExists(ctx, *o.LibraryPath)
-		if err != nil {
-			return false, err
-		}
-		if !ortPathExists {
+		// use os fs here, library cannot be on pluggable storage
+		_, err := os.Stat(*o.LibraryPath)
+		if errors.Is(err, os.ErrNotExist) {
 			return false, fmt.Errorf("cannot find the ort library at: %s", *o.LibraryPath)
 		}
 		ort.SetSharedLibraryPath(*o.LibraryPath)
@@ -91,9 +89,6 @@ func (s *Session) initialiseORT(ctx context.Context) (bool, error) {
 		return true, optionsError
 	}
 	s.options.BackendOptions = sessionOptions
-	s.options.Destroy = func() error {
-		return sessionOptions.Destroy()
-	}
 
 	if o.IntraOpNumThreads != nil {
 		if err := sessionOptions.SetIntraOpNumThreads(*o.IntraOpNumThreads); err != nil {

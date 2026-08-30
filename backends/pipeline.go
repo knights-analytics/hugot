@@ -16,12 +16,12 @@ import (
 
 // BasePipeline can be embedded by a pipeline.
 type BasePipeline struct {
+	SessionContext   context.Context
 	Model            *Model
 	ONNXTimings      *timings
 	TokenizerTimings *timings
 	PipelineName     string
-	Runtime          string
-	SessionContext   context.Context
+	Backend          Backend
 }
 
 type InputOutputInfo struct {
@@ -143,8 +143,11 @@ type TokenizedInput struct {
 
 // PipelineBatch represents a batch of inputs that runs through the pipeline.
 type PipelineBatch struct {
-	InputValues       any
+	InputValues any
+	// Multimodal support
+	Images            any // Will hold *ortgenai.Images for generative models
 	DestroyInputs     func() error
+	DestroyMultimodal func() error
 	Input             []TokenizedInput
 	PaddingMask       [][]bool
 	OutputValues      []any
@@ -154,9 +157,6 @@ type PipelineBatch struct {
 	// PaddedBatchSize is the bucketed batch size used when XLA pads the batch dimension.
 	// Zero means no batch padding was applied (ORT / GO backend).
 	PaddedBatchSize int
-	// Multimodal support
-	Images            any // Will hold *ortgenai.Images for generative models
-	DestroyMultimodal func() error
 }
 
 func (b *PipelineBatch) Destroy() error {
@@ -168,6 +168,23 @@ func (b *PipelineBatch) Destroy() error {
 		err = errors.Join(err, b.DestroyMultimodal())
 	}
 	return err
+}
+
+// RunPipeline executes the common synchronous pipeline lifecycle. The typed
+// postprocessor keeps the concrete output type visible to pipeline callers.
+func RunPipeline[T any](ctx context.Context, size int, preprocess func(*PipelineBatch) error, forward func(context.Context, *PipelineBatch) error, postprocess func(*PipelineBatch) (*T, error)) (result *T, err error) {
+	batch := NewBatch(size)
+	defer func() {
+		err = errors.Join(err, batch.Destroy())
+	}()
+
+	if err = preprocess(batch); err != nil {
+		return nil, err
+	}
+	if err = forward(ctx, batch); err != nil {
+		return nil, err
+	}
+	return postprocess(batch)
 }
 
 // NewBatch initializes a new batch for inference.
@@ -192,92 +209,59 @@ func GetNames(info []InputOutputInfo) []string {
 }
 
 func RunSessionOnBatch(ctx context.Context, batch *PipelineBatch, p *BasePipeline) error {
-	switch p.Runtime {
-	case "ORT":
-		return runORTSessionOnBatch(ctx, batch, p)
-	case "GO", "XLA":
-		return runGoMLXSessionOnBatch(ctx, batch, p)
+	if p.Backend == nil {
+		return fmt.Errorf("pipeline backend is not configured")
 	}
-	return nil
+	return p.Backend.RunSessionOnBatch(ctx, batch, p)
 }
 
 func RunGenerativeSessionOnBatch(ctx context.Context, batch *PipelineBatch, p *BasePipeline, maxLength int, stopSequences []string, temperature *float64, topP *float64, seed *int, tools []string, guidance *Guidance) (chan SequenceDelta, chan error, error) {
-	switch p.Runtime {
-	case "ORT":
-		return runGenerativeORTSessionOnBatch(ctx, batch, p, maxLength, stopSequences, temperature, topP, seed, tools, guidance)
-	case "GO":
-		return nil, nil, errors.New("GO backend is not yet implemented for generative models")
-	case "XLA":
-		return nil, nil, errors.New("XLA backend is not yet implemented for generative models")
-	default:
-		return nil, nil, errors.New("invalid backend")
+	if p.Backend == nil {
+		return nil, nil, fmt.Errorf("pipeline backend is not configured")
 	}
+	return p.Backend.RunGenerativeSessionOnBatch(ctx, batch, p, maxLength, stopSequences, temperature, topP, seed, tools, guidance)
 }
 
 func CreateMessages(batch *PipelineBatch, p *BasePipeline, inputs any, systemPrompt string) error {
-	switch p.Runtime {
-	case "ORT":
-		return CreateMessagesORT(batch, inputs, systemPrompt)
-	case "GO", "XLA":
-		return fmt.Errorf("not implemented")
+	if p.Backend == nil {
+		return fmt.Errorf("pipeline backend is not configured")
 	}
-	return nil
+	return p.Backend.CreateMessages(batch, inputs, systemPrompt)
 }
 
 // CreateInputTensorsTraining creates input tensors for training. Same as CreateInputTensors but
 // we never pad the batch size as we expect regular batch sizes from the dataset.
-func CreateInputTensorsTraining(batch *PipelineBatch, model *Model, runtime string) error {
-	switch runtime {
-	case "ORT":
-		return createInputTensorsORT(batch, model)
-	case "GO":
-		return createInputTensorsGoMLX(batch, model, false, false)
-	case "XLA":
-		return createInputTensorsGoMLX(batch, model, false, true)
+func CreateInputTensorsTraining(batch *PipelineBatch, model *Model) error {
+	if model.Backend != nil {
+		return model.Backend.CreateInputTensors(batch, model, true)
 	}
-	return nil
+	return fmt.Errorf("pipeline backend is not configured")
 }
 
-func CreateInputTensors(batch *PipelineBatch, model *Model, runtime string) error {
-	switch runtime {
-	case "ORT":
-		return createInputTensorsORT(batch, model)
-	case "GO":
-		if model.GoMLXModel.MaxCache > 0 {
-			// only pad the batch dimension if we have a limited cache
-			return createInputTensorsGoMLX(batch, model, true, true)
-		}
-		return createInputTensorsGoMLX(batch, model, false, false)
-	case "XLA":
-		return createInputTensorsGoMLX(batch, model, true, true)
+func CreateInputTensors(batch *PipelineBatch, model *Model) error {
+	if model.Backend != nil {
+		return model.Backend.CreateInputTensors(batch, model, false)
 	}
-	return nil
+	return fmt.Errorf("pipeline backend is not configured")
 }
 
 // CreateTabularTensors builds input tensors for classic ML/tabular models.
-func CreateTabularTensors(batch *PipelineBatch, model *Model, features [][]float32, runtime string) error {
-	switch runtime {
-	case "ORT":
-		return createTabularTensorsORT(batch, model, features)
-	case "GO", "XLA":
-		return createTabularTensorsGoMLX(batch, model, features)
-	default:
-		return fmt.Errorf("invalid runtime %s", runtime)
+func CreateTabularTensors(batch *PipelineBatch, model *Model, features [][]float32) error {
+	if model.Backend != nil {
+		return model.Backend.CreateTabularTensors(batch, model, features)
 	}
+	return fmt.Errorf("pipeline backend is not configured")
 }
 
-func NewBasePipeline[T Pipeline](sessionContext context.Context, config PipelineConfig[T], s *options.Options, model *Model) (*BasePipeline, error) {
-	pipeline := &BasePipeline{}
-	pipeline.Runtime = s.Backend
-	if s.Backend == "ORT" && s.UseGoMLX {
-		pipeline.Runtime = "GO"
+func NewBasePipeline[T Pipeline](sessionContext context.Context, config PipelineConfig[T], model *Model) *BasePipeline {
+	return &BasePipeline{
+		PipelineName:     config.Name,
+		Model:            model,
+		Backend:          model.Backend,
+		ONNXTimings:      &timings{},
+		TokenizerTimings: &timings{},
+		SessionContext:   sessionContext,
 	}
-	pipeline.PipelineName = config.Name
-	pipeline.Model = model
-	pipeline.ONNXTimings = &timings{}
-	pipeline.TokenizerTimings = &timings{}
-	pipeline.SessionContext = sessionContext
-	return pipeline, nil
 }
 
 func CreateModelBackend(ctx context.Context, model *Model, s *options.Options) error {
@@ -294,16 +278,20 @@ func CreateModelBackend(ctx context.Context, model *Model, s *options.Options) e
 		model.OnnxReader = reader
 	}
 
+	backend, backendErr := newBackend(s)
+	if backendErr != nil {
+		return backendErr
+	}
+	model.Backend = backend
 	switch s.Backend {
-	case "ORT":
+	case options.BackendORT:
 		if s.UseGoMLX {
 			err = createGoMLXModelBackend(model, s)
 		} else {
 			err = createORTModelBackend(model, s)
 		}
-	case "GO", "XLA":
+	case options.BackendGo, options.BackendXLA:
 		err = createGoMLXModelBackend(model, s)
 	}
-
 	return err
 }

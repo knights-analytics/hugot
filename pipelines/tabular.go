@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/knights-analytics/hugot/backends"
-	"github.com/knights-analytics/hugot/options"
 	"github.com/knights-analytics/hugot/util/safeconv"
 	"github.com/knights-analytics/hugot/util/vectorutil"
 )
@@ -20,9 +19,9 @@ import (
 // or regression values.
 type TabularPipeline struct {
 	*backends.BasePipeline
+	IDLabelMap              map[int]string // optional mapping from class IDs to labels
 	AggregationFunctionName string         // for classification: SOFTMAX or SIGMOID
 	ProblemType             string         // "classification" or "regression"
-	IDLabelMap              map[int]string // optional mapping from class IDs to labels
 }
 
 type TabularClassificationOutput struct {
@@ -95,11 +94,9 @@ func WithIDLabelMap(labels map[int]string) backends.PipelineOption[*TabularPipel
 }
 
 // NewTabularPipeline initializes the pipeline.
-func NewTabularPipeline(sessionContext context.Context, config backends.PipelineConfig[*TabularPipeline], s *options.Options, model *backends.Model) (*TabularPipeline, error) {
-	base, err := backends.NewBasePipeline(sessionContext, config, s, model)
-	if err != nil {
-		return nil, err
-	}
+func NewTabularPipeline(sessionContext context.Context, config backends.PipelineConfig[*TabularPipeline], model *backends.Model) (*TabularPipeline, error) {
+	base := backends.NewBasePipeline(sessionContext, config, model)
+	var err error
 	p := &TabularPipeline{BasePipeline: base}
 	for _, o := range config.Options {
 		if err = o(p); err != nil {
@@ -216,7 +213,7 @@ func (p *TabularPipeline) Validate() error {
 func (p *TabularPipeline) preprocess(batch *backends.PipelineBatch, inputs [][]float32) error {
 	start := time.Now()
 	// Build tensors
-	if err := backends.CreateTabularTensors(batch, p.Model, inputs, p.Runtime); err != nil {
+	if err := backends.CreateTabularTensors(batch, p.Model, inputs); err != nil {
 		return err
 	}
 	_ = start // measured but not recorded; tokenizer not used
@@ -333,25 +330,9 @@ func (p *TabularPipeline) Run(ctx context.Context, inputs []string) (backends.Pi
 }
 
 func (p *TabularPipeline) RunPipeline(ctx context.Context, inputs [][]float32) (*TabularOutput, error) {
-	var runErrors []error
-	batch := backends.NewBatch(len(inputs))
-	defer func(*backends.PipelineBatch) {
-		runErrors = append(runErrors, batch.Destroy())
-	}(batch)
-
-	runErrors = append(runErrors, p.preprocess(batch, inputs))
-	if e := errors.Join(runErrors...); e != nil {
-		return nil, e
-	}
-
-	runErrors = append(runErrors, p.forward(ctx, batch))
-	if e := errors.Join(runErrors...); e != nil {
-		return nil, e
-	}
-
-	result, postErr := p.postprocess(batch)
-	runErrors = append(runErrors, postErr)
-	return result, errors.Join(runErrors...)
+	return backends.RunPipeline(ctx, len(inputs), func(batch *backends.PipelineBatch) error {
+		return p.preprocess(batch, inputs)
+	}, p.forward, p.postprocess)
 }
 
 // parseFeatures accepts each input only as a JSON array ("[1,2,3]").

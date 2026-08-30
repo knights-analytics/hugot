@@ -32,14 +32,14 @@ func loadGoTokenizer(tokenizerBytes []byte, model *Model) error {
 	}
 
 	model.Tokenizer = &Tokenizer{
-		Runtime: "GO",
+		Runtime: TokenizerRuntimeGo,
 		GoTokenizer: &GoTokenizer{
 			Tokenizer:     tk,
 			TypeIDs:       typeIDs,
 			AttentionMask: attentionMask,
 		},
 		MaxAllowedTokens: model.MaxPositionEmbeddings,
-		Destroy: func() error {
+		close: func() error {
 			return nil
 		},
 	}

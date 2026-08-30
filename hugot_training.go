@@ -26,13 +26,14 @@ type TrainingStatistics struct {
 type TrainingSession struct {
 	pipeline         backends.Pipeline
 	earlyStopping    *earlyStopping
-	backend          string
+	backend          options.Backend
 	statistics       TrainingStatistics
 	freezeLayers     []int // freeze the layers of the transformer model, 0 is the first layer etc. Set [-1] to freeze all layers apart from the last one
 	config           TrainingConfig
 	maxEpochs        int
 	cuda             bool
-	freezeEmbeddings bool // freeze the embedding layers of the transfomer model
+	freezeEmbeddings bool // freeze the embedding layers of the transformer model
+	sessionContext   context.Context
 }
 
 // GetPipeline returns the pipeline used in the training session.
@@ -41,7 +42,7 @@ func (s *TrainingSession) GetPipeline() backends.Pipeline {
 }
 
 func (s *TrainingSession) Destroy() error {
-	err := s.pipeline.GetModel().Destroy()
+	err := s.pipeline.GetModel().Close()
 	if err != nil {
 		return err
 	}
@@ -112,11 +113,12 @@ type TrainingConfig struct {
 	GOMLXTrainingOptions *GOMLXTrainingOptions
 	ModelPath            string
 	OnnxFilename         string
+	SessionOptions       []options.WithOption
 	Options              []TrainingOption
 	Verbose              bool
 }
 
-func newTrainingSession[T backends.Pipeline](sessionContext context.Context, backend string, config TrainingConfig) (*TrainingSession, error) {
+func newTrainingSession[T backends.Pipeline](sessionContext context.Context, backend options.Backend, config TrainingConfig) (*TrainingSession, error) {
 	session := &TrainingSession{
 		config:  config,
 		backend: backend,
@@ -124,34 +126,41 @@ func newTrainingSession[T backends.Pipeline](sessionContext context.Context, bac
 	var trainingPipeline T
 	var model *backends.Model
 	var err error
-	opts := options.Defaults()
-	opts.Backend = backend
+	parsedOptions := options.Defaults()
+	parsedOptions.Backend = backend
+	for _, opt := range config.SessionOptions {
+		if err = opt(parsedOptions); err != nil {
+			return nil, err
+		}
+	}
 	for _, opt := range config.Options {
 		if err = opt(session); err != nil {
 			return nil, err
 		}
 	}
 	switch backend {
-	case "XLA":
-		opts.GoMLXOptions.XLA = true
-		opts.GoMLXOptions.Cuda = session.cuda
-	case "ORT":
-		opts.UseGoMLX = true
-	case "GO":
+	case options.BackendXLA:
+		parsedOptions.GoMLXOptions.XLA = true
+		parsedOptions.GoMLXOptions.Cuda = session.cuda
+	case options.BackendORT:
+		parsedOptions.UseGoMLX = true
+	case options.BackendGo:
 	default:
 		return nil, fmt.Errorf("runtime %s is not supported", backend)
 	}
 	if session.maxEpochs <= 0 {
 		session.maxEpochs = 100 // default to 100 epochs if not set
 	}
-	model, err = backends.LoadModel(sessionContext, config.ModelPath, config.OnnxFilename, opts, false)
+	sessionContext = fileutil.WithFileSystem(sessionContext, parsedOptions.FileSystem)
+	session.sessionContext = sessionContext
+	model, err = backends.LoadModel(sessionContext, config.ModelPath, config.OnnxFilename, parsedOptions, false)
 	if err != nil {
 		return nil, err
 	}
 	switch any(trainingPipeline).(type) {
 	case *pipelines.FeatureExtractionPipeline:
 		pipelineConfig := FeatureExtractionConfig{}
-		pipeline, _, err := initializePipeline(sessionContext, pipelineConfig, opts, model)
+		pipeline, _, err := initializePipeline(sessionContext, pipelineConfig, model)
 		if err != nil {
 			return nil, err
 		}
@@ -197,7 +206,7 @@ func newTrainingSession[T backends.Pipeline](sessionContext context.Context, bac
 
 func (s *TrainingSession) Train() error {
 	switch s.backend {
-	case "GO", "XLA", "ORT":
+	case options.BackendGo, options.BackendXLA, options.BackendORT:
 		return TrainGoMLX(s)
 	default:
 		return fmt.Errorf("training runtime %s is not supported", s.backend)
@@ -207,12 +216,12 @@ func (s *TrainingSession) Train() error {
 // Save serializes the trained model as an onnx model.
 // If a tokenizer is present, the tokenizer files are copied from the untrained model directory to the trained model.
 // Path is the full path to the directory where the model will be saved.
-func (s *TrainingSession) Save(ctx context.Context, path string) error {
+func (s *TrainingSession) Save(path string) error {
 	if path == "" {
 		return fmt.Errorf("path is required")
 	}
 	var writeErr error
-	statisticsWriter, err := fileutil.NewFileWriter(ctx, fileutil.PathJoinSafe(path, "statistics.txt"), "")
+	statisticsWriter, err := fileutil.NewFileWriter(s.sessionContext, fileutil.PathJoinSafe(path, "statistics.txt"), "")
 	if err != nil {
 		return err
 	}
@@ -228,10 +237,10 @@ func (s *TrainingSession) Save(ctx context.Context, path string) error {
 	}
 	model := s.pipeline.GetModel()
 	if model != nil {
-		if s.backend == "GO" || s.backend == "XLA" || s.backend == "ORT" {
+		if s.backend == options.BackendGo || s.backend == options.BackendXLA || s.backend == options.BackendORT {
 			goMLXModel := model.GoMLXModel
 			if goMLXModel != nil {
-				modelWriter, err := fileutil.NewFileWriter(ctx, fileutil.PathJoinSafe(path, "model.onnx"), "")
+				modelWriter, err := fileutil.NewFileWriter(s.sessionContext, fileutil.PathJoinSafe(path, "model.onnx"), "")
 				if err != nil {
 					return err
 				}
@@ -241,7 +250,7 @@ func (s *TrainingSession) Save(ctx context.Context, path string) error {
 				writeErr = errors.Join(writeErr, goMLXModel.Save(modelWriter))
 				if model.Tokenizer != nil {
 					// copy tokenizer files from original model
-					writeErr = errors.Join(writeErr, copyTokenizer(ctx, model.Path, path))
+					writeErr = errors.Join(writeErr, copyTokenizer(s.sessionContext, model.Path, path))
 				}
 			} else {
 				return fmt.Errorf("gomlx model is nil")
@@ -267,11 +276,11 @@ func copyTokenizer(ctx context.Context, from, to string) error {
 			return false, ctx.Err()
 		}
 		if toCopy[info.Name()] {
-			if err = fileutil.CopyFile(ctx, fileutil.PathJoinSafe(from, parent, info.Name()), to); err != nil {
+			if err = fileutil.CopyFile(ctx, fileutil.PathJoinSafe(from, parent, info.Name()), fileutil.PathJoinSafe(to, info.Name())); err != nil {
 				return false, err
 			}
 		}
 		return true, nil
 	}
-	return fileutil.WalkDir()(ctx, from, walker)
+	return fileutil.WalkDir(ctx, from, walker)
 }

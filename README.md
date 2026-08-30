@@ -269,13 +269,19 @@ session, err := hugot.NewORTSession(
 InterOpNumThreads and IntraOpNumThreads constricts each goroutine's call to a single core, greatly reducing locking and cache penalties. Disabling CpuMemArena and MemPattern skips pre-allocation of some memory structures, increasing latency, but also throughput efficiency.
 
 ## File Systems
-Hugot uses the standard operating system filesystem by default. File operations are defined by `fileutil.FileSystem`, which can be replaced with an adapter for an object store or another filesystem. Set the adapter during application initialization; pass `nil` to restore the OS default:
+Hugot uses the standard operating system filesystem by default. File operations are defined by `fileutil.FileSystem`, which can be replaced with an adapter for an object store or another filesystem. Pass the adapter with `options.WithFileSystem` when creating a session; the adapter is scoped to that session and can be used safely by concurrent sessions:
 ```go
-fileutil.SetFileSystem(myFileSystemAdapter)
-defer fileutil.SetFileSystem(nil)
+session, err := hugot.NewGoSession(
+    context.Background(),
+    options.WithFileSystem(myFileSystemAdapter),
+)
+if err != nil {
+    return err
+}
+defer session.Destroy()
 ```
 
-The adapter must implement the operations in `util/fileutil/file.go` (`Open`, `Copy`, `Walk`, `Delete`, `Exists`, `Stat`, and `NewWriter`). This keeps Hugot independent of storage providers while allowing integrations such as `afs` or `gocloud` to translate those operations to their own APIs.
+The adapter must implement the operations in `util/fileutil/file.go` (`OpenFile`, `CopyFile`, `Walk`, `DeleteFile`, `FileExists`, `FileStats`, and `NewFileWriter`). This keeps Hugot independent of storage providers while allowing integrations such as `afs` or `gocloud` to translate those operations to their own APIs.
 
 ## Limitations
 

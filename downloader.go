@@ -31,11 +31,12 @@ type DownloadOptions struct {
 // NewDownloadOptions creates new DownloadOptions struct with default values.
 // Override the values to specify different download options.
 func NewDownloadOptions() DownloadOptions {
-	d := DownloadOptions{}
-	d.Branch = "main"
-	d.MaxRetries = 5
-	d.RetryInterval = 5
-	d.ConcurrentConnections = 5
+	d := DownloadOptions{
+		Branch:                "main",
+		MaxRetries:            5,
+		RetryInterval:         5,
+		ConcurrentConnections: 5,
+	}
 	return d
 }
 

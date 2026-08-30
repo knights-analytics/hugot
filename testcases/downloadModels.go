@@ -44,7 +44,7 @@ var extraFiles = []struct {
 }
 
 func main() {
-	ctx := context.Background()
+	ctx := fileutil.WithFileSystem(context.Background(), nil)
 	if ok, err := fileutil.FileExists(ctx, "./models"); err == nil {
 		if !ok {
 			err = os.MkdirAll("./models", os.ModePerm)
