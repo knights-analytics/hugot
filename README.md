@@ -269,10 +269,13 @@ session, err := hugot.NewORTSession(
 InterOpNumThreads and IntraOpNumThreads constricts each goroutine's call to a single core, greatly reducing locking and cache penalties. Disabling CpuMemArena and MemPattern skips pre-allocation of some memory structures, increasing latency, but also throughput efficiency.
 
 ## File Systems
-We use an [abstract file system](https://github.com/viant/afs) within Hugot. It works out of the box with various OS filesystems, to use object stores such as S3 please import the appropriate plugin from the afsc library, e.g.
+Hugot uses the standard operating system filesystem by default. File operations are defined by `fileutil.FileSystem`, which can be replaced with an adapter for an object store or another filesystem. Set the adapter during application initialization; pass `nil` to restore the OS default:
 ```go
-import _ "github.com/viant/afsc/s3"
+fileutil.SetFileSystem(myFileSystemAdapter)
+defer fileutil.SetFileSystem(nil)
 ```
+
+The adapter must implement the operations in `util/fileutil/file.go` (`Open`, `Copy`, `Walk`, `Delete`, `Exists`, `Stat`, and `NewWriter`). This keeps Hugot independent of storage providers while allowing integrations such as `afs` or `gocloud` to translate those operations to their own APIs.
 
 ## Limitations
 

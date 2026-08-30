@@ -6,21 +6,53 @@ import (
 	"context"
 	"errors"
 	"io"
+	"os"
 	"path/filepath"
 	"strings"
-
-	"github.com/viant/afs"
-	"github.com/viant/afs/option"
-	"github.com/viant/afs/option/content"
-	"github.com/viant/afs/storage"
+	"sync"
 )
 
-var fileSystem = afs.New()
+// OnVisit is called for each file or directory encountered by WalkDir.
+// parent is relative to the URL passed to WalkDir and reader is provided for files.
+type OnVisit func(ctx context.Context, URL string, parent string, info os.FileInfo, reader io.Reader) (toContinue bool, err error)
 
-const partSize = 64 * 1024 * 1024
+// FileSystem is the storage contract used by Hugot. The default implementation
+// uses the local operating system, while applications can provide an adapter for
+// object storage or another filesystem.
+type FileSystem interface {
+	OpenFile(ctx context.Context, filename string) (io.ReadCloser, error)
+	CopyFile(ctx context.Context, from string, to string) error
+	Walk(ctx context.Context, URL string, handler OnVisit) error
+	DeleteFile(ctx context.Context, filename string) error
+	FileExists(ctx context.Context, filename string) (bool, error)
+	FileStats(ctx context.Context, filename string) (os.FileInfo, error)
+	NewFileWriter(ctx context.Context, filename string, contentType string) (io.WriteCloser, error)
+}
+
+var (
+	fileSystemMu sync.RWMutex
+	fileSystem   FileSystem = osFileSystem{}
+)
+
+// SetFileSystem replaces the filesystem used by the package. It is intended to
+// be called during application initialization, before starting concurrent work.
+func SetFileSystem(system FileSystem) {
+	fileSystemMu.Lock()
+	if system == nil {
+		system = osFileSystem{}
+	}
+	fileSystem = system
+	fileSystemMu.Unlock()
+}
+
+func currentFileSystem() FileSystem {
+	fileSystemMu.RLock()
+	defer fileSystemMu.RUnlock()
+	return fileSystem
+}
 
 func ReadFileBytes(ctx context.Context, filename string) ([]byte, error) {
-	file, err := fileSystem.OpenURL(ctx, filename)
+	file, err := currentFileSystem().OpenFile(ctx, filename)
 	if err != nil {
 		return nil, err
 	}
@@ -48,7 +80,7 @@ func GetPathType(path string) string {
 }
 
 func OpenFile(ctx context.Context, filename string) (io.ReadCloser, error) {
-	return fileSystem.OpenURL(ctx, filename)
+	return currentFileSystem().OpenFile(ctx, filename)
 }
 
 // ReadLine returns a single line (without the ending \n)
@@ -87,23 +119,23 @@ func PathJoinSafe(elem ...string) string {
 }
 
 func CopyFile(ctx context.Context, from string, to string) error {
-	return fileSystem.Copy(ctx, from, to, option.NewSource(option.NewStream(partSize, 0)), option.NewDest(option.NewSkipChecksum(true)))
+	return currentFileSystem().CopyFile(ctx, from, to)
 }
 
-func WalkDir() func(ctx context.Context, URL string, handler storage.OnVisit, options ...storage.Option) error {
-	return fileSystem.Walk
+func WalkDir() func(ctx context.Context, URL string, handler OnVisit) error {
+	return currentFileSystem().Walk
 }
 
 func DeleteFile(ctx context.Context, filename string) error {
-	return fileSystem.Delete(ctx, filename)
+	return currentFileSystem().DeleteFile(ctx, filename)
 }
 
 func FileExists(ctx context.Context, filename string) (bool, error) {
-	return fileSystem.Exists(ctx, filename)
+	return currentFileSystem().FileExists(ctx, filename)
 }
 
-func FileStats(ctx context.Context, filename string) (storage.Object, error) {
-	return fileSystem.Object(ctx, filename)
+func FileStats(ctx context.Context, filename string) (os.FileInfo, error) {
+	return currentFileSystem().FileStats(ctx, filename)
 }
 
 func NewFileWriter(ctx context.Context, filename string, contentType string) (io.WriteCloser, error) {
@@ -112,13 +144,10 @@ func NewFileWriter(ctx context.Context, filename string, contentType string) (io
 		return nil, err
 	}
 	if exists {
-		err = fileSystem.Delete(ctx, filename)
+		err = currentFileSystem().DeleteFile(ctx, filename)
 		if err != nil {
 			return nil, err
 		}
 	}
-	if contentType != "" {
-		return fileSystem.NewWriter(ctx, filename, 0o644, content.NewMeta(content.Type, contentType), option.NewSkipChecksum(true))
-	}
-	return fileSystem.NewWriter(ctx, filename, 0o644, option.NewSkipChecksum(true))
+	return currentFileSystem().NewFileWriter(ctx, filename, contentType)
 }
