@@ -33,10 +33,27 @@ type GoMLXModel struct {
 	Store           *mlmodel.Store
 	Exec            *mlmodel.Exec
 	Call            func(scope *mlmodel.Scope, inputs []*graph.Node) []*graph.Node
-	Destroy         func()
 	BatchBuckets    []int // BatchBuckets defines bucket sizes for batch dimension padding.
 	SequenceBuckets []int // SequenceBuckets defines bucket sizes for sequence length padding.
 	MaxCache        int   // MaxCache sets the maximum number of unique input shapes to cache.
+}
+
+func (m *GoMLXModel) Close() {
+	if m == nil {
+		return
+	}
+	if m.Exec != nil {
+		m.Exec.Finalize()
+	}
+	if m.Store != nil {
+		m.Store.Finalize()
+	}
+	if m.Backend != nil {
+		m.Backend.Finalize()
+	}
+	if m.OnnxModel != nil {
+		_ = m.OnnxModel.Close()
+	}
 }
 
 func createGoMLXModelBackend(model *Model, options *options.Options) error {
@@ -116,11 +133,6 @@ func createGoMLXModelBackend(model *Model, options *options.Options) error {
 		MaxCache:        maxCache,
 		BatchBuckets:    batchBuckets,
 		SequenceBuckets: sequenceBuckets,
-		Destroy: func() {
-			exec.Finalize()
-			store.Finalize()
-			backend.Finalize()
-		},
 	}
 	model.InputsMeta = inputs
 	model.OutputsMeta = outputs
@@ -391,11 +403,11 @@ func shapeBucket(n int, buckets []int) (int, error) {
 	return 0, fmt.Errorf("input shape %d exceeds maximum bucket size %v", n, buckets)
 }
 
-func (goMLXModel *GoMLXModel) Save(w io.Writer) error {
-	if err := goMLXModel.OnnxModel.ScopeToONNX(goMLXModel.Scope); err != nil {
+func (m *GoMLXModel) Save(w io.Writer) error {
+	if err := m.OnnxModel.ScopeToONNX(m.Scope); err != nil {
 		return err
 	}
-	err := goMLXModel.OnnxModel.Write(w)
+	err := m.OnnxModel.Write(w)
 	if err != nil {
 		return err
 	}

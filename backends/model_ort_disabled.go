@@ -10,10 +10,11 @@ import (
 )
 
 type ORTModel struct {
-	Destroy           func() error
 	GenerativeSession *disabledGenerativeSession // placeholder when ORT disabled
 	GenerativeEngine  *disabledGenerativeEngine  // placeholder when ORT disabled
 }
+
+func (m *ORTModel) Close() error { return nil }
 
 func createORTModelBackend(_ *Model, _ *options.Options) error {
 	return errors.New("ORT is not enabled")

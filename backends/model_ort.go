@@ -27,7 +27,23 @@ type ORTModel struct {
 	GenerativeEngine  *ortgenai.Engine
 	SessionOptions    *ort.SessionOptions
 	Options           *options.OrtOptions
-	Destroy           func() error
+}
+
+func (m *ORTModel) Close() error {
+	if m == nil {
+		return nil
+	}
+	if m.Session != nil {
+		return m.Session.Destroy()
+	}
+	if m.GenerativeSession != nil {
+		m.GenerativeSession.Destroy()
+		return nil
+	}
+	if m.GenerativeEngine != nil {
+		m.GenerativeEngine.Destroy()
+	}
+	return nil
 }
 
 var generativeBackendMutex = sync.Mutex{}
@@ -113,10 +129,6 @@ func createORTGenerativeSession(ctx context.Context, model *Model, options *opti
 		model.ORTModel = &ORTModel{
 			GenerativeEngine: ortGenAiEngine,
 			Options:          options.ORTOptions,
-			Destroy: func() error {
-				ortGenAiEngine.Destroy()
-				return nil
-			},
 		}
 	} else {
 		ortGenAiSession, err := ortgenai.CreateSessionWithOptions(model.Path, providers, providerOptions)
@@ -126,10 +138,6 @@ func createORTGenerativeSession(ctx context.Context, model *Model, options *opti
 		model.ORTModel = &ORTModel{
 			GenerativeSession: ortGenAiSession,
 			Options:           options.ORTOptions,
-			Destroy: func() error {
-				ortGenAiSession.Destroy()
-				return nil
-			},
 		}
 	}
 	return nil
@@ -352,7 +360,10 @@ func runGenerativeORTSessionOnBatch(ctx context.Context, batch *PipelineBatch, p
 }
 
 func createORTModelBackend(model *Model, options *options.Options) error {
-	sessionOptions := options.BackendOptions.(*ort.SessionOptions)
+	sessionOptions, ok := options.BackendOptions.(*ort.SessionOptions)
+	if !ok || sessionOptions == nil {
+		return errors.New("invalid ORT session options")
+	}
 
 	var inputs, outputs []InputOutputInfo
 	var cwd string
@@ -415,9 +426,6 @@ func createORTModelBackend(model *Model, options *options.Options) error {
 		Session:        session,
 		SessionOptions: sessionOptions,
 		Options:        options.ORTOptions,
-		Destroy: func() error {
-			return session.Destroy()
-		},
 	}
 	model.InputsMeta = inputs
 	model.OutputsMeta = outputs

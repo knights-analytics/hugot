@@ -20,7 +20,7 @@ func NewORTSession(ctx context.Context, opts ...options.WithOption) (*Session, e
 		return nil, errors.New("another session is currently active, and only one session can be active at one time")
 	}
 
-	session, err := newSession(ctx, "ORT", opts...)
+	session, err := newSession(ctx, options.BackendORT, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -91,9 +91,6 @@ func (s *Session) initialiseORT(ctx context.Context) (bool, error) {
 		return true, optionsError
 	}
 	s.options.BackendOptions = sessionOptions
-	s.options.Destroy = func() error {
-		return sessionOptions.Destroy()
-	}
 
 	if o.IntraOpNumThreads != nil {
 		if err := sessionOptions.SetIntraOpNumThreads(*o.IntraOpNumThreads); err != nil {

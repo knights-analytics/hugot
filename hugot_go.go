@@ -9,5 +9,5 @@ import (
 )
 
 func NewGoSession(ctx context.Context, opts ...options.WithOption) (*Session, error) {
-	return newSession(ctx, "GO", opts...)
+	return newSession(ctx, options.BackendGo, opts...)
 }

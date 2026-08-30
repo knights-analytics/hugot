@@ -11,7 +11,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gomlx/go-huggingface/hub"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/knights-analytics/hugot"
@@ -25,19 +24,6 @@ const (
 	ModelsFolder    = "../../models/"
 	TestCasesFolder = "../../testcases/"
 )
-
-// test download validation
-
-func TestDownloadValidation(t *testing.T) {
-	downloadOptions := hugot.NewDownloadOptions()
-
-	// a model with the required files in a subfolder should not error
-	_, err := hugot.ValidateDownloadedHFModel(hub.New("KnightsAnalytics/distilbert-base-uncased-finetuned-sst-2-english"), downloadOptions)
-	assert.NoError(t, err)
-	// a model without tokenizer.json or .onnx model should error
-	_, err = hugot.ValidateDownloadedHFModel(hub.New("ByteDance/SDXL-Lightning"), downloadOptions)
-	assert.Error(t, err)
-}
 
 // FEATURE EXTRACTION
 
@@ -1696,8 +1682,8 @@ func printTokenEntities(o *pipelines.TokenClassificationOutput) {
 }
 
 type toolCall struct {
-	Name      string         `json:"name"`
 	Arguments map[string]any `json:"arguments"`
+	Name      string         `json:"name"`
 }
 
 // parseToolCalls extracts all <tool_call>...</tool_call> blocks from s and unmarshals

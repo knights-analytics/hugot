@@ -4,30 +4,38 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"reflect"
 	"sync"
 
 	"github.com/knights-analytics/hugot/backends"
 	"github.com/knights-analytics/hugot/options"
 	"github.com/knights-analytics/hugot/pipelines"
+	"github.com/knights-analytics/hugot/util/fileutil"
 )
 
 // Session allows for the creation of new pipelines and holds the pipeline already created.
 type Session struct {
+	sessionContext       context.Context
 	pipelines            map[string]backends.Pipeline
 	models               map[string]*backends.Model
 	modelLocks           map[string]*sync.Mutex
-	modelLocksMu         sync.Mutex
 	pipelineLocks        map[string]*sync.Mutex
-	pipelineLocksMu      sync.Mutex
 	options              *options.Options
 	environmentDestroy   func() error
-	sessionContext       context.Context
 	cancelSessionContext context.CancelFunc
+	modelLocksMu         sync.Mutex
+	pipelineLocksMu      sync.Mutex
+	destroyMu            sync.Mutex
+	registryMu           sync.RWMutex
 }
 
 func (s *Session) GetModels() map[string]*backends.Model {
-	return s.models
+	s.registryMu.RLock()
+	defer s.registryMu.RUnlock()
+	models := make(map[string]*backends.Model, len(s.models))
+	maps.Copy(models, s.models)
+	return models
 }
 
 func (s *Session) getModelLock(modelID string) *sync.Mutex {
@@ -62,9 +70,12 @@ func (s *Session) getPipelineLock(name string) *sync.Mutex {
 	return lock
 }
 
-func newSession(ctx context.Context, backend string, opts ...options.WithOption) (*Session, error) {
+func newSession(ctx context.Context, backend options.Backend, opts ...options.WithOption) (*Session, error) {
 	parsedOptions := options.Defaults()
 	parsedOptions.Backend = backend
+	if !backend.Valid() {
+		return nil, fmt.Errorf("runtime %q is not supported", backend)
+	}
 	// Collect options into a struct, so they can be applied in the correct order later
 	if backend == "XLA" {
 		parsedOptions.GoMLXOptions.XLA = true
@@ -76,6 +87,7 @@ func newSession(ctx context.Context, backend string, opts ...options.WithOption)
 		}
 	}
 
+	ctx = fileutil.WithFileSystem(ctx, parsedOptions.FileSystem)
 	sessionContext, cancelSessionContext := context.WithCancel(ctx)
 
 	session := &Session{
@@ -95,7 +107,7 @@ func newSession(ctx context.Context, backend string, opts ...options.WithOption)
 }
 
 // pipelineConstructor builds a pipeline of some concrete type from an untyped config.
-type pipelineConstructor func(ctx context.Context, config any, opts *options.Options, model *backends.Model) (backends.Pipeline, error)
+type pipelineConstructor func(ctx context.Context, config any, model *backends.Model) (backends.Pipeline, error)
 
 // pipelineConstructors maps each concrete pipeline type to the constructor that builds it.
 // To support a new pipeline type, register it once in the init() below instead of extending
@@ -104,14 +116,14 @@ var pipelineConstructors = map[reflect.Type]pipelineConstructor{}
 
 // registerPipeline adapts a typed pipeline constructor into the untyped registry entry, keyed
 // by the pipeline's concrete type.
-func registerPipeline[T backends.Pipeline](construct func(context.Context, backends.PipelineConfig[T], *options.Options, *backends.Model) (T, error)) {
+func registerPipeline[T backends.Pipeline](construct func(context.Context, backends.PipelineConfig[T], *backends.Model) (T, error)) {
 	var zero T
-	pipelineConstructors[reflect.TypeOf(zero)] = func(ctx context.Context, config any, opts *options.Options, model *backends.Model) (backends.Pipeline, error) {
+	pipelineConstructors[reflect.TypeOf(zero)] = func(ctx context.Context, config any, model *backends.Model) (backends.Pipeline, error) {
 		typedConfig, ok := config.(backends.PipelineConfig[T])
 		if !ok {
 			return nil, fmt.Errorf("invalid config type %T for pipeline %T", config, zero)
 		}
-		return construct(ctx, typedConfig, opts, model)
+		return construct(ctx, typedConfig, model)
 	}
 }
 
@@ -201,7 +213,10 @@ func NewPipeline[T backends.Pipeline](s *Session, pipelineConfig backends.Pipeli
 	pipelineLock.Lock()
 	defer pipelineLock.Unlock()
 
-	if _, exists := s.pipelines[pipelineConfig.Name]; exists {
+	s.registryMu.RLock()
+	_, exists := s.pipelines[pipelineConfig.Name]
+	s.registryMu.RUnlock()
+	if exists {
 		return pipeline, fmt.Errorf("pipeline %s has already been initialised", pipelineConfig.Name)
 	}
 
@@ -216,24 +231,30 @@ func NewPipeline[T backends.Pipeline](s *Session, pipelineConfig backends.Pipeli
 	modelLock.Lock()
 	defer modelLock.Unlock()
 
+	s.registryMu.RLock()
 	model, ok := s.models[modelID]
+	s.registryMu.RUnlock()
 	if !ok {
 		var err error
 		model, err = backends.LoadModel(s.sessionContext, pipelineConfig.ModelPath, pipelineConfig.OnnxFilename, s.options, pipeline.IsGenerative())
 		if err != nil {
 			return pipeline, err
 		}
+		s.registryMu.Lock()
 		s.models[modelID] = model
+		s.registryMu.Unlock()
 	}
 
-	created, err := constructor(s.sessionContext, pipelineConfig, s.options, model)
+	created, err := constructor(s.sessionContext, pipelineConfig, model)
 	if err != nil {
 		return pipeline, err
 	}
 
 	name := pipelineConfig.Name
+	s.registryMu.Lock()
 	model.Pipelines[name] = created
 	s.pipelines[name] = created
+	s.registryMu.Unlock()
 
 	return created.(T), nil
 }
@@ -241,13 +262,13 @@ func NewPipeline[T backends.Pipeline](s *Session, pipelineConfig backends.Pipeli
 // initializePipeline constructs a pipeline of type T from its config using the registered
 // constructor, without storing it in a Session. Used by flows (e.g. training) that manage the
 // pipeline lifecycle themselves.
-func initializePipeline[T backends.Pipeline](sessionContext context.Context, config backends.PipelineConfig[T], opts *options.Options, model *backends.Model) (T, string, error) {
+func initializePipeline[T backends.Pipeline](sessionContext context.Context, config backends.PipelineConfig[T], model *backends.Model) (T, string, error) {
 	var zero T
 	constructor, ok := pipelineConstructors[reflect.TypeOf(zero)]
 	if !ok {
 		return zero, "", fmt.Errorf("pipeline type not supported: %T", zero)
 	}
-	created, err := constructor(sessionContext, config, opts, model)
+	created, err := constructor(sessionContext, config, model)
 	if err != nil {
 		return zero, "", err
 	}
@@ -257,6 +278,8 @@ func initializePipeline[T backends.Pipeline](sessionContext context.Context, con
 // GetPipeline can be used to retrieve a pipeline of type T with the given name from the session.
 func GetPipeline[T backends.Pipeline](s *Session, name string) (T, error) {
 	var zero T
+	s.registryMu.RLock()
+	defer s.registryMu.RUnlock()
 	p, ok := s.pipelines[name]
 	if !ok {
 		return zero, &pipelineNotFoundError{pipelineName: name}
@@ -270,6 +293,8 @@ func GetPipeline[T backends.Pipeline](s *Session, name string) (T, error) {
 
 // GetPipelines returns all pipelines of type T currently held by the session, keyed by name.
 func GetPipelines[T backends.Pipeline](s *Session) (map[string]T, error) {
+	s.registryMu.RLock()
+	defer s.registryMu.RUnlock()
 	result := map[string]T{}
 	for name, p := range s.pipelines {
 		if typed, ok := p.(T); ok {
@@ -282,6 +307,8 @@ func GetPipelines[T backends.Pipeline](s *Session) (map[string]T, error) {
 // ClosePipeline removes the pipeline of type T with the given name from the session, tearing down
 // the underlying model when no other pipeline depends on it.
 func ClosePipeline[T backends.Pipeline](s *Session, name string) error {
+	s.registryMu.Lock()
+	defer s.registryMu.Unlock()
 	p, ok := s.pipelines[name]
 	if !ok {
 		return nil
@@ -296,7 +323,7 @@ func ClosePipeline[T backends.Pipeline](s *Session, name string) error {
 	if len(model.Pipelines) == 0 {
 		delete(s.models, model.ID)
 		s.removeModelLock(model.ID)
-		return model.Destroy()
+		return model.Close()
 	}
 	return nil
 }
@@ -317,6 +344,8 @@ func (e *pipelineNotFoundError) Error() string {
 // the number of batch calls to the onnxruntime inference
 // the average time per onnxruntime inference batch call.
 func (s *Session) GetStatistics() map[string]backends.PipelineStatistics {
+	s.registryMu.RLock()
+	defer s.registryMu.RUnlock()
 	statistics := map[string]backends.PipelineStatistics{}
 	for name, p := range s.pipelines {
 		statistics[name] = p.GetStatistics()
@@ -336,20 +365,32 @@ func (s *Session) PrintStatistics() {
 // Destroy deletes the hugot session and onnxruntime environment and all initialized pipelines, freeing memory.
 // A hugot session should be destroyed when not neeeded any more, preferably with a defer() call.
 func (s *Session) Destroy() error {
+	s.destroyMu.Lock()
+	defer s.destroyMu.Unlock()
+	if s.sessionContext == nil && s.options == nil {
+		return nil
+	}
 	var err error
+	s.registryMu.Lock()
 	for _, model := range s.models {
-		err = errors.Join(err, model.Destroy())
+		err = errors.Join(err, model.Close())
 	}
 	s.models = nil
 	s.pipelines = nil
+	s.registryMu.Unlock()
 
 	if s.options != nil {
-		err = errors.Join(err, s.options.Destroy())
+		if s.options.BackendOptions != nil {
+			err = errors.Join(err, s.options.BackendOptions.Destroy())
+		}
 		s.options.BackendOptions = nil
 		s.options = nil
 	}
 
-	err = errors.Join(err, s.environmentDestroy())
+	if s.environmentDestroy != nil {
+		err = errors.Join(err, s.environmentDestroy())
+		s.environmentDestroy = nil
+	}
 
 	if s.cancelSessionContext != nil {
 		s.cancelSessionContext()

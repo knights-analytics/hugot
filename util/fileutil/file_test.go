@@ -19,7 +19,6 @@ func (f *recordingFileSystem) OpenFile(context.Context, string) (io.ReadCloser, 
 }
 
 func TestDefaultFileSystemUsesOS(t *testing.T) {
-	SetFileSystem(nil)
 	directory := t.TempDir()
 	filename := filepath.Join(directory, "file.txt")
 
@@ -43,15 +42,43 @@ func TestDefaultFileSystemUsesOS(t *testing.T) {
 	}
 }
 
-func TestSetFileSystem(t *testing.T) {
-	t.Cleanup(func() { SetFileSystem(nil) })
+func TestContextFileSystemIsScoped(t *testing.T) {
 	filesystem := &recordingFileSystem{}
-	SetFileSystem(filesystem)
+	ctx := WithFileSystem(context.Background(), filesystem)
 
-	if _, err := ReadFileBytes(context.Background(), "ignored"); err != nil {
+	if _, err := ReadFileBytes(ctx, "ignored"); err != nil {
 		t.Fatal(err)
 	}
 	if !filesystem.opened {
-		t.Fatal("configured filesystem was not used")
+		t.Fatal("context filesystem was not used")
+	}
+
+	if _, err := ReadFileBytes(context.Background(), filepath.Join(t.TempDir(), "missing")); err == nil {
+		t.Fatal("unbound context unexpectedly used the injected filesystem")
+	}
+}
+
+func TestPathJoinSafeHandlesEmptyAndObjectStoragePaths(t *testing.T) {
+	if got := PathJoinSafe(); got != "" {
+		t.Fatalf("empty path got %q", got)
+	}
+	tests := []struct {
+		name string
+		path []string
+		want string
+	}{
+		{name: "S3", path: []string{"s3://bucket/", "/folder/", "file.json"}, want: "s3://bucket/folder/file.json"},
+		{name: "GCP", path: []string{"gs://bucket/", "/folder/", "file.json"}, want: "gs://bucket/folder/file.json"},
+		{name: "GCS alias", path: []string{"gcs://bucket/", "/folder/", "file.json"}, want: "gcs://bucket/folder/file.json"},
+		{name: "Azure alias", path: []string{"az://container/", "/folder/", "file.json"}, want: "az://container/folder/file.json"},
+		{name: "Azure Blob", path: []string{"azblob://container/", "/folder/", "file.json"}, want: "azblob://container/folder/file.json"},
+		{name: "Azure Blob HTTPS", path: []string{"https://account.blob.core.windows.net/container/", "/folder/", "file.json"}, want: "https://account.blob.core.windows.net/container/folder/file.json"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := PathJoinSafe(test.path...); got != test.want {
+				t.Fatalf("path got %q, want %q", got, test.want)
+			}
+		})
 	}
 }

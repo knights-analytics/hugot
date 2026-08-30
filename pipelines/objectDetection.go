@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/knights-analytics/hugot/backends"
-	"github.com/knights-analytics/hugot/options"
 	"github.com/knights-analytics/hugot/util/imageutil"
 	"github.com/knights-analytics/hugot/util/safeconv"
 	"github.com/knights-analytics/hugot/util/vectorutil"
@@ -92,11 +91,9 @@ func WithDetectionTopK(k int) backends.PipelineOption[*ObjectDetectionPipeline] 
 }
 
 // NewObjectDetectionPipeline initializes an object detection pipeline.
-func NewObjectDetectionPipeline(sessionContext context.Context, config backends.PipelineConfig[*ObjectDetectionPipeline], s *options.Options, model *backends.Model) (*ObjectDetectionPipeline, error) {
-	base, err := backends.NewBasePipeline(sessionContext, config, s, model)
-	if err != nil {
-		return nil, err
-	}
+func NewObjectDetectionPipeline(sessionContext context.Context, config backends.PipelineConfig[*ObjectDetectionPipeline], model *backends.Model) (*ObjectDetectionPipeline, error) {
+	base := backends.NewBasePipeline(sessionContext, config, model)
+	var err error
 	p := &ObjectDetectionPipeline{BasePipeline: base, ScoreThreshold: 0.25, IouThreshold: 0.45, TopK: 100}
 	for _, o := range config.Options {
 		if err = o(p); err != nil {
@@ -190,7 +187,7 @@ func (p *ObjectDetectionPipeline) preprocess(batch *backends.PipelineBatch, inpu
 	if err != nil {
 		return err
 	}
-	return backends.CreateImageTensors(batch, p.Model, processed, p.Runtime)
+	return backends.CreateImageTensors(batch, p.Model, processed)
 }
 
 // forward inference.
@@ -339,39 +336,17 @@ func (p *ObjectDetectionPipeline) Run(ctx context.Context, inputs []string) (bac
 }
 
 func (p *ObjectDetectionPipeline) RunPipeline(ctx context.Context, inputs []string) (*ObjectDetectionOutput, error) {
-	var errs []error
-	batch := backends.NewBatch(len(inputs))
-	defer func(*backends.PipelineBatch) { errs = append(errs, batch.Destroy()) }(batch)
-	imgs, err := imageutil.LoadImagesFromPaths(ctx, inputs)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load images: %w", err)
-	}
-	errs = append(errs, p.preprocess(batch, imgs))
-	if e := errors.Join(errs...); e != nil {
-		return nil, e
-	}
-	errs = append(errs, p.forward(ctx, batch))
-	if e := errors.Join(errs...); e != nil {
-		return nil, e
-	}
-	res, postErr := p.postprocess(batch)
-	errs = append(errs, postErr)
-	return res, errors.Join(errs...)
+	return backends.RunPipeline(ctx, len(inputs), func(batch *backends.PipelineBatch) error {
+		imgs, err := imageutil.LoadImagesFromPaths(ctx, inputs)
+		if err != nil {
+			return fmt.Errorf("failed to load images: %w", err)
+		}
+		return p.preprocess(batch, imgs)
+	}, p.forward, p.postprocess)
 }
 
 func (p *ObjectDetectionPipeline) RunWithImages(ctx context.Context, inputs []image.Image) (*ObjectDetectionOutput, error) {
-	var errs []error
-	batch := backends.NewBatch(len(inputs))
-	defer func(*backends.PipelineBatch) { errs = append(errs, batch.Destroy()) }(batch)
-	errs = append(errs, p.preprocess(batch, inputs))
-	if e := errors.Join(errs...); e != nil {
-		return nil, e
-	}
-	errs = append(errs, p.forward(ctx, batch))
-	if e := errors.Join(errs...); e != nil {
-		return nil, e
-	}
-	res, postErr := p.postprocess(batch)
-	errs = append(errs, postErr)
-	return res, errors.Join(errs...)
+	return backends.RunPipeline(ctx, len(inputs), func(batch *backends.PipelineBatch) error {
+		return p.preprocess(batch, inputs)
+	}, p.forward, p.postprocess)
 }

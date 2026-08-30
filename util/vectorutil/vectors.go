@@ -64,26 +64,10 @@ func SoftMax(vector []float32) []float32 {
 	}
 
 	inverseSum := float32(1 / sumExp)
-	for i := range scores {
-		scores[i] *= inverseSum
+	for j := range scores {
+		scores[j] *= inverseSum
 	}
 	return scores
-}
-
-func SumSlice(s []float64) float64 {
-	var s0, s1, s2, s3 float64
-	i := 0
-	for ; i+3 < len(s); i += 4 {
-		s0 += s[i]
-		s1 += s[i+1]
-		s2 += s[i+2]
-		s3 += s[i+3]
-	}
-	sum := (s0 + s1) + (s2 + s3)
-	for ; i < len(s); i++ {
-		sum += s[i]
-	}
-	return sum
 }
 
 // ArgMax find both index of max value in s and max value.

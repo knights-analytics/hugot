@@ -42,15 +42,11 @@ func DetectImageTensorFormat(model *Model) (string, error) {
 	return "NCHW", nil
 }
 
-func CreateImageTensors(batch *PipelineBatch, model *Model, preprocessed [][][][]float32, runtime string) error {
-	switch runtime {
-	case "ORT":
-		return createImageTensorsORT(batch, model, preprocessed)
-	case "GO", "XLA":
-		return createImageTensorsGoXLA(batch, model, preprocessed)
-	default:
-		return fmt.Errorf("runtime %s is not supported for image tensors", runtime)
+func CreateImageTensors(batch *PipelineBatch, model *Model, preprocessed [][][][]float32) error {
+	if model.Backend != nil {
+		return model.Backend.CreateImageTensors(batch, model, preprocessed)
 	}
+	return fmt.Errorf("pipeline backend is not configured")
 }
 
 // PreprocessImages preprocesses images into a 4D tensor slice according to format and steps.

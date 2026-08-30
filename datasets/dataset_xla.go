@@ -90,10 +90,10 @@ func (s *SemanticSimilarityDataset) processBatch(exampleBatch []SemanticSimilari
 	}
 	backends.TokenizeInputs(batchLHS, s.pipeline.Model.Tokenizer, inputsLHS)
 	backends.TokenizeInputs(batchRHS, s.pipeline.Model.Tokenizer, inputsRHS)
-	if err := backends.CreateInputTensorsTraining(batchLHS, s.pipeline.Model, s.pipeline.Runtime); err != nil {
+	if err := backends.CreateInputTensorsTraining(batchLHS, s.pipeline.Model); err != nil {
 		return train.Batch{}, err
 	}
-	if err := backends.CreateInputTensorsTraining(batchRHS, s.pipeline.Model, s.pipeline.Runtime); err != nil {
+	if err := backends.CreateInputTensorsTraining(batchRHS, s.pipeline.Model); err != nil {
 		return train.Batch{}, err
 	}
 	inputLHS := batchLHS.InputValues.([]*tensors.Tensor)

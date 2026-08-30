@@ -9,12 +9,32 @@ import (
 )
 
 type Options struct {
-	BackendOptions any
+	BackendOptions BackendOptions
 	ORTOptions     *OrtOptions
 	GoMLXOptions   *GoMLXOptions
-	UseGoMLX       bool
 	Destroy        func() error
-	Backend        string
+	Backend        Backend
+	UseGoMLX       bool
+	FileSystem     fileutil.FileSystem
+}
+
+// BackendOptions contains backend-owned session state that can be released by
+// the session without exposing a concrete runtime type to the options package.
+type BackendOptions interface {
+	Destroy() error
+}
+
+// Backend identifies the execution backend selected for a session.
+type Backend string
+
+const (
+	BackendORT Backend = "ORT"
+	BackendGo  Backend = "GO"
+	BackendXLA Backend = "XLA"
+)
+
+func (b Backend) Valid() bool {
+	return b == BackendORT || b == BackendGo || b == BackendXLA
 }
 
 func Defaults() *Options {
@@ -25,6 +45,7 @@ func Defaults() *Options {
 			LibraryPath: &libraryPathDefault,
 		},
 		GoMLXOptions: &GoMLXOptions{},
+		FileSystem:   nil,
 		Destroy: func() error {
 			return nil
 		},
@@ -81,16 +102,16 @@ type OrtOptions struct {
 	OpenVINOOptions         map[string]string
 	TensorRTOptions         map[string]string
 	NvTensorRTRTXOptions    map[string]string
-	ExtraExecutionProviders []ExtraExecutionProvider
 	OptimizedModelFilePath  *string
 	ProfilingEnabled        *bool
 	ProfilingFilePrefix     *string
+	ExtraExecutionProviders []ExtraExecutionProvider
 	UseEngine               bool
 }
 
 type ExtraExecutionProvider struct {
-	Name    string
 	Options map[string]string
+	Name    string
 }
 type GoMLXOptions struct {
 	// BatchBuckets defines the bucket sizes for batch dimension padding.
@@ -109,10 +130,22 @@ type GoMLXOptions struct {
 // WithOption is the interface for all option functions.
 type WithOption func(o *Options) error
 
+// WithFileSystem scopes storage operations to the session being created.
+// It avoids changing package-global state and is safe for concurrent sessions.
+func WithFileSystem(system fileutil.FileSystem) WithOption {
+	return func(o *Options) error {
+		if system == nil {
+			return fmt.Errorf("filesystem must not be nil")
+		}
+		o.FileSystem = system
+		return nil
+	}
+}
+
 // WithGoMLX (ORT only) uses GoMLX with ONNX Runtime as the execution backend.
 func WithGoMLX() WithOption {
 	return func(o *Options) error {
-		if o.Backend == "ORT" {
+		if o.Backend == BackendORT {
 			o.UseGoMLX = true
 			return nil
 		}
@@ -123,7 +156,7 @@ func WithGoMLX() WithOption {
 // WithOnnxLibraryPath (ORT only) Use this function to set the path to the "libonnxuntime.so", "libonnxuntime.dylib" or "onnxruntime.dll" files.
 func WithOnnxLibraryPath(ortLibraryPath string) WithOption {
 	return func(o *Options) error {
-		if o.Backend == "ORT" {
+		if o.Backend == BackendORT {
 			ctx := context.Background()
 			object, err := fileutil.FileStats(ctx, ortLibraryPath)
 			if err != nil {
@@ -152,7 +185,7 @@ func WithOnnxLibraryPath(ortLibraryPath string) WithOption {
 // WithTelemetry (ORT only) Enables telemetry events for the onnxbackend environment. Default is off.
 func WithTelemetry() WithOption {
 	return func(o *Options) error {
-		if o.Backend == "ORT" {
+		if o.Backend == BackendORT {
 			o.ORTOptions.Telemetry = new(true)
 			return nil
 		}
@@ -164,7 +197,7 @@ func WithTelemetry() WithOption {
 // graph nodes. If unspecified, onnxbackend uses the number of physical CPU cores.
 func WithIntraOpNumThreads(numThreads int) WithOption {
 	return func(o *Options) error {
-		if o.Backend == "ORT" {
+		if o.Backend == BackendORT {
 			o.ORTOptions.IntraOpNumThreads = &numThreads
 			return nil
 		}
@@ -176,7 +209,7 @@ func WithIntraOpNumThreads(numThreads int) WithOption {
 // onnxbackend graph nodes. If unspecified, onnxbackend uses the number of physical CPU cores.
 func WithInterOpNumThreads(numThreads int) WithOption {
 	return func(o *Options) error {
-		if o.Backend == "ORT" {
+		if o.Backend == BackendORT {
 			o.ORTOptions.InterOpNumThreads = &numThreads
 			return nil
 		}
@@ -188,7 +221,7 @@ func WithInterOpNumThreads(numThreads int) WithOption {
 // Arena may pre-allocate memory for future usage. Default is true.
 func WithCPUMemArena(enable bool) WithOption {
 	return func(o *Options) error {
-		if o.Backend == "ORT" {
+		if o.Backend == BackendORT {
 			o.ORTOptions.CPUMemArena = &enable
 			return nil
 		}
@@ -200,7 +233,7 @@ func WithCPUMemArena(enable bool) WithOption {
 // If this is enabled memory is preallocated if all shapes are known. Default is true.
 func WithMemPattern(enable bool) WithOption {
 	return func(o *Options) error {
-		if o.Backend == "ORT" {
+		if o.Backend == BackendORT {
 			o.ORTOptions.MemPattern = &enable
 			return nil
 		}
@@ -211,7 +244,7 @@ func WithMemPattern(enable bool) WithOption {
 // WithExecutionMode sets the parallel execution mode for the ORT backend. Returns an error if the backend is not ORT.
 func WithExecutionMode(parallel bool) WithOption {
 	return func(o *Options) error {
-		if o.Backend == "ORT" {
+		if o.Backend == BackendORT {
 			o.ORTOptions.ParallelExecutionMode = &parallel
 			return nil
 		}
@@ -223,7 +256,7 @@ func WithExecutionMode(parallel bool) WithOption {
 // It returns an error if used with a backend other than ORT.
 func WithIntraOpSpinning(spinning bool) WithOption {
 	return func(o *Options) error {
-		if o.Backend == "ORT" {
+		if o.Backend == BackendORT {
 			o.ORTOptions.IntraOpSpinning = &spinning
 			return nil
 		}
@@ -235,7 +268,7 @@ func WithIntraOpSpinning(spinning bool) WithOption {
 // It returns an error if used with a backend other than ORT.
 func WithInterOpSpinning(spinning bool) WithOption {
 	return func(o *Options) error {
-		if o.Backend == "ORT" {
+		if o.Backend == BackendORT {
 			o.ORTOptions.InterOpSpinning = &spinning
 			return nil
 		}
@@ -249,10 +282,10 @@ func WithInterOpSpinning(spinning bool) WithOption {
 func WithCuda(options map[string]string) WithOption {
 	return func(o *Options) error {
 		switch o.Backend {
-		case "ORT":
+		case BackendORT:
 			o.ORTOptions.CudaOptions = options
 			return nil
-		case "XLA":
+		case BackendXLA:
 			o.GoMLXOptions.Cuda = true
 			return nil
 		default:
@@ -266,7 +299,7 @@ func WithCuda(options map[string]string) WithOption {
 // Set PJRT_PLUGIN_LIBRARY_PATH to the directory containing pjrt_plugin_tpu.so or libtpu.so.
 func WithTPU() WithOption {
 	return func(o *Options) error {
-		if o.Backend == "XLA" {
+		if o.Backend == BackendXLA {
 			o.GoMLXOptions.TPU = true
 			return nil
 		}
@@ -281,7 +314,7 @@ func WithTPU() WithOption {
 // IMPORTANT: Ensure MaxCache >= len(BatchBuckets) * len(SequenceBuckets).
 func WithGoMLXBatchBuckets(buckets []int) WithOption {
 	return func(o *Options) error {
-		if o.Backend == "XLA" || o.Backend == "GO" {
+		if o.Backend == BackendXLA || o.Backend == BackendGo {
 			o.GoMLXOptions.BatchBuckets = buckets
 			return nil
 		}
@@ -296,7 +329,7 @@ func WithGoMLXBatchBuckets(buckets []int) WithOption {
 // IMPORTANT: Ensure MaxCache >= len(BatchBuckets) * len(SequenceBuckets).
 func WithGoMLXSequenceBuckets(buckets []int) WithOption {
 	return func(o *Options) error {
-		if o.Backend == "XLA" || o.Backend == "GO" {
+		if o.Backend == BackendXLA || o.Backend == BackendGo {
 			o.GoMLXOptions.SequenceBuckets = buckets
 			return nil
 		}
@@ -309,7 +342,7 @@ func WithGoMLXSequenceBuckets(buckets []int) WithOption {
 // The `o.CoreMLOptions` field in `OrtOptions` struct will be set to the provided flags parameter.
 func WithCoreML(flags map[string]string) WithOption {
 	return func(o *Options) error {
-		if o.Backend == "ORT" {
+		if o.Backend == BackendORT {
 			o.ORTOptions.CoreMLOptions = flags
 			return nil
 		}

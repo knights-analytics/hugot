@@ -26,7 +26,7 @@ type TrainingStatistics struct {
 type TrainingSession struct {
 	pipeline         backends.Pipeline
 	earlyStopping    *earlyStopping
-	backend          string
+	backend          options.Backend
 	statistics       TrainingStatistics
 	freezeLayers     []int // freeze the layers of the transformer model, 0 is the first layer etc. Set [-1] to freeze all layers apart from the last one
 	config           TrainingConfig
@@ -41,7 +41,7 @@ func (s *TrainingSession) GetPipeline() backends.Pipeline {
 }
 
 func (s *TrainingSession) Destroy() error {
-	err := s.pipeline.GetModel().Destroy()
+	err := s.pipeline.GetModel().Close()
 	if err != nil {
 		return err
 	}
@@ -116,7 +116,7 @@ type TrainingConfig struct {
 	Verbose              bool
 }
 
-func newTrainingSession[T backends.Pipeline](sessionContext context.Context, backend string, config TrainingConfig) (*TrainingSession, error) {
+func newTrainingSession[T backends.Pipeline](sessionContext context.Context, backend options.Backend, config TrainingConfig) (*TrainingSession, error) {
 	session := &TrainingSession{
 		config:  config,
 		backend: backend,
@@ -132,12 +132,12 @@ func newTrainingSession[T backends.Pipeline](sessionContext context.Context, bac
 		}
 	}
 	switch backend {
-	case "XLA":
+	case options.BackendXLA:
 		opts.GoMLXOptions.XLA = true
 		opts.GoMLXOptions.Cuda = session.cuda
-	case "ORT":
+	case options.BackendORT:
 		opts.UseGoMLX = true
-	case "GO":
+	case options.BackendGo:
 	default:
 		return nil, fmt.Errorf("runtime %s is not supported", backend)
 	}
@@ -151,7 +151,7 @@ func newTrainingSession[T backends.Pipeline](sessionContext context.Context, bac
 	switch any(trainingPipeline).(type) {
 	case *pipelines.FeatureExtractionPipeline:
 		pipelineConfig := FeatureExtractionConfig{}
-		pipeline, _, err := initializePipeline(sessionContext, pipelineConfig, opts, model)
+		pipeline, _, err := initializePipeline(sessionContext, pipelineConfig, model)
 		if err != nil {
 			return nil, err
 		}
@@ -197,7 +197,7 @@ func newTrainingSession[T backends.Pipeline](sessionContext context.Context, bac
 
 func (s *TrainingSession) Train() error {
 	switch s.backend {
-	case "GO", "XLA", "ORT":
+	case options.BackendGo, options.BackendXLA, options.BackendORT:
 		return TrainGoMLX(s)
 	default:
 		return fmt.Errorf("training runtime %s is not supported", s.backend)
@@ -228,7 +228,7 @@ func (s *TrainingSession) Save(ctx context.Context, path string) error {
 	}
 	model := s.pipeline.GetModel()
 	if model != nil {
-		if s.backend == "GO" || s.backend == "XLA" || s.backend == "ORT" {
+		if s.backend == options.BackendGo || s.backend == options.BackendXLA || s.backend == options.BackendORT {
 			goMLXModel := model.GoMLXModel
 			if goMLXModel != nil {
 				modelWriter, err := fileutil.NewFileWriter(ctx, fileutil.PathJoinSafe(path, "model.onnx"), "")
@@ -273,5 +273,5 @@ func copyTokenizer(ctx context.Context, from, to string) error {
 		}
 		return true, nil
 	}
-	return fileutil.WalkDir()(ctx, from, walker)
+	return fileutil.WalkDir(ctx, from, walker)
 }

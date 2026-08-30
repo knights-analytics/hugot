@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/knights-analytics/hugot/backends"
-	"github.com/knights-analytics/hugot/options"
 	"github.com/knights-analytics/hugot/util/safeconv"
 	"github.com/knights-analytics/hugot/util/vectorutil"
 )
@@ -72,11 +71,9 @@ func WithFixedPadding(fixedPaddingLength int) backends.PipelineOption[*TextClass
 }
 
 // NewTextClassificationPipeline initializes a new text classification pipeline.
-func NewTextClassificationPipeline(sessionContext context.Context, config backends.PipelineConfig[*TextClassificationPipeline], s *options.Options, model *backends.Model) (*TextClassificationPipeline, error) {
-	defaultPipeline, err := backends.NewBasePipeline(sessionContext, config, s, model)
-	if err != nil {
-		return nil, err
-	}
+func NewTextClassificationPipeline(sessionContext context.Context, config backends.PipelineConfig[*TextClassificationPipeline], model *backends.Model) (*TextClassificationPipeline, error) {
+	defaultPipeline := backends.NewBasePipeline(sessionContext, config, model)
+	var err error
 
 	pipeline := &TextClassificationPipeline{BasePipeline: defaultPipeline}
 	for _, o := range config.Options {
@@ -182,7 +179,7 @@ func (p *TextClassificationPipeline) preprocess(batch *backends.PipelineBatch, i
 	}
 
 	atomic.AddUint64(&p.TokenizerTimings.TotalNS, safeconv.DurationToU64(time.Since(start)))
-	err := backends.CreateInputTensors(batch, p.Model, p.Runtime)
+	err := backends.CreateInputTensors(batch, p.Model)
 	return err
 }
 
@@ -270,23 +267,7 @@ func (p *TextClassificationPipeline) Run(ctx context.Context, inputs []string) (
 }
 
 func (p *TextClassificationPipeline) RunPipeline(ctx context.Context, inputs []string) (*TextClassificationOutput, error) {
-	var runErrors []error
-	batch := backends.NewBatch(len(inputs))
-	defer func(*backends.PipelineBatch) {
-		runErrors = append(runErrors, batch.Destroy())
-	}(batch)
-
-	runErrors = append(runErrors, p.preprocess(batch, inputs))
-	if e := errors.Join(runErrors...); e != nil {
-		return nil, e
-	}
-
-	runErrors = append(runErrors, p.forward(ctx, batch))
-	if e := errors.Join(runErrors...); e != nil {
-		return nil, e
-	}
-
-	result, postErr := p.postprocess(batch)
-	runErrors = append(runErrors, postErr)
-	return result, errors.Join(runErrors...)
+	return backends.RunPipeline(ctx, len(inputs), func(batch *backends.PipelineBatch) error {
+		return p.preprocess(batch, inputs)
+	}, p.forward, p.postprocess)
 }

@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/knights-analytics/hugot/backends"
-	"github.com/knights-analytics/hugot/options"
 	"github.com/knights-analytics/hugot/util/safeconv"
 	"github.com/knights-analytics/hugot/util/vectorutil"
 )
@@ -110,11 +109,9 @@ func WithSplitWords() backends.PipelineOption[*TokenClassificationPipeline] {
 }
 
 // NewTokenClassificationPipeline Initializes a feature extraction pipeline.
-func NewTokenClassificationPipeline(sessionContext context.Context, config backends.PipelineConfig[*TokenClassificationPipeline], s *options.Options, model *backends.Model) (*TokenClassificationPipeline, error) {
-	defaultPipeline, err := backends.NewBasePipeline(sessionContext, config, s, model)
-	if err != nil {
-		return nil, err
-	}
+func NewTokenClassificationPipeline(sessionContext context.Context, config backends.PipelineConfig[*TokenClassificationPipeline], model *backends.Model) (*TokenClassificationPipeline, error) {
+	defaultPipeline := backends.NewBasePipeline(sessionContext, config, model)
+	var err error
 	pipeline := &TokenClassificationPipeline{BasePipeline: defaultPipeline}
 	for _, o := range config.Options {
 		err = o(pipeline)
@@ -207,7 +204,7 @@ func (p *TokenClassificationPipeline) preprocess(batch *backends.PipelineBatch, 
 	backends.TokenizeInputs(batch, p.Model.Tokenizer, inputs)
 	atomic.AddUint64(&p.TokenizerTimings.NumCalls, 1)
 	atomic.AddUint64(&p.TokenizerTimings.TotalNS, safeconv.DurationToU64(time.Since(start)))
-	err := backends.CreateInputTensors(batch, p.Model, p.Runtime)
+	err := backends.CreateInputTensors(batch, p.Model)
 	return err
 }
 
@@ -258,7 +255,7 @@ func (p *TokenClassificationPipeline) preprocessWords(batch *backends.PipelineBa
 		// set raw to joined string for offsets consistency
 		batch.Input[i].Raw = joined[i]
 	}
-	return backends.CreateInputTensors(batch, p.Model, p.Runtime)
+	return backends.CreateInputTensors(batch, p.Model)
 }
 
 // forward performs the forward inference of the pipeline.
@@ -584,22 +581,9 @@ func (p *TokenClassificationPipeline) Run(ctx context.Context, inputs []string) 
 
 // RunPipeline is like Run but returns the concrete type rather than the interface.
 func (p *TokenClassificationPipeline) RunPipeline(ctx context.Context, inputs []string) (*TokenClassificationOutput, error) {
-	var runErrors []error
-	batch := backends.NewBatch(len(inputs))
-	defer func(*backends.PipelineBatch) {
-		runErrors = append(runErrors, batch.Destroy())
-	}(batch)
-	runErrors = append(runErrors, p.preprocess(batch, inputs))
-	if e := errors.Join(runErrors...); e != nil {
-		return nil, e
-	}
-	runErrors = append(runErrors, p.forward(ctx, batch))
-	if e := errors.Join(runErrors...); e != nil {
-		return nil, e
-	}
-	result, postErr := p.postprocess(batch)
-	runErrors = append(runErrors, postErr)
-	return result, errors.Join(runErrors...)
+	return backends.RunPipeline(ctx, len(inputs), func(batch *backends.PipelineBatch) error {
+		return p.preprocess(batch, inputs)
+	}, p.forward, p.postprocess)
 }
 
 // RunWords runs the pipeline for pre-split word inputs.
@@ -607,20 +591,7 @@ func (p *TokenClassificationPipeline) RunPipeline(ctx context.Context, inputs []
 // This is particularly useful when the user wants to control tokenization because of special tokens,
 // hashtags, or other domain-specific tokenization needs.
 func (p *TokenClassificationPipeline) RunWords(ctx context.Context, inputs [][]string) (*TokenClassificationOutput, error) {
-	var runErrors []error
-	batch := backends.NewBatch(len(inputs))
-	defer func(*backends.PipelineBatch) {
-		runErrors = append(runErrors, batch.Destroy())
-	}(batch)
-	runErrors = append(runErrors, p.preprocessWords(batch, inputs))
-	if e := errors.Join(runErrors...); e != nil {
-		return nil, e
-	}
-	runErrors = append(runErrors, p.forward(ctx, batch))
-	if e := errors.Join(runErrors...); e != nil {
-		return nil, e
-	}
-	result, postErr := p.postprocess(batch)
-	runErrors = append(runErrors, postErr)
-	return result, errors.Join(runErrors...)
+	return backends.RunPipeline(ctx, len(inputs), func(batch *backends.PipelineBatch) error {
+		return p.preprocessWords(batch, inputs)
+	}, p.forward, p.postprocess)
 }

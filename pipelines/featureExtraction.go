@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/knights-analytics/hugot/backends"
-	"github.com/knights-analytics/hugot/options"
 	"github.com/knights-analytics/hugot/util/imageutil"
 	"github.com/knights-analytics/hugot/util/safeconv"
 	"github.com/knights-analytics/hugot/util/vectorutil"
@@ -39,7 +38,7 @@ type FeatureExtractionOutput struct {
 func (t *FeatureExtractionOutput) GetOutput() []any {
 	out := make([]any, len(t.Embeddings))
 	for i, embedding := range t.Embeddings {
-		out[i] = any(embedding)
+		out[i] = embedding
 	}
 	return out
 }
@@ -85,11 +84,9 @@ func WithImageMode() backends.PipelineOption[*FeatureExtractionPipeline] {
 }
 
 // NewFeatureExtractionPipeline init a feature extraction pipeline.
-func NewFeatureExtractionPipeline(sessionContext context.Context, config backends.PipelineConfig[*FeatureExtractionPipeline], s *options.Options, model *backends.Model) (*FeatureExtractionPipeline, error) {
-	defaultPipeline, err := backends.NewBasePipeline(sessionContext, config, s, model)
-	if err != nil {
-		return nil, err
-	}
+func NewFeatureExtractionPipeline(sessionContext context.Context, config backends.PipelineConfig[*FeatureExtractionPipeline], model *backends.Model) (*FeatureExtractionPipeline, error) {
+	defaultPipeline := backends.NewBasePipeline(sessionContext, config, model)
+	var err error
 	pipeline := &FeatureExtractionPipeline{BasePipeline: defaultPipeline}
 	for _, o := range config.Options {
 		err = o(pipeline)
@@ -202,7 +199,7 @@ func (p *FeatureExtractionPipeline) preprocess(batch *backends.PipelineBatch, in
 	backends.TokenizeInputs(batch, p.Model.Tokenizer, inputs)
 	atomic.AddUint64(&p.TokenizerTimings.NumCalls, 1)
 	atomic.AddUint64(&p.TokenizerTimings.TotalNS, safeconv.DurationToU64(time.Since(start)))
-	err := backends.CreateInputTensors(batch, p.Model, p.Runtime)
+	err := backends.CreateInputTensors(batch, p.Model)
 	return err
 }
 
@@ -287,22 +284,9 @@ func (p *FeatureExtractionPipeline) Run(ctx context.Context, inputs []string) (b
 
 // RunPipeline is like Run, but returns the concrete feature extraction output type rather than the interface.
 func (p *FeatureExtractionPipeline) RunPipeline(ctx context.Context, inputs []string) (*FeatureExtractionOutput, error) {
-	var runErrors []error
-	batch := backends.NewBatch(len(inputs))
-	defer func(*backends.PipelineBatch) {
-		runErrors = append(runErrors, batch.Destroy())
-	}(batch)
-	runErrors = append(runErrors, p.preprocess(batch, inputs))
-	if e := errors.Join(runErrors...); e != nil {
-		return nil, e
-	}
-	runErrors = append(runErrors, p.forward(ctx, batch))
-	if e := errors.Join(runErrors...); e != nil {
-		return nil, e
-	}
-	result, postErr := p.postprocess(batch)
-	runErrors = append(runErrors, postErr)
-	return result, errors.Join(runErrors...)
+	return backends.RunPipeline(ctx, len(inputs), func(batch *backends.PipelineBatch) error {
+		return p.preprocess(batch, inputs)
+	}, p.forward, p.postprocess)
 }
 
 // IMAGE MODE METHODS
@@ -313,7 +297,7 @@ func (p *FeatureExtractionPipeline) PreprocessImages(batch *backends.PipelineBat
 	if err != nil {
 		return fmt.Errorf("failed to preprocess images: %w", err)
 	}
-	return backends.CreateImageTensors(batch, p.Model, preprocessed, p.Runtime)
+	return backends.CreateImageTensors(batch, p.Model, preprocessed)
 }
 
 // RunWithImages runs the pipeline on a batch of images (for vision models).
@@ -322,22 +306,9 @@ func (p *FeatureExtractionPipeline) RunWithImages(ctx context.Context, images []
 	if !p.imageMode {
 		return nil, fmt.Errorf("RunWithImages requires ImageMode to be enabled; use WithImageMode() option")
 	}
-	var runErrors []error
-	batch := backends.NewBatch(len(images))
-	defer func(*backends.PipelineBatch) {
-		runErrors = append(runErrors, batch.Destroy())
-	}(batch)
-	runErrors = append(runErrors, p.PreprocessImages(batch, images))
-	if e := errors.Join(runErrors...); e != nil {
-		return nil, e
-	}
-	runErrors = append(runErrors, p.forward(ctx, batch))
-	if e := errors.Join(runErrors...); e != nil {
-		return nil, e
-	}
-	result, postErr := p.postprocess(batch)
-	runErrors = append(runErrors, postErr)
-	return result, errors.Join(runErrors...)
+	return backends.RunPipeline(ctx, len(images), func(batch *backends.PipelineBatch) error {
+		return p.PreprocessImages(batch, images)
+	}, p.forward, p.postprocess)
 }
 
 // RunWithImagePaths loads images from file paths and runs the pipeline.
