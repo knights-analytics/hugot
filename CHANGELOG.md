@@ -4,6 +4,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
+## [0.7.8] - 2026-09-02
+
+### Added
+
+- Added `NewORTTrainingSession` for training with the ORT backend.
+- Added `options.WithGoMLX` to use GoMLX for model execution with an ORT session.
+- Added pluggable, session-scoped filesystem adapters through `options.WithFileSystem`, see README.MD for details.
+- Added concurrency protection for model and pipeline registries and made model closing idempotent.
+
+### Changed
+
+- Upgraded to Go 1.27.0.
+- Upgraded GoMLX dependencies, ONNX Runtime to 1.29.0, and ORT GenAI to 0.15.2.
+- Refactored backend and pipeline handling around typed backend and model abstractions.
+
+### Breaking changes
+
+- Filesystem integrations must implement `fileutil.FileSystem` and be supplied with `options.WithFileSystem`; the previous global `viant/afs` integration is no longer used.
+- `fileutil.WalkDir` now takes a context and handler directly, and `fileutil.FileStats` returns `os.FileInfo`; update callers and adapters accordingly.
+- Exported pipeline constructors no longer accept `*options.Options`; backend configuration is now supplied when creating the session.
+
 ## [0.7.7] - 2026-08-03
 
 ###  Changed
