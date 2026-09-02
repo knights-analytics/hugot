@@ -24,11 +24,11 @@ jobs:
       CI: true
     steps:
       - name: Set up Go
-        uses: actions/setup-go@v2
+        uses: actions/setup-go@v7
         with:
           go-version: '1.27.0'
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       - name: Install dependencies
         run: |
           go mod download
@@ -41,25 +41,25 @@ jobs:
           COVERALLS_TOKEN: ${{ secrets.COVERALLS_TOKEN }}
         run: goveralls -coverprofile=./testTarget/unit/cover.final.out -service=github
         continue-on-error: true
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: cover.final.out
           path: ./testTarget/unit/cover.final.out
         continue-on-error: true
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: libtokenizers.a
           path: ./artifacts/libtokenizers.a
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: libonnxruntime-linux-x64.so
           path: ./artifacts/libonnxruntime-linux-x64.so
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: libonnxruntime-genai-linux-x64.so
           path: ./artifacts/libonnxruntime-genai-linux-x64.so
       - name: Publish Test Report
-        uses: mikepenz/action-junit-report@v4
+        uses: mikepenz/action-junit-report@v6
         if: success() || failure()
         with:
           report_paths: './testTarget/unit/*.xml'
@@ -71,10 +71,10 @@ jobs:
     needs: test
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Log in to the Container registry
-        uses: docker/login-action@65b78e6e13532edd9afa3aa52ac7964289d1a9c1
+        uses: docker/login-action@v4
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -82,14 +82,14 @@ jobs:
 
       - name: Extract metadata (tags, labels) for Docker
         id: meta
-        uses: docker/metadata-action@9ec57ed1fcdbf14dcef7dfbe97b2010124a938b7
+        uses: docker/metadata-action@v6
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           target: hugot
 
       - name: Build and push
         id: bake
-        uses: docker/bake-action@v6
+        uses: docker/bake-action@v7
         with:
           push: true
           files: |
@@ -100,7 +100,7 @@ jobs:
             hugot.output=type=registry
 
       - name: Generate artifact attestation
-        uses: actions/attest-build-provenance@v1
+        uses: actions/attest-build-provenance@v4
         with:
           subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME}}
           subject-digest: ${{ fromJSON(steps.bake.outputs.metadata).hugot.image.digest }}
@@ -112,16 +112,16 @@ jobs:
     needs: test
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+        uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
         with:
           name: libtokenizers.a
           path: .
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: libonnxruntime-linux-x64.so
           path: .
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: libonnxruntime-genai-linux-x64.so
           path: .
