@@ -62,14 +62,15 @@ Hugot can be used both as a library and as a command-line application. See below
 
 Hugot supports pluggable backends to perform the tokenization and run the ONNX models. Currently, we support the following backends:
 
-- (default) native go (provided by [GoMLX](https://github.com/gomlx/gomlx))
+- Go
 - [Onnx Runtime](https://onnxruntime.ai/)
 - [OpenXLA](https://openxla.org/)
 
-Onnx Runtime can also be selected as a backend via the build tag "-tags ORT". It does not support training, but it is currently the fastest backend for CPU inference. It supports
-all pipelines, including generative pipelines such as text generation.
+The native Go backend is always available, as it does not require any cgo dependencies. It is provided by the [GoMLX](https://github.com/gomlx/gomlx) project.
 
-OpenXLA can be included at compile time via the build tag "-tags XLA". This is required for fine-tuning of e.g. embedding models, and is the only backend that supports TPUs. Note that it does not yet support generative pipelines.
+Onnx Runtime can be included at compile time via the build tag "-tags ORT".  It is currently the fastest backend for inference and supports all pipelines, including generative pipelines such as text generation.
+
+OpenXLA can be included at compile time via the build tag "-tags XLA". This is the only backend that supports TPUs. Note that it does not yet support generative pipelines or dynamic shapes.
 
 CUDA requires a C backend, either OpenXLA or Onnx Runtime.
 
