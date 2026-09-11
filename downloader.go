@@ -44,6 +44,9 @@ func NewDownloadOptions() DownloadOptions {
 // validation occurs to ensure there is an .onnx and tokenizers.json file. Hugot only works with onnx models.
 func DownloadModel(ctx context.Context, modelName string, destination string, options DownloadOptions) (string, error) {
 	// replicates code in hf downloader
+	// DownloadModel is usable without a session, so bind the default filesystem
+	// before using the context-based file helpers below.
+	ctx = fileutil.WithFileSystem(ctx, nil)
 	modelP := modelName
 	if strings.Contains(modelP, ":") {
 		modelP = strings.Split(modelName, ":")[0]

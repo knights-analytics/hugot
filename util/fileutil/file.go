@@ -34,6 +34,9 @@ type fileSystemContextKey struct{}
 // session-scoped injection mechanism.
 func WithFileSystem(ctx context.Context, system FileSystem) context.Context {
 	if system == nil {
+		if existing, ok := ctx.Value(fileSystemContextKey{}).(FileSystem); ok && existing != nil {
+			return ctx
+		}
 		system = osFileSystem{}
 	}
 	return context.WithValue(ctx, fileSystemContextKey{}, system)

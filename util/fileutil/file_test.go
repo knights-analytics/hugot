@@ -59,6 +59,19 @@ func TestContextFileSystemIsScoped(t *testing.T) {
 	}
 }
 
+func TestWithFileSystemNilPreservesExistingFileSystem(t *testing.T) {
+	filesystem := &recordingFileSystem{}
+	ctx := WithFileSystem(context.Background(), filesystem)
+	ctx = WithFileSystem(ctx, nil)
+
+	if _, err := ReadFileBytes(ctx, "ignored"); err != nil {
+		t.Fatal(err)
+	}
+	if !filesystem.opened {
+		t.Fatal("existing context filesystem was replaced")
+	}
+}
+
 func TestPathJoinSafeHandlesEmptyAndObjectStoragePaths(t *testing.T) {
 	if got := PathJoinSafe(); got != "" {
 		t.Fatalf("empty path got %q", got)
