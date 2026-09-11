@@ -278,7 +278,10 @@ func ReshapeOutput[T float32 | int64 | int32](input []T, meta InputOutputInfo, b
 	lenDimensions := len(dimensions)
 	switch lenDimensions {
 	case 1:
-		return input
+		// The input may be backed by memory owned by a runtime tensor. Copy it
+		// before the tensor is closed by the caller.
+		outArray = make([]T, len(input))
+		copy(outArray.([]T), input)
 	case 2:
 		outArray = flatDataTo2D(input, batchSize, dimensions[lenDimensions-1])
 	case 3:

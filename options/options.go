@@ -95,7 +95,6 @@ type OrtOptions struct {
 	IntraOpSpinning         *bool
 	InterOpSpinning         *bool
 	LogSeverityLevel        *LoggingLevel
-	EnvLoggingLevel         *LoggingLevel
 	GraphOptimizationLevel  *GraphOptimizationLevel
 	CudaOptions             map[string]string
 	CoreMLOptions           map[string]string
@@ -281,6 +280,17 @@ func WithInterOpSpinning(spinning bool) WithOption {
 	}
 }
 
+// WithLogSeverityLevel (ORT only) Sets the log severity level for the session.
+func WithLogSeverityLevel(level LoggingLevel) WithOption {
+	return func(o *Options) error {
+		if o.Backend == BackendORT {
+			o.ORTOptions.LogSeverityLevel = &level
+			return nil
+		}
+		return fmt.Errorf("WithLogSeverityLevel is only supported for ORT backend")
+	}
+}
+
 // WithCuda Use this function to set the options for CUDA provider.
 // It takes a map of CUDA parameters as input.
 // The options will be applied to the OrtOptions or GoMLXOptions struct, depending on your current backend.
@@ -415,28 +425,6 @@ func WithNvTensorRTRTX(options map[string]string) WithOption {
 			return nil
 		}
 		return fmt.Errorf("WithNvTensorRTRTX is only supported for ORT backend")
-	}
-}
-
-// WithLogSeverityLevel (ORT only) Sets the log severity level for the session.
-func WithLogSeverityLevel(level LoggingLevel) WithOption {
-	return func(o *Options) error {
-		if o.Backend == "ORT" {
-			o.ORTOptions.LogSeverityLevel = &level
-			return nil
-		}
-		return fmt.Errorf("WithLogSeverityLevel is only supported for ORT backend")
-	}
-}
-
-// WithEnvLoggingLevel (ORT only) Sets the log severity level for the environment.
-func WithEnvLoggingLevel(level LoggingLevel) WithOption {
-	return func(o *Options) error {
-		if o.Backend == "ORT" {
-			o.ORTOptions.EnvLoggingLevel = &level
-			return nil
-		}
-		return fmt.Errorf("WithEnvLoggingLevel is only supported for ORT backend")
 	}
 }
 

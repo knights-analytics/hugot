@@ -1,11 +1,15 @@
 package pipelines
 
 import (
+	"context"
 	"image"
 	"image/color"
+	"image/png"
+	"os"
 	"testing"
 
 	"github.com/knights-analytics/hugot/backends"
+	"github.com/knights-analytics/hugot/util/fileutil"
 	"github.com/knights-analytics/hugot/util/imageutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -126,6 +130,24 @@ func TestImageModeValidation(t *testing.T) {
 	_, err := pipeline.RunWithImages(t.Context(), []image.Image{img})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "ImageMode")
+}
+
+func TestRunWithImagePathsUsesSessionFileSystem(t *testing.T) {
+	imagePath := t.TempDir() + string(os.PathSeparator) + "image.png"
+	file, err := os.Create(imagePath)
+	require.NoError(t, err)
+	require.NoError(t, png.Encode(file, image.NewRGBA(image.Rect(0, 0, 1, 1))))
+	require.NoError(t, file.Close())
+
+	pipeline := &FeatureExtractionPipeline{
+		BasePipeline: &backends.BasePipeline{
+			SessionContext: fileutil.WithFileSystem(context.Background(), nil),
+		},
+	}
+
+	_, err = pipeline.RunWithImagePaths(context.Background(), []string{imagePath})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "RunWithImages requires ImageMode")
 }
 
 func TestWithImageModeOption(t *testing.T) {
