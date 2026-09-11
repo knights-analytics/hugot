@@ -13,37 +13,32 @@ import (
 	"strings"
 	"sync"
 
-	ort "github.com/yalue/onnxruntime_go"
-	"golang.org/x/sync/errgroup"
-
 	"github.com/knights-analytics/hugot/options"
 	"github.com/knights-analytics/hugot/util/fileutil"
 	"github.com/knights-analytics/ortgenai"
 )
 
 type ORTModel struct {
-	Session           *ort.DynamicAdvancedSession
-	GenerativeSession *ortgenai.Session
-	GenerativeEngine  *ortgenai.Engine
-	SessionOptions    *ort.SessionOptions
-	Options           *options.OrtOptions
+	Session        *coreORTSession
+	Generative     *generativeORTAdapter
+	SessionOptions *coreORTOptions
+	Options        *options.OrtOptions
 }
 
 func (m *ORTModel) Close() error {
 	if m == nil {
 		return nil
 	}
+	var closeErr error
 	if m.Session != nil {
-		return m.Session.Destroy()
+		closeErr = errors.Join(closeErr, m.Session.Close())
+		m.Session = nil
 	}
-	if m.GenerativeSession != nil {
-		m.GenerativeSession.Destroy()
-		return nil
+	if m.Generative != nil {
+		closeErr = errors.Join(closeErr, m.Generative.Close())
+		m.Generative = nil
 	}
-	if m.GenerativeEngine != nil {
-		m.GenerativeEngine.Destroy()
-	}
-	return nil
+	return closeErr
 }
 
 var generativeBackendMutex = sync.Mutex{}
@@ -127,8 +122,8 @@ func createORTGenerativeSession(ctx context.Context, model *Model, options *opti
 			return fmt.Errorf("error creating ortgenai engine: %w", err)
 		}
 		model.ORTModel = &ORTModel{
-			GenerativeEngine: ortGenAiEngine,
-			Options:          options.ORTOptions,
+			Generative: &generativeORTAdapter{engine: ortGenAiEngine},
+			Options:    options.ORTOptions,
 		}
 	} else {
 		ortGenAiSession, err := ortgenai.CreateSessionWithOptions(model.Path, providers, providerOptions)
@@ -136,8 +131,8 @@ func createORTGenerativeSession(ctx context.Context, model *Model, options *opti
 			return fmt.Errorf("error creating ortgenai session: %w", err)
 		}
 		model.ORTModel = &ORTModel{
-			GenerativeSession: ortGenAiSession,
-			Options:           options.ORTOptions,
+			Generative: &generativeORTAdapter{session: ortGenAiSession},
+			Options:    options.ORTOptions,
 		}
 	}
 	return nil
@@ -194,8 +189,11 @@ func runGenerativeORTSessionOnBatch(ctx context.Context, batch *PipelineBatch, p
 	default:
 	}
 
-	session := p.Model.ORTModel.GenerativeSession
-	engine := p.Model.ORTModel.GenerativeEngine
+	if p.Model.ORTModel.Generative == nil {
+		return nil, nil, errors.New("ORT generative adapter is not initialized")
+	}
+	session := p.Model.ORTModel.Generative.session
+	engine := p.Model.ORTModel.Generative.engine
 	if session == nil && engine == nil {
 		return nil, nil, errors.New("ORT generative session/engine is not initialized")
 	}
@@ -360,12 +358,11 @@ func runGenerativeORTSessionOnBatch(ctx context.Context, batch *PipelineBatch, p
 }
 
 func createORTModelBackend(model *Model, options *options.Options) error {
-	sessionOptions, ok := options.BackendOptions.(*ort.SessionOptions)
+	sessionOptions, ok := options.BackendOptions.(*coreORTOptions)
 	if !ok || sessionOptions == nil {
 		return errors.New("invalid ORT session options")
 	}
 
-	var inputs, outputs []InputOutputInfo
 	var cwd string
 	var err error
 	var onnxBytes []byte
@@ -375,7 +372,6 @@ func createORTModelBackend(model *Model, options *options.Options) error {
 		if err != nil {
 			return err
 		}
-		inputs, outputs, err = loadInputOutputMetaORTReader(onnxBytes)
 	} else {
 		// TODO: currently models with external data can only load from regular filesystems, and require dir change
 		cwd, err = os.Getwd()
@@ -387,37 +383,9 @@ func createORTModelBackend(model *Model, options *options.Options) error {
 			return err
 		}
 
-		inputs, outputs, err = loadInputOutputMetaORTFile(model.OnnxPath)
-	}
-	if err != nil {
-		return err
 	}
 
-	inputNames := make([]string, len(inputs))
-	outputNames := make([]string, len(outputs))
-	for i, v := range inputs {
-		inputNames[i] = v.Name
-	}
-	for i, v := range outputs {
-		outputNames[i] = v.Name
-	}
-
-	var session *ort.DynamicAdvancedSession
-	if len(onnxBytes) > 0 {
-		session, err = ort.NewDynamicAdvancedSessionWithONNXData(
-			onnxBytes,
-			inputNames,
-			outputNames,
-			sessionOptions,
-		)
-	} else {
-		session, err = ort.NewDynamicAdvancedSession(
-			model.OnnxPath,
-			inputNames,
-			outputNames,
-			sessionOptions,
-		)
-	}
+	session, inputs, outputs, err := newCoreORTSession(model.OnnxPath, onnxBytes, sessionOptions)
 	if err != nil {
 		return err
 	}
@@ -436,29 +404,13 @@ func createORTModelBackend(model *Model, options *options.Options) error {
 	return err
 }
 
-func loadInputOutputMetaORTReader(onnxBytes []byte) ([]InputOutputInfo, []InputOutputInfo, error) {
-	inputs, outputs, err := ort.GetInputOutputInfoWithONNXData(onnxBytes)
-	if err != nil {
-		return nil, nil, err
-	}
-	return convertORTInputOutputs(inputs), convertORTInputOutputs(outputs), nil
-}
-
-func loadInputOutputMetaORTFile(onnxPath string) ([]InputOutputInfo, []InputOutputInfo, error) {
-	inputs, outputs, err := ort.GetInputOutputInfo(onnxPath)
-	if err != nil {
-		return nil, nil, err
-	}
-	return convertORTInputOutputs(inputs), convertORTInputOutputs(outputs), nil
-}
-
 func createInputTensorsORT(batch *PipelineBatch, model *Model) error {
 	batchSize := batch.Size
 	maxSequenceLength := batch.MaxSequenceLength
 	total := batchSize * maxSequenceLength
 
 	// 1) prepare result containers - now we use all inputs, not filtering
-	inputVals := make([]ort.Value, len(model.InputsMeta))
+	inputVals := make([]*coreORTTensor, len(model.InputsMeta))
 	masks := make([][]bool, batchSize)
 
 	// 2) build each tensor
@@ -512,7 +464,7 @@ func createInputTensorsORT(batch *PipelineBatch, model *Model) error {
 		}
 
 		// create the ONNX Runtime tensor for regular inputs
-		t, err := ort.NewTensor(ort.NewShape(int64(batchSize), int64(maxSequenceLength)), backing)
+		t, err := newCoreInt64Tensor([]int64{int64(batchSize), int64(maxSequenceLength)}, backing)
 		if err != nil {
 			return err
 		}
@@ -524,9 +476,9 @@ func createInputTensorsORT(batch *PipelineBatch, model *Model) error {
 	batch.PaddingMask = masks
 	batch.DestroyInputs = func() error {
 		var agg error
-		if values, ok := batch.InputValues.([]ort.Value); ok {
+		if values, ok := batch.InputValues.([]*coreORTTensor); ok {
 			for _, t := range values {
-				agg = errors.Join(agg, t.Destroy())
+				agg = errors.Join(agg, t.Close())
 			}
 		} else {
 			agg = errors.Join(agg, errors.New("batch.InputValues has incorrect type"))
@@ -548,55 +500,31 @@ func runORTSessionOnBatch(ctx context.Context, batch *PipelineBatch, p *BasePipe
 	default:
 	}
 
-	outputTensors := make([]ort.Value, len(p.Model.OutputsMeta))
-	doneChannel := make(chan bool, 1)
-	eg := errgroup.Group{}
-	eg.Go(func() (err error) {
-		defer func() {
-			// C code does not support context, so cancelling a context and/or session will usually trigger a segfault(panic).
-			// recover this here, so context can be cancelled gracefully and return an error.
-			if r := recover(); r != nil {
-				err = fmt.Errorf("recovered from panic: %v", r)
-			}
-			close(doneChannel)
-		}()
-		return errors.Join(err, p.Model.ORTModel.Session.Run(batch.InputValues.([]ort.Value), outputTensors))
-	})
-
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-p.SessionContext.Done():
-		return p.SessionContext.Err()
-	case <-doneChannel:
-		if err := eg.Wait(); err != nil {
-			return err
-		}
+	outputTensors, err := p.Model.ORTModel.Session.Run(ctx, batch.InputValues.([]*coreORTTensor))
+	if err != nil {
+		return err
 	}
+	defer func() {
+		for _, tensor := range outputTensors {
+			err = errors.Join(tensor.Close())
+		}
+	}()
 
 	convertedOutput := make([]any, len(outputTensors))
 	for i, t := range outputTensors {
-		switch v := t.(type) {
-		case *ort.Tensor[float32]:
-			convertedOutput[i] = ReshapeOutput(v.GetData(), p.Model.OutputsMeta[i], batch.Size, batch.PaddingMask, batch.MaxSequenceLength)
-		case *ort.Tensor[int64]:
-			convertedOutput[i] = ReshapeOutput(v.GetData(), p.Model.OutputsMeta[i], batch.Size, batch.PaddingMask, batch.MaxSequenceLength)
+		if values, dataErr := t.Float32Data(); dataErr == nil {
+			convertedOutput[i] = ReshapeOutput(values, p.Model.OutputsMeta[i], batch.Size, batch.PaddingMask, batch.MaxSequenceLength)
+			continue
 		}
+		if values, dataErr := t.Int64Data(); dataErr == nil {
+			convertedOutput[i] = ReshapeOutput(values, p.Model.OutputsMeta[i], batch.Size, batch.PaddingMask, batch.MaxSequenceLength)
+			continue
+		}
+		return fmt.Errorf("unsupported ORT output type for %q", p.Model.OutputsMeta[i].Name)
 	}
 	// store resulting tensors
 	batch.OutputValues = convertedOutput
-	return nil
-}
-
-func convertORTInputOutputs(inputOutputs []ort.InputOutputInfo) []InputOutputInfo {
-	inputOutputsStandardised := make([]InputOutputInfo, len(inputOutputs))
-	for i, inputOutput := range inputOutputs {
-		inputOutputsStandardised[i] = InputOutputInfo{
-			Name:       inputOutput.Name,
-			Dimensions: Shape(inputOutput.Dimensions),
-		}
-	}
-	return inputOutputsStandardised
+	return err
 }
 
 // createTabularTensorsORT flattens [][]float32 features into a [batch, feature_dim] tensor.
@@ -636,14 +564,14 @@ func createTabularTensorsORT(batch *PipelineBatch, model *Model, features [][]fl
 		}
 	}
 
-	t, err := ort.NewTensor(ort.NewShape(int64(batch.Size), int64(featDim)), backing)
+	t, err := newCoreFloat32Tensor([]int64{int64(batch.Size), int64(featDim)}, backing)
 	if err != nil {
 		return err
 	}
-	values := make([]ort.Value, len(model.InputsMeta))
+	values := make([]*coreORTTensor, len(model.InputsMeta))
 	values[0] = t
 	batch.InputValues = values
-	batch.DestroyInputs = func() error { return t.Destroy() }
+	batch.DestroyInputs = func() error { return t.Close() }
 	// No padding mask for tabular
 	batch.PaddingMask = nil
 	batch.MaxSequenceLength = 0
@@ -668,14 +596,24 @@ func createImageTensorsORT(batch *PipelineBatch, model *Model, preprocessed [][]
 			}
 		}
 	}
-	imgTensor, err := ort.NewTensor(ort.NewShape(int64(n), int64(c), int64(h), int64(w)), imgBacking)
+	imgTensor, err := newCoreFloat32Tensor([]int64{int64(n), int64(c), int64(h), int64(w)}, imgBacking)
 	if err != nil {
 		return err
 	}
+	success := false
+	var destroyers []func() error
+	defer func() {
+		if !success {
+			err = errors.Join(imgTensor.Close())
+			for _, destroy := range destroyers {
+				err = errors.Join(destroy())
+			}
+		}
+	}()
 
 	// Prepare inputs slice according to model input metadata order.
-	values := make([]ort.Value, len(model.InputsMeta))
-	destroyers := make([]func() error, 0, len(values))
+	values := make([]*coreORTTensor, len(model.InputsMeta))
+	destroyers = make([]func() error, 0, len(values))
 
 	// Helper to infer mask dims
 	inferMaskDims := func(s Shape) (int64, int64) {
@@ -720,7 +658,7 @@ func createImageTensorsORT(batch *PipelineBatch, model *Model, preprocessed [][]
 			for j := range maskBacking {
 				maskBacking[j] = 1
 			}
-			maskTensor, mErr := ort.NewTensor(ort.NewShape(shape...), maskBacking)
+			maskTensor, mErr := newCoreInt64Tensor(shape, maskBacking)
 			if mErr != nil {
 				// If creating 4D fails, try 3D fallback
 				if len(shape) == 4 {
@@ -730,14 +668,14 @@ func createImageTensorsORT(batch *PipelineBatch, model *Model, preprocessed [][]
 					for j := range maskBacking {
 						maskBacking[j] = 1
 					}
-					maskTensor, mErr = ort.NewTensor(ort.NewShape(shape...), maskBacking)
+					maskTensor, mErr = newCoreInt64Tensor(shape, maskBacking)
 				}
 				if mErr != nil {
 					return mErr
 				}
 			}
 			values[i] = maskTensor
-			destroyers = append(destroyers, maskTensor.Destroy)
+			destroyers = append(destroyers, maskTensor.Close)
 		} else {
 			values[i] = imgTensor
 			// Only destroy once; avoid double-destroy if multiple inputs map to same tensor
@@ -750,13 +688,14 @@ func createImageTensorsORT(batch *PipelineBatch, model *Model, preprocessed [][]
 	batch.InputValues = values
 	batch.DestroyInputs = func() error {
 		var agg error
-		agg = errors.Join(agg, imgTensor.Destroy())
+		agg = errors.Join(agg, imgTensor.Close())
 		for _, d := range destroyers {
 			agg = errors.Join(agg, d())
 		}
 		return agg
 	}
-	return nil
+	success = true
+	return err
 }
 
 func CreateMessagesORT(batch *PipelineBatch, inputs any, systemPrompt string) error {
