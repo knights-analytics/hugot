@@ -31,7 +31,7 @@ RUN --mount=src=./go.mod,dst=/go.mod \
     dnf install -y 'dnf-command(config-manager)' && \
     # from rhel \
     dnf config-manager --add-repo https://developer.download.nvidia.com/compute/cuda/repos/rhel9/x86_64/cuda-rhel9.repo && \
-    dnf install -y cuda-cudart-13-3 libcublas-13-3 libcurand-13-3 libcufft-13-3 libcudnn9-cuda-13 && \
+    dnf install -y cuda-cudart-13-4 libcublas-13-4 libcurand-13-4 libcufft-13-4 libcudnn9-cuda-13 && \
     dnf clean all && \
    # go \
     curl -LO https://golang.org/dl/go${GO_VERSION}.linux-amd64.tar.gz && \
