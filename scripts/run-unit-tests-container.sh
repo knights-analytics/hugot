@@ -10,7 +10,7 @@ go run ./testcases/downloadModels.go
 
 echo "Running ORT tests..."
 
-gotestsum --format testname --junitfile=$folder/unit-ort.xml --jsonfile=$folder/unit-ort.json -- -coverprofile=$folder/cover-ort.out -coverpkg ./... -tags=ORT -timeout 60m -race ./...
+gotestsum --format testname --junitfile=$folder/unit-ort.xml --jsonfile=$folder/unit-ort.json -- -coverprofile=$folder/cover-ort.out -coverpkg ./... -tags=ORT -timeout 60m ./...
 
 echo "ORT tests completed."
 

@@ -11,8 +11,8 @@ require (
 	github.com/gomlx/gomlx v0.28.16
 	github.com/gomlx/onnx-gomlx v0.5.13
 	github.com/knights-analytics/ortgenai v0.3.2
+	github.com/microsoft/onnxruntime/go v0.0.0-20260921022929-bca9d15b639c
 	github.com/stretchr/testify v1.12.1
-	github.com/yalue/onnxruntime_go v1.36.0
 	golang.org/x/image v0.46.0
 	golang.org/x/sync v0.23.0
 )
@@ -26,7 +26,7 @@ require (
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
 	golang.org/x/exp v0.0.0-20260908205506-85c1c2202aba // indirect
 	golang.org/x/sys v0.48.0 // indirect
-	golang.org/x/term v0.45.0 // indirect
+	golang.org/x/term v0.46.0 // indirect
 	golang.org/x/text v0.42.0 // indirect
 	google.golang.org/protobuf v1.36.12 // indirect
 	k8s.io/klog/v2 v2.140.0 // indirect

@@ -73,16 +73,6 @@ const (
 	GraphOptimizationLevelEnableAll      GraphOptimizationLevel = 99
 )
 
-type LoggingLevel int
-
-const (
-	LoggingLevelVerbose LoggingLevel = 0
-	LoggingLevelInfo    LoggingLevel = 1
-	LoggingLevelWarning LoggingLevel = 2
-	LoggingLevelError   LoggingLevel = 3
-	LoggingLevelFatal   LoggingLevel = 4
-)
-
 type OrtOptions struct {
 	LibraryPath             *string
 	LibraryDir              *string
@@ -94,8 +84,6 @@ type OrtOptions struct {
 	ParallelExecutionMode   *bool
 	IntraOpSpinning         *bool
 	InterOpSpinning         *bool
-	LogSeverityLevel        *LoggingLevel
-	EnvLoggingLevel         *LoggingLevel
 	GraphOptimizationLevel  *GraphOptimizationLevel
 	CudaOptions             map[string]string
 	CoreMLOptions           map[string]string
@@ -415,28 +403,6 @@ func WithNvTensorRTRTX(options map[string]string) WithOption {
 			return nil
 		}
 		return fmt.Errorf("WithNvTensorRTRTX is only supported for ORT backend")
-	}
-}
-
-// WithLogSeverityLevel (ORT only) Sets the log severity level for the session.
-func WithLogSeverityLevel(level LoggingLevel) WithOption {
-	return func(o *Options) error {
-		if o.Backend == "ORT" {
-			o.ORTOptions.LogSeverityLevel = &level
-			return nil
-		}
-		return fmt.Errorf("WithLogSeverityLevel is only supported for ORT backend")
-	}
-}
-
-// WithEnvLoggingLevel (ORT only) Sets the log severity level for the environment.
-func WithEnvLoggingLevel(level LoggingLevel) WithOption {
-	return func(o *Options) error {
-		if o.Backend == "ORT" {
-			o.ORTOptions.EnvLoggingLevel = &level
-			return nil
-		}
-		return fmt.Errorf("WithEnvLoggingLevel is only supported for ORT backend")
 	}
 }
 

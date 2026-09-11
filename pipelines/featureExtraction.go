@@ -314,7 +314,7 @@ func (p *FeatureExtractionPipeline) RunWithImages(ctx context.Context, images []
 // RunWithImagePaths loads images from file paths and runs the pipeline.
 // Convenience method that combines image loading with RunWithImages.
 func (p *FeatureExtractionPipeline) RunWithImagePaths(ctx context.Context, paths []string) (*FeatureExtractionOutput, error) {
-	images, err := imageutil.LoadImagesFromPaths(ctx, paths)
+	images, err := imageutil.LoadImagesFromPaths(p.SessionContext, paths)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load images: %w", err)
 	}
