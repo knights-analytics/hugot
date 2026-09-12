@@ -407,7 +407,10 @@ func createORTModelBackend(model *Model, options *options.Options) error {
 func createInputTensorsORT(batch *PipelineBatch, model *Model) error {
 	batchSize := batch.Size
 	maxSequenceLength := batch.MaxSequenceLength
-	total := batchSize * maxSequenceLength
+	queryCount := batch.QueryCount
+	if queryCount < 1 {
+		queryCount = 1
+	}
 
 	// 1) prepare result containers - now we use all inputs, not filtering
 	inputVals := make([]*coreORTTensor, len(model.InputsMeta))
@@ -415,48 +418,89 @@ func createInputTensorsORT(batch *PipelineBatch, model *Model) error {
 
 	// 2) build each tensor
 	for mi, meta := range model.InputsMeta {
-		// Handle regular input tensors
-		backing := make([]int64, total)
+		if isImageInput(meta.Name) {
+			backing, dimensions, err := flattenImageValues(model, batch.Size, batch.ImageValues)
+			if err != nil {
+				return err
+			}
+			t, err := newCoreFloat32Tensor(dimensions, backing)
+			if err != nil {
+				return err
+			}
+			inputVals[mi] = t
+			continue
+		}
+		textRank := len(meta.Dimensions)
+		if textRank != 2 && textRank != 3 {
+			return fmt.Errorf("unsupported text input rank %d for %s", textRank, meta.Name)
+		}
+		if textRank == 3 && batch.QueryCount == 0 {
+			return fmt.Errorf("input %s requires a query dimension", meta.Name)
+		}
+		backing := make([]int64, batchSize*queryCount*maxSequenceLength)
 		idx := 0
 		switch meta.Name {
 		case "input_ids":
-			for bi, inp := range batch.Input {
-				seqLen := len(inp.TokenIDs)
-				maskRow := make([]bool, maxSequenceLength)
-				for pos := range maxSequenceLength {
-					if pos < seqLen {
-						backing[idx] = int64(inp.TokenIDs[pos])
-						maskRow[pos] = true
+			for bi := range batchSize {
+				for qi := range queryCount {
+					inputIndex := bi
+					if textRank == 3 {
+						inputIndex = qi
 					}
-					idx++
+					inp := batch.Input[inputIndex]
+					seqLen := len(inp.TokenIDs)
+					maskRow := make([]bool, maxSequenceLength)
+					for pos := range maxSequenceLength {
+						if pos < seqLen {
+							backing[idx] = int64(inp.TokenIDs[pos])
+							maskRow[pos] = true
+						}
+						idx++
+					}
+					if bi < len(masks) && qi == 0 {
+						masks[bi] = maskRow
+					}
 				}
-				masks[bi] = maskRow
 			}
 		case "token_type_ids":
-			for _, inp := range batch.Input {
-				seqLen := len(inp.TokenIDs)
-				for pos := range maxSequenceLength {
-					if pos < seqLen {
-						backing[idx] = int64(inp.TypeIDs[pos])
+			for bi := range batchSize {
+				for qi := range queryCount {
+					inputIndex := bi
+					if textRank == 3 {
+						inputIndex = qi
 					}
-					idx++
+					inp := batch.Input[inputIndex]
+					for pos := range maxSequenceLength {
+						if pos < len(inp.TypeIDs) {
+							backing[idx] = int64(inp.TypeIDs[pos])
+						}
+						idx++
+					}
 				}
 			}
 		case "attention_mask":
-			for _, inp := range batch.Input {
-				for pos := range maxSequenceLength {
-					if pos < len(inp.TokenIDs) {
-						backing[idx] = int64(inp.AttentionMask[pos])
+			for bi := range batchSize {
+				for qi := range queryCount {
+					inputIndex := bi
+					if textRank == 3 {
+						inputIndex = qi
 					}
-					idx++
+					inp := batch.Input[inputIndex]
+					for pos := range maxSequenceLength {
+						if pos < len(inp.AttentionMask) {
+							backing[idx] = int64(inp.AttentionMask[pos])
+						}
+						idx++
+					}
 				}
 			}
 		case "position_ids":
-			for range batch.Input {
-				for pos := range maxSequenceLength {
-					// 1-indexed positions
-					backing[idx] = int64(pos + 1)
-					idx++
+			for range batchSize {
+				for range queryCount {
+					for pos := range maxSequenceLength {
+						backing[idx] = int64(pos + 1)
+						idx++
+					}
 				}
 			}
 		default:
@@ -464,7 +508,11 @@ func createInputTensorsORT(batch *PipelineBatch, model *Model) error {
 		}
 
 		// create the ONNX Runtime tensor for regular inputs
-		t, err := newCoreInt64Tensor([]int64{int64(batchSize), int64(maxSequenceLength)}, backing)
+		dimensions := []int64{int64(batchSize), int64(maxSequenceLength)}
+		if textRank == 3 {
+			dimensions = []int64{int64(batchSize), int64(queryCount), int64(maxSequenceLength)}
+		}
+		t, err := newCoreInt64Tensor(dimensions, backing)
 		if err != nil {
 			return err
 		}
@@ -512,12 +560,13 @@ func runORTSessionOnBatch(ctx context.Context, batch *PipelineBatch, p *BasePipe
 
 	convertedOutput := make([]any, len(outputTensors))
 	for i, t := range outputTensors {
+		dimensions := Shape(t.tensor.Shape())
 		if values, dataErr := t.Float32Data(); dataErr == nil {
-			convertedOutput[i] = ReshapeOutput(values, p.Model.OutputsMeta[i], batch.Size, batch.PaddingMask, batch.MaxSequenceLength)
+			convertedOutput[i] = reshapeOutput(values, dimensions, batch.Size, batch.PaddingMask, batch.MaxSequenceLength)
 			continue
 		}
 		if values, dataErr := t.Int64Data(); dataErr == nil {
-			convertedOutput[i] = ReshapeOutput(values, p.Model.OutputsMeta[i], batch.Size, batch.PaddingMask, batch.MaxSequenceLength)
+			convertedOutput[i] = reshapeOutput(values, dimensions, batch.Size, batch.PaddingMask, batch.MaxSequenceLength)
 			continue
 		}
 		return fmt.Errorf("unsupported ORT output type for %q", p.Model.OutputsMeta[i].Name)
@@ -529,6 +578,40 @@ func runORTSessionOnBatch(ctx context.Context, batch *PipelineBatch, p *BasePipe
 
 // createTabularTensorsORT flattens [][]float32 features into a [batch, feature_dim] tensor.
 // Currently supports models with a single input of 2D shape (batch, features).
+func createAudioTensorsORT(batch *PipelineBatch, model *Model, samples [][]float32) error {
+	if len(samples) == 0 || len(samples) != batch.Size {
+		return errors.New("audio samples do not match batch size")
+	}
+	if len(model.InputsMeta) != 1 {
+		return errors.New("audio models with multiple inputs are not supported")
+	}
+	dims := model.InputsMeta[0].Dimensions
+	if len(dims) != 2 && len(dims) != 3 {
+		return fmt.Errorf("unsupported audio input rank %d", len(dims))
+	}
+	maxSamples := 0
+	for _, waveform := range samples {
+		if len(waveform) > maxSamples {
+			maxSamples = len(waveform)
+		}
+	}
+	backing := make([]float32, len(samples)*maxSamples)
+	for i, waveform := range samples {
+		copy(backing[i*maxSamples:], waveform)
+	}
+	shape := []int64{int64(len(samples)), int64(maxSamples)}
+	if len(dims) == 3 {
+		shape = []int64{int64(len(samples)), 1, int64(maxSamples)}
+	}
+	tensor, err := newCoreFloat32Tensor(shape, backing)
+	if err != nil {
+		return err
+	}
+	batch.InputValues = []*coreORTTensor{tensor}
+	batch.DestroyInputs = tensor.Close
+	return nil
+}
+
 func createTabularTensorsORT(batch *PipelineBatch, model *Model, features [][]float32) error {
 	if len(features) != batch.Size {
 		return fmt.Errorf("features batch size %d does not match PipelineBatch size %d", len(features), batch.Size)

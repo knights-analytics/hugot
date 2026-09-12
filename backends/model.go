@@ -28,6 +28,7 @@ type ModelMetadata struct {
 	IDLabelMap            map[int]string
 	SeparatorToken        string
 	MaxPositionEmbeddings int
+	ImageSize             int
 	IsGenerative          bool
 }
 
@@ -189,6 +190,9 @@ func loadModelConfig(ctx context.Context, model *Model) error {
 		if configMap.MaxPositionEmbeddings > 0 {
 			model.MaxPositionEmbeddings = configMap.MaxPositionEmbeddings
 		}
+		if configMap.ImageSize > 0 {
+			model.ImageSize = configMap.ImageSize
+		}
 		if configMap.ID2Label != nil {
 			model.IDLabelMap = map[int]string{}
 			for k, label := range configMap.ID2Label {
@@ -273,9 +277,13 @@ func loadModelConfig(ctx context.Context, model *Model) error {
 }
 
 func ReshapeOutput[T float32 | int64 | int32](input []T, meta InputOutputInfo, batchSize int, paddingMask [][]bool, sequenceLength int) any {
+	return reshapeOutput(input, meta.Dimensions, batchSize, paddingMask, sequenceLength)
+}
+
+func reshapeOutput[T float32 | int64 | int32](input []T, dimensions Shape, batchSize int, paddingMask [][]bool, sequenceLength int) any {
 	var outArray any
-	dimensions := meta.Dimensions.ValuesInt()
-	lenDimensions := len(dimensions)
+	dimensionsInt := dimensions.ValuesInt()
+	lenDimensions := len(dimensionsInt)
 	switch lenDimensions {
 	case 1:
 		// The input may be backed by memory owned by a runtime tensor. Copy it
@@ -283,18 +291,16 @@ func ReshapeOutput[T float32 | int64 | int32](input []T, meta InputOutputInfo, b
 		outArray = make([]T, len(input))
 		copy(outArray.([]T), input)
 	case 2:
-		outArray = flatDataTo2D(input, batchSize, dimensions[lenDimensions-1])
+		outArray = flatDataTo2D(input, batchSize, dimensionsInt[lenDimensions-1])
 	case 3:
 		// If no padding mask is provided (vision models), infer middle dim.
 		if len(paddingMask) == 0 || sequenceLength == 0 {
-			outArray = flatDataTo3DGeneric(input, batchSize, dimensions[lenDimensions-1])
+			outArray = flatDataTo3DGeneric(input, batchSize, dimensionsInt[lenDimensions-1])
 		} else {
-			outArray = flatDataTo3D(input, paddingMask, sequenceLength, dimensions[lenDimensions-1])
+			outArray = flatDataTo3D(input, paddingMask, sequenceLength, dimensionsInt[lenDimensions-1])
 		}
 	case 4:
-		dimension := dimensions[3]
-		groupSize := dimensions[1]
-		outArray = flatDataTo4D(input, paddingMask, groupSize, dimension)
+		outArray = flatDataTo4D(input, paddingMask, batchSize, dimensionsInt[1], dimensionsInt[2], dimensionsInt[3])
 	}
 	return outArray
 }
@@ -377,31 +383,28 @@ func flatDataTo3DGeneric[T float32 | int64 | int32](input []T, batchSize int, di
 	return output
 }
 
-func flatDataTo4D[T float32 | int64 | int32](input []T, paddingMask [][]bool, groupSize int, dimension int) [][][][]T {
-	batchSize := len(paddingMask) // B
-	if batchSize == 0 || groupSize <= 0 || dimension <= 0 {
+func flatDataTo4D[T float32 | int64 | int32](input []T, paddingMask [][]bool, batchSize, groupSize, height, width int) [][][][]T {
+	if len(paddingMask) > 0 {
+		batchSize = len(paddingMask)
+	}
+	if batchSize == 0 || groupSize <= 0 || height <= 0 || width <= 0 {
 		return make([][][][]T, batchSize)
 	}
-	sequenceLength := len(paddingMask[0]) // S
 	output := make([][][][]T, batchSize)
 	counter := 0
 	for b := range batchSize {
 		group := make([][][]T, groupSize) // A
 		for a := range groupSize {
-			sequence := make([][]T, sequenceLength)
-			for s := range sequenceLength {
-				if !paddingMask[b][s] {
-					// skip this entire vector
-					counter += dimension
-					sequence[s] = make([]T, dimension) // fill with zeros or ignore
-					continue
-				}
-				vector := make([]T, dimension)
-				for d := range dimension {
-					vector[d] = input[counter]
+			sequence := make([][]T, height)
+			for y := range height {
+				vector := make([]T, width)
+				for x := range width {
+					if counter < len(input) {
+						vector[x] = input[counter]
+					}
 					counter++
 				}
-				sequence[s] = vector
+				sequence[y] = vector
 			}
 			group[a] = sequence
 		}

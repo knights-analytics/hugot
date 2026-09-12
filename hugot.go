@@ -138,67 +138,93 @@ func init() {
 	registerPipeline(pipelines.NewTextGenerationPipeline)
 	registerPipeline(pipelines.NewTabularPipeline)
 	registerPipeline(pipelines.NewQuestionAnsweringPipeline)
+	registerPipeline(pipelines.NewFillMaskPipeline)
+	registerPipeline(pipelines.NewImageFeatureExtractionPipeline)
+	registerPipeline(pipelines.NewImageSegmentationPipeline)
+	registerPipeline(pipelines.NewDepthEstimationPipeline)
+	registerPipeline(pipelines.NewSummarizationPipeline)
+	registerPipeline(pipelines.NewTranslationPipeline)
+	registerPipeline(pipelines.NewText2TextGenerationPipeline)
+	registerPipeline(pipelines.NewAudioClassificationPipeline)
+	registerPipeline(pipelines.NewBackgroundRemovalPipeline)
+	registerPipeline(pipelines.NewZeroShotImageClassificationPipeline)
+	registerPipeline(pipelines.NewAutomaticSpeechRecognitionPipeline)
+	registerPipeline(pipelines.NewImageToTextPipeline)
+	registerPipeline(pipelines.NewImageTextToTextPipeline)
+	registerPipeline(pipelines.NewZeroShotObjectDetectionPipeline)
+	registerPipeline(pipelines.NewMaskGenerationPipeline)
+	registerPipeline(pipelines.NewZeroShotAudioClassificationPipeline)
+	registerPipeline(pipelines.NewVisualQuestionAnsweringPipeline)
+	registerPipeline(pipelines.NewDocumentQuestionAnsweringPipeline)
+	registerPipeline(pipelines.NewTableQuestionAnsweringPipeline)
+	registerPipeline(pipelines.NewTextToSpeechPipeline)
+	registerPipeline(pipelines.NewTextToAudioPipeline)
 }
 
-// FeatureExtractionConfig is the configuration for a feature extraction pipeline.
-type FeatureExtractionConfig = backends.PipelineConfig[*pipelines.FeatureExtractionPipeline]
-
-// FeatureExtractionOption is an option for a feature extraction pipeline.
-type FeatureExtractionOption = backends.PipelineOption[*pipelines.FeatureExtractionPipeline]
-
-// TextClassificationConfig is the configuration for a text classification pipeline.
-type TextClassificationConfig = backends.PipelineConfig[*pipelines.TextClassificationPipeline]
-
-// TextClassificationOption is an option for a text classification pipeline.
-type TextClassificationOption = backends.PipelineOption[*pipelines.TextClassificationPipeline]
-
-// ZeroShotClassificationConfig is the configuration for a zero shot classification pipeline.
-type ZeroShotClassificationConfig = backends.PipelineConfig[*pipelines.ZeroShotClassificationPipeline]
-
-// ZeroShotClassificationOption is an option for a zero shot classification pipeline.
-type ZeroShotClassificationOption = backends.PipelineOption[*pipelines.ZeroShotClassificationPipeline]
-
-// TokenClassificationConfig is the configuration for a token classification pipeline.
-type TokenClassificationConfig = backends.PipelineConfig[*pipelines.TokenClassificationPipeline]
-
-// TokenClassificationOption is an option for a token classification pipeline.
-type TokenClassificationOption = backends.PipelineOption[*pipelines.TokenClassificationPipeline]
-
-// CrossEncoderConfig is the configuration for a cross encoder pipeline.
-type CrossEncoderConfig = backends.PipelineConfig[*pipelines.CrossEncoderPipeline]
-
-// CrossEncoderOption is an option for a cross encoder pipeline.
-type CrossEncoderOption = backends.PipelineOption[*pipelines.CrossEncoderPipeline]
-
-// ImageClassificationConfig is the configuration for an image classification pipeline.
-type ImageClassificationConfig = backends.PipelineConfig[*pipelines.ImageClassificationPipeline]
-
-// ImageClassificationOption is an option for an image classification pipeline.
-type ImageClassificationOption = backends.PipelineOption[*pipelines.ImageClassificationPipeline]
-
-// ObjectDetectionConfig is the configuration for an object detection pipeline.
-type ObjectDetectionConfig = backends.PipelineConfig[*pipelines.ObjectDetectionPipeline]
-
-// ObjectDetectionOption is an option for an object detection pipeline.
-type ObjectDetectionOption = backends.PipelineOption[*pipelines.ObjectDetectionPipeline]
-
-// TextGenerationConfig is the configuration for a text generation pipeline.
-type TextGenerationConfig = backends.PipelineConfig[*pipelines.TextGenerationPipeline]
-
-// TextGenerationOption is an option for a text generation pipeline.
-type TextGenerationOption = backends.PipelineOption[*pipelines.TextGenerationPipeline]
-
-// TabularConfig is the configuration for a tabular pipeline.
-type TabularConfig = backends.PipelineConfig[*pipelines.TabularPipeline]
-
-// TabularOption is an option for a tabular pipeline.
-type TabularOption = backends.PipelineOption[*pipelines.TabularPipeline]
-
-// QuestionAnsweringConfig is the configuration for a question answering pipeline.
-type QuestionAnsweringConfig = backends.PipelineConfig[*pipelines.QuestionAnsweringPipeline]
-
-// QuestionAnsweringOption is an option for a question answering pipeline.
-type QuestionAnsweringOption = backends.PipelineOption[*pipelines.QuestionAnsweringPipeline]
+type (
+	FeatureExtractionConfig           = backends.PipelineConfig[*pipelines.FeatureExtractionPipeline]
+	FeatureExtractionOption           = backends.PipelineOption[*pipelines.FeatureExtractionPipeline]
+	TextClassificationConfig          = backends.PipelineConfig[*pipelines.TextClassificationPipeline]
+	TextClassificationOption          = backends.PipelineOption[*pipelines.TextClassificationPipeline]
+	ZeroShotClassificationConfig      = backends.PipelineConfig[*pipelines.ZeroShotClassificationPipeline]
+	ZeroShotClassificationOption      = backends.PipelineOption[*pipelines.ZeroShotClassificationPipeline]
+	TokenClassificationConfig         = backends.PipelineConfig[*pipelines.TokenClassificationPipeline]
+	TokenClassificationOption         = backends.PipelineOption[*pipelines.TokenClassificationPipeline]
+	CrossEncoderConfig                = backends.PipelineConfig[*pipelines.CrossEncoderPipeline]
+	CrossEncoderOption                = backends.PipelineOption[*pipelines.CrossEncoderPipeline]
+	ImageClassificationConfig         = backends.PipelineConfig[*pipelines.ImageClassificationPipeline]
+	ImageClassificationOption         = backends.PipelineOption[*pipelines.ImageClassificationPipeline]
+	ObjectDetectionConfig             = backends.PipelineConfig[*pipelines.ObjectDetectionPipeline]
+	ObjectDetectionOption             = backends.PipelineOption[*pipelines.ObjectDetectionPipeline]
+	TextGenerationConfig              = backends.PipelineConfig[*pipelines.TextGenerationPipeline]
+	TextGenerationOption              = backends.PipelineOption[*pipelines.TextGenerationPipeline]
+	TabularConfig                     = backends.PipelineConfig[*pipelines.TabularPipeline]
+	TabularOption                     = backends.PipelineOption[*pipelines.TabularPipeline]
+	QuestionAnsweringConfig           = backends.PipelineConfig[*pipelines.QuestionAnsweringPipeline]
+	QuestionAnsweringOption           = backends.PipelineOption[*pipelines.QuestionAnsweringPipeline]
+	FillMaskConfig                    = backends.PipelineConfig[*pipelines.FillMaskPipeline]
+	FillMaskOption                    = backends.PipelineOption[*pipelines.FillMaskPipeline]
+	ImageFeatureExtractionConfig      = backends.PipelineConfig[*pipelines.ImageFeatureExtractionPipeline]
+	ImageFeatureExtractionOption      = backends.PipelineOption[*pipelines.ImageFeatureExtractionPipeline]
+	ImageSegmentationConfig           = backends.PipelineConfig[*pipelines.ImageSegmentationPipeline]
+	ImageSegmentationOption           = backends.PipelineOption[*pipelines.ImageSegmentationPipeline]
+	DepthEstimationConfig             = backends.PipelineConfig[*pipelines.DepthEstimationPipeline]
+	DepthEstimationOption             = backends.PipelineOption[*pipelines.DepthEstimationPipeline]
+	SummarizationConfig               = backends.PipelineConfig[*pipelines.SummarizationPipeline]
+	SummarizationOption               = backends.PipelineOption[*pipelines.SummarizationPipeline]
+	TranslationConfig                 = backends.PipelineConfig[*pipelines.TranslationPipeline]
+	TranslationOption                 = backends.PipelineOption[*pipelines.TranslationPipeline]
+	Text2TextGenerationConfig         = backends.PipelineConfig[*pipelines.Text2TextGenerationPipeline]
+	Text2TextGenerationOption         = backends.PipelineOption[*pipelines.Text2TextGenerationPipeline]
+	AudioClassificationConfig         = backends.PipelineConfig[*pipelines.AudioClassificationPipeline]
+	AudioClassificationOption         = backends.PipelineOption[*pipelines.AudioClassificationPipeline]
+	BackgroundRemovalConfig           = backends.PipelineConfig[*pipelines.BackgroundRemovalPipeline]
+	BackgroundRemovalOption           = backends.PipelineOption[*pipelines.BackgroundRemovalPipeline]
+	ZeroShotImageClassificationConfig = backends.PipelineConfig[*pipelines.ZeroShotImageClassificationPipeline]
+	ZeroShotImageClassificationOption = backends.PipelineOption[*pipelines.ZeroShotImageClassificationPipeline]
+	AutomaticSpeechRecognitionConfig  = backends.PipelineConfig[*pipelines.AutomaticSpeechRecognitionPipeline]
+	AutomaticSpeechRecognitionOption  = backends.PipelineOption[*pipelines.AutomaticSpeechRecognitionPipeline]
+	ImageToTextConfig                 = backends.PipelineConfig[*pipelines.ImageToTextPipeline]
+	ImageToTextOption                 = backends.PipelineOption[*pipelines.ImageToTextPipeline]
+	ImageTextToTextConfig             = backends.PipelineConfig[*pipelines.ImageTextToTextPipeline]
+	ImageTextToTextOption             = backends.PipelineOption[*pipelines.ImageTextToTextPipeline]
+	ZeroShotObjectDetectionConfig     = backends.PipelineConfig[*pipelines.ZeroShotObjectDetectionPipeline]
+	ZeroShotObjectDetectionOption     = backends.PipelineOption[*pipelines.ZeroShotObjectDetectionPipeline]
+	MaskGenerationConfig              = backends.PipelineConfig[*pipelines.MaskGenerationPipeline]
+	MaskGenerationOption              = backends.PipelineOption[*pipelines.MaskGenerationPipeline]
+	ZeroShotAudioClassificationConfig = backends.PipelineConfig[*pipelines.ZeroShotAudioClassificationPipeline]
+	ZeroShotAudioClassificationOption = backends.PipelineOption[*pipelines.ZeroShotAudioClassificationPipeline]
+	VisualQuestionAnsweringConfig     = backends.PipelineConfig[*pipelines.VisualQuestionAnsweringPipeline]
+	VisualQuestionAnsweringOption     = backends.PipelineOption[*pipelines.VisualQuestionAnsweringPipeline]
+	DocumentQuestionAnsweringConfig   = backends.PipelineConfig[*pipelines.DocumentQuestionAnsweringPipeline]
+	DocumentQuestionAnsweringOption   = backends.PipelineOption[*pipelines.DocumentQuestionAnsweringPipeline]
+	TableQuestionAnsweringConfig      = backends.PipelineConfig[*pipelines.TableQuestionAnsweringPipeline]
+	TableQuestionAnsweringOption      = backends.PipelineOption[*pipelines.TableQuestionAnsweringPipeline]
+	TextToSpeechConfig                = backends.PipelineConfig[*pipelines.TextToSpeechPipeline]
+	TextToSpeechOption                = backends.PipelineOption[*pipelines.TextToSpeechPipeline]
+	TextToAudioConfig                 = backends.PipelineConfig[*pipelines.TextToAudioPipeline]
+	TextToAudioOption                 = backends.PipelineOption[*pipelines.TextToAudioPipeline]
+)
 
 // NewPipeline can be used to create a new pipeline of type T. The initialised pipeline will be returned and it
 // will also be stored in the session object so that all created pipelines can be destroyed with session.Destroy()

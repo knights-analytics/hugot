@@ -8,6 +8,7 @@ import (
 // Config contains the model metadata used by Hugot when loading a model.
 type Config struct {
 	MaxPositionEmbeddings int               `json:"max_position_embeddings"`
+	ImageSize             int               `json:"image_size"`
 	ID2Label              map[string]string `json:"id2label"`
 	TextConfig            *Config           `json:"text_config"`
 }

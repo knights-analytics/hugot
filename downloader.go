@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"path"
 	"path/filepath"
 	"strings"
@@ -26,6 +27,8 @@ type DownloadOptions struct {
 	RetryInterval         int
 	ConcurrentConnections int
 	Verbose               bool
+	AdditionalFilePaths   []string
+	PreservePaths         bool
 }
 
 // NewDownloadOptions creates new DownloadOptions struct with default values.
@@ -98,12 +101,23 @@ func DownloadModel(ctx context.Context, modelName string, destination string, op
 			continue
 		}
 
+		if mkdirErr := os.MkdirAll(modelPath, 0o755); mkdirErr != nil {
+			return "", mkdirErr
+		}
+
 		for j, downloadPath := range downloadPaths {
 			truePath, symErr := filepath.EvalSymlinks(downloadPath)
 			if symErr != nil {
 				return "", symErr
 			}
-			moveErr := fileutil.CopyFile(ctx, truePath, fmt.Sprintf("%s/%s", modelPath, path.Base(downloadFiles[j])))
+			destinationPath := filepath.Join(modelPath, path.Base(downloadFiles[j]))
+			if options.PreservePaths {
+				destinationPath = filepath.Join(modelPath, downloadFiles[j])
+				if mkdirErr := os.MkdirAll(filepath.Dir(destinationPath), 0o755); mkdirErr != nil {
+					return "", mkdirErr
+				}
+			}
+			moveErr := fileutil.CopyFile(ctx, truePath, destinationPath)
 			if moveErr != nil {
 				return "", moveErr
 			}
@@ -184,5 +198,6 @@ func ValidateDownloadedHFModel(repo *hub.Repo, options DownloadOptions) ([]strin
 	if tokenizerPath != "" {
 		files = append(files, tokenizerPath)
 	}
+	files = append(files, options.AdditionalFilePaths...)
 	return files, errors.Join(errs...)
 }

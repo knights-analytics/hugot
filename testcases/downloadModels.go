@@ -19,6 +19,8 @@ type downloadModel struct {
 	name             string
 	onnxFilePath     string
 	externalDataPath string
+	additionalFiles  []string
+	preservePaths    bool
 }
 
 var models = []downloadModel{
@@ -31,8 +33,33 @@ var models = []downloadModel{
 	{name: "KnightsAnalytics/jina-reranker-v1-tiny-en", onnxFilePath: "model.onnx"},
 	{name: "KnightsAnalytics/resnet50"},
 	{name: "KnightsAnalytics/detr-resnet-50", onnxFilePath: "model.onnx"},
+	{name: "Xenova/clip-vit-base-patch32", onnxFilePath: "onnx/model.onnx"},
+	{name: "Xenova/owlv2-base-patch16", onnxFilePath: "onnx/model.onnx"},
+	{name: "Xenova/segformer-b0-finetuned-ade-512-512", onnxFilePath: "onnx/model.onnx"},
+	{name: "Xenova/dpt-large", onnxFilePath: "onnx/model.onnx"},
 	{name: "KnightsAnalytics/iris-decision-tree", onnxFilePath: "model.onnx"},
 	{name: "KnightsAnalytics/qwen3-4B-int4", onnxFilePath: "model.onnx", externalDataPath: "model.onnx.data"},
+	{name: "Xenova/wav2vec2-large-xlsr-53-gender-recognition-librispeech", onnxFilePath: "onnx/model.onnx"},
+	{name: "Xenova/wav2vec2-base-960h", onnxFilePath: "onnx/model.onnx"},
+	{name: "Xenova/mms-tts-eng", onnxFilePath: "onnx/model.onnx"},
+	{name: "Xenova/mms-tts-spa", onnxFilePath: "onnx/model.onnx"},
+	{
+		name:             "microsoft/Phi-3.5-vision-instruct-onnx",
+		onnxFilePath:     "cpu_and_mobile/cpu-int4-rtn-block-32-acc-level-4/phi-3.5-v-instruct-text.onnx",
+		externalDataPath: "cpu_and_mobile/cpu-int4-rtn-block-32-acc-level-4/phi-3.5-v-instruct-text.onnx.data",
+		additionalFiles: []string{
+			"cpu_and_mobile/cpu-int4-rtn-block-32-acc-level-4/genai_config.json",
+			"cpu_and_mobile/cpu-int4-rtn-block-32-acc-level-4/phi-3.5-v-instruct-embedding.onnx",
+			"cpu_and_mobile/cpu-int4-rtn-block-32-acc-level-4/phi-3.5-v-instruct-embedding.onnx.data",
+			"cpu_and_mobile/cpu-int4-rtn-block-32-acc-level-4/phi-3.5-v-instruct-vision.onnx",
+			"cpu_and_mobile/cpu-int4-rtn-block-32-acc-level-4/phi-3.5-v-instruct-vision.onnx.data",
+			"cpu_and_mobile/cpu-int4-rtn-block-32-acc-level-4/processor_config.json",
+			"cpu_and_mobile/cpu-int4-rtn-block-32-acc-level-4/special_tokens_map.json",
+			"cpu_and_mobile/cpu-int4-rtn-block-32-acc-level-4/tokenizer.json",
+			"cpu_and_mobile/cpu-int4-rtn-block-32-acc-level-4/tokenizer_config.json",
+		},
+		preservePaths: true,
+	},
 }
 
 // Additional files to download (direct URLs).
@@ -53,15 +80,17 @@ func main() {
 			}
 		}
 		for _, model := range models {
-			if os.Getenv("CI") != "" && model.name == "KnightsAnalytics/qwen3-4B-int4" {
+			if os.Getenv("CI") != "" && (model.name == "KnightsAnalytics/qwen3-4B-int4" || model.name == "microsoft/Phi-3.5-vision-instruct-onnx") {
 				continue // skipping this model for cicd
 			}
 
 			if ok, err = fileutil.FileExists(ctx, "./models/"+strings.ReplaceAll(model.name, "/", "_")); err == nil {
 				if !ok {
 					options := hugot.NewDownloadOptions()
-					options.OnnxFilePath = model.onnxFilePath
-					options.ExternalDataPath = model.externalDataPath
+			options.OnnxFilePath = model.onnxFilePath
+			options.ExternalDataPath = model.externalDataPath
+			options.AdditionalFilePaths = model.additionalFiles
+			options.PreservePaths = model.preservePaths
 					fmt.Printf("Downloading %s\n", model.name)
 					outPath, dlErr := hugot.DownloadModel(ctx, model.name, "./models", options)
 					if dlErr != nil {
