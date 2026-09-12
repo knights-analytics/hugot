@@ -216,7 +216,10 @@ func createInputTensorsGoMLX(batch *PipelineBatch, model *Model, padBatchDimensi
 			return fmt.Errorf("sequence length larger than max bucket, please adjust WithGoMLXSequenceBuckets: %w", err)
 		}
 	}
-	total := batchSize * maxSeqLength
+	queryCount := batch.QueryCount
+	if queryCount < 1 {
+		queryCount = 1
+	}
 
 	// 1) prepare result containers - now we use all inputs, not filtering
 	inputTensors := make([]*tensors.Tensor, len(model.InputsMeta))
@@ -224,52 +227,97 @@ func createInputTensorsGoMLX(batch *PipelineBatch, model *Model, padBatchDimensi
 
 	// 2) build each tensor
 	for mi, meta := range model.InputsMeta {
-		backing := make([]int64, total)
+		if isImageInput(meta.Name) {
+			backing, dimensions, err := flattenImageValues(model, batch.Size, batch.ImageValues)
+			if err != nil {
+				return err
+			}
+			if batchSize != batch.Size {
+				backing = append(backing, make([]float32, (batchSize-batch.Size)*int(dimensions[1])*int(dimensions[2])*int(dimensions[3]))...)
+			}
+			inputTensors[mi] = tensors.FromFlatDataAndDimensions(backing, batchSize, int(dimensions[1]), int(dimensions[2]), int(dimensions[3]))
+			continue
+		}
+		textRank := len(meta.Dimensions)
+		if textRank != 2 && textRank != 3 {
+			return fmt.Errorf("unsupported text input rank %d for %s", textRank, meta.Name)
+		}
+		if textRank == 3 && batch.QueryCount == 0 {
+			return fmt.Errorf("input %s requires a query dimension", meta.Name)
+		}
+		backing := make([]int64, batchSize*queryCount*maxSeqLength)
 		idx := 0
 		switch meta.Name {
 		case "input_ids":
-			for bi, inp := range batch.Input {
-				seqLen := len(inp.TokenIDs)
-				maskRow := make([]bool, maxSeqLength)
-				for pos := 0; pos < maxSeqLength; pos++ {
-					if pos < seqLen {
-						backing[idx] = int64(inp.TokenIDs[pos])
-						maskRow[pos] = true
+			for bi := range batchSize {
+				for qi := range queryCount {
+					inputIndex := bi
+					if textRank == 3 {
+						inputIndex = qi
 					}
-					idx++
+					inp := batch.Input[inputIndex]
+					maskRow := make([]bool, maxSeqLength)
+					for pos := 0; pos < maxSeqLength; pos++ {
+						if pos < len(inp.TokenIDs) {
+							backing[idx] = int64(inp.TokenIDs[pos])
+							maskRow[pos] = true
+						}
+						idx++
+					}
+					if bi < len(paddingMasks) && qi == 0 {
+						paddingMasks[bi] = maskRow
+					}
 				}
-				paddingMasks[bi] = maskRow
 			}
 		case "token_type_ids":
-			for _, inp := range batch.Input {
-				seqLen := len(inp.TokenIDs)
-				for pos := range maxSeqLength {
-					if pos < seqLen {
-						backing[idx] = int64(inp.TypeIDs[pos])
+			for bi := range batchSize {
+				for qi := range queryCount {
+					inputIndex := bi
+					if textRank == 3 {
+						inputIndex = qi
 					}
-					idx++
+					inp := batch.Input[inputIndex]
+					for pos := range maxSeqLength {
+						if pos < len(inp.TypeIDs) {
+							backing[idx] = int64(inp.TypeIDs[pos])
+						}
+						idx++
+					}
 				}
 			}
 		case "attention_mask":
-			for _, inp := range batch.Input {
-				for pos := range maxSeqLength {
-					if pos < len(inp.TokenIDs) {
-						backing[idx] = int64(inp.AttentionMask[pos])
+			for bi := range batchSize {
+				for qi := range queryCount {
+					inputIndex := bi
+					if textRank == 3 {
+						inputIndex = qi
 					}
-					idx++
+					inp := batch.Input[inputIndex]
+					for pos := range maxSeqLength {
+						if pos < len(inp.AttentionMask) {
+							backing[idx] = int64(inp.AttentionMask[pos])
+						}
+						idx++
+					}
 				}
 			}
 		case "position_ids":
-			for range batch.Input {
-				for pos := range maxSeqLength {
-					backing[idx] = int64(pos + 1)
-					idx++
+			for range batchSize {
+				for range queryCount {
+					for pos := range maxSeqLength {
+						backing[idx] = int64(pos + 1)
+						idx++
+					}
 				}
 			}
 		default:
 			return fmt.Errorf("unknown input meta name %s", meta.Name)
 		}
-		inputTensors[mi] = tensors.FromFlatDataAndDimensions(backing, batchSize, maxSeqLength)
+		if textRank == 3 {
+			inputTensors[mi] = tensors.FromFlatDataAndDimensions(backing, batchSize, queryCount, maxSeqLength)
+		} else {
+			inputTensors[mi] = tensors.FromFlatDataAndDimensions(backing, batchSize, maxSeqLength)
+		}
 	}
 
 	// 3) assign and prepare cleanup
@@ -484,6 +532,38 @@ func createImageTensorsGoXLA(batch *PipelineBatch, model *Model, preprocessed []
 		}
 		return err
 	}
+	return nil
+}
+
+func createAudioTensorsGoMLX(batch *PipelineBatch, model *Model, samples [][]float32) error {
+	if len(samples) == 0 || len(samples) != batch.Size {
+		return errors.New("audio samples do not match batch size")
+	}
+	if len(model.InputsMeta) != 1 {
+		return errors.New("audio models with multiple inputs are not supported")
+	}
+	dims := model.InputsMeta[0].Dimensions
+	if len(dims) != 2 && len(dims) != 3 {
+		return fmt.Errorf("unsupported audio input rank %d", len(dims))
+	}
+	maxSamples := 0
+	for _, waveform := range samples {
+		if len(waveform) > maxSamples {
+			maxSamples = len(waveform)
+		}
+	}
+	backing := make([]float32, len(samples)*maxSamples)
+	for i, waveform := range samples {
+		copy(backing[i*maxSamples:], waveform)
+	}
+	var tensor *tensors.Tensor
+	if len(dims) == 3 {
+		tensor = tensors.FromFlatDataAndDimensions(backing, len(samples), 1, maxSamples)
+	} else {
+		tensor = tensors.FromFlatDataAndDimensions(backing, len(samples), maxSamples)
+	}
+	batch.InputValues = []*tensors.Tensor{tensor}
+	batch.DestroyInputs = tensor.FinalizeAll
 	return nil
 }
 

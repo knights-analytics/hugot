@@ -289,9 +289,7 @@ func ReshapeOutput[T float32 | int64 | int32](input []T, meta InputOutputInfo, b
 			outArray = flatDataTo3D(input, paddingMask, sequenceLength, dimensions[lenDimensions-1])
 		}
 	case 4:
-		dimension := dimensions[3]
-		groupSize := dimensions[1]
-		outArray = flatDataTo4D(input, paddingMask, groupSize, dimension)
+		outArray = flatDataTo4D(input, paddingMask, batchSize, dimensions[1], dimensions[2], dimensions[3])
 	}
 	return outArray
 }
@@ -374,31 +372,28 @@ func flatDataTo3DGeneric[T float32 | int64 | int32](input []T, batchSize int, di
 	return output
 }
 
-func flatDataTo4D[T float32 | int64 | int32](input []T, paddingMask [][]bool, groupSize int, dimension int) [][][][]T {
-	batchSize := len(paddingMask) // B
-	if batchSize == 0 || groupSize <= 0 || dimension <= 0 {
+func flatDataTo4D[T float32 | int64 | int32](input []T, paddingMask [][]bool, batchSize, groupSize, height, width int) [][][][]T {
+	if len(paddingMask) > 0 {
+		batchSize = len(paddingMask)
+	}
+	if batchSize == 0 || groupSize <= 0 || height <= 0 || width <= 0 {
 		return make([][][][]T, batchSize)
 	}
-	sequenceLength := len(paddingMask[0]) // S
 	output := make([][][][]T, batchSize)
 	counter := 0
 	for b := range batchSize {
 		group := make([][][]T, groupSize) // A
 		for a := range groupSize {
-			sequence := make([][]T, sequenceLength)
-			for s := range sequenceLength {
-				if !paddingMask[b][s] {
-					// skip this entire vector
-					counter += dimension
-					sequence[s] = make([]T, dimension) // fill with zeros or ignore
-					continue
-				}
-				vector := make([]T, dimension)
-				for d := range dimension {
-					vector[d] = input[counter]
+			sequence := make([][]T, height)
+			for y := range height {
+				vector := make([]T, width)
+				for x := range width {
+					if counter < len(input) {
+						vector[x] = input[counter]
+					}
 					counter++
 				}
-				sequence[s] = vector
+				sequence[y] = vector
 			}
 			group[a] = sequence
 		}

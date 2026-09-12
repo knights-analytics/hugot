@@ -42,17 +42,39 @@ Hugot is brought to you by the friendly folks at [Knights Analytics](https://kni
 Currently, we have implementations for the following transformer pipelines:
 
 - [crossEncoder](https://huggingface.co/cross-encoder)
+- [depthEstimation](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.DepthEstimationPipeline)
 - [featureExtraction](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.FeatureExtractionPipeline)
 - [imageClassification](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.ImageClassificationPipeline)
+- [imageFeatureExtraction](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.ImageFeatureExtractionPipeline)
+- [imageSegmentation](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.ImageSegmentationPipeline)
+- [audioClassification](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.AudioClassificationPipeline)
+- [automaticSpeechRecognition](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.AutomaticSpeechRecognitionPipeline) (greedy CTC; waveform models)
+- backgroundRemoval (image-mask pipeline)
 - [objectDetection](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.ImageClassificationPipeline)
 - [questionAnswering](https://huggingface.co/docs/transformers/tasks/question_answering)
 - tabular (classic ML models such as decision trees, random forests etc)
 - [textClassification](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.TextClassificationPipeline)
 - [textGeneration](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.TextGenerationPipeline) (currently ORT only)
+- zeroShotImageClassification (paired image/text contract; model-specific execution currently unavailable)
+- [imageToText](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.ImageToTextPipeline) (ORT generative multimodal models)
+- [imageTextToText](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.ImageTextToTextPipeline) (ORT generative multimodal models)
+- [maskGeneration](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.MaskGenerationPipeline) (segmentation-style source-sized masks)
+- [fillMask](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.FillMaskPipeline)
+- [summarization](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.SummarizationPipeline) (currently ORT only)
 - [tokenClassification](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.TokenClassificationPipeline)
+- [translation](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.TranslationPipeline) (currently ORT only)
+- [text2textGeneration](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.Text2TextGenerationPipeline) (currently ORT only)
 - [zeroShotClassification](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.ZeroShotClassificationPipeline)
+- zeroShotObjectDetection (paired image/text contract; model-specific execution currently unavailable)
+- zeroShotAudioClassification (candidate-label waveform classification)
+- audioToAudio (waveform transformation)
+- visualQuestionAnswering (ORT generative image/text models)
+- documentQuestionAnswering (ORT generative document/image models)
+- tableQuestionAnswering (ORT generative table/text models)
+- textToSpeech (typed waveform generation; ORT generative models)
+- textToAudio (typed waveform generation; ORT generative models)
 
-Implementations for additional pipelines will follow. We also very gladly accept PRs to expand the set of pipelines! See [here](https://huggingface.co/docs/transformers/en/main_classes/pipelines) for the missing pipelines that can be implemented, and the contributing section below if you want to lend a hand.
+The image pipelines use model-family-specific ONNX output contracts; depth estimation accepts `[batch,height,width]` or `[batch,1,height,width]` depth outputs and resizes them to each source image. Automatic speech recognition currently supports greedy CTC waveform models. Image-to-text, image-text-to-text, visual QA, document QA, table QA, text-to-speech, and text-to-audio use ORT generative model contracts. Zero-shot object detection requires a model-specific paired image/text tensor contract and reports an explicit unsupported-backend error when unavailable. See [here](https://huggingface.co/docs/transformers/en/main_classes/pipelines) for the remaining pipeline families.
 
 Hugot can be used both as a library and as a command-line application. See below for usage instructions.
 
@@ -175,7 +197,9 @@ See also hugot_test.go for further examples for all pipelines.
 
 Hugot uses the [Onnx Runtime Generative AI](https://onnxruntime.ai/generative-ai) backend to run generative models.
 
-We currently support generative models only within the text generation pipeline. Please look at the [ORT tests](hugot_ort_test.go) for an example of its usage.
+Generative models currently use the ORT backend. In addition to the decoder-only text generation pipeline, Hugot exposes summarization, translation, and text-to-text generation through a shared seq2seq runtime. These pipelines require a compatible encoder-decoder model export and remain unavailable on the Go/XLA backends; unsupported model layouts return an explicit error. Please look at the [ORT tests](hugot_ort_test.go) for an example of generative pipeline usage.
+
+The public pipeline registry also includes `fill-mask`, image feature extraction, and image segmentation. Image segmentation returns source-sized semantic masks; model-specific output layouts that cannot be decoded are rejected rather than silently approximated.
 
 To use the experimental Engine support for concurrent requests and inference batching, use the `WithGenerativeEngine()` option when creating a session.
 

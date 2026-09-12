@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"image"
 	"math"
 	"strings"
 	"time"
@@ -141,11 +142,36 @@ type TokenizedInput struct {
 	MaxAttentionIndex int
 }
 
+// ImageTextInput is one paired image and text example for multimodal models.
+// The image is kept as an image.Image so callers can use in-memory images
+// without coupling the public contract to a particular image decoder.
+type ImageTextInput struct {
+	Image     image.Image
+	ImagePath string
+	Text      string
+}
+
+// Validate checks the common requirements shared by image/text pipelines.
+func (i ImageTextInput) Validate() error {
+	if i.Image == nil && i.ImagePath == "" {
+		return errors.New("multimodal input image is required")
+	}
+	if strings.TrimSpace(i.Text) == "" {
+		return errors.New("multimodal input text is required")
+	}
+	return nil
+}
+
 // PipelineBatch represents a batch of inputs that runs through the pipeline.
 type PipelineBatch struct {
 	InputValues any
+	// InputMetadata holds pipeline-specific input information that must survive
+	// tensor creation until postprocessing.
+	InputMetadata any
 	// Multimodal support
 	Images            any // Will hold *ortgenai.Images for generative models
+	ImageText         []ImageTextInput
+	ImageValues       [][][][]float32
 	DestroyInputs     func() error
 	DestroyMultimodal func() error
 	Input             []TokenizedInput
@@ -157,6 +183,7 @@ type PipelineBatch struct {
 	// PaddedBatchSize is the bucketed batch size used when XLA pads the batch dimension.
 	// Zero means no batch padding was applied (ORT / GO backend).
 	PaddedBatchSize int
+	QueryCount      int
 }
 
 func (b *PipelineBatch) Destroy() error {

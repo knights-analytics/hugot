@@ -35,6 +35,10 @@ func createImageTensorsORT(_ *PipelineBatch, _ *Model, _ [][][][]float32) error 
 	return errors.New("ORT model execution is not available on this platform")
 }
 
+func createAudioTensorsORT(_ *PipelineBatch, _ *Model, _ [][]float32) error {
+	return errors.New("ORT model execution is not available on this platform")
+}
+
 func createTabularTensorsORT(_ *PipelineBatch, _ *Model, _ [][]float32) error {
 	return errors.New("ORT model execution is not available on this platform")
 }
