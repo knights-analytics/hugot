@@ -119,7 +119,7 @@ func NewTextGenerationPipeline(sessionContext context.Context, config backends.P
 		}
 	}
 	if pipeline.MaxLength == 0 {
-		pipeline.MaxLength = 1028 // Default value if not set as per Python
+		pipeline.MaxLength = 4096 // Default value if not set
 	}
 	err = pipeline.Validate()
 	if err != nil {

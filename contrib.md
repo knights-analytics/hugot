@@ -39,7 +39,7 @@ Thank you for contributing to hugot!
 
 ## Development environment
 
-The easiest way to contribute to hugot is by developing inside a docker container that has both the tokenizer and onnxruntime libraries.
+The easiest way to contribute to hugot is by developing inside a docker container that has the onnxruntime libraries.
 From the source folder, it should be as easy as:
 
 ```bash
@@ -69,7 +69,7 @@ make stop-dev-container
 
 Alternatively, you can use your IDE devcontainer support, and point it to the [Dockerfile](./Dockerfile).
 
-If you prefer to develop on bare metal, you will need to download the `tokenizers.a` to `/usr/lib/tokenizers.a` and `onnxruntime.so` to `/usr/lib/onnxruntime.so`.
+If you prefer to develop on bare metal, you will need to download the `onnxruntime.so` to `/usr/lib/onnxruntime.so`.
 
 ## Run the tests
 

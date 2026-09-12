@@ -4,6 +4,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **New pipelines**:
+  - **Image**: `FillMaskPipeline`, `MaskGenerationPipeline`, `ImageSegmentationPipeline`, `DepthEstimationPipeline`, `BackgroundRemovalPipeline`, `ZeroShotImageClassificationPipeline`.
+  - **Audio**: `AudioClassificationPipeline`, `ZeroShotAudioClassificationPipeline`, `AutomaticSpeechRecognitionPipeline`, `TextToAudioPipeline`, `TextToSpeechPipeline`.
+  - **Multimodal**: `VisualQuestionAnsweringPipeline`, `DocumentQuestionAnsweringPipeline`, `TableQuestionAnsweringPipeline`, `ImageToTextPipeline`, `ImageTextToTextPipeline`.
+- Image pipelines expose `RunWithImages(ctx, []image.Image)` so callers can feed in-memory `image.Image` values without a disk round-trip, in addition to `Run(ctx, []string)` which loads from paths or data URIs.
+- Audio input plumbing: `backends.AudioWaveform`, `backends.AudioURLs`, `Message.AudioURLs`, and `ConversationHasAudio` / `FlattenAudioURLs` helpers used by the ORT session pipeline.
+- **Per-conversation system turns** are expressed as `History[0] = {Role: "system", ...}` on all five input types. The pipeline-level `SystemPrompt` on `multimodalGeneration` continues to be applied globally by the ORT backend via `createORTMessages`.
+- Upgraded to ONNX Runtime GenAI 0.17.0.
+
+### Changed
+
+- Pipeline operations are now methods on `*hugot.Session` (`session.NewPipeline`, `session.GetPipeline`, `session.GetPipelines`, `session.ClosePipeline`); the old free-function variants are deprecated thin wrappers kept for compatibility.
+- BREAKING: Training is now configured with `session.NewTrainer(TrainerConfig, ...TrainerOption)` and run with `trainer.Train(ctx)`.
+
+### Removed
+
+- Removed the Rust tokenizer dependency; the Go tokenizer is fast enough, supports all of our test pipelines, and avoids the extra cgo dependency/project complexity.
+
 ## [0.8.0] - 2026-09-22
 
 ### Fixed

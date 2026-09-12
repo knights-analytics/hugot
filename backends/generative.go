@@ -26,11 +26,12 @@ type SequenceDelta struct {
 }
 
 // Message represents a single message in a conversation.
-// Images can be included via ImageURLs for multimodal models.
+// Images and audio can be included via ImageURLs and AudioURLs for multimodal models.
 type Message struct {
 	Role      string   `json:"role"`
 	Content   string   `json:"content"`
 	ImageURLs []string `json:"image_urls,omitempty"` // File paths or data URIs for multimodal support
+	AudioURLs []string `json:"audio_urls,omitempty"` // File paths for multimodal support
 }
 
 // GenerativeModel abstracts either a generative session or engine.

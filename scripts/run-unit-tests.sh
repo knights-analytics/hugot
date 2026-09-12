@@ -24,7 +24,7 @@ docker buildx bake \
 "hugot-test"
 
 echo "Running tests for commit hash: $commit_hash"
-docker compose -f "$src_dir/compose-test.yaml" up && \
+docker compose -f "$src_dir/compose-test.yaml" up --exit-code-from hugot-test && \
 docker compose -f "$src_dir/compose-test.yaml" logs --no-color >& "$test_folder/logs.txt"
 docker compose -f "$src_dir/compose-test.yaml" rm -fsv
 

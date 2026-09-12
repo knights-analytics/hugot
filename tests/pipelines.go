@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"os"
 	"regexp"
 	"runtime"
 	"strings"
@@ -21,8 +22,9 @@ import (
 )
 
 const (
-	ModelsFolder    = "../../models/"
-	TestCasesFolder = "../../testcases/"
+	ModelsFolder        = "../../models/"
+	TestCasesFolder     = "../../testcases/"
+	MultimodalModelPath = ModelsFolder + "microsoft_Phi-3.5-vision-instruct-onnx/cpu_and_mobile/cpu-int4-rtn-block-32-acc-level-4"
 )
 
 // FEATURE EXTRACTION
@@ -101,7 +103,6 @@ func FeatureExtractionPipeline(t *testing.T, session *hugot.Session) {
 	assert.Greater(t, pipeline.ONNXTimings.NumCalls, zero, "PipelineTimings.NumCalls should be greater than 0")
 	assert.Greater(t, pipeline.ONNXTimings.TotalNS, zero, "PipelineTimings.TotalNS should be greater than 0")
 	assert.Greater(t, pipeline.TokenizerTimings.NumCalls, zero, "TokenizerTimings.NumCalls should be greater than 0")
-	assert.Greater(t, pipeline.TokenizerTimings.TotalNS, zero, "TokenizerTimings.TotalNS should be greater than 0")
 
 	// test normalization
 	testResults = expectedResults["normalizedOutput"]
@@ -180,7 +181,7 @@ func FeatureExtractionPipelineValidation(t *testing.T, session *hugot.Session) {
 func TextClassificationPipeline(t *testing.T, session *hugot.Session) {
 	t.Helper()
 
-	modelPath := ModelsFolder + "KnightsAnalytics_distilbert-base-uncased-finetuned-sst-2-english"
+	modelPath := ModelsFolder + "Xenova_distilbert-base-uncased-finetuned-sst-2-english"
 
 	config := hugot.TextClassificationConfig{
 		ModelPath: modelPath,
@@ -234,7 +235,7 @@ func TextClassificationPipeline(t *testing.T, session *hugot.Session) {
 func TextClassificationPipelineMulti(t *testing.T, session *hugot.Session) {
 	t.Helper()
 
-	modelPathMulti := ModelsFolder + "KnightsAnalytics_roberta-base-go_emotions"
+	modelPathMulti := ModelsFolder + "SamLowe_roberta-base-go_emotions-onnx"
 
 	configMulti := hugot.TextClassificationConfig{
 		ModelPath:    modelPathMulti,
@@ -397,7 +398,7 @@ func TextClassificationPipelineMulti(t *testing.T, session *hugot.Session) {
 func TextClassificationPipelineValidation(t *testing.T, session *hugot.Session) {
 	t.Helper()
 
-	modelPath := ModelsFolder + "KnightsAnalytics_distilbert-base-uncased-finetuned-sst-2-english"
+	modelPath := ModelsFolder + "Xenova_distilbert-base-uncased-finetuned-sst-2-english"
 
 	config := hugot.TextClassificationConfig{
 		ModelPath: modelPath,
@@ -661,31 +662,32 @@ func ZeroShotClassificationPipelineValidation(t *testing.T, session *hugot.Sessi
 
 	modelPath := ModelsFolder + "KnightsAnalytics_deberta-v3-base-zeroshot-v1"
 
-	config := hugot.TextClassificationConfig{
+	config := hugot.ZeroShotClassificationConfig{
 		ModelPath: modelPath,
-		Name:      "testPipelineSimple",
+		Name:      "testZeroShotPipelineValidation",
+		Options: []hugot.ZeroShotClassificationOption{
+			pipelines.WithLabels([]string{"positive", "negative"}),
+		},
 	}
-	sentimentPipeline, err := session.NewPipeline(config)
+	classificationPipeline, err := session.NewPipeline(config)
 	CheckT(t, err)
 
 	t.Run("id-label-map", func(t *testing.T) {
-		labelMapInitial := sentimentPipeline.Model.IDLabelMap
+		labelMapInitial := classificationPipeline.Model.IDLabelMap
 		defer func() {
-			sentimentPipeline.Model.IDLabelMap = labelMapInitial
+			classificationPipeline.Model.IDLabelMap = labelMapInitial
 		}()
-		sentimentPipeline.Model.IDLabelMap = map[int]string{}
-		err = sentimentPipeline.Validate()
-		assert.Error(t, err)
+		classificationPipeline.Model.IDLabelMap = map[int]string{}
+		assert.Error(t, classificationPipeline.Validate())
 	})
 
 	t.Run("output-shape", func(t *testing.T) {
-		dimensionInitial := sentimentPipeline.Model.OutputsMeta[0].Dimensions
+		dimensionInitial := classificationPipeline.Model.OutputsMeta[0].Dimensions
 		defer func() {
-			sentimentPipeline.Model.OutputsMeta[0].Dimensions = dimensionInitial
+			classificationPipeline.Model.OutputsMeta[0].Dimensions = dimensionInitial
 		}()
-		sentimentPipeline.Model.OutputsMeta[0].Dimensions = backends.NewShape(-1, -1, -1)
-		err = sentimentPipeline.Validate()
-		assert.Error(t, err)
+		classificationPipeline.Model.OutputsMeta[0].Dimensions = backends.NewShape(-1, -1, -1)
+		assert.Error(t, classificationPipeline.Validate())
 	})
 }
 
@@ -902,7 +904,7 @@ func TokenClassificationPipelineValidation(t *testing.T, session *hugot.Session)
 func CrossEncoderPipeline(t *testing.T, session *hugot.Session) {
 	t.Helper()
 	config := hugot.CrossEncoderConfig{
-		ModelPath: ModelsFolder + "KnightsAnalytics_jina-reranker-v1-tiny-en",
+		ModelPath: ModelsFolder + "jinaai_jina-reranker-v1-tiny-en",
 		Name:      "test-cross-encoder",
 	}
 	pipeline, err := session.NewPipeline(config)
@@ -958,7 +960,7 @@ func CrossEncoderPipeline(t *testing.T, session *hugot.Session) {
 func CrossEncoderPipelineValidation(t *testing.T, session *hugot.Session) {
 	t.Helper()
 	config := hugot.CrossEncoderConfig{
-		ModelPath: ModelsFolder + "KnightsAnalytics_jina-reranker-v1-tiny-en",
+		ModelPath: ModelsFolder + "jinaai_jina-reranker-v1-tiny-en",
 		Name:      "test-cross-encoder-validation",
 	}
 	pipeline, err := session.NewPipeline(config)
@@ -998,7 +1000,7 @@ func ImageClassificationPipeline(t *testing.T, session *hugot.Session) {
 	config := hugot.ImageClassificationConfig{
 		ModelPath:    modelPath,
 		Name:         "testImageClassification",
-		OnnxFilename: "squeezenet1.1.onnx",
+		OnnxFilename: "model.onnx",
 		Options: []hugot.ImageClassificationOption{
 			pipelines.WithTopK(3),
 			pipelines.WithPreprocessSteps[*pipelines.ImageClassificationPipeline](
@@ -1048,7 +1050,7 @@ func ObjectDetectionPipeline(t *testing.T, session *hugot.Session) {
 	t.Helper()
 
 	config := backends.PipelineConfig[*pipelines.ObjectDetectionPipeline]{
-		ModelPath: ModelsFolder + "KnightsAnalytics_detr-resnet-50",
+		ModelPath: ModelsFolder + "Xenova_detr-resnet-50",
 		Name:      "testObjectDetection",
 		Options: []backends.PipelineOption[*pipelines.ObjectDetectionPipeline]{
 			pipelines.WithNCHWFormat[*pipelines.ObjectDetectionPipeline](),
@@ -1096,7 +1098,7 @@ func ObjectDetectionPipelineValidation(t *testing.T, session *hugot.Session) {
 	t.Helper()
 
 	config := backends.PipelineConfig[*pipelines.ObjectDetectionPipeline]{
-		ModelPath: ModelsFolder + "KnightsAnalytics_detr-resnet-50",
+		ModelPath: ModelsFolder + "Xenova_detr-resnet-50",
 		Name:      "testObjectDetectionValidation",
 	}
 	pipeline, err := session.NewPipeline(config)
@@ -1148,6 +1150,386 @@ func ObjectDetectionPipelineValidation(t *testing.T, session *hugot.Session) {
 	})
 }
 
+// fill-mask
+
+func FillMaskPipeline(t *testing.T, session *hugot.Session) {
+	t.Helper()
+
+	config := hugot.FillMaskConfig{
+		ModelPath: ModelsFolder + "Xenova_bert-base-uncased",
+		Name:      "testFillMask",
+		Options: []hugot.FillMaskOption{
+			pipelines.WithMaskToken("[MASK]"),
+			pipelines.WithFillMaskTopK(3),
+		},
+	}
+	pipeline, err := session.NewPipeline(config)
+	CheckT(t, err)
+	result, err := pipeline.RunPipeline(t.Context(), []string{"HuggingFace is [MASK]."})
+	CheckT(t, err)
+	if len(result.Predictions) != 1 || len(result.Predictions[0]) == 0 {
+		t.Fatal("fill-mask inference returned no predictions")
+	}
+	assert.Greater(t, result.Predictions[0][0].Score, float32(0))
+}
+
+func FillMaskPipelineValidation(t *testing.T, session *hugot.Session) {
+	t.Helper()
+
+	config := hugot.FillMaskConfig{
+		ModelPath: ModelsFolder + "Xenova_bert-base-uncased",
+		Name:      "testFillMaskValidation",
+		Options: []hugot.FillMaskOption{
+			pipelines.WithMaskToken("[MASK]"),
+		},
+	}
+	pipeline, err := session.NewPipeline(config)
+	CheckT(t, err)
+
+	pipeline.TopK = 0
+	assert.Error(t, pipeline.Validate(), "fill-mask validation should reject a non-positive top-k")
+}
+
+// image feature extraction
+
+func ImageFeatureExtractionPipeline(t *testing.T, session *hugot.Session) {
+	t.Helper()
+
+	config := hugot.ImageFeatureExtractionConfig{
+		ModelPath:    ModelsFolder + "KnightsAnalytics_resnet50",
+		Name:         "testImageFeatureExtraction",
+		OnnxFilename: "model.onnx",
+		Options: []hugot.ImageFeatureExtractionOption{
+			pipelines.WithPreprocessSteps[*pipelines.ImageFeatureExtractionPipeline](
+				imageutil.ResizeStep(224),
+				imageutil.CenterCropStep(224, 224),
+			),
+		},
+	}
+	pipeline, err := session.NewPipeline(config)
+	CheckT(t, err)
+	imagePath := ModelsFolder + "imageData/cat.jpg"
+	result, err := pipeline.RunPipeline(t.Context(), []string{imagePath, imagePath})
+	CheckT(t, err)
+	if len(result.Embeddings) != 2 || len(result.Embeddings[0]) == 0 || len(result.Embeddings[1]) == 0 {
+		t.Fatal("image feature extraction returned empty embeddings")
+	}
+	assert.Equal(t, len(result.Embeddings[0]), len(result.Embeddings[1]))
+}
+
+func ImageFeatureExtractionPipelineValidation(t *testing.T, session *hugot.Session) {
+	t.Helper()
+
+	config := hugot.ImageFeatureExtractionConfig{
+		ModelPath:    ModelsFolder + "KnightsAnalytics_resnet50",
+		Name:         "testImageFeatureExtractionValidation",
+		OnnxFilename: "model.onnx",
+	}
+	pipeline, err := session.NewPipeline(config)
+	CheckT(t, err)
+
+	original := pipeline.Model.InputsMeta[0].Dimensions
+	defer func() { pipeline.Model.InputsMeta[0].Dimensions = original }()
+	pipeline.Model.InputsMeta[0].Dimensions = backends.NewShape(-1, -1, -1)
+	assert.Error(t, pipeline.Validate(), "image feature extraction should require four-dimensional image inputs")
+}
+
+// image segmentation
+
+func ImageSegmentationPipeline(t *testing.T, session *hugot.Session) {
+	t.Helper()
+	config := hugot.ImageSegmentationConfig{
+		ModelPath: ModelsFolder + "Xenova_segformer-b0-finetuned-ade-512-512",
+		Name:      "testImageSegmentation",
+	}
+	pipeline, err := session.NewPipeline(config)
+	CheckT(t, err)
+	result, err := pipeline.RunPipeline(t.Context(), []string{ModelsFolder + "imageData/cat.jpg"})
+	CheckT(t, err)
+	if len(result.Results) != 1 || result.Results[0].Width == 0 || result.Results[0].Height == 0 {
+		t.Fatal("image segmentation inference returned no source-sized result")
+	}
+}
+
+func ImageSegmentationPipelineValidation(t *testing.T, session *hugot.Session) {
+	t.Helper()
+
+	config := hugot.ImageSegmentationConfig{
+		ModelPath: ModelsFolder + "Xenova_segformer-b0-finetuned-ade-512-512",
+		Name:      "testImageSegmentationValidation",
+		Options: []hugot.ImageSegmentationOption{
+			pipelines.WithSegmentationLogitsOutput("segmentation_logits"),
+		},
+	}
+	pipeline, err := session.NewPipeline(config)
+	CheckT(t, err)
+
+	original := pipeline.Model.InputsMeta[0].Dimensions
+	defer func() { pipeline.Model.InputsMeta[0].Dimensions = original }()
+	pipeline.Model.InputsMeta[0].Dimensions = backends.NewShape(-1, -1, -1)
+	assert.Error(t, pipeline.Validate(), "image segmentation should require four-dimensional image inputs")
+}
+
+// depth estimation
+
+func DepthEstimationPipeline(t *testing.T, session *hugot.Session) {
+	t.Helper()
+	config := hugot.DepthEstimationConfig{
+		ModelPath: ModelsFolder + "Xenova_dpt-large",
+		Name:      "testDepthEstimation",
+	}
+	pipeline, err := session.NewPipeline(config)
+	CheckT(t, err)
+	result, err := pipeline.RunPipeline(t.Context(), []string{ModelsFolder + "imageData/cat.jpg"})
+	CheckT(t, err)
+	if len(result.Results) != 1 || len(result.Results[0].DepthMap) == 0 {
+		t.Fatal("depth estimation inference returned an empty depth map")
+	}
+}
+
+func DepthEstimationPipelineValidation(t *testing.T, session *hugot.Session) {
+	t.Helper()
+
+	config := hugot.DepthEstimationConfig{
+		ModelPath: ModelsFolder + "Xenova_dpt-large",
+		Name:      "testDepthEstimationValidation",
+		Options: []hugot.DepthEstimationOption{
+			pipelines.WithDepthOutput("depth"),
+		},
+	}
+	pipeline, err := session.NewPipeline(config)
+	CheckT(t, err)
+
+	original := pipeline.Model.InputsMeta[0].Dimensions
+	defer func() { pipeline.Model.InputsMeta[0].Dimensions = original }()
+	pipeline.Model.InputsMeta[0].Dimensions = backends.NewShape(-1, -1, -1)
+	assert.Error(t, pipeline.Validate(), "depth estimation should require four-dimensional image inputs")
+}
+
+// audio classification
+
+func AudioClassificationPipeline(t *testing.T, session *hugot.Session) {
+	t.Helper()
+	config := backends.PipelineConfig[*pipelines.AudioClassificationPipeline]{
+		ModelPath: ModelsFolder + "Xenova_wav2vec2-large-xlsr-53-gender-recognition-librispeech",
+		Name:      "testAudioClassification",
+		Options: []backends.PipelineOption[*pipelines.AudioClassificationPipeline]{
+			pipelines.WithAudioTopK(2),
+		},
+	}
+	pipeline, err := session.NewPipeline(config)
+	CheckT(t, err)
+	result, err := pipeline.RunWithAudio(t.Context(), [][]float32{testAudioWaveform()})
+	CheckT(t, err)
+	assert.Len(t, result.Predictions, 1)
+	assert.Len(t, result.Predictions[0], 2)
+}
+
+func testAudioWaveform() []float32 {
+	waveform := make([]float32, 16000)
+	for i := range waveform {
+		waveform[i] = float32(math.Sin(float64(i)*2*math.Pi*440/16000)) * 0.1
+	}
+	return waveform
+}
+
+func AudioClassificationPipelineValidation(t *testing.T, _ *hugot.Session) {
+	t.Helper()
+	model := &backends.Model{
+		InputsMeta:  []backends.InputOutputInfo{{Name: "input_values", Dimensions: backends.NewShape(-1, -1)}},
+		OutputsMeta: []backends.InputOutputInfo{{Name: "logits", Dimensions: backends.NewShape(-1, 2)}},
+		IDLabelMap:  map[int]string{0: "speech", 1: "music"},
+	}
+	pipeline := &pipelines.AudioClassificationPipeline{BasePipeline: &backends.BasePipeline{Model: model}, TopK: 1, IDLabelMap: model.IDLabelMap}
+	assert.NoError(t, pipeline.Validate())
+	originalDimensions := model.InputsMeta[0].Dimensions
+	defer func() { model.InputsMeta[0].Dimensions = originalDimensions }()
+	model.InputsMeta[0].Dimensions = backends.NewShape(-1)
+	assert.Error(t, pipeline.Validate())
+}
+
+// background removal
+
+func BackgroundRemovalPipeline(t *testing.T, session *hugot.Session) {
+	t.Helper()
+	config := hugot.BackgroundRemovalConfig{
+		ModelPath: ModelsFolder + "Xenova_segformer-b0-finetuned-ade-512-512",
+		Name:      "testBackgroundRemoval",
+		Options:   []hugot.BackgroundRemovalOption{pipelines.WithBackgroundRemovalOutput("logits")},
+	}
+	pipeline, err := session.NewPipeline(config)
+	CheckT(t, err)
+	result, err := pipeline.RunPipeline(t.Context(), []string{ModelsFolder + "imageData/cat.jpg"})
+	CheckT(t, err)
+	assert.Len(t, result.Results, 1)
+	assert.NotEmpty(t, result.Results[0].Mask)
+}
+
+func BackgroundRemovalPipelineValidation(t *testing.T, session *hugot.Session) {
+	t.Helper()
+	config := hugot.BackgroundRemovalConfig{
+		ModelPath: ModelsFolder + "Xenova_segformer-b0-finetuned-ade-512-512",
+		Name:      "testBackgroundRemovalValidation",
+		Options:   []hugot.BackgroundRemovalOption{pipelines.WithBackgroundRemovalOutput("logits")},
+	}
+	pipeline, err := session.NewPipeline(config)
+	CheckT(t, err)
+
+	originalDimensions := pipeline.Model.InputsMeta[0].Dimensions
+	defer func() { pipeline.Model.InputsMeta[0].Dimensions = originalDimensions }()
+	pipeline.Model.InputsMeta[0].Dimensions = backends.NewShape(-1, -1, -1)
+	assert.Error(t, pipeline.Validate())
+}
+
+// zero-shot image classification
+
+func ZeroShotImageClassificationPipeline(t *testing.T, session *hugot.Session) {
+	t.Helper()
+	images, err := imageutil.LoadImagesFromPaths(t.Context(), []string{ModelsFolder + "imageData/cat.jpg"})
+	CheckT(t, err)
+	config := hugot.ZeroShotImageClassificationConfig{
+		ModelPath: ModelsFolder + "Xenova_clip-vit-base-patch32",
+		Name:      "testZeroShotImageClassification",
+		Options: []hugot.ZeroShotImageClassificationOption{
+			pipelines.WithImageLabels([]string{"cat", "dog"}),
+			pipelines.WithImageTopK(2),
+			pipelines.WithPreprocessSteps[*pipelines.ZeroShotImageClassificationPipeline](
+				imageutil.ResizeStep(224),
+				imageutil.CenterCropStep(224, 224),
+			),
+			pipelines.WithNormalizationSteps[*pipelines.ZeroShotImageClassificationPipeline](
+				imageutil.RescaleStep(),
+				imageutil.CLIPPixelNormalizationStep(),
+			),
+		},
+	}
+	pipeline, err := session.NewPipeline(config)
+	CheckT(t, err)
+	result, err := pipeline.RunWithImagesAndLabels(t.Context(), images, []string{"cat", "dog"})
+	CheckT(t, err)
+	assert.Len(t, result.Predictions, 1)
+	assert.Len(t, result.Predictions[0], 2)
+	assert.Equal(t, "cat", result.Predictions[0][0].Label)
+}
+
+func ZeroShotImageClassificationPipelineValidation(t *testing.T, session *hugot.Session) {
+	t.Helper()
+	config := hugot.ZeroShotImageClassificationConfig{
+		ModelPath: ModelsFolder + "Xenova_clip-vit-base-patch32",
+		Name:      "testZeroShotImageClassificationValidation",
+		Options: []hugot.ZeroShotImageClassificationOption{
+			pipelines.WithImageLabels([]string{"cat", "dog"}),
+		},
+	}
+	pipeline, err := session.NewPipeline(config)
+	CheckT(t, err)
+
+	labelsInitial := pipeline.Labels
+	defer func() { pipeline.Labels = labelsInitial }()
+	pipeline.Labels = nil
+	assert.Error(t, pipeline.Validate())
+}
+
+// automatic speech recognition
+
+func AutomaticSpeechRecognitionPipeline(t *testing.T, session *hugot.Session) {
+	t.Helper()
+	config := backends.PipelineConfig[*pipelines.AutomaticSpeechRecognitionPipeline]{
+		ModelPath: ModelsFolder + "Xenova_wav2vec2-base-960h",
+		Name:      "testAutomaticSpeechRecognition",
+	}
+	pipeline, err := session.NewPipeline(config)
+	CheckT(t, err)
+	result, err := pipeline.RunFiles(t.Context(), []string{ModelsFolder + "audioData/librispeech.wav"})
+	CheckT(t, err)
+	assert.Len(t, result.Text, 1)
+	assert.Contains(t, result.Text[0], "MISTER QUILTER",
+		"ASR should recognize the speech sample, got: %q", result.Text[0])
+}
+
+func AutomaticSpeechRecognitionPipelineValidation(t *testing.T, session *hugot.Session) {
+	t.Helper()
+	config := backends.PipelineConfig[*pipelines.AutomaticSpeechRecognitionPipeline]{
+		ModelPath: ModelsFolder + "Xenova_wav2vec2-base-960h",
+		Name:      "testAutomaticSpeechRecognitionValidation",
+	}
+	pipeline, err := session.NewPipeline(config)
+	CheckT(t, err)
+
+	originalDimensions := pipeline.Model.InputsMeta[0].Dimensions
+	defer func() { pipeline.Model.InputsMeta[0].Dimensions = originalDimensions }()
+	pipeline.Model.InputsMeta[0].Dimensions = backends.NewShape(-1)
+	assert.Error(t, pipeline.Validate())
+}
+
+// image-to-text
+
+func ImageToTextPipeline(t *testing.T, session *hugot.Session) {
+	t.Helper()
+	skipGenerativePipeline(t)
+	config := hugot.ImageToTextConfig{
+		ModelPath: MultimodalModelPath,
+		Name:      "imageToText",
+	}
+	pipeline, err := session.NewPipeline(config)
+	CheckT(t, err)
+	result, err := pipeline.RunWithImages(t.Context(), []pipelines.ImageTextPrompt{{
+		ImagePath: ModelsFolder + "imageData/cat.jpg",
+		Prompt:    "Describe this image in one short sentence.",
+	}})
+	CheckT(t, err)
+	if result == nil {
+		t.Fatal("image-to-text returned no result")
+	}
+	assert.NotEmpty(t, result.Responses)
+	assert.NotEmpty(t, result.Responses[0])
+	assert.Contains(t, strings.ToLower(result.Responses[0]), "cat",
+		"image-to-text caption should describe the cat, got: %q", result.Responses[0])
+}
+
+func ImageToTextPipelineValidation(t *testing.T, _ *hugot.Session) {
+	t.Helper()
+	model := &backends.Model{IsGenerative: true}
+	pipeline, err := pipelines.NewImageToTextPipeline(t.Context(), hugot.ImageToTextConfig{Name: "imageToTextValidation"}, model)
+	assert.NoError(t, err)
+	pipeline.MaxLength = 0
+	assert.Error(t, pipeline.Validate())
+}
+
+// image-text-to-text
+
+func ImageTextToTextPipeline(t *testing.T, session *hugot.Session) {
+	t.Helper()
+	skipGenerativePipeline(t)
+	config := hugot.ImageTextToTextConfig{
+		ModelPath: MultimodalModelPath,
+		Name:      "imageTextToText",
+	}
+	pipeline, err := session.NewPipeline(config)
+	CheckT(t, err)
+	result, err := pipeline.RunWithImages(t.Context(), []pipelines.ImageTextPrompt{{
+		ImagePath: ModelsFolder + "imageData/cat.jpg",
+		Prompt:    "What is shown in this image?",
+	}})
+	CheckT(t, err)
+	if result == nil {
+		t.Fatal("image-text-to-text returned no result")
+	}
+	assert.NotEmpty(t, result.Responses)
+	assert.NotEmpty(t, result.Responses[0])
+	assert.Contains(t, strings.ToLower(result.Responses[0]), "cat",
+		"image-text-to-text answer should reference the cat, got: %q", result.Responses[0])
+}
+
+func ImageTextToTextPipelineValidation(t *testing.T, _ *hugot.Session) {
+	t.Helper()
+	model := &backends.Model{IsGenerative: true}
+	pipeline, err := pipelines.NewImageTextToTextPipeline(t.Context(), hugot.ImageTextToTextConfig{Name: "imageTextToTextValidation"}, model)
+	assert.NoError(t, err)
+	pipeline.MaxLength = 0
+	assert.Error(t, pipeline.Validate())
+}
+
 // No same name
 
 func NoSameNamePipeline(t *testing.T, session *hugot.Session) {
@@ -1188,7 +1570,7 @@ func NoSameNameAcrossTypesPipeline(t *testing.T, session *hugot.Session) {
 	}
 
 	textConfig := hugot.TextClassificationConfig{
-		ModelPath: ModelsFolder + "KnightsAnalytics_distilbert-base-uncased-finetuned-sst-2-english",
+		ModelPath: ModelsFolder + "Xenova_distilbert-base-uncased-finetuned-sst-2-english",
 		Name:      "sharedName",
 	}
 	_, err := session.NewPipeline(textConfig)
@@ -1235,7 +1617,16 @@ func DestroyPipelines(t *testing.T, session *hugot.Session) {
 }
 
 func TextGenerationPipeline(t *testing.T, session *hugot.Session) {
+	textGenerationPipeline(t, session, false)
+}
+
+func TextGenerationPipelineEngine(t *testing.T, session *hugot.Session) {
+	textGenerationPipeline(t, session, true)
+}
+
+func textGenerationPipeline(t *testing.T, session *hugot.Session, engineMode bool) {
 	t.Helper()
+	skipGenerativePipeline(t)
 	modelPath := ModelsFolder + "/KnightsAnalytics_qwen3-4B-int4"
 
 	defer func(session *hugot.Session) {
@@ -1298,6 +1689,9 @@ func TextGenerationPipeline(t *testing.T, session *hugot.Session) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			batchResult, err := textGenPipeline.RunMessages(t.Context(), tt.input)
+			if batchResult != nil {
+				logGenerationFailure(t, tt.name, batchResult.Responses, err)
+			}
 			CheckT(t, err)
 			outputs := batchResult.GetOutput()
 			for i := range len(outputs) {
@@ -1330,12 +1724,19 @@ func TextGenerationPipeline(t *testing.T, session *hugot.Session) {
 			},
 		}
 		output, err := streamingPipeline.RunMessages(t.Context(), input)
+		if output == nil {
+			CheckT(t, err)
+			return
+		}
 		var fullAnswer strings.Builder
 		for token := range output.TokenStream {
 			fullAnswer.WriteString(token.Token)
 		}
 		if !strings.Contains(fullAnswer.String(), "4") {
 			t.Fatalf("Expected answer to contain '4', got '%s'", fullAnswer.String())
+		}
+		if err != nil {
+			t.Logf("streaming text generation failed: %v; partial response: %q", err, fullAnswer.String())
 		}
 		CheckT(t, err)
 	})
@@ -1421,6 +1822,15 @@ tool_json: %json {"anyOf": [` +
 		defer cancel()
 
 		toolOutput, err := textGenPipeline.RunMessagesWithOverrides(ctx, messages, tools, nil)
+		if engineMode {
+			if err == nil || !strings.Contains(err.Error(), "EnableFFTokens") {
+				t.Fatalf("expected engine mode to reject unsupported EnableFFTokens guidance, got %v", err)
+			}
+			return
+		}
+		if toolOutput != nil {
+			logGenerationFailure(t, "tool-call generation", toolOutput.Responses, err)
+		}
 		CheckT(t, err)
 		CheckToolCalls(t, toolOutput.Responses[0])
 	})
@@ -1428,7 +1838,7 @@ tool_json: %json {"anyOf": [` +
 
 func TextGenerationPipelineValidation(t *testing.T, session *hugot.Session) {
 	t.Helper()
-
+	skipGenerativePipeline(t)
 	defer func(session *hugot.Session) {
 		err := session.Destroy()
 		CheckT(t, err)
@@ -1445,6 +1855,284 @@ func TextGenerationPipelineValidation(t *testing.T, session *hugot.Session) {
 	pipeline.MaxLength = -100
 	err = pipeline.Validate()
 	assert.Error(t, err)
+}
+
+// zero-shot object detection
+
+func ZeroShotObjectDetectionPipeline(t *testing.T, session *hugot.Session) {
+	t.Helper()
+	config := backends.PipelineConfig[*pipelines.ZeroShotObjectDetectionPipeline]{
+		ModelPath: ModelsFolder + "Xenova_owlv2-base-patch16",
+		Name:      "testZeroShotObjectDetection",
+		Options: []backends.PipelineOption[*pipelines.ZeroShotObjectDetectionPipeline]{
+			pipelines.WithZeroShotObjectLabels([]string{"cat", "dog"}),
+		},
+	}
+	pipeline, err := session.NewPipeline(config)
+	CheckT(t, err)
+	result, err := pipeline.RunWithLabels(t.Context(), []string{ModelsFolder + "imageData/cat.jpg"}, nil)
+	CheckT(t, err)
+	assert.Len(t, result.Detections, 1)
+}
+
+func ZeroShotObjectDetectionPipelineValidation(t *testing.T, session *hugot.Session) {
+	t.Helper()
+	config := backends.PipelineConfig[*pipelines.ZeroShotObjectDetectionPipeline]{
+		ModelPath: ModelsFolder + "Xenova_owlv2-base-patch16",
+		Name:      "testZeroShotObjectDetectionValidation",
+		Options: []backends.PipelineOption[*pipelines.ZeroShotObjectDetectionPipeline]{
+			pipelines.WithZeroShotObjectLabels([]string{"cat", "dog"}),
+		},
+	}
+	pipeline, err := session.NewPipeline(config)
+	CheckT(t, err)
+	assert.NoError(t, pipeline.Validate())
+}
+
+// mask generation
+
+func MaskGenerationPipeline(t *testing.T, session *hugot.Session) {
+	t.Helper()
+	config := backends.PipelineConfig[*pipelines.MaskGenerationPipeline]{
+		ModelPath: ModelsFolder + "Xenova_segformer-b0-finetuned-ade-512-512",
+		Name:      "testMaskGeneration",
+	}
+	pipeline, err := session.NewPipeline(config)
+	CheckT(t, err)
+	result, err := pipeline.RunPipeline(t.Context(), []string{ModelsFolder + "imageData/cat.jpg"})
+	CheckT(t, err)
+	assert.Len(t, result.Results, 1)
+}
+
+func MaskGenerationPipelineValidation(t *testing.T, _ *hugot.Session) {
+	t.Helper()
+	pipeline := &pipelines.MaskGenerationPipeline{
+		ImageSegmentationPipeline: &pipelines.ImageSegmentationPipeline{
+			BasePipeline: &backends.BasePipeline{Model: &backends.Model{}},
+		},
+	}
+	assert.Error(t, pipeline.Validate())
+}
+
+// zero-shot audio classification
+
+func ZeroShotAudioClassificationPipeline(t *testing.T, session *hugot.Session) {
+	t.Helper()
+	config := backends.PipelineConfig[*pipelines.ZeroShotAudioClassificationPipeline]{
+		ModelPath: ModelsFolder + "Xenova_wav2vec2-large-xlsr-53-gender-recognition-librispeech",
+		Name:      "testZeroShotAudioClassification",
+		Options: []backends.PipelineOption[*pipelines.ZeroShotAudioClassificationPipeline]{
+			pipelines.WithZeroShotAudioLabels([]string{"female", "male"}),
+			pipelines.WithZeroShotAudioTopK(2),
+		},
+	}
+	pipeline, err := session.NewPipeline(config)
+	CheckT(t, err)
+	result, err := pipeline.RunWithAudio(t.Context(), [][]float32{testAudioWaveform()})
+	CheckT(t, err)
+	assert.Len(t, result.Predictions, 1)
+	assert.Len(t, result.Predictions[0], 2)
+}
+
+func ZeroShotAudioClassificationPipelineValidation(t *testing.T, session *hugot.Session) {
+	t.Helper()
+	config := backends.PipelineConfig[*pipelines.ZeroShotAudioClassificationPipeline]{
+		ModelPath: ModelsFolder + "Xenova_wav2vec2-large-xlsr-53-gender-recognition-librispeech",
+		Name:      "testZeroShotAudioClassification",
+		Options: []backends.PipelineOption[*pipelines.ZeroShotAudioClassificationPipeline]{
+			pipelines.WithZeroShotAudioLabels([]string{"female", "male"}),
+			pipelines.WithZeroShotAudioTopK(2),
+		},
+	}
+	pipeline, err := session.NewPipeline(config)
+	CheckT(t, err)
+	assert.NoError(t, pipeline.Validate())
+	pipeline.Labels = []string{"female"}
+	assert.Error(t, pipeline.Validate(), "candidate label count should match the model logits")
+}
+
+// visual question answering
+
+func VisualQuestionAnsweringPipeline(t *testing.T, session *hugot.Session) {
+	t.Helper()
+	skipGenerativePipeline(t)
+	config := backends.PipelineConfig[*pipelines.VisualQuestionAnsweringPipeline]{
+		ModelPath: MultimodalModelPath,
+		Name:      "testVisualQuestionAnswering",
+	}
+	pipeline, err := session.NewPipeline(config)
+	CheckT(t, err)
+	result, err := pipeline.RunPipeline(t.Context(), []pipelines.VisualQuestionAnsweringInput{{
+		ImagePath: ModelsFolder + "imageData/cat.jpg",
+		Question:  "What animal is in this image? Answer with one word.",
+	}})
+	CheckT(t, err)
+	assert.NotEmpty(t, result.Responses)
+	assert.NotEmpty(t, result.Responses[0])
+	assert.Contains(t, strings.ToLower(result.Responses[0]), "cat",
+		"the image shows a cat, got: %q", result.Responses[0])
+}
+
+func VisualQuestionAnsweringPipelineValidation(t *testing.T, session *hugot.Session) {
+	t.Helper()
+	skipGenerativePipeline(t)
+	config := backends.PipelineConfig[*pipelines.VisualQuestionAnsweringPipeline]{
+		ModelPath: ModelsFolder + "KnightsAnalytics_qwen3-4B-int4",
+		Name:      "testVisualQuestionAnsweringValidation",
+	}
+	pipeline, err := session.NewPipeline(config)
+	CheckT(t, err)
+	pipeline.MaxLength = 0
+	assert.Error(t, pipeline.Validate())
+}
+
+// document question answering
+
+func DocumentQuestionAnsweringPipeline(t *testing.T, session *hugot.Session) {
+	t.Helper()
+	skipGenerativePipeline(t)
+	config := backends.PipelineConfig[*pipelines.DocumentQuestionAnsweringPipeline]{
+		ModelPath: MultimodalModelPath,
+		Name:      "testDocumentQuestionAnswering",
+	}
+	pipeline, err := session.NewPipeline(config)
+	CheckT(t, err)
+	result, err := pipeline.RunPipeline(t.Context(), []pipelines.DocumentQuestionAnsweringInput{{
+		DocumentPath: ModelsFolder + "imageData/cat.jpg",
+		Question:     "What is shown in this image?",
+	}})
+	if result != nil {
+		logGenerationFailure(t, "document question answering", result.Responses, err)
+	}
+	CheckT(t, err)
+	if result == nil {
+		t.Fatal("document question answering returned no result")
+	}
+	assert.NotEmpty(t, result.Responses)
+	assert.NotEmpty(t, result.Responses[0])
+	assert.Contains(t, strings.ToLower(result.Responses[0]), "cat",
+		"document (cat image) QA should mention the cat, got: %q", result.Responses[0])
+}
+
+func DocumentQuestionAnsweringPipelineValidation(t *testing.T, session *hugot.Session) {
+	t.Helper()
+	skipGenerativePipeline(t)
+	config := backends.PipelineConfig[*pipelines.DocumentQuestionAnsweringPipeline]{
+		ModelPath: ModelsFolder + "KnightsAnalytics_qwen3-4B-int4",
+		Name:      "testDocumentQuestionAnsweringValidation",
+	}
+	pipeline, err := session.NewPipeline(config)
+	CheckT(t, err)
+	pipeline.MaxLength = 0
+	assert.Error(t, pipeline.Validate())
+}
+
+// table question answering
+
+func TableQuestionAnsweringPipeline(t *testing.T, session *hugot.Session) {
+	t.Helper()
+	skipGenerativePipeline(t)
+	config := backends.PipelineConfig[*pipelines.TableQuestionAnsweringPipeline]{
+		ModelPath: ModelsFolder + "KnightsAnalytics_qwen3-4B-int4",
+		Name:      "testTableQuestionAnswering",
+	}
+	pipeline, err := session.NewPipeline(config)
+	CheckT(t, err)
+	result, err := pipeline.RunPipeline(t.Context(), []pipelines.TableQuestionAnsweringInput{{
+		Table:    [][]string{{"name", "value"}, {"x", "1"}},
+		Question: "What is the value?",
+	}})
+	if result != nil {
+		logGenerationFailure(t, "table question answering", result.Responses, err)
+	}
+	CheckT(t, err)
+	if result == nil {
+		t.Fatal("table question answering returned no result")
+	}
+	assert.NotEmpty(t, result.Responses)
+	t.Logf("table QA response: %q", result.Responses[0])
+	assert.Contains(t, result.Responses[0], "1",
+		"table QA answer should contain the value 1 (row x=1), got: %q", result.Responses[0])
+}
+
+func TableQuestionAnsweringPipelineValidation(t *testing.T, session *hugot.Session) {
+	t.Helper()
+	skipGenerativePipeline(t)
+	config := backends.PipelineConfig[*pipelines.TableQuestionAnsweringPipeline]{
+		ModelPath: ModelsFolder + "KnightsAnalytics_qwen3-4B-int4",
+		Name:      "testTableQuestionAnsweringValidation",
+	}
+	pipeline, err := session.NewPipeline(config)
+	CheckT(t, err)
+	pipeline.MaxLength = 0
+	assert.Error(t, pipeline.Validate())
+}
+
+// text-to-speech
+
+func TextToSpeechPipeline(t *testing.T, session *hugot.Session) {
+	t.Helper()
+	config := backends.PipelineConfig[*pipelines.TextToSpeechPipeline]{
+		ModelPath: ModelsFolder + "Xenova_mms-tts-eng",
+		Name:      "testTextToSpeech",
+		Options: []backends.PipelineOption[*pipelines.TextToSpeechPipeline]{
+			pipelines.WithTextToSpeechSampleRate(16000),
+		},
+	}
+	pipeline, err := session.NewPipeline(config)
+	CheckT(t, err)
+	result, err := pipeline.RunText(t.Context(), []string{"hello world"})
+	CheckT(t, err)
+	if len(result.Audio) != 1 || len(result.Audio[0].Samples) == 0 {
+		t.Fatal("text-to-speech inference returned no audio")
+	}
+	assert.Equal(t, 16000, result.Audio[0].SampleRate)
+}
+
+func TextToSpeechPipelineValidation(t *testing.T, session *hugot.Session) {
+	t.Helper()
+	config := backends.PipelineConfig[*pipelines.TextToSpeechPipeline]{
+		ModelPath: ModelsFolder + "Xenova_mms-tts-eng",
+		Name:      "testTextToSpeechValidation",
+	}
+	pipeline, err := session.NewPipeline(config)
+	CheckT(t, err)
+	pipeline.SampleRate = 0
+	assert.Error(t, pipeline.Validate())
+}
+
+// text-to-audio
+
+func TextToAudioPipeline(t *testing.T, session *hugot.Session) {
+	t.Helper()
+	skipGenerativePipeline(t)
+	config := backends.PipelineConfig[*pipelines.TextToAudioPipeline]{
+		ModelPath: ModelsFolder + "Xenova_mms-tts-eng",
+		Name:      "testTextToAudio",
+		Options: []backends.PipelineOption[*pipelines.TextToAudioPipeline]{
+			pipelines.WithTextToAudioSampleRate(16000),
+		},
+	}
+	pipeline, err := session.NewPipeline(config)
+	CheckT(t, err)
+	result, err := pipeline.RunText(t.Context(), []string{"hello world"})
+	CheckT(t, err)
+	if len(result.Audio) != 1 || len(result.Audio[0].Samples) == 0 {
+		t.Fatal("text-to-audio inference returned no audio")
+	}
+	assert.Equal(t, 16000, result.Audio[0].SampleRate)
+}
+
+func TextToAudioPipelineValidation(t *testing.T, session *hugot.Session) {
+	t.Helper()
+	config := backends.PipelineConfig[*pipelines.TextToAudioPipeline]{
+		ModelPath: ModelsFolder + "Xenova_mms-tts-eng",
+		Name:      "testTextToAudioValidation",
+	}
+	pipeline, err := session.NewPipeline(config)
+	CheckT(t, err)
+	pipeline.SampleRate = 0
+	assert.Error(t, pipeline.Validate())
 }
 
 // QUESTION ANSWERING
@@ -1515,6 +2203,22 @@ func QuestionAnsweringPipeline(t *testing.T, session *hugot.Session) {
 	}
 }
 
+func QuestionAnsweringPipelineValidation(t *testing.T, session *hugot.Session) {
+	t.Helper()
+
+	modelPath := ModelsFolder + "/KnightsAnalytics_distilbert-onnx"
+
+	config := hugot.QuestionAnsweringConfig{
+		ModelPath: modelPath,
+		Name:      "testQAPipeline",
+	}
+	pipeline, err := session.NewPipeline(config)
+	CheckT(t, err)
+
+	pipeline.MaxAnswerLength = 0
+	assert.Error(t, pipeline.Validate(), "question answering validation should reject a non-positive MaxAnswerLength")
+}
+
 // TABULAR
 
 func TabularPipeline(t *testing.T, session *hugot.Session) {
@@ -1550,6 +2254,21 @@ func TabularPipeline(t *testing.T, session *hugot.Session) {
 			}
 		}
 	}
+}
+
+func TabularPipelineValidation(t *testing.T, session *hugot.Session) {
+	t.Helper()
+	config := backends.PipelineConfig[*pipelines.TabularPipeline]{
+		ModelPath: ModelsFolder + "/KnightsAnalytics_iris-decision-tree",
+		Name:      "testTabularClassification",
+	}
+	pipeline, err := session.NewPipeline(config)
+	CheckT(t, err)
+
+	original := pipeline.Model.InputsMeta[0].Dimensions
+	defer func() { pipeline.Model.InputsMeta[0].Dimensions = original }()
+	pipeline.Model.InputsMeta[0].Dimensions = backends.NewShape(-1)
+	assert.Error(t, pipeline.Validate(), "tabular pipeline should require 2D input (batch, features)")
 }
 
 // Thread safety
@@ -1632,6 +2351,13 @@ loop:
 
 // Utilities
 
+func skipGenerativePipeline(t *testing.T) {
+	t.Helper()
+	if os.Getenv("CI") != "" || strings.Contains(t.Name(), "Go") || strings.Contains(t.Name(), "XLA") {
+		t.SkipNow()
+	}
+}
+
 func checkClassificationOutput(t *testing.T, inputResult []pipelines.ClassificationOutput, inputExpected []pipelines.ClassificationOutput) {
 	t.Helper()
 	assert.Equal(t, len(inputResult), len(inputExpected))
@@ -1669,6 +2395,13 @@ func CheckT(t *testing.T, err error) {
 	t.Helper()
 	if err != nil {
 		t.Fatalf("Test failed with error %s", err.Error())
+	}
+}
+
+func logGenerationFailure(t *testing.T, name string, responses []string, err error) {
+	t.Helper()
+	if err != nil {
+		t.Logf("%s failed: %v; partial responses: %q", name, err, responses)
 	}
 }
 

@@ -252,7 +252,7 @@ func (p *ZeroShotClassificationPipeline) RunPipeline(ctx context.Context, inputs
 	for _, sequence := range sequencePairs {
 		var sequenceTensors [][]float32
 		for _, pair := range sequence {
-			batch := backends.NewBatch(len(inputs))
+			batch := backends.NewBatch(1)
 			if err = p.preprocessPairs(batch, [][2]string{{pair[0], pair[1]}}); err != nil {
 				return nil, errors.Join(err, batch.Destroy())
 			}

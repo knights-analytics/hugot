@@ -54,12 +54,22 @@ func Defaults() *Options {
 }
 
 func getDefaultLibraryPaths() (string, string, string) {
+	basePath := os.Getenv("ONNXRUNTIME_DIR")
 	switch runtime.GOOS {
 	case "windows":
-		return `onnxruntime.dll`, `.\`, `.\onnxuntime.dll`
+		if basePath != "" {
+			return `onnxruntime.dll`, basePath, basePath + `\onnxruntime.dll`
+		}
+		return `onnxruntime.dll`, `.\`, `.\onnxruntime.dll`
 	case "darwin":
+		if basePath != "" {
+			return "libonnxruntime.dylib", basePath, basePath + "/libonnxruntime.dylib"
+		}
 		return "libonnxruntime.dylib", "/usr/local/lib", "/usr/local/lib/libonnxruntime.dylib"
 	default:
+		if basePath != "" {
+			return "libonnxruntime.so", basePath, basePath + "/libonnxruntime.so"
+		}
 		return "libonnxruntime.so", "/usr/lib", "/usr/lib/libonnxruntime.so"
 	}
 }
@@ -82,6 +92,14 @@ const (
 	LoggingLevelError   LoggingLevel = 3
 	LoggingLevelFatal   LoggingLevel = 4
 )
+
+// GenAIAdapterConfig names a single LoRA / adapter file to load into the
+// session. Path is the file on disk; Name is the in-session identifier used
+// by SetActiveAdapter.
+type GenAIAdapterConfig struct {
+	Path string
+	Name string
+}
 
 type OrtOptions struct {
 	LibraryPath             *string
@@ -107,6 +125,27 @@ type OrtOptions struct {
 	ProfilingFilePrefix     *string
 	ExtraExecutionProviders []ExtraExecutionProvider
 	UseEngine               bool
+
+	// ── ORT GenAI process-wide controls (session path) ────────────────────
+	// SetGPUDeviceID sets the process-wide GPU device for ORT GenAI.
+	GenAIGPUDeviceID *int
+	// SetLogString("filename", …) — nil disables; empty string resets.
+	GenAILogFile *string
+	// SetLogString("stream", …) — "stdout", "stderr", or file path.
+	GenAILogStream *string
+
+	// ── ORT GenAI adapters (session path only) ─────────────────────────────
+	// Adapters to load after session creation.
+	GenAIAdapters []GenAIAdapterConfig
+	// ActiveAdapter selects which loaded adapter is used for inference.
+	GenAIActiveAdapter *string
+
+	// ── ORT GenAI MTP speculative generation (session path only) ───────────
+	// UseMTP enables MTP (multi-token prediction) speculative generation for
+	// text-only batches (requires an MTP model under <modelPath>/MTP in the
+	// ORT GenAI session directory). The native MTP path is greedy:
+	// Temperature, TopP, Seed, and Guidance are ignored.
+	UseMTP *bool
 }
 
 type ExtraExecutionProvider struct {
@@ -157,7 +196,6 @@ func WithGoMLX() WithOption {
 func WithOnnxLibraryPath(ortLibraryPath string) WithOption {
 	return func(o *Options) error {
 		if o.Backend == BackendORT {
-
 			// use os fs here, library cannot be on pluggable storage
 			object, err := os.Stat(ortLibraryPath)
 			if errors.Is(err, os.ErrNotExist) {
@@ -476,8 +514,8 @@ func WithProfiling(enabled bool, filePrefix string) WithOption {
 	}
 }
 
-// WithGenerativeEngine for generative models, uses an ORT Gen AI Engine for dynamic batching and concurrent request support.
-// Note: currently does not support image tensors in the upstream project.
+// WithGenerativeEngine uses the ORT GenAI request engine for concurrent text generation.
+// Engine mode does not support image inputs or session-specific execution-provider options.
 func WithGenerativeEngine() WithOption {
 	return func(o *Options) error {
 		if o.Backend == "ORT" {
@@ -485,5 +523,93 @@ func WithGenerativeEngine() WithOption {
 			return nil
 		}
 		return fmt.Errorf("WithUseEngine is only supported for ORT backend")
+	}
+}
+
+// WithGenAIGPUDeviceID (ORT only, session path) sets the process-wide GPU device
+// for ORT GenAI. Must be called before the first session is created.
+func WithGenAIGPUDeviceID(deviceID int) WithOption {
+	return func(o *Options) error {
+		if o.Backend == "ORT" {
+			o.ORTOptions.GenAIGPUDeviceID = &deviceID
+			return nil
+		}
+		return fmt.Errorf("WithGenAIGPUDeviceID is only supported for ORT backend")
+	}
+}
+
+// WithGenAILogFile (ORT only, session path) sets the ORT GenAI log file path
+// (process-wide). Pass an empty string to reset to the default log file.
+func WithGenAILogFile(path string) WithOption {
+	return func(o *Options) error {
+		if o.Backend == "ORT" {
+			o.ORTOptions.GenAILogFile = &path
+			return nil
+		}
+		return fmt.Errorf("WithGenAILogFile is only supported for ORT backend")
+	}
+}
+
+// WithGenAILogStream (ORT only, session path) sets the ORT GenAI log output
+// stream (process-wide). Accepts "stdout", "stderr", or a file path.
+func WithGenAILogStream(stream string) WithOption {
+	return func(o *Options) error {
+		if o.Backend == "ORT" {
+			o.ORTOptions.GenAILogStream = &stream
+			return nil
+		}
+		return fmt.Errorf("WithGenAILogStream is only supported for ORT backend")
+	}
+}
+
+// WithGenAIAdapters (ORT only, session path) names LoRA / adapter files to load
+// after session creation. ActiveAdapter selects which loaded adapter is used
+// for inference.
+func WithGenAIAdapters(adapters ...GenAIAdapterConfig) WithOption {
+	return func(o *Options) error {
+		if o.Backend == "ORT" {
+			for _, a := range adapters {
+				if a.Path == "" {
+					return fmt.Errorf("GenAIAdapterConfig.Path must not be empty")
+				}
+				if a.Name == "" {
+					return fmt.Errorf("GenAIAdapterConfig.Name must not be empty for adapter at %q", a.Path)
+				}
+			}
+			o.ORTOptions.GenAIAdapters = append(o.ORTOptions.GenAIAdapters, adapters...)
+			return nil
+		}
+		return fmt.Errorf("WithGenAIAdapters is only supported for ORT backend")
+	}
+}
+
+// WithGenAIActiveAdapter (ORT only, session path) selects which loaded adapter
+// is used for inference. Must match the Name field of one of the adapters
+// configured via WithGenAIAdapters.
+func WithGenAIActiveAdapter(name string) WithOption {
+	return func(o *Options) error {
+		if o.Backend == "ORT" {
+			if name == "" {
+				return fmt.Errorf("WithGenAIActiveAdapter name must not be empty")
+			}
+			o.ORTOptions.GenAIActiveAdapter = &name
+			return nil
+		}
+		return fmt.Errorf("WithGenAIActiveAdapter is only supported for ORT backend")
+	}
+}
+
+// WithGenAIMTP (ORT only, session path) enables opt-in MTP (multi-token
+// prediction) speculative generation for text-only batches. The session must
+// ship an MTP model under <modelPath>/MTP; the native path is greedy, so
+// Temperature, TopP, Seed, and Guidance are ignored. MTP is dispatched at
+// generation time and is not supported by the generative engine path.
+func WithGenAIMTP(enabled bool) WithOption {
+	return func(o *Options) error {
+		if o.Backend == "ORT" {
+			o.ORTOptions.UseMTP = &enabled
+			return nil
+		}
+		return fmt.Errorf("WithGenAIMTP is only supported for ORT backend")
 	}
 }

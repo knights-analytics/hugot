@@ -15,6 +15,8 @@ type Backend interface {
 	CreateMessages(*PipelineBatch, any, string) error
 	CreateInputTensors(*PipelineBatch, *Model, bool) error
 	CreateImageTensors(*PipelineBatch, *Model, [][][][]float32) error
+	CreateImageTextTensors(*PipelineBatch, *Model, [][][][]float32, []TokenizedInput) error
+	CreateAudioTensors(*PipelineBatch, *Model, [][]float32) error
 	CreateTabularTensors(*PipelineBatch, *Model, [][]float32) error
 }
 
@@ -68,6 +70,22 @@ func (b runtimeBackend) CreateImageTensors(batch *PipelineBatch, model *Model, p
 		return createImageTensorsORT(batch, model, preprocessed)
 	}
 	return createImageTensorsGoXLA(batch, model, preprocessed)
+}
+
+func (b runtimeBackend) CreateImageTextTensors(batch *PipelineBatch, model *Model, preprocessed [][][][]float32, inputs []TokenizedInput) error {
+	batch.Input = inputs
+	batch.ImageValues = preprocessed
+	if b.runtime == options.BackendORT {
+		return createInputTensorsORT(batch, model)
+	}
+	return createInputTensorsGoMLX(batch, model, true, b.runtime == options.BackendXLA)
+}
+
+func (b runtimeBackend) CreateAudioTensors(batch *PipelineBatch, model *Model, samples [][]float32) error {
+	if b.runtime == options.BackendORT {
+		return createAudioTensorsORT(batch, model, samples)
+	}
+	return createAudioTensorsGoMLX(batch, model, samples)
 }
 
 func (b runtimeBackend) CreateTabularTensors(batch *PipelineBatch, model *Model, features [][]float32) error {

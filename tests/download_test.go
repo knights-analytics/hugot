@@ -16,9 +16,10 @@ import (
 
 func TestDownloadValidation(t *testing.T) {
 	downloadOptions := hugot.NewDownloadOptions()
+	downloadOptions.OnnxFilePath = "onnx/model.onnx"
 
 	// a model with the required files in a subfolder should not error
-	_, err := hugot.ValidateDownloadedHFModel(hub.New("KnightsAnalytics/distilbert-base-uncased-finetuned-sst-2-english"), downloadOptions)
+	_, err := hugot.ValidateDownloadedHFModel(hub.New("Xenova/distilbert-base-uncased-finetuned-sst-2-english"), downloadOptions)
 	assert.NoError(t, err)
 	// a model without tokenizer.json or .onnx model should error
 	_, err = hugot.ValidateDownloadedHFModel(hub.New("ByteDance/SDXL-Lightning"), downloadOptions)

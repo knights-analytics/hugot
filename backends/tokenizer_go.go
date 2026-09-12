@@ -32,7 +32,6 @@ func loadGoTokenizer(tokenizerBytes []byte, model *Model) error {
 	}
 
 	model.Tokenizer = &Tokenizer{
-		Runtime: TokenizerRuntimeGo,
 		GoTokenizer: &GoTokenizer{
 			Tokenizer:     tk,
 			TypeIDs:       typeIDs,
@@ -64,7 +63,11 @@ func getGoTokenizerOptions(model *Model) (api.EncodeOptions, bool, bool, error) 
 			lowerName := strings.ToLower(input.Name)
 			if strings.HasPrefix(lowerName, "past_key_values") ||
 				strings.Contains(lowerName, "pixel_values") ||
-				strings.Contains(lowerName, "image") {
+				strings.Contains(lowerName, "image") ||
+				lowerName == "input_values" ||
+				lowerName == "input_features" ||
+				lowerName == "waveform" ||
+				lowerName == "audio" {
 				continue
 			}
 			return encodeOptions, false, false, fmt.Errorf("input %s not recognized", input.Name)

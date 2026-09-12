@@ -14,6 +14,7 @@ import (
 )
 
 func LoadImagesFromPaths(ctx context.Context, paths []string) ([]image.Image, error) {
+	ctx = fileutil.WithFileSystem(ctx, nil)
 	images := make([]image.Image, 0, len(paths))
 
 	for _, path := range paths {

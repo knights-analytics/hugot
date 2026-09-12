@@ -48,10 +48,6 @@ jobs:
         continue-on-error: true
       - uses: actions/upload-artifact@v7
         with:
-          name: libtokenizers.a
-          path: ./artifacts/libtokenizers.a
-      - uses: actions/upload-artifact@v7
-        with:
           name: libonnxruntime-linux-x64.so
           path: ./artifacts/libonnxruntime-linux-x64.so
       - uses: actions/upload-artifact@v7
@@ -85,7 +81,7 @@ jobs:
         uses: docker/metadata-action@v6
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          target: hugot
+          bake-target: hugot
 
       - name: Build and push
         id: bake
@@ -115,10 +111,6 @@ jobs:
         uses: actions/checkout@v7
       - uses: actions/download-artifact@v8
         with:
-          name: libtokenizers.a
-          path: .
-      - uses: actions/download-artifact@v8
-        with:
           name: libonnxruntime-linux-x64.so
           path: .
       - uses: actions/download-artifact@v8
@@ -129,6 +121,6 @@ jobs:
         run: ls -R
       - uses: ncipollo/release-action@v1
         with:
-          artifacts: "libtokenizers.a, libonnxruntime-linux-x64.so, libonnxruntime-genai-linux-x64.so"
+          artifacts: "libonnxruntime-linux-x64.so, libonnxruntime-genai-linux-x64.so"
           generateReleaseNotes: true
           skipIfReleaseExists: true

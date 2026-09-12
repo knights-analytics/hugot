@@ -6,7 +6,8 @@ import (
 )
 
 // preprocessPipeline is the minimal interface for pipelines that support image preprocess steps.
-// Both FeatureExtractionPipeline (in image mode) and ImageClassificationPipeline implement this.
+// FeatureExtractionPipeline (in image mode), ImageClassificationPipeline, and
+// ZeroShotImageClassificationPipeline implement this.
 // It also requires backends.Pipeline so it can be used with backends.PipelineOption generics.
 type imagePipeline interface {
 	backends.Pipeline

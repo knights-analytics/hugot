@@ -39,8 +39,6 @@ jobs:
           go run testcases/downloadModels.go
       - name: List models directory
         run: ls -l ./models
-      - name: Remove models from .dockerignore # make sure models folder is not ignored
-        run: sed -i '/^\/models$/d' .dockerignore
       - name: Log in to the Container registry
         uses: docker/login-action@v4
         with:

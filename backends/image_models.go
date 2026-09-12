@@ -1,12 +1,18 @@
 package backends
 
 import (
+	"errors"
 	"fmt"
 	"image"
 	"strings"
 
 	"github.com/knights-analytics/hugot/util/imageutil"
 )
+
+func isImageInput(name string) bool {
+	lower := strings.ToLower(name)
+	return strings.Contains(lower, "pixel_values") || strings.Contains(lower, "image")
+}
 
 // DetectImageTensorFormat inspects the first image-like input and infers NHWC or NCHW.
 func DetectImageTensorFormat(model *Model) (string, error) {
@@ -49,7 +55,11 @@ func CreateImageTensors(batch *PipelineBatch, model *Model, preprocessed [][][][
 	return fmt.Errorf("pipeline backend is not configured")
 }
 
-// PreprocessImages preprocesses images into a 4D tensor slice according to format and steps.
+// PreprocessImages converts the given images into a 4D tensor (batch × dim1 × dim2 × dim3)
+// using the provided preprocess / normalization steps. The output is always 3 channels
+// RGB — the alpha channel from image.Image.RGBA() is discarded. If your model expects
+// a different channel count (e.g. 1-channel grayscale or 4-channel RGBA), build the
+// tensor manually and create ORT tensors directly; do not rely on this helper.
 func PreprocessImages(format string, images []image.Image, preprocess []imageutil.PreprocessStep, normalize []imageutil.NormalizationStep) ([][][][]float32, error) {
 	out := make([][][][]float32, len(images))
 
@@ -109,4 +119,75 @@ func PreprocessImages(format string, images []image.Image, preprocess []imageuti
 		}
 	}
 	return out, nil
+}
+
+func flattenImageValues(model *Model, batchSize int, values [][][][]float32) ([]float32, []int64, error) {
+	if len(values) != batchSize {
+		return nil, nil, fmt.Errorf("image values do not match batch size")
+	}
+	if batchSize == 0 {
+		return nil, nil, fmt.Errorf("image batch must not be empty")
+	}
+	format, err := DetectImageTensorFormat(model)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	first := values[0]
+	if len(first) == 0 || len(first[0]) == 0 || len(first[0][0]) == 0 {
+		return nil, nil, errors.New("image tensor must not have empty dimensions")
+	}
+	var dimensions []int64
+	switch format {
+	case "NCHW":
+		if len(first) < 1 {
+			return nil, nil, errors.New("image tensor channels must be positive")
+		}
+		c, h, w := len(first), len(first[0]), len(first[0][0])
+		dimensions = []int64{int64(batchSize), int64(c), int64(h), int64(w)}
+	case "NHWC":
+		if len(first[0][0]) < 1 {
+			return nil, nil, errors.New("image tensor channels must be positive")
+		}
+		h, w, c := len(first), len(first[0]), len(first[0][0])
+		dimensions = []int64{int64(batchSize), int64(h), int64(w), int64(c)}
+	default:
+		return nil, nil, fmt.Errorf("unsupported image tensor format %q", format)
+	}
+
+	backing := make([]float32, 0, batchSize*int(dimensions[1])*int(dimensions[2])*int(dimensions[3]))
+	for i, imageValue := range values {
+		if format == "NCHW" {
+			if len(imageValue) != int(dimensions[1]) {
+				return nil, nil, fmt.Errorf("image %d has inconsistent channel count", i)
+			}
+			for _, channel := range imageValue {
+				if len(channel) != int(dimensions[2]) {
+					return nil, nil, fmt.Errorf("image %d has inconsistent height", i)
+				}
+				for _, row := range channel {
+					if len(row) != int(dimensions[3]) {
+						return nil, nil, fmt.Errorf("image %d has inconsistent width", i)
+					}
+					backing = append(backing, row...)
+				}
+			}
+			continue
+		}
+		if len(imageValue) != int(dimensions[1]) {
+			return nil, nil, fmt.Errorf("image %d has inconsistent height", i)
+		}
+		for _, row := range imageValue {
+			if len(row) != int(dimensions[2]) {
+				return nil, nil, fmt.Errorf("image %d has inconsistent width", i)
+			}
+			for _, pixel := range row {
+				if len(pixel) != int(dimensions[3]) {
+					return nil, nil, fmt.Errorf("image %d has inconsistent channel count", i)
+				}
+				backing = append(backing, pixel...)
+			}
+		}
+	}
+	return backing, dimensions, nil
 }

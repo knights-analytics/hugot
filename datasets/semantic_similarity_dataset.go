@@ -150,16 +150,17 @@ type ExamplePreprocessFunc func([]SemanticSimilarityExample) ([]SemanticSimilari
 // preprocessFunc here must be a function that takes a slice of SemanticSimilarityExample and returns a slice of SemanticSimilarityExample.
 // This function can be used to apply any custom preprocessing to the example batch before they are passed to the model.
 func NewSemanticSimilarityDataset(ctx context.Context, trainingPath string, batchSize int, preprocessFunc ExamplePreprocessFunc, fs fileutil.FileSystem) (*SemanticSimilarityDataset, error) {
+	ctx = fileutil.WithFileSystem(ctx, fs)
 	d := &SemanticSimilarityDataset{
 		trainingPath:   trainingPath,
 		batchSize:      batchSize,
 		preprocessFunc: preprocessFunc,
-		fsContext:      fileutil.WithFileSystem(ctx, fs),
+		fsContext:      ctx,
 	}
 	if err := d.Validate(); err != nil {
 		return nil, err
 	}
-	sourceReadCloser, err := fileutil.OpenFile(d.fsContext, trainingPath)
+	sourceReadCloser, err := fileutil.OpenFile(ctx, trainingPath)
 	if err != nil {
 		return nil, err
 	}

@@ -7,8 +7,6 @@ import (
 	"errors"
 	"sync"
 
-	_ "github.com/gomlx/compute-onnx"
-
 	"github.com/knights-analytics/hugot/backends"
 	"github.com/knights-analytics/hugot/options"
 )

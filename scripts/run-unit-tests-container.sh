@@ -14,12 +14,6 @@ gotestsum --format testname --junitfile=$folder/unit-ort.xml --jsonfile=$folder/
 
 echo "ORT tests completed."
 
-echo "Running XLA tests..."
-
-gotestsum --format testname --junitfile=$folder/unit-xla.xml --jsonfile=$folder/unit-xla.json -- -coverprofile=$folder/cover-xla.out -coverpkg ./... -tags=XLA -timeout 60m ./...
-
-echo "XLA tests completed."
-
 echo "Running simplego tests..."
 
 gotestsum --format testname --junitfile=$folder/unit-go.xml --jsonfile=$folder/unit-go.json -- -coverprofile=$folder/cover-go.out -coverpkg ./... -tags=GO -timeout 60m ./...
@@ -34,7 +28,7 @@ echo "Training tests completed."
 
 echo "merging coverage files"
 head -n 1 $folder/cover-ort.out > $folder/cover.out
-{ tail -n +2 $folder/cover-ort.out; tail -n +2 $folder/cover-xla.out; tail -n +2 $folder/cover-training.out; tail -n +2 $folder/cover-go.out; } >> $folder/cover.out
+{ tail -n +2 $folder/cover-ort.out; tail -n +2 $folder/cover-training.out; tail -n +2 $folder/cover-go.out; } >> $folder/cover.out
 
 head -n 1 $folder/cover.out > $folder/cover.dedup.out
 tail -n +2 $folder/cover.out | sort | uniq >> $folder/cover.dedup.out

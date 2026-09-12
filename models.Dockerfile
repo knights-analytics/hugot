@@ -1,3 +1,20 @@
 FROM scratch
 
-COPY models ./models
+COPY models/KnightsAnalytics_all-MiniLM-L6-v2 ./models/KnightsAnalytics_all-MiniLM-L6-v2
+COPY models/KnightsAnalytics_deberta-v3-base-zeroshot-v1 ./models/KnightsAnalytics_deberta-v3-base-zeroshot-v1
+COPY models/Xenova_distilbert-base-uncased-finetuned-sst-2-english ./models/Xenova_distilbert-base-uncased-finetuned-sst-2-english
+COPY models/Xenova_bert-base-uncased ./models/Xenova_bert-base-uncased
+COPY models/KnightsAnalytics_distilbert-NER ./models/KnightsAnalytics_distilbert-NER
+COPY models/KnightsAnalytics_distilbert-onnx ./models/KnightsAnalytics_distilbert-onnx
+COPY models/SamLowe_roberta-base-go_emotions-onnx ./models/SamLowe_roberta-base-go_emotions-onnx
+COPY models/jinaai_jina-reranker-v1-tiny-en ./models/jinaai_jina-reranker-v1-tiny-en
+COPY models/KnightsAnalytics_resnet50 ./models/KnightsAnalytics_resnet50
+COPY models/Xenova_detr-resnet-50 ./models/Xenova_detr-resnet-50
+COPY models/Xenova_clip-vit-base-patch32 ./models/Xenova_clip-vit-base-patch32
+COPY models/Xenova_owlv2-base-patch16 ./models/Xenova_owlv2-base-patch16
+COPY models/Xenova_segformer-b0-finetuned-ade-512-512 ./models/Xenova_segformer-b0-finetuned-ade-512-512
+COPY models/Xenova_dpt-large ./models/Xenova_dpt-large
+COPY models/KnightsAnalytics_iris-decision-tree ./models/KnightsAnalytics_iris-decision-tree
+COPY models/Xenova_wav2vec2-large-xlsr-53-gender-recognition-librispeech ./models/Xenova_wav2vec2-large-xlsr-53-gender-recognition-librispeech
+COPY models/Xenova_wav2vec2-base-960h ./models/Xenova_wav2vec2-base-960h
+COPY models/Xenova_mms-tts-eng ./models/Xenova_mms-tts-eng
