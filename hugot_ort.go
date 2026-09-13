@@ -5,229 +5,65 @@ package hugot
 import (
 	"context"
 	"errors"
-	"fmt"
-	"os"
-	"runtime"
+	"sync"
 
 	_ "github.com/gomlx/compute-onnx"
-	ort "github.com/yalue/onnxruntime_go"
 
+	"github.com/knights-analytics/hugot/backends"
 	"github.com/knights-analytics/hugot/options"
 )
 
+var (
+	ortSessionMu     sync.Mutex
+	ortSessionActive bool
+)
+
 func NewORTSession(ctx context.Context, opts ...options.WithOption) (*Session, error) {
-	if ort.IsInitialized() {
+	if !acquireORTSession() {
 		return nil, errors.New("another session is currently active, and only one session can be active at one time")
 	}
 
 	session, err := newSession(ctx, options.BackendORT, opts...)
 	if err != nil {
+		releaseORTSession()
 		return nil, err
 	}
 	if session.options.UseGoMLX {
+		releaseORTSession()
 		return session, nil
 	}
 
 	// set session options and initialise
-	if initialised, ortErr := session.initialiseORT(); ortErr != nil {
-		if initialised {
-			destroyErr := session.Destroy()
-			envErr := ort.DestroyEnvironment()
-			return nil, errors.Join(ortErr, destroyErr, envErr)
-		}
-		return nil, ortErr
+	if ortErr := session.initialiseORT(); ortErr != nil {
+		destroyErr := session.Destroy()
+		releaseORTSession()
+		return nil, errors.Join(ortErr, destroyErr)
 	}
 
 	session.environmentDestroy = func() error {
-		if ort.IsInitialized() {
-			return ort.DestroyEnvironment()
-		}
+		releaseORTSession()
 		return nil
 	}
 
 	return session, err
 }
 
-func (s *Session) initialiseORT() (bool, error) {
-	o := s.options.ORTOptions
-	// Set pre-initialisation options
-	if o.LibraryPath != nil {
-		// use os fs here, library cannot be on pluggable storage
-		_, err := os.Stat(*o.LibraryPath)
-		if errors.Is(err, os.ErrNotExist) {
-			return false, fmt.Errorf("cannot find the ort library at: %s", *o.LibraryPath)
-		}
-		ort.SetSharedLibraryPath(*o.LibraryPath)
-	} else if runtime.GOOS == "darwin" {
-		// Onnx runtime does not provide a default for Mac, so do that here instead.
-		ort.SetSharedLibraryPath("libonnxruntime.dylib")
+func acquireORTSession() bool {
+	ortSessionMu.Lock()
+	defer ortSessionMu.Unlock()
+	if ortSessionActive {
+		return false
 	}
+	ortSessionActive = true
+	return true
+}
 
-	// Start OnnxRuntime
-	if o.EnvLoggingLevel != nil {
-		if err := ort.SetEnvironmentLogLevel(ort.LoggingLevel(*o.EnvLoggingLevel)); err != nil {
-			return false, err
-		}
-	}
-	if err := ort.InitializeEnvironment(); err != nil {
-		return false, err
-	}
+func releaseORTSession() {
+	ortSessionMu.Lock()
+	ortSessionActive = false
+	ortSessionMu.Unlock()
+}
 
-	if o.Telemetry != nil {
-		if err := ort.EnableTelemetry(); err != nil {
-			return true, err
-		}
-	} else {
-		if err := ort.DisableTelemetry(); err != nil {
-			return true, err
-		}
-	}
-
-	// Create session options for use in all pipelines
-	sessionOptions, optionsError := ort.NewSessionOptions()
-	if optionsError != nil {
-		return true, optionsError
-	}
-	s.options.BackendOptions = sessionOptions
-
-	if o.IntraOpNumThreads != nil {
-		if err := sessionOptions.SetIntraOpNumThreads(*o.IntraOpNumThreads); err != nil {
-			return true, err
-		}
-	}
-	if o.InterOpNumThreads != nil {
-		if err := sessionOptions.SetInterOpNumThreads(*o.InterOpNumThreads); err != nil {
-			return true, err
-		}
-	}
-	if o.LogSeverityLevel != nil {
-		if err := sessionOptions.SetLogSeverityLevel(ort.LoggingLevel(*o.LogSeverityLevel)); err != nil {
-			return true, err
-		}
-	}
-	if o.GraphOptimizationLevel != nil {
-		if err := sessionOptions.SetGraphOptimizationLevel(ort.GraphOptimizationLevel(*o.GraphOptimizationLevel)); err != nil {
-			return true, err
-		}
-	}
-	if o.CPUMemArena != nil {
-		if err := sessionOptions.SetCpuMemArena(*o.CPUMemArena); err != nil {
-			return true, err
-		}
-	}
-	if o.MemPattern != nil {
-		if err := sessionOptions.SetMemPattern(*o.MemPattern); err != nil {
-			return true, err
-		}
-	}
-	if o.ParallelExecutionMode != nil {
-		if *o.ParallelExecutionMode {
-			if err := sessionOptions.SetExecutionMode(ort.ExecutionModeParallel); err != nil {
-				return true, err
-			}
-		} else {
-			if err := sessionOptions.SetExecutionMode(ort.ExecutionModeSequential); err != nil {
-				return true, err
-			}
-		}
-	}
-	if o.IntraOpSpinning != nil {
-		if *o.IntraOpSpinning {
-			if err := sessionOptions.AddSessionConfigEntry("session.intra_op.allow_spinning", "1"); err != nil {
-				return true, err
-			}
-		} else {
-			if err := sessionOptions.AddSessionConfigEntry("session.intra_op.allow_spinning", "0"); err != nil {
-				return true, err
-			}
-		}
-	}
-	if o.InterOpSpinning != nil {
-		if *o.InterOpSpinning {
-			if err := sessionOptions.AddSessionConfigEntry("session.inter_op.allow_spinning", "1"); err != nil {
-				return true, err
-			}
-		} else {
-			if err := sessionOptions.AddSessionConfigEntry("session.inter_op.allow_spinning", "0"); err != nil {
-				return true, err
-			}
-		}
-	}
-	if o.CudaOptions != nil {
-		cudaOptions, optErr := ort.NewCUDAProviderOptions()
-		if optErr != nil {
-			return true, optErr
-		}
-		if len(o.CudaOptions) > 0 {
-			optErr = cudaOptions.Update(o.CudaOptions)
-			if optErr != nil {
-				return true, errors.Join(optErr, cudaOptions.Destroy())
-			}
-		}
-		if err := sessionOptions.AppendExecutionProviderCUDA(cudaOptions); err != nil {
-			return true, errors.Join(err, cudaOptions.Destroy())
-		}
-		if err := cudaOptions.Destroy(); err != nil {
-			return true, err
-		}
-	}
-	if len(o.ExtraExecutionProviders) > 0 {
-		for _, ep := range o.ExtraExecutionProviders {
-			if err := sessionOptions.AppendExecutionProvider(ep.Name, ep.Options); err != nil {
-				return true, err
-			}
-		}
-	}
-	if o.CoreMLOptions != nil {
-		if err := sessionOptions.AppendExecutionProviderCoreMLV2(o.CoreMLOptions); err != nil {
-			return true, err
-		}
-	}
-	if o.DirectMLOptions != nil {
-		if err := sessionOptions.AppendExecutionProviderDirectML(*o.DirectMLOptions); err != nil {
-			return true, err
-		}
-	}
-	if o.OpenVINOOptions != nil {
-		if err := sessionOptions.AppendExecutionProviderOpenVINO(o.OpenVINOOptions); err != nil {
-			return true, err
-		}
-	}
-	if o.TensorRTOptions != nil {
-		tensorRTOptions, optErr := ort.NewTensorRTProviderOptions()
-		if optErr != nil {
-			return true, optErr
-		}
-		if len(o.TensorRTOptions) > 0 {
-			optErr = tensorRTOptions.Update(o.TensorRTOptions)
-			if optErr != nil {
-				return true, optErr
-			}
-		}
-		if err := sessionOptions.AppendExecutionProviderTensorRT(tensorRTOptions); err != nil {
-			return true, err
-		}
-	}
-	if o.OptimizedModelFilePath != nil {
-		if err := sessionOptions.SetOptimizedModelFilePath(*o.OptimizedModelFilePath); err != nil {
-			return true, err
-		}
-	}
-	if o.ProfilingEnabled != nil {
-		if *o.ProfilingEnabled {
-			prefix := ""
-			if o.ProfilingFilePrefix != nil {
-				prefix = *o.ProfilingFilePrefix
-			}
-			if err := sessionOptions.EnableProfiling(prefix); err != nil {
-				return true, err
-			}
-		} else {
-			if err := sessionOptions.DisableProfiling(); err != nil {
-				return true, err
-			}
-		}
-	}
-
-	return true, nil
+func (s *Session) initialiseORT() error {
+	return backends.InitializeORT(s.options)
 }
