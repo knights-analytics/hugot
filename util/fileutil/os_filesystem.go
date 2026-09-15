@@ -23,14 +23,45 @@ func (osFileSystem) CopyFile(ctx context.Context, from string, to string) error 
 	if err != nil {
 		return err
 	}
+	defer func() {
+		err = errors.Join(err, source.Close())
+	}()
 
-	destination, err := os.OpenFile(to, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o644)
-	if err != nil {
-		_ = source.Close()
+	if err = ctx.Err(); err != nil {
 		return err
 	}
-	_, copyErr := io.Copy(destination, source)
-	return errors.Join(copyErr, source.Close(), destination.Close())
+
+	dir := filepath.Dir(to)
+	temp, err := os.CreateTemp(dir, "."+filepath.Base(to)+".tmp-*")
+	if err != nil {
+		return err
+	}
+
+	tempName := temp.Name()
+	committed := false
+	defer func() {
+		if !committed {
+			err = errors.Join(err, os.Remove(tempName))
+		}
+	}()
+
+	_, copyErr := io.Copy(temp, source)
+	syncErr := temp.Sync()
+	closeErr := temp.Close()
+	if err = errors.Join(copyErr, syncErr, closeErr); err != nil {
+		return err
+	}
+
+	if err = ctx.Err(); err != nil {
+		return err
+	}
+
+	if err = os.Rename(tempName, to); err != nil {
+		return err
+	}
+
+	committed = true
+	return err
 }
 
 func (osFileSystem) Walk(ctx context.Context, URL string, handler OnVisit) error {
