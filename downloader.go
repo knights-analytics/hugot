@@ -53,6 +53,13 @@ func DownloadModel(ctx context.Context, modelName string, destination string, op
 	}
 	modelPath := path.Join(destination, strings.ReplaceAll(modelP, "/", "_"))
 
+	// The files are only copied under destination after the whole model has
+	// been fetched, so reject a destination that cannot hold them before
+	// contacting the hub.
+	if info, statErr := fileutil.FileStats(ctx, destination); statErr == nil && !info.IsDir() {
+		return "", fmt.Errorf("destination %s is not a directory", destination)
+	}
+
 	repo := hub.New(modelName)
 	if options.AuthToken != "" {
 		repo = repo.WithAuth(options.AuthToken)
