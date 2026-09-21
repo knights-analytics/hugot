@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
+## [0.7.9] - 2026-09-21
+
+### Added
+
+- Upgraded to ONNX Runtime v1.30.0.
+- Migrated to Go bindings from the official ORT repo.
+- Fixed missing filesystem error if using downloader before starting a session.
+- Made file copies atomic, to avoid partial model downloads on abort.
+- Check for a valid download destination before downloading.
+
 ## [0.7.8] - 2026-09-02
 
 ### Added
