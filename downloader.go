@@ -56,7 +56,11 @@ func DownloadModel(ctx context.Context, modelName string, destination string, op
 	// The files are only copied under destination after the whole model has
 	// been fetched, so reject a destination that cannot hold them before
 	// contacting the hub.
-	if info, statErr := fileutil.FileStats(ctx, destination); statErr == nil && !info.IsDir() {
+	info, statErr := fileutil.FileStats(ctx, destination)
+	if statErr != nil {
+		return "", fmt.Errorf("could not inspect destination %s: %w", destination, statErr)
+	}
+	if !info.IsDir() {
 		return "", fmt.Errorf("destination %s is not a directory", destination)
 	}
 

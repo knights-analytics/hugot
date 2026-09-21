@@ -33,3 +33,16 @@ func TestDownloadModelDestinationNotDirectory(t *testing.T) {
 	_, err := hugot.DownloadModel(context.Background(), "KnightsAnalytics/distilbert-base-uncased-finetuned-sst-2-english", destination, hugot.NewDownloadOptions())
 	assert.ErrorContains(t, err, "is not a directory")
 }
+
+func TestDownloadModelDestinationStatError(t *testing.T) {
+	destination := t.TempDir()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, err := hugot.DownloadModel(ctx, "KnightsAnalytics/distilbert-base-uncased-finetuned-sst-2-english", destination, hugot.NewDownloadOptions())
+	assert.ErrorIs(t, err, context.Canceled)
+
+	missingDestination := filepath.Join(destination, "missing")
+	_, err = hugot.DownloadModel(context.Background(), "KnightsAnalytics/distilbert-base-uncased-finetuned-sst-2-english", missingDestination, hugot.NewDownloadOptions())
+	assert.ErrorContains(t, err, "could not inspect destination")
+}

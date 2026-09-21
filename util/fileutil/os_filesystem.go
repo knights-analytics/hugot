@@ -32,6 +32,9 @@ func (osFileSystem) CopyFile(ctx context.Context, from string, to string) error 
 	}
 
 	dir := filepath.Dir(to)
+	if err = os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
 	temp, err := os.CreateTemp(dir, "."+filepath.Base(to)+".tmp-*")
 	if err != nil {
 		return err

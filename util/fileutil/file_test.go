@@ -3,6 +3,7 @@ package fileutil
 import (
 	"context"
 	"io"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -35,6 +36,28 @@ func TestDefaultFileSystemUsesOS(t *testing.T) {
 	}
 
 	contents, err := ReadFileBytes(ctx, filename)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(contents) != "hello" {
+		t.Fatalf("got %q, want %q", contents, "hello")
+	}
+}
+
+func TestCopyFileCreatesDestinationDirectories(t *testing.T) {
+	ctx := WithFileSystem(context.Background(), nil)
+	directory := t.TempDir()
+	source := filepath.Join(directory, "source.txt")
+	destination := filepath.Join(directory, "nested", "model", "file.txt")
+
+	if err := os.WriteFile(source, []byte("hello"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := CopyFile(ctx, source, destination); err != nil {
+		t.Fatal(err)
+	}
+
+	contents, err := os.ReadFile(destination)
 	if err != nil {
 		t.Fatal(err)
 	}
