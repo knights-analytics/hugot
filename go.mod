@@ -11,7 +11,7 @@ require (
 	github.com/gomlx/gomlx v0.28.16
 	github.com/gomlx/onnx-gomlx v0.5.13
 	github.com/knights-analytics/ortgenai v0.3.2
-	github.com/microsoft/onnxruntime/go v0.0.0-20260921022929-bca9d15b639c
+	github.com/microsoft/onnxruntime/go v0.0.0-20260922015325-62e95311b771
 	github.com/stretchr/testify v1.12.1
 	golang.org/x/image v0.46.0
 	golang.org/x/sync v0.23.0
