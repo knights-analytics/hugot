@@ -1,4 +1,4 @@
-//go:build cgo && (ORT || ALL) && linux
+//go:build cgo && (ORT || ALL)
 
 package backends
 
