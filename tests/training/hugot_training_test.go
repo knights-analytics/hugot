@@ -61,7 +61,7 @@ func runModel(t *testing.T, runtime string, examplesLeft, examplesRight []string
 		Name:         "testPipeline",
 		OnnxFilename: "model.onnx",
 	}
-	pipeline, err := hugot.NewPipeline(session, config)
+	pipeline, err := session.NewPipeline(config)
 	testutil.CheckT(t, err)
 
 	resultsLeft, err := pipeline.RunPipeline(t.Context(), examplesLeft)

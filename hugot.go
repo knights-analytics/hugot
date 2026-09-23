@@ -203,7 +203,21 @@ type QuestionAnsweringOption = backends.PipelineOption[*pipelines.QuestionAnswer
 // NewPipeline can be used to create a new pipeline of type T. The initialised pipeline will be returned and it
 // will also be stored in the session object so that all created pipelines can be destroyed with session.Destroy()
 // at once.
+//
+// Deprecated: use [Session.NewPipeline] instead. This function is retained for backwards
+// compatibility and will be removed in a future major release.
 func NewPipeline[T backends.Pipeline](s *Session, pipelineConfig backends.PipelineConfig[T]) (T, error) {
+	return s.NewPipeline(pipelineConfig)
+}
+
+// NewPipeline creates a new pipeline of type T. The initialised pipeline is returned and is also
+// stored in the session, so that all created pipelines can be destroyed together with
+// [Session.Destroy].
+//
+// T is inferred from pipelineConfig, so no explicit type argument is needed:
+//
+//	pipeline, err := session.NewPipeline(config)
+func (s *Session) NewPipeline[T backends.Pipeline](pipelineConfig backends.PipelineConfig[T]) (T, error) {
 	var pipeline T
 	if pipelineConfig.Name == "" {
 		return pipeline, errors.New("a name for the pipeline is required")
@@ -276,7 +290,17 @@ func initializePipeline[T backends.Pipeline](sessionContext context.Context, con
 }
 
 // GetPipeline can be used to retrieve a pipeline of type T with the given name from the session.
+//
+// Deprecated: use [Session.GetPipeline] instead. This function is retained for backwards
+// compatibility and will be removed in a future major release.
 func GetPipeline[T backends.Pipeline](s *Session, name string) (T, error) {
+	return s.GetPipeline[T](name)
+}
+
+// GetPipeline retrieves the pipeline of type T with the given name from the session.
+//
+// example: pipeline, err := session.GetPipeline[*pipelines.TokenClassificationPipeline]("name")
+func (s *Session) GetPipeline[T backends.Pipeline](name string) (T, error) {
 	var zero T
 	s.registryMu.RLock()
 	defer s.registryMu.RUnlock()
@@ -292,7 +316,17 @@ func GetPipeline[T backends.Pipeline](s *Session, name string) (T, error) {
 }
 
 // GetPipelines returns all pipelines of type T currently held by the session, keyed by name.
+//
+// Deprecated: use [Session.GetPipelines] instead. This function is retained for backwards
+// compatibility and will be removed in a future major release.
 func GetPipelines[T backends.Pipeline](s *Session) (map[string]T, error) {
+	return s.GetPipelines[T]()
+}
+
+// GetPipelines returns all pipelines of type T currently held by the session, keyed by name.
+//
+//	example: pipelines, err := session.GetPipelines[*pipelines.TokenClassificationPipeline]()
+func (s *Session) GetPipelines[T backends.Pipeline]() (map[string]T, error) {
 	s.registryMu.RLock()
 	defer s.registryMu.RUnlock()
 	result := map[string]T{}
@@ -304,16 +338,32 @@ func GetPipelines[T backends.Pipeline](s *Session) (map[string]T, error) {
 	return result, nil
 }
 
-// ClosePipeline removes the pipeline of type T with the given name from the session, tearing down
-// the underlying model when no other pipeline depends on it.
+// ClosePipeline removes the pipeline with the given name from the session, tearing down the
+// underlying model when no other pipeline depends on it.
+//
+// The type parameter T is ignored. It previously caused the call to do nothing when it did not
+// match the named pipeline's concrete type, which could silently leave a pipeline open; pipeline
+// names are unique, so the name alone identifies the pipeline.
+//
+// Deprecated: use [Session.ClosePipeline] instead. This function is retained for backwards
+// compatibility and will be removed in a future major release.
 func ClosePipeline[T backends.Pipeline](s *Session, name string) error {
+	return s.ClosePipeline(name)
+}
+
+// ClosePipeline removes the pipeline with the given name from the session, tearing down the
+// underlying model when no other pipeline depends on it. Closing a name that is not registered is
+// a no-op and returns nil.
+//
+// This method is deliberately not generic. Pipeline names are unique within a session, so the name
+// alone identifies the pipeline and a type parameter could only ever reject a correct request.
+//
+//	err := session.ClosePipeline("name")
+func (s *Session) ClosePipeline(name string) error {
 	s.registryMu.Lock()
 	defer s.registryMu.Unlock()
 	p, ok := s.pipelines[name]
 	if !ok {
-		return nil
-	}
-	if _, ok := p.(T); !ok {
 		return nil
 	}
 
