@@ -327,7 +327,7 @@ func TestReadmeExample(t *testing.T) {
 	}
 	// then we create out pipeline.
 	// Note: the pipeline will also be added to the session object so all pipelines can be destroyed at once
-	sentimentPipeline, err := hugot.NewPipeline(session, config)
+	sentimentPipeline, err := session.NewPipeline(config)
 	check(err)
 
 	// we can now use the pipeline for prediction on a batch of strings

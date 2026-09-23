@@ -632,7 +632,7 @@ func runBenchmarkEmbedding(ctx context.Context, strings *[]string, cuda bool) {
 		ModelPath: modelPath,
 		Name:      "benchmarkEmbedding",
 	}
-	pipelineEmbedder, err2 := hugot.NewPipeline(session, config)
+	pipelineEmbedder, err2 := session.NewPipeline(config)
 	if err2 != nil {
 		panic(err2)
 	}
