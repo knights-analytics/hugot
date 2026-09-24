@@ -83,32 +83,39 @@ func round3decimals(x float64) float64 {
 }
 
 func trainSimilarity(t *testing.T,
-	config hugot.TrainingConfig,
+	config hugot.TrainerConfig[*pipelines.FeatureExtractionPipeline],
+	trainerOptions []hugot.TrainerOption,
 	examplesLHS,
 	examplesRHS []string,
 ) []float64 {
 	t.Helper()
-	// Create a new GoMLX training session. Currently, training is only possible by loading an onnx model
-	// into GoMLX, fine-tuning it, and then writing it back to onnx. Hugot deals with the details
-	// for you here.
-	trainingSession, err := hugot.NewORTTrainingSession[*pipelines.FeatureExtractionPipeline](t.Context(), config)
+	// Training always runs through GoMLX: an onnx model is loaded into GoMLX, fine-tuned, and
+	// written back to onnx. An ORT session therefore has to be created with options.WithGoMLX().
+	session, err := hugot.NewORTSession(t.Context(), options.WithGoMLX())
 	if err != nil {
 		t.Fatal(err)
 	}
 
+	// The trainer's model belongs to the session, so destroying the session is the only teardown
+	// needed.
 	defer func() {
-		testutil.CheckT(t, trainingSession.Destroy())
+		testutil.CheckT(t, session.Destroy())
 	}()
 
+	trainer, err := session.NewTrainer(config, trainerOptions...)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	// train the model
-	if e := trainingSession.Train(); e != nil {
+	if e := trainer.Train(t.Context()); e != nil {
 		t.Fatal(e)
 	}
 
 	// we now write the fine-tuned pipeline back to disk as an onnx model.
 	// This will also copy the tokenizer files for you. If your models are on s3
 	// this can also work (see documentation).
-	if e := trainingSession.Save(testutil.ModelsFolder + "testTrain"); e != nil {
+	if e := trainer.Save(t.Context(), testutil.ModelsFolder+"testTrain"); e != nil {
 		t.Fatal(e)
 	}
 	if _, err := os.Stat(testutil.ModelsFolder + "testTrain"); err != nil {
@@ -180,16 +187,14 @@ func TestTrainSemanticSimilarity(t *testing.T) {
 	}
 
 	// we now train the model with the dataset
-	trainingConfig := hugot.TrainingConfig{
+	trainingConfig := hugot.TrainerConfig[*pipelines.FeatureExtractionPipeline]{
 		ModelPath:        modelPath,
 		TrainDataset:     trainDataset,
 		TrainEvalDataset: trainEvalDataset,
-		Options: []hugot.TrainingOption{
-			hugot.WithEpochs(2),
-		},
-		Verbose: true,
+		Verbose:          true,
 	}
-	similaritiesGoMLXTrained := trainSimilarity(t, trainingConfig, examplesLHS, examplesRHS)
+	trainerOptions := []hugot.TrainerOption{hugot.WithEpochs(2)}
+	similaritiesGoMLXTrained := trainSimilarity(t, trainingConfig, trainerOptions, examplesLHS, examplesRHS)
 
 	fmt.Println("GoMLX trained model predictions:")
 	for i := range similaritiesGoMLXTrained {
@@ -217,14 +222,14 @@ func TestTrainSemanticSimilarity(t *testing.T) {
 	inMemoryDataset, err := datasets.NewInMemorySemanticSimilarityDataset(examples, 1, nil)
 	testutil.CheckT(t, err)
 	trainingConfig.TrainDataset = inMemoryDataset
-	similaritiesGoMLXTrainedInMemory := trainSimilarity(t, trainingConfig, examplesLHS, examplesRHS)
+	similaritiesGoMLXTrainedInMemory := trainSimilarity(t, trainingConfig, trainerOptions, examplesLHS, examplesRHS)
 	for i := range similaritiesGoMLXTrainedInMemory {
 		assert.Equal(t, round3decimals(similaritiesGoMLXTrained[i]), round3decimals(similaritiesGoMLXTrainedInMemory[i]))
 	}
 
 	// we can also freeze layers
-	trainingConfig.Options = append(trainingConfig.Options, hugot.WithFreezeLayers([]int{-1})) // freeze all layers but the last one
-	similaritiesGoMLXTrainedFrozen := trainSimilarity(t, trainingConfig, examplesLHS, examplesRHS)
+	frozenOptions := append(trainerOptions, hugot.WithFreezeLayers([]int{-1})) // freeze all layers but the last one
+	similaritiesGoMLXTrainedFrozen := trainSimilarity(t, trainingConfig, frozenOptions, examplesLHS, examplesRHS)
 
 	fmt.Println("GoMLX trained model predictions freezing all layers but the last one:")
 	for i := range similaritiesGoMLXTrainedFrozen {
@@ -252,29 +257,34 @@ func TestTrainSemanticSimilarityCuda(t *testing.T) {
 
 	modelPath := testutil.ModelsFolder + "KnightsAnalytics_all-MiniLM-L6-v2"
 
-	session, err := hugot.NewXLATrainingSession[*pipelines.FeatureExtractionPipeline](
-		t.Context(),
-		hugot.TrainingConfig{
+	// cuda is a property of the session, not of the training run
+	session, err := hugot.NewXLASession(t.Context(), options.WithCuda(nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		testutil.CheckT(t, session.Destroy())
+	}()
+
+	trainer, err := session.NewTrainer(
+		hugot.TrainerConfig[*pipelines.FeatureExtractionPipeline]{
 			ModelPath:    modelPath,
 			TrainDataset: dataset,
-			Options: []hugot.TrainingOption{
-				hugot.WithEpochs(1),
-				hugot.WithCuda(), // enable cuda
-			},
-			Verbose: true,
+			Verbose:      true,
 		},
+		hugot.WithEpochs(1),
 	)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// train the model
-	if err = session.Train(); err != nil {
+	if err = trainer.Train(t.Context()); err != nil {
 		t.Fatal(err)
 	}
 
 	// we now write the fine-tuned pipeline back to disk as an onnx model
-	if e := session.Save(testutil.ModelsFolder + "testTrain"); e != nil {
+	if e := trainer.Save(t.Context(), testutil.ModelsFolder+"testTrain"); e != nil {
 		t.Fatal(e)
 	}
 	if _, err := os.Stat(testutil.ModelsFolder + "testTrain"); err != nil {
@@ -297,28 +307,33 @@ func TestTrainSemanticSimilarityGo(t *testing.T) {
 
 	modelPath := testutil.ModelsFolder + "KnightsAnalytics_all-MiniLM-L6-v2"
 
-	session, err := hugot.NewGoTrainingSession[*pipelines.FeatureExtractionPipeline](
-		t.Context(),
-		hugot.TrainingConfig{
+	session, err := hugot.NewGoSession(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		testutil.CheckT(t, session.Destroy())
+	}()
+
+	trainer, err := session.NewTrainer(
+		hugot.TrainerConfig[*pipelines.FeatureExtractionPipeline]{
 			ModelPath:    modelPath,
 			TrainDataset: dataset,
-			Options: []hugot.TrainingOption{
-				hugot.WithEpochs(1),
-			},
-			Verbose: true,
+			Verbose:      true,
 		},
+		hugot.WithEpochs(1),
 	)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// train the model
-	if err = session.Train(); err != nil {
+	if err = trainer.Train(t.Context()); err != nil {
 		t.Fatal(err)
 	}
 
 	// we now write the fine-tuned pipeline back to disk as an onnx model
-	if e := session.Save(testutil.ModelsFolder + "testTrain"); e != nil {
+	if e := trainer.Save(t.Context(), testutil.ModelsFolder+"testTrain"); e != nil {
 		t.Fatal(e)
 	}
 	if _, err := os.Stat(testutil.ModelsFolder + "testTrain"); err != nil {
@@ -348,31 +363,33 @@ func TestEarlyStopping(t *testing.T) {
 		}
 	}()
 
-	trainingConfig := hugot.TrainingConfig{
+	trainingConfig := hugot.TrainerConfig[*pipelines.FeatureExtractionPipeline]{
 		ModelPath:    modelPath,
 		TrainDataset: trainDataset,
 		EvalDataset:  evalDataset,
-		Options: []hugot.TrainingOption{
-			hugot.WithEarlyStoppingParams(2, 1e-4),
-		},
-		Verbose: true,
+		Verbose:      true,
 	}
 
-	trainingSession, err := hugot.NewXLATrainingSession[*pipelines.FeatureExtractionPipeline](t.Context(), trainingConfig)
+	session, err := hugot.NewXLASession(t.Context())
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer func() {
-		testutil.CheckT(t, trainingSession.Destroy())
+		testutil.CheckT(t, session.Destroy())
 	}()
 
+	trainer, err := session.NewTrainer(trainingConfig, hugot.WithEarlyStoppingParams(2, 1e-4))
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	// train the model
-	if trainErr := trainingSession.Train(); trainErr != nil {
+	if trainErr := trainer.Train(t.Context()); trainErr != nil {
 		t.Fatal(trainErr)
 	}
 
 	// save the model
-	if saveErr := trainingSession.Save(testutil.ModelsFolder + "testTrainEval"); saveErr != nil {
+	if saveErr := trainer.Save(t.Context(), testutil.ModelsFolder+"testTrainEval"); saveErr != nil {
 		t.Fatal(saveErr)
 	}
 }

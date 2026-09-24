@@ -242,11 +242,39 @@ This is currently supported only for the **FeatureExtractionPipeline**. This can
 
 See the [example](testcases/semanticSimilarityTest.jsonl) for a sample dataset.
 
-The score is assumed to be a float between 0 and 1 that encodes the semantic similarity between the sentences, and by default a cosine similarity loss is used (see [sentence transformers](https://sbert.net/docs/package_reference/sentence_transformer/losses.html#cosinesimilarityloss)). However, you can also specify a different loss function from `goMLX` using the `XLATrainingOptions` field in the `TrainingConfig` struct. See [the training tests](./hugot_training_test.go) for examples on how to train or fine-tune feature extraction pipelines.
+The score is assumed to be a float between 0 and 1 that encodes the semantic similarity between the sentences, and by default a cosine similarity loss is used (see [sentence transformers](https://sbert.net/docs/package_reference/sentence_transformer/losses.html#cosinesimilarityloss)). You can specify a different optimizer or loss function from `goMLX` using the `GOMLXOptions` field of `TrainerConfig`.
+
+A trainer is created from a session, in the same way as a pipeline:
+
+```go
+// Training runs through goMLX on every backend. A Go or XLA session needs nothing extra;
+// an ORT session must be created with options.WithGoMLX().
+session, err := hugot.NewXLASession(ctx)
+check(err)
+defer func() { _ = session.Destroy() }()
+
+dataset, err := datasets.NewSemanticSimilarityDataset(ctx, "dataset.jsonl", 32, nil, nil)
+check(err)
+
+trainer, err := session.NewTrainer(
+    hugot.TrainerConfig[*pipelines.FeatureExtractionPipeline]{
+        ModelPath:    modelPath,
+        TrainDataset: dataset,
+        Verbose:      true,
+    },
+    hugot.WithEpochs(2),
+)
+check(err)
+
+check(trainer.Train(ctx))
+check(trainer.Save(ctx, outputPath))
+```
+
+The model the trainer loads belongs to the session, so `session.Destroy()` is the only teardown needed. The fine-tuned model is written back as onnx, together with the tokenizer files and a `statistics.txt` holding the per-epoch losses, so the output directory can be loaded straight back into a pipeline.
 
 Note that training on GPU is currently much faster and memory efficient than training on CPU, although optimizations are underway. On CPU, we recommend smaller batch sizes.
 
-See [the tests](hugot_training_test.go) for an example on how to fine-tune semantic similarity starting with an open source sentence transformers model and a few examples.
+See [the training tests](tests/training/hugot_training_test.go) for an example on how to fine-tune semantic similarity starting with an open source sentence transformers model and a few examples.
 
 ## Performance Tuning
 
