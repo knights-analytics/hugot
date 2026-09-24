@@ -230,8 +230,16 @@ On different distros (e.g. Ubuntu), you should be able to install the equivalent
 
 ## Training and fine-tuning pipelines 
 
-Hugot now also supports the training and fine-tuning of transformer pipelines! This functionality requires that you build with XLA enabled as we use gomlx behind the
-scenes for training/fine-tuning: the onnx model will be loaded, converted to xla and trained using [goMLX](https://github.com/gomlx/gomlx), and serialized back to onnx format.
+Hugot now also supports the training and fine-tuning of transformer pipelines! Training always runs through [goMLX](https://github.com/gomlx/gomlx), on any backend:
+the onnx model is loaded into goMLX, fine-tuned, and serialized back to onnx format.
+
+Go and XLA sessions (`hugot.NewGoSession`, `hugot.NewXLASession`) already run on goMLX, so they can train as they are, with no
+extra options. Only an ORT session needs something more: it has to be created with `options.WithGoMLX()` to train. Note that this
+changes the whole session, not just the trainer: every pipeline in a `WithGoMLX` session runs through goMLX rather than native
+ONNX Runtime. If you also want native ORT inference, use a separate session for training.
+
+A trainer always loads its own copy of the model, so training never changes the weights of a pipeline you are serving, even
+in the same session. To serve the fine-tuned model, save it with `trainer.Save` and load the saved path like any other model.
 
 This is currently supported only for the **FeatureExtractionPipeline**. This can be used to fine-tune the vector embeddings for e.g. semantic textual similarity (for applications like RAG and semantic search). In order to fine-tune the feature extraction pipeline for semantic search you will need to collect a training dataset in the following format:
 
@@ -242,11 +250,51 @@ This is currently supported only for the **FeatureExtractionPipeline**. This can
 
 See the [example](testcases/semanticSimilarityTest.jsonl) for a sample dataset.
 
-The score is assumed to be a float between 0 and 1 that encodes the semantic similarity between the sentences, and by default a cosine similarity loss is used (see [sentence transformers](https://sbert.net/docs/package_reference/sentence_transformer/losses.html#cosinesimilarityloss)). However, you can also specify a different loss function from `goMLX` using the `XLATrainingOptions` field in the `TrainingConfig` struct. See [the training tests](./hugot_training_test.go) for examples on how to train or fine-tune feature extraction pipelines.
+The score is assumed to be a float between 0 and 1 that encodes the semantic similarity between the sentences, and by default a cosine similarity loss is used (see [sentence transformers](https://sbert.net/docs/package_reference/sentence_transformer/losses.html#cosinesimilarityloss)). You can specify a different optimizer or loss function from `goMLX` using the `GOMLXOptions` field of `TrainerConfig`.
+
+A trainer is created from a session, in the same way as a pipeline:
+
+```go
+// Training runs through goMLX on every backend. A Go or XLA session needs nothing extra;
+// an ORT session must be created with options.WithGoMLX().
+// NewXLASession requires the go build tags "XLA" or "ALL".
+session, err := hugot.NewXLASession(ctx)
+// To train on an Nvidia GPU, enable CUDA on the session:
+// session, err := hugot.NewXLASession(ctx, options.WithCuda(nil))
+check(err)
+defer func() { _ = session.Destroy() }()
+
+dataset, err := datasets.NewSemanticSimilarityDataset(ctx, "dataset.jsonl", 32, nil, nil)
+check(err)
+
+trainer, err := session.NewTrainer(
+    hugot.TrainerConfig[*pipelines.FeatureExtractionPipeline]{
+        ModelPath:    modelPath,
+        TrainDataset: dataset,
+        Verbose:      true,
+    },
+    hugot.WithEpochs(2),
+)
+check(err)
+defer func() { _ = trainer.Close() }()
+
+check(trainer.Train(ctx))
+check(trainer.Save(ctx, outputPath))
+```
+
+Besides `WithEpochs` (default 100), the following trainer options are available:
+
+- `WithEarlyStopping()` / `WithEarlyStoppingParams(patience, tolerance)`: stop when the loss on `TrainerConfig.EvalDataset` stops improving (defaults: patience 3, tolerance 1e-4). Requires `EvalDataset` to be set.
+- `WithFreezeLayers(layers)`: freeze the given transformer layers (0 is the first); `[]int{-1}` freezes every layer except the last.
+- `WithFreezeEmbeddings()`: freeze the embedding layers.
+
+Set `TrainerConfig.TrainEvalDataset` to record a per-epoch training loss, available from `trainer.Statistics()` and written to `statistics.txt` on save.
+
+`trainer.Close()` releases the trainer's copy of the model once you have saved it; a trainer that is never closed is released by `session.Destroy()`, so in a long-lived session that trains repeatedly, close each trainer when you are done with it. The fine-tuned model is written back as onnx, together with the tokenizer files and a `statistics.txt` holding the per-epoch losses, so the output directory can be loaded straight back into a pipeline.
 
 Note that training on GPU is currently much faster and memory efficient than training on CPU, although optimizations are underway. On CPU, we recommend smaller batch sizes.
 
-See [the tests](hugot_training_test.go) for an example on how to fine-tune semantic similarity starting with an open source sentence transformers model and a few examples.
+See [the training tests](tests/training/hugot_training_test.go) for an example on how to fine-tune semantic similarity starting with an open source sentence transformers model and a few examples.
 
 ## Performance Tuning
 

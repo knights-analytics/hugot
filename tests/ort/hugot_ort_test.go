@@ -668,3 +668,24 @@ func BenchmarkORTCPUEmbedding(b *testing.B) {
 		runBenchmarkEmbedding(b.Context(), &p, false)
 	}
 }
+
+// Only one native ORT session can be active at a time. A GoMLX session is allowed alongside a native one.
+func TestORTSessionLimitIgnoresGoMLX(t *testing.T) {
+	native, err := hugot.NewORTSession(t.Context())
+	testutil.CheckT(t, err)
+
+	goMLX, err := hugot.NewORTSession(t.Context(), options.WithGoMLX())
+	testutil.CheckT(t, err)
+	testutil.CheckT(t, goMLX.Destroy())
+
+	if second, secondErr := hugot.NewORTSession(t.Context()); secondErr == nil {
+		testutil.CheckT(t, second.Destroy())
+		t.Fatal("a second native ORT session was created while one was active")
+	}
+
+	// destroying the native session frees the slot for the next one
+	testutil.CheckT(t, native.Destroy())
+	native, err = hugot.NewORTSession(t.Context())
+	testutil.CheckT(t, err)
+	testutil.CheckT(t, native.Destroy())
+}
