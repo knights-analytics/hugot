@@ -6,8 +6,8 @@ import "errors"
 
 type RustTokenizer struct{}
 
-func loadRustTokenizer(_ []byte, _ *Model) error {
-	return errors.New("rust tokenizer is not enabled")
+func parseRustTokenizer(_ []byte) (*parsedTokenizer, error) {
+	return nil, errors.New("rust tokenizer is not enabled")
 }
 
 func tokenizeInputsRust(_ *PipelineBatch, _ *Tokenizer, _ []string) {}

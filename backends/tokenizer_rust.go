@@ -3,7 +3,6 @@
 package backends
 
 import (
-	"errors"
 	"fmt"
 	"strings"
 
@@ -15,21 +14,24 @@ type RustTokenizer struct {
 	Options   []tokenizers.EncodeOption
 }
 
-func loadRustTokenizer(tokenizerBytes []byte, model *Model) error {
+func parseRustTokenizer(tokenizerBytes []byte) (*parsedTokenizer, error) {
 	tk, tkErr := tokenizers.FromBytes(tokenizerBytes)
 	if tkErr != nil {
-		return tkErr
+		return nil, tkErr
 	}
-
-	// tokenizer init
-	rustOptions, optErr := getRustTokenizerOptions(model)
-	if optErr != nil {
-		return errors.Join(optErr, tk.Close())
-	}
-	model.Tokenizer = &Tokenizer{Runtime: TokenizerRuntimeRust, RustTokenizer: &RustTokenizer{Tokenizer: tk, Options: rustOptions}, MaxAllowedTokens: model.MaxPositionEmbeddings, close: func() error {
-		return tk.Close()
-	}}
-	return nil
+	return &parsedTokenizer{
+		attach: func(model *Model) error {
+			rustOptions, optErr := getRustTokenizerOptions(model)
+			if optErr != nil {
+				return optErr
+			}
+			model.Tokenizer = &Tokenizer{Runtime: TokenizerRuntimeRust, RustTokenizer: &RustTokenizer{Tokenizer: tk, Options: rustOptions}, MaxAllowedTokens: model.MaxPositionEmbeddings, close: func() error {
+				return tk.Close()
+			}}
+			return nil
+		},
+		close: tk.Close,
+	}, nil
 }
 
 func getRustTokenizerOptions(model *Model) ([]tokenizers.EncodeOption, error) {
