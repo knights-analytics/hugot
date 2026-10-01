@@ -80,12 +80,18 @@ func LoadModel(ctx context.Context, path string, onnxFilename string, opts *opti
 		if err != nil {
 			return nil, errors.Join(err, model.Close())
 		}
+		// The tokenizer is parsed while the backend is created: for a large
+		// vocabulary both take hundreds of milliseconds, and neither needs the
+		// other until the tokenizer is attached.
+		pending, tkErr := startTokenizerLoad(ctx, model, opts)
+		if tkErr != nil {
+			return nil, errors.Join(tkErr, model.Close())
+		}
 		err = CreateModelBackend(ctx, model, opts)
 		if err != nil {
-			return nil, errors.Join(err, model.Close())
+			return nil, errors.Join(err, pending.discard(), model.Close())
 		}
-		tkErr := LoadTokenizer(ctx, model, opts)
-		if tkErr != nil {
+		if tkErr := pending.attach(model); tkErr != nil {
 			return nil, errors.Join(tkErr, model.Close())
 		}
 	}

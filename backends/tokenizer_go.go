@@ -15,35 +15,39 @@ type GoTokenizer struct {
 	AttentionMask bool
 }
 
-func loadGoTokenizer(tokenizerBytes []byte, model *Model) error {
+func parseGoTokenizer(tokenizerBytes []byte) (*parsedTokenizer, error) {
 	tk, tkErr := hftokenizer.NewFromContent(nil, tokenizerBytes)
 	if tkErr != nil {
-		return tkErr
+		return nil, tkErr
 	}
+	return &parsedTokenizer{
+		attach: func(model *Model) error {
+			goOptions, typeIDs, attentionMask, optErr := getGoTokenizerOptions(model)
+			if optErr != nil {
+				return optErr
+			}
 
-	goOptions, typeIDs, attentionMask, optErr := getGoTokenizerOptions(model)
-	if optErr != nil {
-		return optErr
-	}
+			optErr = tk.With(goOptions)
+			if optErr != nil {
+				return optErr
+			}
 
-	optErr = tk.With(goOptions)
-	if optErr != nil {
-		return optErr
-	}
-
-	model.Tokenizer = &Tokenizer{
-		Runtime: TokenizerRuntimeGo,
-		GoTokenizer: &GoTokenizer{
-			Tokenizer:     tk,
-			TypeIDs:       typeIDs,
-			AttentionMask: attentionMask,
-		},
-		MaxAllowedTokens: model.MaxPositionEmbeddings,
-		close: func() error {
+			model.Tokenizer = &Tokenizer{
+				Runtime: TokenizerRuntimeGo,
+				GoTokenizer: &GoTokenizer{
+					Tokenizer:     tk,
+					TypeIDs:       typeIDs,
+					AttentionMask: attentionMask,
+				},
+				MaxAllowedTokens: model.MaxPositionEmbeddings,
+				close: func() error {
+					return nil
+				},
+			}
 			return nil
 		},
-	}
-	return nil
+		close: func() error { return nil },
+	}, nil
 }
 
 func getGoTokenizerOptions(model *Model) (api.EncodeOptions, bool, bool, error) {

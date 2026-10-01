@@ -2,6 +2,7 @@ package backends
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/knights-analytics/hugot/options"
@@ -32,25 +33,90 @@ const (
 )
 
 func LoadTokenizer(ctx context.Context, model *Model, s *options.Options) error {
-	if exists, err := fileutil.FileExists(ctx, fileutil.PathJoinSafe(model.Path, "tokenizer.json")); err == nil {
-		if exists {
-			tokenizerBytes, err := fileutil.ReadFileBytes(ctx, fileutil.PathJoinSafe(model.Path, "tokenizer.json"))
-			if err != nil {
-				return err
-			}
-			switch s.Backend {
-			case options.BackendORT, options.BackendXLA:
-				return loadRustTokenizer(tokenizerBytes, model)
-			case options.BackendGo:
-				return loadGoTokenizer(tokenizerBytes, model)
-			default:
-				return fmt.Errorf("runtime %s not recognized", s.Backend)
-			}
-		}
-	} else {
-		return fmt.Errorf("error checking for existence of tokenizer.json: %w", err)
+	pending, err := startTokenizerLoad(ctx, model, s)
+	if err != nil {
+		return err
+	}
+	return pending.attach(model)
+}
+
+// parsedTokenizer is a tokenizer parsed from tokenizer.json but not yet
+// attached to its model: the encode options depend on the model's inputs,
+// which are only known once the model backend exists.
+type parsedTokenizer struct {
+	attach func(model *Model) error
+	close  func() error
+}
+
+// pendingTokenizer is a tokenizer being parsed in the background. parsed is
+// nil once done when the model has no tokenizer.json.
+type pendingTokenizer struct {
+	done   chan struct{}
+	parsed *parsedTokenizer
+	err    error
+}
+
+// startTokenizerLoad reads the model's tokenizer.json and parses it in the
+// background, so that parsing (hundreds of milliseconds for a large
+// vocabulary) overlaps the creation of the model backend. The file is read
+// before returning: creating an ORT backend changes the working directory,
+// and a relative model path must not be resolved while it does.
+func startTokenizerLoad(ctx context.Context, model *Model, s *options.Options) (*pendingTokenizer, error) {
+	p := &pendingTokenizer{done: make(chan struct{})}
+	tokenizerPath := fileutil.PathJoinSafe(model.Path, "tokenizer.json")
+	exists, err := fileutil.FileExists(ctx, tokenizerPath)
+	if err != nil {
+		return nil, fmt.Errorf("error checking for existence of tokenizer.json: %w", err)
+	}
+	if !exists {
+		close(p.done)
+		return p, nil
+	}
+	tokenizerBytes, err := fileutil.ReadFileBytes(ctx, tokenizerPath)
+	if err != nil {
+		return nil, err
+	}
+	var parse func([]byte) (*parsedTokenizer, error)
+	switch s.Backend {
+	case options.BackendORT, options.BackendXLA:
+		parse = parseRustTokenizer
+	case options.BackendGo:
+		parse = parseGoTokenizer
+	default:
+		return nil, fmt.Errorf("runtime %s not recognized", s.Backend)
+	}
+	go func() {
+		defer close(p.done)
+		p.parsed, p.err = parse(tokenizerBytes)
+	}()
+	return p, nil
+}
+
+// attach waits for the parse to finish and attaches the tokenizer to model.
+// Without a tokenizer.json it attaches nothing.
+func (p *pendingTokenizer) attach(model *Model) error {
+	<-p.done
+	if p.err != nil {
+		return p.err
+	}
+	if p.parsed == nil {
+		return nil
+	}
+	if err := p.parsed.attach(model); err != nil {
+		return errors.Join(err, p.parsed.close())
 	}
 	return nil
+}
+
+// discard waits for the parse to finish and releases the tokenizer, for when
+// the model failed to load and the tokenizer will never be attached. A parse
+// that failed left nothing to release.
+func (p *pendingTokenizer) discard() error {
+	<-p.done
+	if p.parsed == nil {
+		return nil
+	}
+	return p.parsed.close()
 }
 
 func TokenizeInputs(batch *PipelineBatch, tk *Tokenizer, inputs []string) {
