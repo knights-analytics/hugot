@@ -224,6 +224,41 @@ func createInputTensorsGoMLX(batch *PipelineBatch, model *Model, padBatchDimensi
 
 	// 2) build each tensor
 	for mi, meta := range model.InputsMeta {
+		if strings.EqualFold(meta.Name, "input_features") {
+			backing, dimensions, err := flattenAudioFeatures(batch.AudioFeatures, batch.Size)
+			if err != nil {
+				return err
+			}
+			if batchSize != batch.Size {
+				paddingSize := 1
+				for _, dimension := range dimensions[1:] {
+					paddingSize *= int(dimension)
+				}
+				backing = append(backing, make([]float32, (batchSize-batch.Size)*paddingSize)...)
+			}
+			shape := make([]int, len(dimensions))
+			for i, dimension := range dimensions {
+				shape[i] = int(dimension)
+			}
+			shape[0] = batchSize
+			inputTensors[mi] = tensors.FromFlatDataAndDimensions(backing, shape...)
+			continue
+		}
+		if strings.EqualFold(meta.Name, "is_longer") {
+			if len(batch.AudioIsLonger) != batch.Size {
+				return fmt.Errorf("audio duration flags do not match batch size")
+			}
+			flags := append([]bool(nil), batch.AudioIsLonger...)
+			if batchSize != batch.Size {
+				flags = append(flags, make([]bool, batchSize-batch.Size)...)
+			}
+			shape := []int{batchSize}
+			if len(meta.Dimensions) > 1 {
+				shape = append(shape, 1)
+			}
+			inputTensors[mi] = tensors.FromFlatDataAndDimensions(flags, shape...)
+			continue
+		}
 		if isImageInput(meta.Name) {
 			backing, dimensions, err := flattenImageValues(model, batch.Size, batch.ImageValues)
 			if err != nil {

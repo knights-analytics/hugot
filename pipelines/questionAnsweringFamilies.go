@@ -28,8 +28,7 @@ type VisualQuestionAnsweringInput struct {
 // DocumentQuestionAnsweringInput associates a document image with a question.
 // ImagePath may be a local image path or a data URI supported by the backend.
 //
-// By default it produces a single user turn with the document image attached.
-// Set Role and History for multi-turn conversations.
+// Document QA uses a document-trained encoder/decoder, not conversational VQA.
 type DocumentQuestionAnsweringInput struct {
 	DocumentPath string
 	ImagePath    string
@@ -56,14 +55,13 @@ type TableQuestionAnsweringInput struct {
 // QuestionAnsweringTextOutput contains one generated answer per input.
 type QuestionAnsweringTextOutput struct {
 	Responses   []string
+	Answers     [][]VisualQuestionAnsweringAnswer
 	TokenStream chan backends.SequenceDelta
 	ErrorStream chan error
 }
 
 type (
-	VisualQuestionAnsweringOutput   = QuestionAnsweringTextOutput
-	DocumentQuestionAnsweringOutput = QuestionAnsweringTextOutput
-	TableQuestionAnsweringOutput    = QuestionAnsweringTextOutput
+	VisualQuestionAnsweringOutput = QuestionAnsweringTextOutput
 )
 
 func (o *QuestionAnsweringTextOutput) GetOutput() []any {
@@ -106,19 +104,21 @@ func (p *questionAnsweringFamily) runText(ctx context.Context, messages [][]back
 	}, err
 }
 
-// VisualQuestionAnsweringPipeline answers questions about images with a
-// generative multimodal model.
-type VisualQuestionAnsweringPipeline struct{ questionAnsweringFamily }
+// VisualQuestionAnsweringAnswer is a native classification answer and its sigmoid score.
+type VisualQuestionAnsweringAnswer struct {
+	Answer string
+	Score  float32
+}
 
-// DocumentQuestionAnsweringPipeline answers questions about document images.
-type DocumentQuestionAnsweringPipeline struct{ questionAnsweringFamily }
+// VisualQuestionAnsweringPipeline supports native ViLT scored answers and
+// generative multimodal answers. Native models use explicit ONNX loading.
+type VisualQuestionAnsweringPipeline struct {
+	questionAnsweringFamily
+	TopK   int
+	native *nativeVisualQuestionAnswering
+}
 
-// TableQuestionAnsweringPipeline answers questions about serialized tables.
-type TableQuestionAnsweringPipeline struct{ questionAnsweringFamily }
-
-func (*VisualQuestionAnsweringPipeline) IsGenerative() bool   { return true }
-func (*DocumentQuestionAnsweringPipeline) IsGenerative() bool { return true }
-func (*TableQuestionAnsweringPipeline) IsGenerative() bool    { return true }
+func (*VisualQuestionAnsweringPipeline) IsGenerative() bool { return true }
 
 type (
 	VisualQuestionAnsweringConfig   = backends.PipelineConfig[*VisualQuestionAnsweringPipeline]
@@ -144,11 +144,23 @@ func WithVisualQuestionAnsweringMaxLength(n int) VisualQuestionAnsweringOption {
 }
 
 func WithDocumentQuestionAnsweringMaxLength(n int) DocumentQuestionAnsweringOption {
-	return func(p *DocumentQuestionAnsweringPipeline) error { return setQAMaxLength(n)(&p.questionAnsweringFamily) }
+	return func(p *DocumentQuestionAnsweringPipeline) error {
+		if n <= 0 {
+			return errors.New("max length must be positive")
+		}
+		p.MaxLength = n
+		return nil
+	}
 }
 
 func WithTableQuestionAnsweringMaxLength(n int) TableQuestionAnsweringOption {
-	return func(p *TableQuestionAnsweringPipeline) error { return setQAMaxLength(n)(&p.questionAnsweringFamily) }
+	return func(p *TableQuestionAnsweringPipeline) error {
+		if n <= 0 {
+			return errors.New("max length must be positive")
+		}
+		p.MaxLength = n
+		return nil
+	}
 }
 
 func WithVisualQuestionAnsweringStreaming() VisualQuestionAnsweringOption {
@@ -156,11 +168,15 @@ func WithVisualQuestionAnsweringStreaming() VisualQuestionAnsweringOption {
 }
 
 func WithDocumentQuestionAnsweringStreaming() DocumentQuestionAnsweringOption {
-	return func(p *DocumentQuestionAnsweringPipeline) error { p.Streaming = true; return nil }
+	return func(_ *DocumentQuestionAnsweringPipeline) error {
+		return errors.New("native document QA returns answer results and does not support streaming")
+	}
 }
 
 func WithTableQuestionAnsweringStreaming() TableQuestionAnsweringOption {
-	return func(p *TableQuestionAnsweringPipeline) error { p.Streaming = true; return nil }
+	return func(_ *TableQuestionAnsweringPipeline) error {
+		return errors.New("native table QA returns cell results and does not support streaming")
+	}
 }
 
 func newQAPipeline[T backends.Pipeline](ctx context.Context, config backends.PipelineConfig[T], model *backends.Model) *multimodalGeneration {
@@ -171,60 +187,28 @@ func NewVisualQuestionAnsweringPipeline(ctx context.Context, config VisualQuesti
 	if model == nil {
 		return nil, errors.New("visual question answering pipeline requires a model")
 	}
+	p := &VisualQuestionAnsweringPipeline{questionAnsweringFamily: questionAnsweringFamily{newQAPipeline(ctx, config, model)}, TopK: 5}
 	if !model.IsGenerative {
-		return nil, errors.New("visual question answering pipeline requires a generative model")
+		var err error
+		p.native, err = newNativeVisualQuestionAnswering(ctx, model)
+		if err != nil {
+			return nil, err
+		}
+		p.MaxLength = 40
 	}
-	p := &VisualQuestionAnsweringPipeline{questionAnsweringFamily{newQAPipeline(ctx, config, model)}}
 	for _, option := range config.Options {
 		if err := option(p); err != nil {
 			return nil, err
 		}
 	}
-	return p, p.validate("visual question answering")
-}
-
-func NewDocumentQuestionAnsweringPipeline(ctx context.Context, config DocumentQuestionAnsweringConfig, model *backends.Model) (*DocumentQuestionAnsweringPipeline, error) {
-	if model == nil {
-		return nil, errors.New("document question answering pipeline requires a model")
-	}
-	if !model.IsGenerative {
-		return nil, errors.New("document question answering pipeline requires a generative model")
-	}
-	p := &DocumentQuestionAnsweringPipeline{questionAnsweringFamily{newQAPipeline(ctx, config, model)}}
-	for _, option := range config.Options {
-		if err := option(p); err != nil {
-			return nil, err
-		}
-	}
-	return p, p.validate("document question answering")
-}
-
-func NewTableQuestionAnsweringPipeline(ctx context.Context, config TableQuestionAnsweringConfig, model *backends.Model) (*TableQuestionAnsweringPipeline, error) {
-	if model == nil {
-		return nil, errors.New("table question answering pipeline requires a model")
-	}
-	if !model.IsGenerative {
-		return nil, errors.New("table question answering pipeline requires a generative model")
-	}
-	p := &TableQuestionAnsweringPipeline{questionAnsweringFamily{newQAPipeline(ctx, config, model)}}
-	for _, option := range config.Options {
-		if err := option(p); err != nil {
-			return nil, err
-		}
-	}
-	return p, p.validate("table question answering")
+	return p, p.Validate()
 }
 
 func (p *VisualQuestionAnsweringPipeline) Validate() error {
+	if p != nil && p.native != nil {
+		return p.validateNativeVQA()
+	}
 	return p.validate("visual question answering")
-}
-
-func (p *DocumentQuestionAnsweringPipeline) Validate() error {
-	return p.validate("document question answering")
-}
-
-func (p *TableQuestionAnsweringPipeline) Validate() error {
-	return p.validate("table question answering")
 }
 
 func (p *VisualQuestionAnsweringPipeline) Run(ctx context.Context, inputs []string) (backends.PipelineBatchOutput, error) {
@@ -415,6 +399,9 @@ func tableQuestionAnsweringMessages(inputs []TableQuestionAnsweringInput) ([][]b
 // to a multimodal conversation whose trailing turn carries the question and
 // the image path.
 func (p *VisualQuestionAnsweringPipeline) RunPipeline(ctx context.Context, inputs []VisualQuestionAnsweringInput) (*QuestionAnsweringTextOutput, error) {
+	if p.native != nil {
+		return p.runNativeVQA(ctx, inputs)
+	}
 	messages, err := visualQuestionAnsweringMessages(inputs)
 	if err != nil {
 		return nil, err
@@ -440,35 +427,11 @@ func (p *VisualQuestionAnsweringPipeline) RunWithImages(ctx context.Context, inp
 // temp PNG (cleaned up after the call returns); an ImagePath value is used
 // as-is. This is the in-memory counterpart to Run(ctx, []string) which loads
 // from paths.
-func (p *DocumentQuestionAnsweringPipeline) RunWithImages(ctx context.Context, inputs []backends.ImageTextInput) (*QuestionAnsweringTextOutput, error) {
+func (p *DocumentQuestionAnsweringPipeline) RunWithImages(ctx context.Context, inputs []backends.ImageTextInput) (*DocumentQuestionAnsweringOutput, error) {
 	values, cleanup, err := documentQuestionAnsweringRunWithImages(inputs)
 	if err != nil {
 		return nil, err
 	}
 	defer cleanup()
 	return p.RunPipeline(ctx, values)
-}
-
-func (p *DocumentQuestionAnsweringPipeline) RunPipeline(ctx context.Context, inputs []DocumentQuestionAnsweringInput) (*QuestionAnsweringTextOutput, error) {
-	values := make([]VisualQuestionAnsweringInput, len(inputs))
-	for i, input := range inputs {
-		path := input.DocumentPath
-		if path == "" {
-			path = input.ImagePath
-		}
-		values[i] = VisualQuestionAnsweringInput{ImagePath: path, Question: input.Question, Role: input.Role, History: input.History}
-	}
-	messages, err := visualQuestionAnsweringMessages(values)
-	if err != nil {
-		return nil, err
-	}
-	return p.runText(ctx, messages)
-}
-
-func (p *TableQuestionAnsweringPipeline) RunPipeline(ctx context.Context, inputs []TableQuestionAnsweringInput) (*QuestionAnsweringTextOutput, error) {
-	messages, err := tableQuestionAnsweringMessages(inputs)
-	if err != nil {
-		return nil, err
-	}
-	return p.runText(ctx, messages)
 }

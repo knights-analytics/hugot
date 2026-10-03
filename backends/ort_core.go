@@ -50,6 +50,14 @@ func newCoreFloat32Tensor(shape []int64, data []float32) (*coreORTTensor, error)
 	return &coreORTTensor{tensor: tensor}, nil
 }
 
+func newCoreBoolTensor(shape []int64, data []bool) (*coreORTTensor, error) {
+	tensor, err := ort.CreateTensor(shape, data)
+	if err != nil {
+		return nil, err
+	}
+	return &coreORTTensor{tensor: tensor}, nil
+}
+
 func (t *coreORTTensor) Close() error {
 	if t == nil || t.tensor == nil {
 		return nil

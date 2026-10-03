@@ -256,8 +256,12 @@ func (s *Session) NewPipeline[T backends.Pipeline](pipelineConfig backends.Pipel
 		return pipeline, fmt.Errorf("pipeline type not supported: %T", pipeline)
 	}
 
-	// Load model if it has not been loaded already
-	modelID := pipelineConfig.ModelPath + ":" + pipelineConfig.OnnxFilename
+	loading, err := resolvePipelineModelLoading(pipeline, pipelineConfig.ModelLoading, pipelineConfig.OnnxFilename)
+	if err != nil {
+		return pipeline, err
+	}
+	// Load model if it has not been loaded already. Runtime paths must not share a cache entry.
+	modelID := pipelineModelCacheID(pipelineConfig.ModelPath, pipelineConfig.OnnxFilename, loading)
 	modelLock := s.getModelLock(modelID)
 	modelLock.Lock()
 	defer modelLock.Unlock()
@@ -267,10 +271,11 @@ func (s *Session) NewPipeline[T backends.Pipeline](pipelineConfig backends.Pipel
 	s.registryMu.RUnlock()
 	if !ok {
 		var err error
-		model, err = backends.LoadModel(s.sessionContext, pipelineConfig.ModelPath, pipelineConfig.OnnxFilename, s.options, pipeline.IsGenerative())
+		model, err = backends.LoadModel(s.sessionContext, pipelineConfig.ModelPath, pipelineConfig.OnnxFilename, s.options, loading == backends.ModelLoadingGenAI)
 		if err != nil {
 			return pipeline, err
 		}
+		model.ID = modelID
 		s.registryMu.Lock()
 		s.models[modelID] = model
 		s.registryMu.Unlock()
@@ -288,6 +293,39 @@ func (s *Session) NewPipeline[T backends.Pipeline](pipelineConfig backends.Pipel
 	s.registryMu.Unlock()
 
 	return created.(T), nil
+}
+
+func resolvePipelineModelLoading(pipeline backends.Pipeline, loading backends.ModelLoading, filename string) (backends.ModelLoading, error) {
+	if loading == backends.ModelLoadingDefault || loading == "default" {
+		loading = backends.ModelLoadingONNX
+		if pipeline.IsGenerative() {
+			loading = backends.ModelLoadingGenAI
+		}
+	}
+	switch loading {
+	case backends.ModelLoadingONNX:
+		if pipeline.IsGenerative() {
+			switch pipeline.(type) {
+			case *pipelines.VisualQuestionAnsweringPipeline, *pipelines.ImageToTextPipeline:
+			default:
+				return "", fmt.Errorf("pipeline %T does not support ordinary ONNX loading", pipeline)
+			}
+		}
+	case backends.ModelLoadingGenAI:
+		if !pipeline.IsGenerative() {
+			return "", fmt.Errorf("pipeline %T does not support GenAI loading", pipeline)
+		}
+		if filename != "" {
+			return "", errors.New("GenAI loading uses genai_config.json and does not accept an ONNX filename")
+		}
+	default:
+		return "", fmt.Errorf("unsupported model loading mode %q", loading)
+	}
+	return loading, nil
+}
+
+func pipelineModelCacheID(path, filename string, loading backends.ModelLoading) string {
+	return fmt.Sprintf("%q:%q:%s", path, filename, loading)
 }
 
 // initializePipeline constructs a pipeline of type T from its config using the registered

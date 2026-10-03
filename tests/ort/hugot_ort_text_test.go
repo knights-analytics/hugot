@@ -11,6 +11,14 @@ import (
 
 // Feature extraction
 
+func TestRawFeatureExtractionPipelineORT(t *testing.T) {
+	runORTPipeline(t, testutil.RawFeatureExtractionPipeline)
+}
+
+func TestRawFeatureExtractionPipelineORTGoMLX(t *testing.T) {
+	runORTPipelineGoMLX(t, testutil.RawFeatureExtractionPipeline)
+}
+
 func TestFeatureExtractionPipelineORT(t *testing.T) {
 	runORTPipeline(t, testutil.FeatureExtractionPipeline)
 }

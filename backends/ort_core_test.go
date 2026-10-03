@@ -139,6 +139,47 @@ func TestToORTMessagesStripsMedia(t *testing.T) {
 	// toORTMessages itself would surface the drift.
 }
 
+func TestLoadMultimodalConversationsPreservesPreparedMessages(t *testing.T) {
+	inputs := [][]Message{
+		{
+			{Role: "user", Content: "Describe these images"},
+			{Role: "assistant", Content: "I will inspect them."},
+			{Role: "user", Content: "And this one"},
+		},
+		{{Role: "user", Content: "Describe this image"}},
+	}
+	// Media loading is independent of the already prepared prompt. Keep this
+	// test native-free while checking that image tags and system turns survive.
+	prepared := [][]ortgenai.Message{
+		{
+			{Role: "system", Content: "System prompt"},
+			{Role: "user", Content: "Describe these images\n<|image_1|>\n<|image_2|>"},
+			{Role: "assistant", Content: "I will inspect them."},
+			{Role: "user", Content: "And this one\n<|image_3|>"},
+		},
+		{
+			{Role: "system", Content: "System prompt"},
+			{Role: "user", Content: "Describe this image\n<|image_1|>"},
+		},
+	}
+	conversations, destroyers, err := loadMultimodalConversations(inputs, prepared)
+	require.NoError(t, err)
+	require.Empty(t, destroyers)
+	require.Len(t, conversations, len(prepared))
+	for i, conversation := range conversations {
+		require.Equal(t, prepared[i], conversation.Messages)
+		require.Nil(t, conversation.Images)
+		require.Nil(t, conversation.Audios)
+	}
+}
+
+func TestLoadMultimodalConversationsRejectsMismatchedMessages(t *testing.T) {
+	conversations, destroyers, err := loadMultimodalConversations([][]Message{{{ImageURLs: []string{"missing.jpg"}}}}, nil)
+	require.EqualError(t, err, "multimodal media and prepared messages must have the same conversation count")
+	require.Nil(t, conversations)
+	require.Nil(t, destroyers)
+}
+
 func TestValidateGenerativeEngineOptionsRejectsRuntimeControls(t *testing.T) {
 	cases := []struct {
 		name string

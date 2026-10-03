@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"image"
+	"math"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -14,6 +15,7 @@ import (
 	"github.com/knights-analytics/hugot/util/safeconv"
 )
 
+// BackgroundRemovalPipeline is a Hugot extension for foreground alpha prediction.
 type BackgroundRemovalPipeline struct {
 	*backends.BasePipeline
 	imageFormat string
@@ -45,17 +47,22 @@ func NewBackgroundRemovalPipeline(ctx context.Context, config backends.PipelineC
 	if model == nil {
 		return nil, errors.New("background removal pipeline requires a model")
 	}
-	p := &BackgroundRemovalPipeline{BasePipeline: backends.NewBasePipeline(ctx, config, model), normalize: []imageutil.NormalizationStep{imageutil.RescaleStep(), imageutil.ImagenetPixelNormalizationStep()}}
+	p := &BackgroundRemovalPipeline{BasePipeline: backends.NewBasePipeline(ctx, config, model)}
 	for _, option := range config.Options {
 		if err := option(p); err != nil {
 			return nil, err
 		}
 	}
+	if len(p.normalize) == 0 {
+		p.normalize = []imageutil.NormalizationStep{imageutil.RescaleStep(), imageutil.ImagenetPixelNormalizationStep()}
+	}
 	format, err := backends.DetectImageTensorFormat(model)
 	if err != nil {
 		return nil, err
 	}
-	p.imageFormat = format
+	if p.imageFormat == "" {
+		p.imageFormat = format
+	}
 	if err := p.Validate(); err != nil {
 		return nil, err
 	}
@@ -82,6 +89,9 @@ func (p *BackgroundRemovalPipeline) GetStatistics() backends.PipelineStatistics 
 }
 
 func (p *BackgroundRemovalPipeline) Validate() error {
+	if p == nil || p.BasePipeline == nil || p.Model == nil {
+		return errors.New("background removal requires a model")
+	}
 	var errs []error
 	if len(p.Model.InputsMeta) == 0 || len(p.Model.InputsMeta[0].Dimensions) != 4 {
 		errs = append(errs, errors.New("background removal requires a four-dimensional image input"))
@@ -101,8 +111,31 @@ func (p *BackgroundRemovalPipeline) Validate() error {
 	if p.OutputName == "" {
 		errs = append(errs, errors.New("could not infer background-removal mask output; set WithBackgroundRemovalOutput"))
 	}
+	found := false
+	for _, out := range p.Model.OutputsMeta {
+		if out.Name != p.OutputName {
+			continue
+		}
+		found = true
+		if len(out.Dimensions) != 3 && (len(out.Dimensions) != 4 || out.Dimensions[1] != 1) {
+			errs = append(errs, errors.New("background removal requires a single-channel foreground alpha output, not semantic class logits"))
+		}
+	}
+	if !found {
+		errs = append(errs, fmt.Errorf("background-removal output %q not found", p.OutputName))
+	}
 	return errors.Join(errs...)
 }
+
+func (p *BackgroundRemovalPipeline) addPreprocessSteps(steps ...imageutil.PreprocessStep) {
+	p.preprocess = append(p.preprocess, steps...)
+}
+
+func (p *BackgroundRemovalPipeline) addNormalizationSteps(steps ...imageutil.NormalizationStep) {
+	p.normalize = append(p.normalize, steps...)
+}
+
+func (p *BackgroundRemovalPipeline) setImageFormat(format string) { p.imageFormat = format }
 
 func (p *BackgroundRemovalPipeline) preprocessBatch(batch *backends.PipelineBatch, images []image.Image) error {
 	if len(images) == 0 {
@@ -148,20 +181,36 @@ func (p *BackgroundRemovalPipeline) postprocess(batch *backends.PipelineBatch) (
 	results := make([]BackgroundRemovalResult, len(sizes))
 	raw := batch.OutputValues[idx]
 	for i, size := range sizes {
+		if size.X <= 0 || size.Y <= 0 {
+			return nil, errors.New("background-removal source dimensions must be positive")
+		}
 		var mask [][]float32
 		switch v := raw.(type) {
 		case [][][]float32:
-			if i >= len(v) {
+			if len(v) != len(sizes) {
 				return nil, errors.New("background-removal output batch mismatch")
 			}
 			mask = v[i]
 		case [][][][]float32:
-			if i >= len(v) || len(v[i]) == 0 {
-				return nil, errors.New("background-removal output is empty")
+			if len(v) != len(sizes) || len(v[i]) != 1 {
+				return nil, errors.New("background-removal output must have one foreground channel per source image")
 			}
 			mask = v[i][0]
 		default:
 			return nil, fmt.Errorf("unsupported background-removal output type %T", raw)
+		}
+		if len(mask) == 0 || len(mask[0]) == 0 {
+			return nil, errors.New("background-removal mask is empty")
+		}
+		for _, row := range mask {
+			if len(row) != len(mask[0]) {
+				return nil, errors.New("background-removal mask has inconsistent row widths")
+			}
+			for _, value := range row {
+				if math.IsNaN(float64(value)) || math.IsInf(float64(value), 0) || value < 0 || value > 1 {
+					return nil, errors.New("background-removal alpha values must be finite probabilities in [0, 1]")
+				}
+			}
 		}
 		results[i] = BackgroundRemovalResult{Width: size.X, Height: size.Y, Mask: resizeFloatMask(mask, size.X, size.Y)}
 	}

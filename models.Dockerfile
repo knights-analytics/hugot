@@ -13,8 +13,16 @@ COPY models/Xenova_detr-resnet-50 ./models/Xenova_detr-resnet-50
 COPY models/Xenova_clip-vit-base-patch32 ./models/Xenova_clip-vit-base-patch32
 COPY models/Xenova_owlv2-base-patch16 ./models/Xenova_owlv2-base-patch16
 COPY models/Xenova_segformer-b0-finetuned-ade-512-512 ./models/Xenova_segformer-b0-finetuned-ade-512-512
+COPY models/Xenova_slimsam-77-uniform ./models/Xenova_slimsam-77-uniform
+COPY models/Xenova_donut-base-finetuned-docvqa ./models/Xenova_donut-base-finetuned-docvqa
+COPY models/KnightsAnalytics_tapas-base-finetuned-sqa ./models/KnightsAnalytics_tapas-base-finetuned-sqa
+COPY models/Xenova_dino-vits16 ./models/Xenova_dino-vits16
+COPY models/Xenova_modnet ./models/Xenova_modnet
 COPY models/Xenova_dpt-large ./models/Xenova_dpt-large
 COPY models/KnightsAnalytics_iris-decision-tree ./models/KnightsAnalytics_iris-decision-tree
 COPY models/Xenova_wav2vec2-large-xlsr-53-gender-recognition-librispeech ./models/Xenova_wav2vec2-large-xlsr-53-gender-recognition-librispeech
+COPY models/Xenova_larger_clap_music_and_speech ./models/Xenova_larger_clap_music_and_speech
 COPY models/Xenova_wav2vec2-base-960h ./models/Xenova_wav2vec2-base-960h
 COPY models/Xenova_mms-tts-eng ./models/Xenova_mms-tts-eng
+COPY models/imageData ./models/imageData
+COPY models/audioData ./models/audioData

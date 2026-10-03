@@ -21,20 +21,24 @@ func TestVisualQuestionAnsweringPipelineValidationGo(t *testing.T) {
 // Document question answering
 
 func TestDocumentQuestionAnsweringPipelineGo(t *testing.T) {
+	t.Skip("Skipping test due to unimplemented ONNX op \"ConvInteger\" issue with Go pipeline")
 	runGoPipeline(t, testutil.DocumentQuestionAnsweringPipeline)
 }
 
 func TestDocumentQuestionAnsweringPipelineValidationGo(t *testing.T) {
+	t.Skip("Skipping test due to unimplemented ONNX op \"ConvInteger\" issue with Go pipeline")
 	runGoPipelineValidation(t, testutil.DocumentQuestionAnsweringPipelineValidation)
 }
 
 // Table question answering
 
 func TestTableQuestionAnsweringPipelineGo(t *testing.T) {
+	t.Skip("Skipping test due to unimplemented ONNX op \"ScatterElements\" issue with Go pipeline")
 	runGoPipeline(t, testutil.TableQuestionAnsweringPipeline)
 }
 
 func TestTableQuestionAnsweringPipelineValidationGo(t *testing.T) {
+	t.Skip("Skipping test due to unimplemented ONNX op \"ScatterElements\" issue with Go pipeline")
 	runGoPipelineValidation(t, testutil.TableQuestionAnsweringPipelineValidation)
 }
 

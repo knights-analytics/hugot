@@ -60,8 +60,8 @@ github.com/mattn/go-isatty v0.0.20 h1:xfD0iDuEKnDkl03q4limB+vH+GxLEtL/jb4xVJSWWE
 github.com/mattn/go-isatty v0.0.20/go.mod h1:W+V8PltTTMOvKvAeJH7IuucS94S2C6jfK/D7dTCTo3Y=
 github.com/mattn/go-runewidth v0.0.21 h1:jJKAZiQH+2mIinzCJIaIG9Be1+0NR+5sz/lYEEjdM8w=
 github.com/mattn/go-runewidth v0.0.21/go.mod h1:XBkDxAl56ILZc9knddidhrOlY5R/pDhgLpndooCuJAs=
-github.com/microsoft/onnxruntime/go v0.0.0-20261002084303-27f3d47e38cd h1:QrhdDcCUP8JjODUGnuiO/K4W0/vWCupIgzH7FxcCiuQ=
-github.com/microsoft/onnxruntime/go v0.0.0-20261002084303-27f3d47e38cd/go.mod h1:y6lrwg9wJfp1/eahM089k+5YM7nekCeWhl8UGvefyzo=
+github.com/microsoft/onnxruntime/go v0.0.0-20261003023054-e236378862ef h1:IKqWrUX0/RwmjpOAh49hbHpqNgrVTqsHMsroX9S0ogE=
+github.com/microsoft/onnxruntime/go v0.0.0-20261003023054-e236378862ef/go.mod h1:y6lrwg9wJfp1/eahM089k+5YM7nekCeWhl8UGvefyzo=
 github.com/mitchellh/colorstring v0.0.0-20190213212951-d06e56a500db h1:62I3jR2EmQ4l5rM/4FEfDWcRD+abF5XlKShorW5LRoQ=
 github.com/mitchellh/colorstring v0.0.0-20190213212951-d06e56a500db/go.mod h1:l0dey0ia/Uv7NcFFVbCLtqEBQbrT4OCwCSKTEv6enCw=
 github.com/muesli/termenv v0.16.0 h1:S5AlUN9dENB57rsbnkPyfdGuWIlkmzJjbFf0Tf5FWUc=

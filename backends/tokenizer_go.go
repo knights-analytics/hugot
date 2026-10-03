@@ -63,6 +63,7 @@ func getGoTokenizerOptions(model *Model) (api.EncodeOptions, bool, bool, error) 
 			lowerName := strings.ToLower(input.Name)
 			if strings.HasPrefix(lowerName, "past_key_values") ||
 				strings.Contains(lowerName, "pixel_values") ||
+				lowerName == "pixel_mask" ||
 				strings.Contains(lowerName, "image") ||
 				lowerName == "input_values" ||
 				lowerName == "input_features" ||

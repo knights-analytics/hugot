@@ -42,9 +42,9 @@ func TestQuestionAnsweringFamiliesGenerativeStatusOnNilPipelines(t *testing.T) {
 	var imageToText *ImageToTextPipeline
 	var imageTextToText *ImageTextToTextPipeline
 
-	if !visual.IsGenerative() || !document.IsGenerative() || !table.IsGenerative() ||
+	if !visual.IsGenerative() || document.IsGenerative() || table.IsGenerative() ||
 		!imageToText.IsGenerative() || !imageTextToText.IsGenerative() {
-		t.Fatal("expected all multimodal generative pipelines to be generative")
+		t.Fatal("only conversational VQA and image generation use the GenAI model loader")
 	}
 }
 

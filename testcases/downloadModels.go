@@ -3,12 +3,14 @@ package main
 import (
 	"context"
 	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/knights-analytics/hugot"
 	"github.com/knights-analytics/hugot/util/fileutil"
@@ -22,6 +24,8 @@ type downloadModel struct {
 	externalDataPath string
 	additionalFiles  []string
 	preservePaths    bool
+	revision         string
+	preparedFiles    []string
 }
 
 var models = []downloadModel{
@@ -33,15 +37,23 @@ var models = []downloadModel{
 	{name: "KnightsAnalytics/distilbert-onnx"},
 	{name: "SamLowe/roberta-base-go_emotions-onnx", onnxFilePath: "onnx/model.onnx"},
 	{name: "jinaai/jina-reranker-v1-tiny-en", onnxFilePath: "onnx/model.onnx"},
-	{name: "KnightsAnalytics/resnet50"},
+	{name: "KnightsAnalytics/resnet50", onnxFilePath: "resnet50-v1-12.onnx"},
+	{name: "dandelin/vilt-b32-finetuned-vqa", preparedFiles: []string{"model.onnx", "config.json", "preprocessor_config.json", "tokenizer.json", "export_verification.json"}},
+	{name: "Xenova/vit-gpt2-image-captioning", onnxFilePath: "onnx/encoder_model_quantized.onnx", additionalFiles: []string{"onnx/decoder_model_quantized.onnx", "preprocessor_config.json"}, revision: "215b4edcb7ec1fad5905a18a03f7b2007f6fabd0"},
 	{name: "Xenova/detr-resnet-50", onnxFilePath: "onnx/model.onnx"},
 	{name: "Xenova/clip-vit-base-patch32", onnxFilePath: "onnx/model.onnx"},
 	{name: "Xenova/owlv2-base-patch16", onnxFilePath: "onnx/model_q4.onnx"},
 	{name: "Xenova/segformer-b0-finetuned-ade-512-512", onnxFilePath: "onnx/model.onnx"},
+	{name: "Xenova/slimsam-77-uniform", onnxFilePath: "onnx/vision_encoder.onnx", additionalFiles: []string{"onnx/prompt_encoder_mask_decoder.onnx", "preprocessor_config.json"}},
+	{name: "Xenova/donut-base-finetuned-docvqa", onnxFilePath: "onnx/encoder_model_quantized.onnx", additionalFiles: []string{"onnx/decoder_model_quantized.onnx", "preprocessor_config.json"}},
+	{name: "KnightsAnalytics/tapas-base-finetuned-sqa", onnxFilePath: "model.onnx"},
+	{name: "Xenova/dino-vits16", onnxFilePath: "onnx/model.onnx", additionalFiles: []string{"preprocessor_config.json"}},
+	{name: "Xenova/modnet", onnxFilePath: "onnx/model.onnx", additionalFiles: []string{"preprocessor_config.json"}},
 	{name: "Xenova/dpt-large", onnxFilePath: "onnx/model_q4.onnx"},
 	{name: "KnightsAnalytics/iris-decision-tree", onnxFilePath: "model.onnx"},
 	{name: "KnightsAnalytics/qwen3-4B-int4", onnxFilePath: "model.onnx", externalDataPath: "model.onnx.data"},
 	{name: "Xenova/wav2vec2-large-xlsr-53-gender-recognition-librispeech", onnxFilePath: "onnx/model.onnx"},
+	{name: "Xenova/larger_clap_music_and_speech", onnxFilePath: "onnx/model_quantized.onnx"},
 	{name: "Xenova/wav2vec2-base-960h", onnxFilePath: "onnx/model_q4.onnx"},
 	{name: "Xenova/mms-tts-eng", onnxFilePath: "onnx/model.onnx"},
 	{
@@ -69,18 +81,45 @@ var extraFiles = []struct {
 }{
 	// Cat image from HuggingFace cats-image dataset
 	{"https://huggingface.co/datasets/huggingface/cats-image/resolve/main/cats_image.jpeg", "./models/imageData/cat.jpg"},
+	{"https://huggingface.co/datasets/Xenova/transformers.js-docs/resolve/main/invoice.png", "./models/imageData/invoice.png"},
+	{"https://huggingface.co/datasets/Xenova/transformers.js-docs/resolve/main/portrait-of-woman.jpg", "./models/imageData/portrait.jpg"},
 	// Speech sample from the HuggingFace LibriSpeech dataset
 	{"https://huggingface.co/datasets/bezzam/audio_samples/resolve/main/librispeech_mr_quilter.wav", "./models/audioData/librispeech.wav"},
 }
 
 func main() {
-	ctx := fileutil.WithFileSystem(context.Background(), nil)
+	selected := flag.String("model", "", "download only this Hugging Face model (default: all test models)")
+	timeout := flag.Duration("timeout", 10*time.Minute, "deadline for downloading test models and data")
+	flag.Parse()
+	ctx, cancel := context.WithTimeout(context.Background(), *timeout)
+	defer cancel()
+	ctx = fileutil.WithFileSystem(ctx, nil)
 	if err := os.MkdirAll("./models", os.ModePerm); err != nil {
 		panic(err)
 	}
 	for _, model := range models {
+		if *selected != "" && model.name != *selected {
+			continue
+		}
 		if os.Getenv("CI") != "" && (model.name == "KnightsAnalytics/qwen3-4B-int4" || model.name == "microsoft/Phi-3.5-vision-instruct-onnx") {
 			continue // skipping this model for cicd
+		}
+		if len(model.preparedFiles) > 0 {
+			output := filepath.Join("models", strings.ReplaceAll(model.name, "/", "_"))
+			for _, filename := range model.preparedFiles {
+				exists, err := fileutil.FileExists(ctx, filepath.Join(output, filename))
+				if err != nil {
+					panic(err)
+				}
+				if !exists {
+					if *selected != "" {
+						panic(fmt.Errorf("%s requires a prepared, verified ONNX export in %s (missing %s); see README native model fixtures", model.name, output, filename))
+					}
+					fmt.Printf("Skipping %s: prepared ONNX export missing %s (see README native model fixtures)\n", model.name, filename)
+					break
+				}
+			}
+			continue
 		}
 		exists, err := fileutil.FileExists(ctx, "./models/"+strings.ReplaceAll(model.name, "/", "_"))
 		if err != nil {
@@ -94,6 +133,9 @@ func main() {
 		options.ExternalDataPath = model.externalDataPath
 		options.AdditionalFilePaths = model.additionalFiles
 		options.PreservePaths = model.preservePaths
+		if model.revision != "" {
+			options.Branch = model.revision
+		}
 		fmt.Printf("Downloading %s\n", model.name)
 		outPath, err := hugot.DownloadModel(ctx, model.name, "./models", options)
 		if err != nil {

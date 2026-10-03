@@ -71,6 +71,93 @@ Currently, we have implementations for the following transformer pipelines:
 - [zeroShotImageClassification](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.ZeroShotImageClassificationPipeline)
 - [zeroShotObjectDetection](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.ZeroShotObjectDetectionPipeline) (currently ORT only)
 
+### Model-family and reference coverage
+
+These pipelines implement supported subsets, not universal Transformers Python parity.
+Checkpoint graph contracts, processors, and backend operators matter; exporting an
+arbitrary model to ONNX does not establish pipeline compatibility.
+
+| Task | Fixture family / supported path | Limits |
+| --- | --- | --- |
+| Text classification, zero-shot classification, NER, fill-mask, extractive QA | DistilBERT, RoBERTa, DeBERTa, BERT | Task-specific heads and tokenizer contracts required |
+| Visual question answering | Native ViLT scored answers; existing Phi-3.5 VLM | ViLT uses individually processed unpadded images, sigmoid scores and `top_k`; no native chat or streaming |
+| Image-to-text | Native ViT-GPT2 encoder/decoder; existing prompted Phi-3.5 VLM | Native path is image-only greedy decoding, no past-key cache or chat; max 1023 generated tokens |
+| Image classification / detection | ResNet / DETR / OWLv2 | Checkpoint-specific resize, crop, interpolation and normalization |
+| Segmentation / depth / masks | SegFormer / DPT / SlimSAM | These fixtures do not establish every task mode or architecture |
+| Joint zero-shot classification | CLIP image/text / CLAP audio/text | Model-specific joint embedding contracts |
+| Text / image features | MiniLM / DINO hidden states | Raw sequence tensors or existing mean-pooled embeddings; explicit model pooler only when exposed by the graph |
+| Speech recognition | Wav2Vec2 | Greedy CTC only; no Whisper/seq2seq, chunking or timestamp parity |
+| Document QA | Donut | Dedicated encoder/decoder document path; no OCR/LayoutLM support |
+| Table QA | TAPAS SQA | Independent queries and call-local sequential follow-ups; real aggregation-checkpoint reference coverage remains pending |
+| Speech / audio generation | MMS-TTS | `text-to-speech` and `text-to-audio` alias coverage, not MusicGen or arbitrary audio generators |
+| Reranking / tabular / background removal | Cross-encoder / iris decision tree / MODNet | Hugot extensions, not direct Transformers Python pipeline equivalents |
+
+The native ViLT and ViT-GPT2 fixtures are verified with direct ORT CPU inference.
+The heavy Phi-3.5 VLM checks remain separate and are skipped in CI and GoMLX/XLA
+runs; a skip is not evidence of tested capability. Donut GoMLX tests explicitly
+skip unsupported `ConvInteger`; TAPAS GoMLX tests skip `ScatterElements`.
+Other backends are not implied to support these graphs merely because they load
+ordinary ONNX models.
+
+`RunRaw` on text/image feature pipelines (and `RunRawWithImages` for in-memory
+images) returns `RawFeatureOutput` with actual `Dimensions` and unnormalized
+`HiddenStates` shaped `[batch, sequence, hidden]`, including padding tokens.
+Rank-two outputs populate `Embeddings` instead. Existing pooled/normalized
+methods remain unchanged. `WithModelPooler()` / `WithImageModelPooler()` explicitly
+select `pooler_output`; missing model poolers are errors, not a mean-pooling
+fallback. Raw-feature integration checks validate shapes and reconstruction of
+legacy embeddings, not yet pinned Python hidden-state values.
+
+`TableQuestionAnsweringPipeline.RunSequential(ctx, table, questions)` sends each
+preceding answer's selected cells through TAPAS `prev_labels`. State stays local
+to that call; `RunPipeline` inputs remain independent. Configured row/column
+bounds and token limits are enforced instead of silently dropping cells. Scalar
+numeric-column ranks and comparison features are supported; Python numeric
+spans, dates, number words, ordinals, and tokenizer customization are not fully
+matched. Aggregation outputs preserve `AGGREGATOR > cells` rather than computing
+arithmetic, but synthetic aggregation tests do not establish WTQ model parity.
+
+### Native model fixtures
+
+For ViLT or native captioning, set `ModelLoading: backends.ModelLoadingONNX` in
+the pipeline configuration. The default preserves the existing ORT GenAI/VLM
+loading behavior; the session model cache separates effective loading modes.
+Native captioning also sets `OnnxFilename: "encoder_model_quantized.onnx"` and
+loads `decoder_model_quantized.onnx` as a parent-owned companion graph.
+
+- ViLT: the verified local export is in `models/dandelin_vilt-b32-finetuned-vqa`,
+  based on `dandelin/vilt-b32-finetuned-vqa` revision
+  `d0a1f6ab88522427a7ae76ceb6e1e1e7b68a1d08`. Its required artifacts are
+  `model.onnx`, `config.json`, `preprocessor_config.json`, `tokenizer.json` and
+  `export_verification.json`. Preserve the verification report when hosting the
+  export under KnightsAnalytics. This graph uses batch size one, dynamic text and
+  image dimensions, all image patches in raster order, image dimensions divisible
+  by 32 and an all-ones pixel mask. An upstream model card is not an ONNX export.
+  Until a hosted repository and revision are available, the downloader validates
+  a prepared local fixture rather than attempting to download nonexistent ONNX.
+- Captioning: `Xenova/vit-gpt2-image-captioning` revision
+  `215b4edcb7ec1fad5905a18a03f7b2007f6fabd0`, with quantized encoder and decoder,
+  configuration, tokenizer and processor. The supported processor resizes to
+  224x224 with bilinear interpolation, rescales by 1/255, then normalizes with
+  mean/std 0.5. Start/EOS IDs come from the checkpoint configuration. Generation
+  defaults to 20 greedy tokens; quantized captions are not claimed to exactly
+  match full-precision Python generation.
+
+`testcases/embedded/pipelineReference.json` records pinned ResNet preprocessing
+provenance, deterministic synthetic inputs and interpolation tolerances.
+`viltReference.json` records deterministic ViLT token, pixel and score comparisons;
+the export verification report includes full original-versus-ONNX logits.
+Go tests consume these fixtures without Python. Python exporters, environments
+and dependency manifests are intentionally not kept in this repository; new
+reference data must be generated externally with pinned versions and revisions.
+
+On Windows, set `$env:ONNXRUNTIME_DIR='E:\ort-lib'` before running the ORT tests.
+Use bounded runs, for example:
+
+```powershell
+go test '-tags=ORT' ./tests/ort '-run=^TestNative(VisualQuestionAnswering|ImageToText)PipelineORT$' '-timeout=90s' -count=1
+```
+
 ## Installation and usage
 
 ### Choosing a backend

@@ -1,6 +1,115 @@
 package backends
 
-import "testing"
+import (
+	"encoding/json"
+	"image"
+	"image/color"
+	"math"
+	"testing"
+
+	"github.com/knights-analytics/hugot/testcases/embedded"
+	"github.com/knights-analytics/hugot/util/imageutil"
+)
+
+func TestPreprocessImagesPythonReference(t *testing.T) {
+	var reference struct {
+		Cases []struct {
+			Name  string
+			Input struct {
+				Kind          string
+				Width, Height int
+				RGB           [3]uint8
+			}
+			OutputShape       []int   `json:"output_shape"`
+			AbsoluteTolerance float64 `json:"absolute_tolerance"`
+			Samples           []struct {
+				X, Y   int
+				Values [3]float64
+			}
+		}
+	}
+	if err := json.Unmarshal(embedded.PipelineReferenceByte, &reference); err != nil {
+		t.Fatal(err)
+	}
+	if len(reference.Cases) != 5 {
+		t.Fatalf("expected five Python reference cases, got %d", len(reference.Cases))
+	}
+	for _, tc := range reference.Cases {
+		t.Run(tc.Name, func(t *testing.T) {
+			img := image.NewRGBA(image.Rect(0, 0, tc.Input.Width, tc.Input.Height))
+			for y := range tc.Input.Height {
+				for x := range tc.Input.Width {
+					rgb := tc.Input.RGB
+					if tc.Input.Kind != "constant" {
+						for c := range rgb {
+							rgb[c] = uint8((17*x + 29*y + 43*c + 7*((x*y)%19)) % 256)
+						}
+					}
+					img.SetRGBA(x, y, color.RGBA{R: rgb[0], G: rgb[1], B: rgb[2], A: 255})
+				}
+			}
+			var preprocess []imageutil.PreprocessStep
+			if tc.Input.Kind != "constant" {
+				preprocess = []imageutil.PreprocessStep{imageutil.ResizeBilinearStep(256), imageutil.CenterCropStep(224, 224)}
+			}
+			values, err := PreprocessImages("NCHW", []image.Image{img}, preprocess,
+				[]imageutil.NormalizationStep{imageutil.RescaleStep(), imageutil.ImagenetPixelNormalizationStep()})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(tc.OutputShape) != 4 || tc.OutputShape[0] != len(values) ||
+				tc.OutputShape[1] != len(values[0]) || tc.OutputShape[2] != len(values[0][0]) ||
+				tc.OutputShape[3] != len(values[0][0][0]) {
+				t.Fatalf("processed tensor does not match reference shape %v", tc.OutputShape)
+			}
+			for _, sample := range tc.Samples {
+				for c, want := range sample.Values {
+					got := float64(values[0][c][sample.Y][sample.X])
+					if math.IsNaN(got) || math.IsInf(got, 0) || math.Abs(got-want) > tc.AbsoluteTolerance {
+						t.Errorf("channel %d pixel (%d,%d): got %g, want %g (tolerance %g)", c, sample.X, sample.Y, got, want, tc.AbsoluteTolerance)
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestPreprocessImagesRescaleBeforeNormalize(t *testing.T) {
+	img := image.NewRGBA(image.Rect(0, 0, 1, 1))
+	img.SetRGBA(0, 0, color.RGBA{R: 255, G: 128, B: 0, A: 255})
+	steps := []imageutil.NormalizationStep{imageutil.RescaleStep(), imageutil.ImagenetPixelNormalizationStep()}
+	mean := [3]float64{0.485, 0.456, 0.406}
+	std := [3]float64{0.229, 0.224, 0.225}
+	pixels := [3]float64{255, 128, 0}
+	for _, format := range []string{"NCHW", "NHWC"} {
+		t.Run(format, func(t *testing.T) {
+			values, err := PreprocessImages(format, []image.Image{img}, nil, steps)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for c := range 3 {
+				var got float32
+				if format == "NCHW" {
+					got = values[0][c][0][0]
+				} else {
+					got = values[0][0][0][c]
+				}
+				want := (pixels[c]/255 - mean[c]) / std[c]
+				if math.Abs(float64(got)-want) > 1e-6 {
+					t.Fatalf("channel %d: got %g, want %g", c, got, want)
+				}
+			}
+		})
+	}
+	wrong, err := PreprocessImages("NCHW", []image.Image{img}, nil,
+		[]imageutil.NormalizationStep{imageutil.ImagenetPixelNormalizationStep(), imageutil.RescaleStep()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if math.Abs(float64(wrong[0][2][0][0])-(pixels[2]/255-mean[2])/std[2]) < 1 {
+		t.Fatal("synthetic pixel does not distinguish the original incorrect ordering")
+	}
+}
 
 func TestFlattenImageValuesPreservesNCHW(t *testing.T) {
 	model := &Model{InputsMeta: []InputOutputInfo{{Name: "pixel_values", Dimensions: Shape{-1, 3, 2, 2}}}}

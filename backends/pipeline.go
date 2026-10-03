@@ -117,12 +117,22 @@ func (p *PipelineStatistics) Print() {
 // PipelineOption is an option for a pipeline type.
 type PipelineOption[T Pipeline] func(eo T) error
 
+// ModelLoading selects the model runtime independently of generation behavior.
+type ModelLoading string
+
+const (
+	ModelLoadingDefault ModelLoading = ""
+	ModelLoadingONNX    ModelLoading = "onnx"
+	ModelLoadingGenAI   ModelLoading = "genai"
+)
+
 // PipelineConfig is a configuration for a pipeline type that can be used
 // to create that pipeline.
 type PipelineConfig[T Pipeline] struct {
 	ModelPath    string
 	Name         string
 	OnnxFilename string
+	ModelLoading ModelLoading
 	Options      []PipelineOption[T]
 }
 type timings struct {
@@ -184,18 +194,20 @@ type PipelineBatch struct {
 	Images any
 	// Audios is the audio counterpart of Images; set by the backend when a
 	// conversation (or conversations) carries AudioURLs.
-	Audios any
+	Audios             any
 	MultimodalMessages [][]Message
-	ImageText         []ImageTextInput
-	ImageValues       [][][][]float32
-	DestroyInputs     func() error
-	DestroyMultimodal func() error
-	Input             []TokenizedInput
-	PaddingMask       [][]bool
-	OutputValues      []any
-	Size              int
-	MaxSequenceLength int
-	MaxNewTokens      int
+	ImageText          []ImageTextInput
+	ImageValues        [][][][]float32
+	AudioFeatures      [][][][]float32
+	AudioIsLonger      []bool
+	DestroyInputs      func() error
+	DestroyMultimodal  func() error
+	Input              []TokenizedInput
+	PaddingMask        [][]bool
+	OutputValues       []any
+	Size               int
+	MaxSequenceLength  int
+	MaxNewTokens       int
 	// PaddedBatchSize is the bucketed batch size used when XLA pads the batch dimension.
 	// Zero means no batch padding was applied (ORT / GO backend).
 	PaddedBatchSize int
@@ -288,6 +300,49 @@ func CreateInputTensors(batch *PipelineBatch, model *Model) error {
 	return fmt.Errorf("pipeline backend is not configured")
 }
 
+// CreateAudioTextTensors creates the feature, duration, and token tensors used by CLAP models.
+func CreateAudioTextTensors(batch *PipelineBatch, model *Model, features [][][][]float32, isLonger []bool, inputs []TokenizedInput) error {
+	if model.Backend == nil {
+		return fmt.Errorf("pipeline backend is not configured")
+	}
+	backend, ok := model.Backend.(interface {
+		CreateAudioTextTensors(*PipelineBatch, *Model, [][][][]float32, []bool, []TokenizedInput) error
+	})
+	if !ok {
+		return fmt.Errorf("pipeline backend does not support audio/text input tensors")
+	}
+	return backend.CreateAudioTextTensors(batch, model, features, isLonger, inputs)
+}
+
+func flattenAudioFeatures(features [][][][]float32, batchSize int) ([]float32, []int64, error) {
+	if len(features) == 0 || len(features) != batchSize {
+		return nil, nil, fmt.Errorf("audio feature batch size %d does not match PipelineBatch size %d", len(features), batchSize)
+	}
+	channels, frames, bins := len(features[0]), 0, 0
+	if channels == 0 || len(features[0][0]) == 0 || len(features[0][0][0]) == 0 {
+		return nil, nil, fmt.Errorf("audio features must have non-empty channel, frame, and feature dimensions")
+	}
+	frames, bins = len(features[0][0]), len(features[0][0][0])
+	backing := make([]float32, 0, batchSize*channels*frames*bins)
+	for bi, sample := range features {
+		if len(sample) != channels {
+			return nil, nil, fmt.Errorf("audio feature sample %d has %d channels, expected %d", bi, len(sample), channels)
+		}
+		for ci, channel := range sample {
+			if len(channel) != frames {
+				return nil, nil, fmt.Errorf("audio feature sample %d channel %d has %d frames, expected %d", bi, ci, len(channel), frames)
+			}
+			for fi, frame := range channel {
+				if len(frame) != bins {
+					return nil, nil, fmt.Errorf("audio feature sample %d channel %d frame %d has %d bins, expected %d", bi, ci, fi, len(frame), bins)
+				}
+				backing = append(backing, frame...)
+			}
+		}
+	}
+	return backing, []int64{int64(batchSize), int64(channels), int64(frames), int64(bins)}, nil
+}
+
 // CreateTabularTensors builds input tensors for classic ML/tabular models.
 func CreateTabularTensors(batch *PipelineBatch, model *Model, features [][]float32) error {
 	if model.Backend != nil {
@@ -308,6 +363,7 @@ func NewBasePipeline[T Pipeline](sessionContext context.Context, config Pipeline
 }
 
 func CreateModelBackend(ctx context.Context, model *Model, s *options.Options) error {
+	model.loadOptions = s
 	err := GetOnnxModelPath(ctx, model)
 	if err != nil {
 		return err

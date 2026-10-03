@@ -1,0 +1,471 @@
+{
+  "schema_version": 1,
+  "model": {
+    "id": "KnightsAnalytics/resnet50",
+    "revision": "8ed0f05073f2c48b593e20aa9498009fa76a384c",
+    "artifact": "resnet50-v1-12.onnx",
+    "preprocessor_config_present": false
+  },
+  "provenance": {
+    "settings_source": "https://raw.githubusercontent.com/onnx/models/main/validated/vision/classification/resnet/README.md",
+    "note": "ONNX zoo ResNet settings: shortest edge 256, center crop 224, RGB /255 then ImageNet normalization. Explicit PIL bilinear interpolation uses antialiasing when downsampling. No unrelated checkpoint configuration is loaded.",
+    "processor_class": "transformers.CLIPImageProcessorPil",
+    "python": "3.14.4",
+    "versions": {
+      "transformers": "5.5.0",
+      "numpy": "2.4.4",
+      "Pillow": "12.2.0"
+    }
+  },
+  "layout": "NCHW float32; sample values are [R,G,B] at zero-based output (x,y)",
+  "input_formula": "For spatial inputs: uint8((17*x + 29*y + 43*c + 7*((x*y)%19))%256), x in [0,width), y in [0,height), c=0,1,2 for R,G,B. RGB uint8, no alpha.",
+  "tolerance_note": "Constant inputs allow float32 roundoff only. Spatial inputs allow at most one uint8 interpolation step per channel, bounded by 1/(255*min(image_std)), plus 1e-6 float32 roundoff; use absolute comparison.",
+  "cases": [
+    {
+      "name": "black",
+      "input": {
+        "kind": "constant",
+        "width": 2,
+        "height": 2,
+        "rgb": [
+          0,
+          0,
+          0
+        ]
+      },
+      "processor": {
+        "do_resize": false,
+        "size": {
+          "shortest_edge": 256
+        },
+        "resample": 2,
+        "do_center_crop": false,
+        "crop_size": {
+          "height": 224,
+          "width": 224
+        },
+        "do_rescale": true,
+        "rescale_factor": 0.00392156862745098,
+        "do_normalize": true,
+        "image_mean": [
+          0.485,
+          0.456,
+          0.406
+        ],
+        "image_std": [
+          0.229,
+          0.224,
+          0.225
+        ],
+        "do_convert_rgb": true
+      },
+      "output_shape": [
+        1,
+        3,
+        2,
+        2
+      ],
+      "absolute_tolerance": 1e-06,
+      "samples": [
+        {
+          "x": 0,
+          "y": 0,
+          "values": [
+            -2.1179039478302,
+            -2.0357141494750977,
+            -1.804444432258606
+          ]
+        },
+        {
+          "x": 1,
+          "y": 1,
+          "values": [
+            -2.1179039478302,
+            -2.0357141494750977,
+            -1.804444432258606
+          ]
+        }
+      ]
+    },
+    {
+      "name": "white",
+      "input": {
+        "kind": "constant",
+        "width": 2,
+        "height": 2,
+        "rgb": [
+          255,
+          255,
+          255
+        ]
+      },
+      "processor": {
+        "do_resize": false,
+        "size": {
+          "shortest_edge": 256
+        },
+        "resample": 2,
+        "do_center_crop": false,
+        "crop_size": {
+          "height": 224,
+          "width": 224
+        },
+        "do_rescale": true,
+        "rescale_factor": 0.00392156862745098,
+        "do_normalize": true,
+        "image_mean": [
+          0.485,
+          0.456,
+          0.406
+        ],
+        "image_std": [
+          0.229,
+          0.224,
+          0.225
+        ],
+        "do_convert_rgb": true
+      },
+      "output_shape": [
+        1,
+        3,
+        2,
+        2
+      ],
+      "absolute_tolerance": 1e-06,
+      "samples": [
+        {
+          "x": 0,
+          "y": 0,
+          "values": [
+            2.248908281326294,
+            2.4285714626312256,
+            2.640000104904175
+          ]
+        },
+        {
+          "x": 1,
+          "y": 1,
+          "values": [
+            2.248908281326294,
+            2.4285714626312256,
+            2.640000104904175
+          ]
+        }
+      ]
+    },
+    {
+      "name": "mixed_rgb",
+      "input": {
+        "kind": "constant",
+        "width": 2,
+        "height": 2,
+        "rgb": [
+          17,
+          128,
+          239
+        ]
+      },
+      "processor": {
+        "do_resize": false,
+        "size": {
+          "shortest_edge": 256
+        },
+        "resample": 2,
+        "do_center_crop": false,
+        "crop_size": {
+          "height": 224,
+          "width": 224
+        },
+        "do_rescale": true,
+        "rescale_factor": 0.00392156862745098,
+        "do_normalize": true,
+        "image_mean": [
+          0.485,
+          0.456,
+          0.406
+        ],
+        "image_std": [
+          0.229,
+          0.224,
+          0.225
+        ],
+        "do_convert_rgb": true
+      },
+      "output_shape": [
+        1,
+        3,
+        2,
+        2
+      ],
+      "absolute_tolerance": 1e-06,
+      "samples": [
+        {
+          "x": 0,
+          "y": 0,
+          "values": [
+            -1.8267831802368164,
+            0.20518219470977783,
+            2.361132860183716
+          ]
+        },
+        {
+          "x": 1,
+          "y": 1,
+          "values": [
+            -1.8267831802368164,
+            0.20518219470977783,
+            2.361132860183716
+          ]
+        }
+      ]
+    },
+    {
+      "name": "rectangular_upsample",
+      "input": {
+        "kind": "spatial",
+        "width": 37,
+        "height": 23
+      },
+      "processor": {
+        "do_resize": true,
+        "size": {
+          "shortest_edge": 256
+        },
+        "resample": 2,
+        "do_center_crop": true,
+        "crop_size": {
+          "height": 224,
+          "width": 224
+        },
+        "do_rescale": true,
+        "rescale_factor": 0.00392156862745098,
+        "do_normalize": true,
+        "image_mean": [
+          0.485,
+          0.456,
+          0.406
+        ],
+        "image_std": [
+          0.229,
+          0.224,
+          0.225
+        ],
+        "do_convert_rgb": true
+      },
+      "output_shape": [
+        1,
+        3,
+        224,
+        224
+      ],
+      "absolute_tolerance": 0.01750800280112045,
+      "samples": [
+        {
+          "x": 0,
+          "y": 0,
+          "values": [
+            1.6152923107147217,
+            -1.5105042457580566,
+            -0.8981263041496277
+          ]
+        },
+        {
+          "x": 223,
+          "y": 0,
+          "values": [
+            -1.1075435876846313,
+            -0.33753496408462524,
+            0.6356428861618042
+          ]
+        },
+        {
+          "x": 0,
+          "y": 223,
+          "values": [
+            -0.6622998714447021,
+            0.20518219470977783,
+            1.175947904586792
+          ]
+        },
+        {
+          "x": 223,
+          "y": 223,
+          "values": [
+            1.0673003196716309,
+            1.9733892679214478,
+            -1.4035730361938477
+          ]
+        },
+        {
+          "x": 112,
+          "y": 112,
+          "values": [
+            0.7933042645454407,
+            1.693277359008789,
+            2.4482791423797607
+          ]
+        },
+        {
+          "x": 17,
+          "y": 31,
+          "values": [
+            -0.6622998714447021,
+            0.20518219470977783,
+            1.175947904586792
+          ]
+        },
+        {
+          "x": 73,
+          "y": 149,
+          "values": [
+            0.31381115317344666,
+            1.2030812501907349,
+            0.7227888703346252
+          ]
+        },
+        {
+          "x": 201,
+          "y": 9,
+          "values": [
+            -0.919171154499054,
+            -0.057422954589128494,
+            0.9145100116729736
+          ]
+        },
+        {
+          "x": 111,
+          "y": 113,
+          "values": [
+            0.8960527777671814,
+            1.7457983493804932,
+            1.803398847579956
+          ]
+        }
+      ]
+    },
+    {
+      "name": "rectangular_downsample",
+      "input": {
+        "kind": "spatial",
+        "width": 503,
+        "height": 301
+      },
+      "processor": {
+        "do_resize": true,
+        "size": {
+          "shortest_edge": 256
+        },
+        "resample": 2,
+        "do_center_crop": true,
+        "crop_size": {
+          "height": 224,
+          "width": 224
+        },
+        "do_rescale": true,
+        "rescale_factor": 0.00392156862745098,
+        "do_normalize": true,
+        "image_mean": [
+          0.485,
+          0.456,
+          0.406
+        ],
+        "image_std": [
+          0.229,
+          0.224,
+          0.225
+        ],
+        "do_convert_rgb": true
+      },
+      "output_shape": [
+        1,
+        3,
+        224,
+        224
+      ],
+      "absolute_tolerance": 0.01750800280112045,
+      "samples": [
+        {
+          "x": 0,
+          "y": 0,
+          "values": [
+            -1.3130406141281128,
+            -0.7051820158958435,
+            0.26962968707084656
+          ]
+        },
+        {
+          "x": 223,
+          "y": 0,
+          "values": [
+            0.4165596663951874,
+            0.45028021931648254,
+            1.2456645965576172
+          ]
+        },
+        {
+          "x": 0,
+          "y": 223,
+          "values": [
+            -0.25130581855773926,
+            -0.4600839912891388,
+            0.26962968707084656
+          ]
+        },
+        {
+          "x": 223,
+          "y": 223,
+          "values": [
+            0.22818739712238312,
+            1.1155462265014648,
+            1.2108062505722046
+          ]
+        },
+        {
+          "x": 112,
+          "y": 112,
+          "values": [
+            0.17681314051151276,
+            -0.8977590203285217,
+            0.07790856808423996
+          ]
+        },
+        {
+          "x": 17,
+          "y": 31,
+          "values": [
+            1.2214230298995972,
+            0.3802522122859955,
+            0.8622223734855652
+          ]
+        },
+        {
+          "x": 73,
+          "y": 149,
+          "values": [
+            0.5021834373474121,
+            0.6603642106056213,
+            -1.1769933700561523
+          ]
+        },
+        {
+          "x": 201,
+          "y": 9,
+          "values": [
+            -1.4500386714935303,
+            -0.6001399755477905,
+            0.3742048442363739
+          ]
+        },
+        {
+          "x": 111,
+          "y": 113,
+          "values": [
+            0.5193082094192505,
+            1.4131653308868408,
+            -0.7238343954086304
+          ]
+        }
+      ]
+    }
+  ]
+}

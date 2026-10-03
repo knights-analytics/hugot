@@ -433,7 +433,7 @@ func runGenerativeORTSessionOnBatch(ctx context.Context, batch *PipelineBatch, p
 			cancel()
 			return nil, nil, errors.New("multimodal generation requires a session, but only engine is initialized")
 		}
-		convs, destroyers, loadErr := loadMultimodalConversations(batch.MultimodalMessages)
+		convs, destroyers, loadErr := loadMultimodalConversations(batch.MultimodalMessages, inputs)
 		if loadErr != nil {
 			cancel()
 			return nil, nil, loadErr
@@ -639,6 +639,39 @@ func createInputTensorsORT(batch *PipelineBatch, model *Model) error {
 
 	// 2) build each tensor
 	for mi, meta := range model.InputsMeta {
+		if strings.EqualFold(meta.Name, "input_features") {
+			backing, dimensions, err := flattenAudioFeatures(batch.AudioFeatures, batch.Size)
+			if err != nil {
+				return err
+			}
+			t, err := newCoreFloat32Tensor(dimensions, backing)
+			if err != nil {
+				return err
+			}
+			inputVals[mi] = t
+			continue
+		}
+		if strings.EqualFold(meta.Name, "is_longer") {
+			if len(batch.AudioIsLonger) != batch.Size {
+				return fmt.Errorf("audio duration flags do not match batch size")
+			}
+			shape := make([]int64, len(meta.Dimensions))
+			shape[0] = int64(batch.Size)
+			for i := 1; i < len(shape); i++ {
+				shape[i] = 1
+				if meta.Dimensions[i] > 0 {
+					shape[i] = meta.Dimensions[i]
+				}
+			}
+			backing := make([]bool, batch.Size)
+			copy(backing, batch.AudioIsLonger)
+			t, err := newCoreBoolTensor(shape, backing)
+			if err != nil {
+				return err
+			}
+			inputVals[mi] = t
+			continue
+		}
 		if isImageInput(meta.Name) {
 			backing, dimensions, err := flattenImageValues(model, batch.Size, batch.ImageValues)
 			if err != nil {
@@ -1097,11 +1130,15 @@ func toORTMessages(conv []Message) []ortgenai.Message {
 
 // loadMultimodalConversations builds the per-conversation multimodal inputs for
 // the batch-safe session wrapper, loading each conversation's image and audio
-// paths independently so media stays scoped to its conversation. It returns the
+// paths independently so media stays scoped to its conversation. Prepared messages
+// retain the image tags and system prompt added by CreateMessagesORT. It returns the
 // conversations plus one destroy function per loaded native resource; callers
 // should chain these into batch.DestroyMultimodal and invoke them (reversibly)
 // on a failed load.
-func loadMultimodalConversations(messageConvs [][]Message) ([]ortgenai.MultimodalConversation, []func(), error) {
+func loadMultimodalConversations(messageConvs [][]Message, prepared [][]ortgenai.Message) ([]ortgenai.MultimodalConversation, []func(), error) {
+	if len(messageConvs) != len(prepared) {
+		return nil, nil, errors.New("multimodal media and prepared messages must have the same conversation count")
+	}
 	out := make([]ortgenai.MultimodalConversation, len(messageConvs))
 	var destroyers []func()
 	release := func() {
@@ -1110,7 +1147,7 @@ func loadMultimodalConversations(messageConvs [][]Message) ([]ortgenai.Multimoda
 		}
 	}
 	for i, conv := range messageConvs {
-		c := ortgenai.MultimodalConversation{Messages: toORTMessages(conv)}
+		c := ortgenai.MultimodalConversation{Messages: prepared[i]}
 		if paths := flattenImageURLs(conv); len(paths) > 0 {
 			images, err := ortgenai.LoadImages(paths)
 			if err != nil {
