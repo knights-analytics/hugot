@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"image"
+	"image/color"
 	"math"
 	"os"
 	"regexp"
@@ -28,6 +30,70 @@ const (
 )
 
 // FEATURE EXTRACTION
+
+func RawFeatureExtractionPipeline(t *testing.T, session *hugot.Session) {
+	t.Helper()
+	config := hugot.FeatureExtractionConfig{
+		ModelPath: ModelsFolder + "KnightsAnalytics_all-MiniLM-L6-v2",
+		Name:      "rawFeatureExtraction", OnnxFilename: "model.onnx",
+		Options: []hugot.FeatureExtractionOption{pipelines.WithNormalization()},
+	}
+	pipeline, err := session.NewPipeline(config)
+	CheckT(t, err)
+	reference := loadFeatureReference(t)
+	inputs := reference.Text.Inputs
+	raw, err := pipeline.RunRaw(t.Context(), inputs)
+	CheckT(t, err)
+	checkHiddenStateReference(t, raw, reference.Text.hiddenStateReference, reference.Tolerance)
+	if raw == nil || len(raw.Dimensions) != 3 || raw.Dimensions[0] != 2 || raw.Dimensions[2] != 384 || len(raw.HiddenStates) != 2 {
+		t.Fatal("raw text features must retain batch, token and hidden dimensions")
+	}
+	pooled, err := pipeline.RunPipeline(t.Context(), inputs)
+	CheckT(t, err)
+	if pooled == nil || len(pooled.Embeddings) != 2 {
+		t.Fatal("pooled text feature batch mismatch")
+	}
+	batch := backends.NewBatch(len(inputs))
+	defer func() { CheckT(t, batch.Destroy()) }()
+	backends.TokenizeInputs(batch, pipeline.Model.Tokenizer, inputs)
+	if len(batch.Input) != 2 {
+		t.Fatal("raw text tokenizer batch mismatch")
+	}
+	for i, hidden := range raw.HiddenStates {
+		if int64(len(hidden)) != raw.Dimensions[1] || len(hidden) < len(batch.Input[i].TokenIDs) {
+			t.Fatal("raw text features lost tokens or padding dimensions")
+		}
+		mean := make([]float32, 384)
+		for j, token := range hidden {
+			if len(token) != 384 {
+				t.Fatal("raw text hidden dimension mismatch")
+			}
+			for _, value := range token {
+				if math.IsNaN(float64(value)) || math.IsInf(float64(value), 0) {
+					t.Fatal("raw text features are nonfinite")
+				}
+			}
+			if j < len(batch.Input[i].AttentionMask) && batch.Input[i].AttentionMask[j] != 0 {
+				for k, value := range token {
+					mean[k] += value
+				}
+			}
+		}
+		var norm float64
+		for _, value := range mean {
+			norm += float64(value) * float64(value)
+		}
+		if norm == 0 {
+			t.Fatal("raw text features have zero masked mean")
+		}
+		for j := range mean {
+			mean[j] /= float32(math.Sqrt(norm))
+		}
+		assert.InDeltaSlice(t, mean, pooled.Embeddings[i], 1e-5, "raw features reconstruct unchanged normalized embeddings")
+	}
+	_, err = pipeline.RunRaw(t.Context(), nil)
+	assert.Error(t, err)
+}
 
 func FeatureExtractionPipeline(t *testing.T, session *hugot.Session) {
 	t.Helper()
@@ -990,7 +1056,7 @@ func CrossEncoderPipelineValidation(t *testing.T, session *hugot.Session) {
 	}
 }
 
-// ImageClassificationPipeline test using HuggingFace SqueezeNet and a sample image.
+// ImageClassificationPipeline test using Hugging Face ResNet and a sample image.
 func ImageClassificationPipeline(t *testing.T, session *hugot.Session) {
 	t.Helper()
 
@@ -1000,16 +1066,16 @@ func ImageClassificationPipeline(t *testing.T, session *hugot.Session) {
 	config := hugot.ImageClassificationConfig{
 		ModelPath:    modelPath,
 		Name:         "testImageClassification",
-		OnnxFilename: "model.onnx",
+		OnnxFilename: "resnet50-v1-12.onnx",
 		Options: []hugot.ImageClassificationOption{
 			pipelines.WithTopK(3),
 			pipelines.WithPreprocessSteps[*pipelines.ImageClassificationPipeline](
-				imageutil.ResizeStep(224),
+				imageutil.ResizeBilinearStep(256),
 				imageutil.CenterCropStep(224, 224),
 			),
 			pipelines.WithNormalizationSteps[*pipelines.ImageClassificationPipeline](
-				imageutil.ImagenetPixelNormalizationStep(),
 				imageutil.RescaleStep(),
+				imageutil.ImagenetPixelNormalizationStep(),
 			),
 		},
 	}
@@ -1171,6 +1237,21 @@ func FillMaskPipeline(t *testing.T, session *hugot.Session) {
 		t.Fatal("fill-mask inference returned no predictions")
 	}
 	assert.Greater(t, result.Predictions[0][0].Score, float32(0))
+
+	// Explicit top-3 fill-mask predictions for "HuggingFace is [MASK]."
+	expectedPredictions := []pipelines.FillMaskResult{
+		{Token: "[MASK]", TokenID: 3819, Sequence: "[CLS] huggingface is perfect . [SEP]", Score: 0.029229378},
+		{Token: "[MASK]", TokenID: 2204, Sequence: "[CLS] huggingface is good . [SEP]", Score: 0.022476919},
+		{Token: "[MASK]", TokenID: 2157, Sequence: "[CLS] huggingface is right . [SEP]", Score: 0.019856254},
+	}
+	assert.Len(t, result.Predictions[0], len(expectedPredictions), "TopK=3 should return exactly 3 predictions")
+	for i, expected := range expectedPredictions {
+		actual := result.Predictions[0][i]
+		assert.Equal(t, expected.Token, actual.Token, "prediction %d token", i)
+		assert.Equal(t, expected.TokenID, actual.TokenID, "prediction %d tokenID", i)
+		assert.Equal(t, expected.Sequence, actual.Sequence, "prediction %d sequence", i)
+		assert.InDelta(t, float64(expected.Score), float64(actual.Score), 1e-3, "prediction %d score", i)
+	}
 }
 
 func FillMaskPipelineValidation(t *testing.T, session *hugot.Session) {
@@ -1196,7 +1277,7 @@ func ImageFeatureExtractionPipeline(t *testing.T, session *hugot.Session) {
 	t.Helper()
 
 	config := hugot.ImageFeatureExtractionConfig{
-		ModelPath:    ModelsFolder + "KnightsAnalytics_resnet50",
+		ModelPath:    ModelsFolder + "Xenova_dino-vits16",
 		Name:         "testImageFeatureExtraction",
 		OnnxFilename: "model.onnx",
 		Options: []hugot.ImageFeatureExtractionOption{
@@ -1204,24 +1285,94 @@ func ImageFeatureExtractionPipeline(t *testing.T, session *hugot.Session) {
 				imageutil.ResizeStep(224),
 				imageutil.CenterCropStep(224, 224),
 			),
+			pipelines.WithNormalizationSteps[*pipelines.ImageFeatureExtractionPipeline](imageutil.RescaleStep(), imageutil.ImagenetPixelNormalizationStep()),
 		},
 	}
 	pipeline, err := session.NewPipeline(config)
 	CheckT(t, err)
 	imagePath := ModelsFolder + "imageData/cat.jpg"
-	result, err := pipeline.RunPipeline(t.Context(), []string{imagePath, imagePath})
+	result, err := pipeline.RunPipeline(t.Context(), []string{imagePath, imagePath, ModelsFolder + "imageData/invoice.png"})
 	CheckT(t, err)
-	if len(result.Embeddings) != 2 || len(result.Embeddings[0]) == 0 || len(result.Embeddings[1]) == 0 {
-		t.Fatal("image feature extraction returned empty embeddings")
+	if result == nil || len(result.Embeddings) != 3 {
+		t.Fatal("image feature extraction returned the wrong batch size")
 	}
-	assert.Equal(t, len(result.Embeddings[0]), len(result.Embeddings[1]))
+	assert.Equal(t, "last_hidden_state", pipeline.GetMetadata().OutputsInfo[0].Name)
+	for _, embedding := range result.Embeddings {
+		assert.Len(t, embedding, 384)
+		var norm float64
+		for _, value := range embedding {
+			assert.False(t, math.IsNaN(float64(value)) || math.IsInf(float64(value), 0))
+			norm += float64(value) * float64(value)
+		}
+		assert.Greater(t, norm, 0.0)
+	}
+	assert.InDeltaSlice(t, result.Embeddings[0], result.Embeddings[1], 1e-5)
+	var difference float64
+	for i, value := range result.Embeddings[0] {
+		difference += math.Abs(float64(value - result.Embeddings[2][i]))
+	}
+	assert.Greater(t, difference, 0.1, "different images must produce different hidden features")
+	raw, err := pipeline.RunRaw(t.Context(), []string{imagePath, imagePath, ModelsFolder + "imageData/invoice.png"})
+	CheckT(t, err)
+	if raw == nil || len(raw.HiddenStates) != 3 || len(raw.Dimensions) != 3 {
+		t.Fatal("raw image features must retain batch, patch and hidden dimensions")
+	}
+	assert.EqualValues(t, []int64{3, 197, 384}, raw.Dimensions)
+	for i, patches := range raw.HiddenStates {
+		mean := make([]float32, 384)
+		for _, patch := range patches {
+			if len(patch) != 384 {
+				t.Fatal("raw image hidden dimension mismatch")
+			}
+			for j, value := range patch {
+				mean[j] += value
+			}
+		}
+		for j := range mean {
+			mean[j] /= float32(len(patches))
+		}
+		assert.InDeltaSlice(t, result.Embeddings[i], mean, 1e-5, "legacy image embeddings remain mean pooled")
+	}
+	reference := loadFeatureReference(t)
+	img := image.NewNRGBA(image.Rect(0, 0, reference.Image.Width, reference.Image.Height))
+	for y := range reference.Image.Height {
+		for x := range reference.Image.Width {
+			img.SetNRGBA(x, y, color.NRGBA{R: reference.Image.RGB[0], G: reference.Image.RGB[1], B: reference.Image.RGB[2], A: 255})
+		}
+	}
+	referenceRaw, err := pipeline.RunRawWithImages(t.Context(), []image.Image{img})
+	CheckT(t, err)
+	checkHiddenStateReference(t, referenceRaw, reference.Image.hiddenStateReference, reference.Tolerance)
+	config.Name = "imageModelPooler"
+	config.Options = append(config.Options, pipelines.WithImageModelPooler())
+	pooler, err := session.NewPipeline(config)
+	hasPooler := false
+	for _, output := range pipeline.Model.OutputsMeta {
+		hasPooler = hasPooler || output.Name == "pooler_output"
+	}
+	if !hasPooler {
+		assert.Error(t, err, "models without a pooler must not silently mean pool")
+		return
+	}
+	CheckT(t, err)
+	modelPooled, err := pooler.RunRaw(t.Context(), []string{imagePath})
+	CheckT(t, err)
+	if modelPooled == nil || len(modelPooled.Embeddings) != 1 {
+		t.Fatal("model pooler did not return a rank-two tensor")
+	}
+	assert.Equal(t, "pooler_output", modelPooled.OutputName)
+	var poolerDifference float64
+	for j, value := range modelPooled.Embeddings[0] {
+		poolerDifference += math.Abs(float64(value - result.Embeddings[0][j]))
+	}
+	assert.Greater(t, poolerDifference, 0.01, "model pooling and mean pooling are distinct operations")
 }
 
 func ImageFeatureExtractionPipelineValidation(t *testing.T, session *hugot.Session) {
 	t.Helper()
 
 	config := hugot.ImageFeatureExtractionConfig{
-		ModelPath:    ModelsFolder + "KnightsAnalytics_resnet50",
+		ModelPath:    ModelsFolder + "Xenova_dino-vits16",
 		Name:         "testImageFeatureExtractionValidation",
 		OnnxFilename: "model.onnx",
 	}
@@ -1248,6 +1399,35 @@ func ImageSegmentationPipeline(t *testing.T, session *hugot.Session) {
 	CheckT(t, err)
 	if len(result.Results) != 1 || result.Results[0].Width == 0 || result.Results[0].Height == 0 {
 		t.Fatal("image segmentation inference returned no source-sized result")
+	}
+
+	// Explicit segmentation result for models/imageData/cat.jpg (source 640x480).
+	// Each segment is a full-resolution mask covering 640*480 pixels.
+	assert.Equal(t, 640, result.Results[0].Width, "segmentation width")
+	assert.Equal(t, 480, result.Results[0].Height, "segmentation height")
+	expectedSegments := []struct {
+		Label string
+		Class int
+		Score float32
+	}{
+		{Label: "wall", Class: 0, Score: 0.011198625},
+		{Label: "ceiling", Class: 5, Score: 0.021142391},
+		{Label: "bed ", Class: 7, Score: 0.23426121},
+		{Label: "person", Class: 12, Score: 0.1132925},
+		{Label: "sofa", Class: 23, Score: 0.028294662},
+		{Label: "armchair", Class: 30, Score: 0.0052581797},
+		{Label: "cushion", Class: 39, Score: 0.053761255},
+		{Label: "box", Class: 41, Score: 0.0030891823},
+		{Label: "plaything", Class: 108, Score: 0.055784084},
+	}
+	assert.Len(t, result.Results[0].Segments, len(expectedSegments), "number of segmentation segments")
+	for i, expected := range expectedSegments {
+		seg := result.Results[0].Segments[i]
+		assert.Equal(t, expected.Label, seg.Label, "segment %d label", i)
+		assert.Equal(t, expected.Class, seg.Class, "segment %d class", i)
+		assert.InDelta(t, float64(expected.Score), float64(seg.Score), 1e-3, "segment %d score", i)
+		assert.Len(t, seg.Mask, 480, "segment %d mask rows", i)
+		assert.Len(t, seg.Mask[0], 640, "segment %d mask cols", i)
 	}
 }
 
@@ -1285,6 +1465,29 @@ func DepthEstimationPipeline(t *testing.T, session *hugot.Session) {
 	if len(result.Results) != 1 || len(result.Results[0].DepthMap) == 0 {
 		t.Fatal("depth estimation inference returned an empty depth map")
 	}
+	// Explicit depth-estimation result for models/imageData/cat.jpg (source 640x480).
+	dm := result.Results[0]
+	assert.Equal(t, 640, dm.Width, "depth width")
+	assert.Equal(t, 480, dm.Height, "depth height")
+	assert.Len(t, dm.DepthMap, 480, "depth map rows")
+	assert.Len(t, dm.DepthMap[0], 640, "depth map cols")
+	minDepth, maxDepth := dm.DepthMap[0][0], dm.DepthMap[0][0]
+	for _, row := range dm.DepthMap {
+		for _, v := range row {
+			assert.False(t, math.IsNaN(float64(v)) || math.IsInf(float64(v), 0), "depth value must be finite")
+			if v < minDepth {
+				minDepth = v
+			}
+			if v > maxDepth {
+				maxDepth = v
+			}
+		}
+	}
+	// Depth values for this input range ~[7.02, 30.00].
+	assert.InDelta(t, 7.0227566, float64(minDepth), 2.0, "depth map minimum")
+	assert.InDelta(t, 30.000578, float64(maxDepth), 2.0, "depth map maximum")
+	assert.InDelta(t, 12.303157, float64(dm.DepthMap[0][0]), 0.1, "top-left depth sample")
+	assert.InDelta(t, 8.83053, float64(dm.DepthMap[0][639]), 0.1, "top-right depth sample")
 }
 
 func DepthEstimationPipelineValidation(t *testing.T, session *hugot.Session) {
@@ -1319,18 +1522,12 @@ func AudioClassificationPipeline(t *testing.T, session *hugot.Session) {
 	}
 	pipeline, err := session.NewPipeline(config)
 	CheckT(t, err)
-	result, err := pipeline.RunWithAudio(t.Context(), [][]float32{testAudioWaveform()})
+	result, err := pipeline.RunFiles(t.Context(), []string{ModelsFolder + "audioData/librispeech.wav"})
 	CheckT(t, err)
 	assert.Len(t, result.Predictions, 1)
 	assert.Len(t, result.Predictions[0], 2)
-}
-
-func testAudioWaveform() []float32 {
-	waveform := make([]float32, 16000)
-	for i := range waveform {
-		waveform[i] = float32(math.Sin(float64(i)*2*math.Pi*440/16000)) * 0.1
-	}
-	return waveform
+	assert.Equal(t, "male", result.Predictions[0][0].Label)
+	assert.Greater(t, result.Predictions[0][0].Score, float32(0.99))
 }
 
 func AudioClassificationPipelineValidation(t *testing.T, _ *hugot.Session) {
@@ -1348,29 +1545,60 @@ func AudioClassificationPipelineValidation(t *testing.T, _ *hugot.Session) {
 	assert.Error(t, pipeline.Validate())
 }
 
-// background removal
+// Background removal
 
 func BackgroundRemovalPipeline(t *testing.T, session *hugot.Session) {
 	t.Helper()
 	config := hugot.BackgroundRemovalConfig{
-		ModelPath: ModelsFolder + "Xenova_segformer-b0-finetuned-ade-512-512",
+		ModelPath: ModelsFolder + "Xenova_modnet",
 		Name:      "testBackgroundRemoval",
-		Options:   []hugot.BackgroundRemovalOption{pipelines.WithBackgroundRemovalOutput("logits")},
+		Options: []hugot.BackgroundRemovalOption{
+			pipelines.WithBackgroundRemovalOutput("output"),
+			pipelines.WithPreprocessSteps[*pipelines.BackgroundRemovalPipeline](imageutil.ResizeStep(512)),
+			pipelines.WithNormalizationSteps[*pipelines.BackgroundRemovalPipeline](
+				imageutil.RescaleStep(),
+				imageutil.PixelNormalizationStep([3]float32{0.5, 0.5, 0.5}, [3]float32{0.5, 0.5, 0.5}),
+			),
+		},
 	}
 	pipeline, err := session.NewPipeline(config)
 	CheckT(t, err)
-	result, err := pipeline.RunPipeline(t.Context(), []string{ModelsFolder + "imageData/cat.jpg"})
+	images, err := imageutil.LoadImagesFromPaths(t.Context(), []string{ModelsFolder + "imageData/portrait.jpg"})
 	CheckT(t, err)
-	assert.Len(t, result.Results, 1)
-	assert.NotEmpty(t, result.Results[0].Mask)
+	result, err := pipeline.RunWithImages(t.Context(), images)
+	CheckT(t, err)
+	if len(result.Results) != 1 {
+		t.Fatal("background removal returned the wrong batch size")
+	}
+	w, h := images[0].Bounds().Dx(), images[0].Bounds().Dy()
+	mask := result.Results[0].Mask
+	assert.Equal(t, w, result.Results[0].Width)
+	assert.Equal(t, h, result.Results[0].Height)
+	if len(mask) != h {
+		t.Fatal("background-removal mask must have source height")
+	}
+	for _, row := range mask {
+		if len(row) != w {
+			t.Fatal("background-removal mask must have source width")
+		}
+		for _, alpha := range row {
+			if math.IsNaN(float64(alpha)) || math.IsInf(float64(alpha), 0) || alpha < 0 || alpha > 1 {
+				t.Fatal("background-removal mask must contain finite alpha probabilities")
+			}
+		}
+	}
+	// The portrait's face is foreground; the upper corners are the pink backdrop.
+	assert.Greater(t, mask[h/2][w/2], float32(0.9), "the subject should remain opaque")
+	assert.Less(t, mask[h/10][w/10], float32(0.1), "the backdrop should be transparent")
+	assert.Less(t, mask[h/10][9*w/10], float32(0.1), "the backdrop should be transparent")
 }
 
 func BackgroundRemovalPipelineValidation(t *testing.T, session *hugot.Session) {
 	t.Helper()
 	config := hugot.BackgroundRemovalConfig{
-		ModelPath: ModelsFolder + "Xenova_segformer-b0-finetuned-ade-512-512",
+		ModelPath: ModelsFolder + "Xenova_modnet",
 		Name:      "testBackgroundRemovalValidation",
-		Options:   []hugot.BackgroundRemovalOption{pipelines.WithBackgroundRemovalOutput("logits")},
+		Options:   []hugot.BackgroundRemovalOption{pipelines.WithBackgroundRemovalOutput("output")},
 	}
 	pipeline, err := session.NewPipeline(config)
 	CheckT(t, err)
@@ -1464,6 +1692,56 @@ func AutomaticSpeechRecognitionPipelineValidation(t *testing.T, session *hugot.S
 
 // image-to-text
 
+func NativeImageToTextPipeline(t *testing.T, session *hugot.Session) {
+	t.Helper()
+	config := hugot.ImageToTextConfig{
+		ModelPath:    ModelsFolder + "Xenova_vit-gpt2-image-captioning",
+		OnnxFilename: "encoder_model_quantized.onnx",
+		Name:         "nativeImageToText",
+		ModelLoading: backends.ModelLoadingONNX,
+	}
+	pipeline, err := session.NewPipeline(config)
+	CheckT(t, err)
+	inputs := []pipelines.ImageTextPrompt{
+		{ImagePath: ModelsFolder + "imageData/cat.jpg"},
+		{ImagePath: ModelsFolder + "imageData/portrait.jpg"},
+	}
+	result, err := pipeline.RunWithImages(t.Context(), inputs)
+	CheckT(t, err)
+	if result == nil || len(result.Responses) != len(inputs) {
+		t.Fatal("native captioning did not preserve batch size")
+	}
+	assert.Contains(t, strings.ToLower(result.Responses[0]), "cat")
+	assert.NotEmpty(t, result.Responses[1])
+	assert.NotEqual(t, result.Responses[0], result.Responses[1], "captions should be image-conditioned")
+	checkCaptionGenerationReference(t, pipeline)
+	t.Logf("native captions: %q", result.Responses)
+	for i, input := range inputs {
+		single, err := pipeline.RunWithImages(t.Context(), []pipelines.ImageTextPrompt{input})
+		CheckT(t, err)
+		if single == nil || len(single.Responses) != 1 {
+			t.Fatal("native captioning returned invalid single-image result")
+		}
+		assert.Equal(t, result.Responses[i], single.Responses[0], "batch order and deterministic greedy decoding")
+	}
+	_, err = pipeline.RunWithImages(t.Context(), nil)
+	assert.Error(t, err)
+	_, err = pipeline.RunWithImages(t.Context(), []pipelines.ImageTextPrompt{{ImagePath: inputs[0].ImagePath, Prompt: "describe"}})
+	assert.Error(t, err)
+	cancelled, cancel := context.WithCancel(t.Context())
+	cancel()
+	_, err = pipeline.RunWithImages(cancelled, inputs)
+	assert.ErrorIs(t, err, context.Canceled)
+	decoder, err := pipeline.Model.LoadGraph(t.Context(), "decoder_model_quantized.onnx")
+	CheckT(t, err)
+	CheckT(t, session.ClosePipeline(config.Name))
+	_, err = decoder.RunTensors(t.Context(), nil)
+	assert.ErrorContains(t, err, "closed", "closing the parent must close its decoder graph")
+	_, err = pipeline.Model.LoadGraph(t.Context(), "decoder_model_quantized.onnx")
+	assert.ErrorContains(t, err, "closed")
+	CheckT(t, pipeline.Model.Close())
+}
+
 func ImageToTextPipeline(t *testing.T, session *hugot.Session) {
 	t.Helper()
 	skipGenerativePipeline(t)
@@ -1478,8 +1756,8 @@ func ImageToTextPipeline(t *testing.T, session *hugot.Session) {
 		Prompt:    "Describe this image in one short sentence.",
 	}})
 	CheckT(t, err)
-	if result == nil {
-		t.Fatal("image-to-text returned no result")
+	if result == nil || len(result.Responses) != 1 {
+		t.Fatal("image-to-text returned an invalid response count")
 	}
 	assert.NotEmpty(t, result.Responses)
 	assert.NotEmpty(t, result.Responses[0])
@@ -1507,18 +1785,22 @@ func ImageTextToTextPipeline(t *testing.T, session *hugot.Session) {
 	}
 	pipeline, err := session.NewPipeline(config)
 	CheckT(t, err)
-	result, err := pipeline.RunWithImages(t.Context(), []pipelines.ImageTextPrompt{{
-		ImagePath: ModelsFolder + "imageData/cat.jpg",
-		Prompt:    "What is shown in this image?",
-	}})
+	result, err := pipeline.RunWithImages(t.Context(), []pipelines.ImageTextPrompt{
+		{ImagePath: ModelsFolder + "imageData/cat.jpg", Prompt: "What is shown in this image?"},
+		{ImagePath: ModelsFolder + "imageData/portrait.jpg", Prompt: "What is shown in this image?"},
+	})
 	CheckT(t, err)
-	if result == nil {
-		t.Fatal("image-text-to-text returned no result")
+	if result == nil || len(result.Responses) != 2 {
+		t.Fatal("image-text-to-text returned an invalid response count")
 	}
 	assert.NotEmpty(t, result.Responses)
 	assert.NotEmpty(t, result.Responses[0])
 	assert.Contains(t, strings.ToLower(result.Responses[0]), "cat",
 		"image-text-to-text answer should reference the cat, got: %q", result.Responses[0])
+	assert.NotEmpty(t, result.Responses[1])
+	assert.NotEqual(t, result.Responses[0], result.Responses[1], "contrasting images should produce grounded responses")
+	assert.True(t, strings.Contains(strings.ToLower(result.Responses[1]), "woman") ||
+		strings.Contains(strings.ToLower(result.Responses[1]), "person"), "portrait response should describe the person")
 }
 
 func ImageTextToTextPipelineValidation(t *testing.T, _ *hugot.Session) {
@@ -1894,22 +2176,49 @@ func ZeroShotObjectDetectionPipelineValidation(t *testing.T, session *hugot.Sess
 func MaskGenerationPipeline(t *testing.T, session *hugot.Session) {
 	t.Helper()
 	config := backends.PipelineConfig[*pipelines.MaskGenerationPipeline]{
-		ModelPath: ModelsFolder + "Xenova_segformer-b0-finetuned-ade-512-512",
-		Name:      "testMaskGeneration",
+		ModelPath:    ModelsFolder + "Xenova_slimsam-77-uniform",
+		OnnxFilename: "vision_encoder.onnx",
+		Name:         "testMaskGeneration",
 	}
 	pipeline, err := session.NewPipeline(config)
 	CheckT(t, err)
 	result, err := pipeline.RunPipeline(t.Context(), []string{ModelsFolder + "imageData/cat.jpg"})
 	CheckT(t, err)
 	assert.Len(t, result.Results, 1)
+	images, err := imageutil.LoadImagesFromPaths(t.Context(), []string{ModelsFolder + "imageData/cat.jpg"})
+	CheckT(t, err)
+	proposal := result.Results[0]
+	assert.Equal(t, images[0].Bounds().Dx(), proposal.Width)
+	assert.Equal(t, images[0].Bounds().Dy(), proposal.Height)
+	assert.Greater(t, len(proposal.Masks), 1)
+	for _, mask := range proposal.Masks {
+		assert.Greater(t, mask.Area, 0)
+		assert.GreaterOrEqual(t, mask.Score, pipeline.PredictedIOUThreshold)
+		assert.LessOrEqual(t, mask.Score, float32(1))
+		assert.GreaterOrEqual(t, mask.StabilityScore, pipeline.StabilityThreshold)
+		assert.LessOrEqual(t, mask.StabilityScore, float32(1))
+		assert.Len(t, mask.Mask, proposal.Height)
+		area := 0
+		for _, row := range mask.Mask {
+			assert.Len(t, row, proposal.Width)
+			for _, foreground := range row {
+				if foreground {
+					area++
+				}
+			}
+		}
+		assert.Equal(t, area, mask.Area)
+		assert.GreaterOrEqual(t, mask.Box[0], 0)
+		assert.GreaterOrEqual(t, mask.Box[1], 0)
+		assert.Less(t, mask.Box[2], proposal.Width)
+		assert.Less(t, mask.Box[3], proposal.Height)
+	}
 }
 
 func MaskGenerationPipelineValidation(t *testing.T, _ *hugot.Session) {
 	t.Helper()
 	pipeline := &pipelines.MaskGenerationPipeline{
-		ImageSegmentationPipeline: &pipelines.ImageSegmentationPipeline{
-			BasePipeline: &backends.BasePipeline{Model: &backends.Model{}},
-		},
+		BasePipeline: &backends.BasePipeline{Model: &backends.Model{}},
 	}
 	assert.Error(t, pipeline.Validate())
 }
@@ -1919,39 +2228,133 @@ func MaskGenerationPipelineValidation(t *testing.T, _ *hugot.Session) {
 func ZeroShotAudioClassificationPipeline(t *testing.T, session *hugot.Session) {
 	t.Helper()
 	config := backends.PipelineConfig[*pipelines.ZeroShotAudioClassificationPipeline]{
-		ModelPath: ModelsFolder + "Xenova_wav2vec2-large-xlsr-53-gender-recognition-librispeech",
+		ModelPath: ModelsFolder + "Xenova_larger_clap_music_and_speech",
 		Name:      "testZeroShotAudioClassification",
 		Options: []backends.PipelineOption[*pipelines.ZeroShotAudioClassificationPipeline]{
-			pipelines.WithZeroShotAudioLabels([]string{"female", "male"}),
+			pipelines.WithZeroShotAudioLabels([]string{"a man speaking", "a classical music performance"}),
 			pipelines.WithZeroShotAudioTopK(2),
 		},
 	}
 	pipeline, err := session.NewPipeline(config)
 	CheckT(t, err)
-	result, err := pipeline.RunWithAudio(t.Context(), [][]float32{testAudioWaveform()})
+	result, err := pipeline.RunFiles(t.Context(), []string{ModelsFolder + "audioData/librispeech.wav"})
 	CheckT(t, err)
 	assert.Len(t, result.Predictions, 1)
 	assert.Len(t, result.Predictions[0], 2)
+	assert.Equal(t, "a man speaking", result.Predictions[0][0].Label)
+	assert.Greater(t, result.Predictions[0][0].Score, result.Predictions[0][1].Score)
 }
 
 func ZeroShotAudioClassificationPipelineValidation(t *testing.T, session *hugot.Session) {
 	t.Helper()
 	config := backends.PipelineConfig[*pipelines.ZeroShotAudioClassificationPipeline]{
-		ModelPath: ModelsFolder + "Xenova_wav2vec2-large-xlsr-53-gender-recognition-librispeech",
+		ModelPath: ModelsFolder + "Xenova_larger_clap_music_and_speech",
 		Name:      "testZeroShotAudioClassification",
 		Options: []backends.PipelineOption[*pipelines.ZeroShotAudioClassificationPipeline]{
-			pipelines.WithZeroShotAudioLabels([]string{"female", "male"}),
+			pipelines.WithZeroShotAudioLabels([]string{"speech", "music", "applause"}),
 			pipelines.WithZeroShotAudioTopK(2),
 		},
 	}
 	pipeline, err := session.NewPipeline(config)
 	CheckT(t, err)
 	assert.NoError(t, pipeline.Validate())
-	pipeline.Labels = []string{"female"}
-	assert.Error(t, pipeline.Validate(), "candidate label count should match the model logits")
+	pipeline.Labels = []string{"speech", "music", "applause", "footsteps"}
+	assert.NoError(t, pipeline.Validate(), "candidate labels are runtime text inputs, not model output classes")
 }
 
 // visual question answering
+
+func NativeVisualQuestionAnsweringPipeline(t *testing.T, session *hugot.Session) {
+	t.Helper()
+	config := backends.PipelineConfig[*pipelines.VisualQuestionAnsweringPipeline]{
+		ModelPath: ModelsFolder + "KnightsAnalytics_vilt-b32-finetuned-vqa", Name: "nativeVisualQuestionAnswering",
+		ModelLoading: backends.ModelLoadingONNX,
+		Options:      []backends.PipelineOption[*pipelines.VisualQuestionAnsweringPipeline]{pipelines.WithVisualQuestionAnsweringTopK(5)},
+	}
+	pipeline, err := session.NewPipeline(config)
+	CheckT(t, err)
+	result, err := pipeline.RunPipeline(t.Context(), []pipelines.VisualQuestionAnsweringInput{
+		{ImagePath: ModelsFolder + "imageData/cat.jpg", Question: "What animal is shown in this picture?"},
+		{ImagePath: ModelsFolder + "imageData/portrait.jpg", Question: "What animal is shown in this picture?"},
+	})
+	CheckT(t, err)
+	if result == nil || len(result.Answers) != 2 || len(result.Responses) != 2 {
+		t.Fatal("native VQA did not preserve batch order and answer count")
+	}
+	for i, answers := range result.Answers {
+		if !assert.Len(t, answers, 5) {
+			continue
+		}
+		assert.Equal(t, answers[0].Answer, result.Responses[i])
+		for j, answer := range answers {
+			assert.NotEmpty(t, answer.Answer)
+			assert.False(t, math.IsNaN(float64(answer.Score)) || math.IsInf(float64(answer.Score), 0))
+			assert.GreaterOrEqual(t, answer.Score, float32(0))
+			assert.LessOrEqual(t, answer.Score, float32(1))
+			if j > 0 {
+				assert.GreaterOrEqual(t, answers[j-1].Score, answer.Score)
+			}
+		}
+	}
+	assert.Contains(t, strings.ToLower(result.Responses[0]), "cat")
+	assert.NotEqual(t, result.Responses[0], result.Responses[1], "changing the image should change the grounded answer")
+
+	var reference struct {
+		Tolerance float64 `json:"score_absolute_tolerance"`
+		Cases     []struct {
+			Width, Height    int
+			Question, Answer string
+			Tokens           struct {
+				IDs       [][]uint32 `json:"input_ids"`
+				Types     [][]uint32 `json:"token_type_ids"`
+				Attention [][]uint32 `json:"attention_mask"`
+			}
+			TopIDs []int     `json:"top_ids"`
+			Scores []float32 `json:"top_scores"`
+		}
+	}
+	CheckT(t, json.Unmarshal(embedded.ViltReferenceByte, &reference))
+	for _, tc := range reference.Cases {
+		batch := backends.NewBatch(1)
+		backends.TokenizeInputs(batch, pipeline.Model.Tokenizer, []string{tc.Question})
+		if len(batch.Input) != 1 || len(tc.Tokens.IDs) != 1 || len(tc.Tokens.Types) != 1 || len(tc.Tokens.Attention) != 1 {
+			t.Fatal("invalid VQA tokenizer/reference batch shape")
+		}
+		assert.EqualValues(t, tc.Tokens.IDs[0], batch.Input[0].TokenIDs)
+		assert.EqualValues(t, tc.Tokens.Types[0], batch.Input[0].TypeIDs)
+		assert.EqualValues(t, tc.Tokens.Attention[0], batch.Input[0].AttentionMask)
+		CheckT(t, batch.Destroy())
+		img := image.NewRGBA(image.Rect(0, 0, tc.Width, tc.Height))
+		for y := range tc.Height {
+			for x := range tc.Width {
+				img.SetRGBA(x, y, color.RGBA{R: uint8((3*x + y) % 256), G: uint8((5*y + x) % 256), B: uint8((x + 7*y) % 256), A: 255})
+			}
+		}
+		actual, err := pipeline.RunWithImages(t.Context(), []backends.ImageTextInput{{Image: img, Text: tc.Question}})
+		CheckT(t, err)
+		if actual == nil || len(actual.Answers) != 1 || len(actual.Responses) != 1 || len(actual.Answers[0]) != len(tc.TopIDs) || len(tc.Scores) != len(tc.TopIDs) {
+			t.Fatal("native VQA reference answer shape mismatch")
+		}
+		assert.Equal(t, tc.Answer, actual.Responses[0])
+		for j, answer := range actual.Answers[0] {
+			assert.Equal(t, pipeline.Model.IDLabelMap[tc.TopIDs[j]], answer.Answer)
+			assert.InDelta(t, tc.Scores[j], answer.Score, reference.Tolerance)
+		}
+	}
+	config.Name = "nativeVisualQuestionAnsweringTopOne"
+	config.Options = []backends.PipelineOption[*pipelines.VisualQuestionAnsweringPipeline]{pipelines.WithVisualQuestionAnsweringTopK(1)}
+	topOne, err := session.NewPipeline(config)
+	CheckT(t, err)
+	assert.Same(t, pipeline.GetModel(), topOne.GetModel(), "equivalent ONNX loads should reuse the same model")
+	one, err := topOne.RunPipeline(t.Context(), []pipelines.VisualQuestionAnsweringInput{{ImagePath: ModelsFolder + "imageData/cat.jpg", Question: "What animal is shown in this picture?"}})
+	CheckT(t, err)
+	if one == nil || len(one.Answers) != 1 || len(one.Answers[0]) != 1 {
+		t.Fatal("top_k=1 did not return exactly one answer")
+	}
+	assert.Equal(t, result.Answers[0][0], one.Answers[0][0])
+	CheckT(t, session.ClosePipeline(config.Name))
+	assert.NoError(t, pipeline.Validate(), "closing a shared pipeline must preserve the native model")
+}
 
 func VisualQuestionAnsweringPipeline(t *testing.T, session *hugot.Session) {
 	t.Helper()
@@ -1967,6 +2370,9 @@ func VisualQuestionAnsweringPipeline(t *testing.T, session *hugot.Session) {
 		Question:  "What animal is in this image? Answer with one word.",
 	}})
 	CheckT(t, err)
+	if result == nil || len(result.Responses) != 1 {
+		t.Fatal("visual question answering returned an invalid response count")
+	}
 	assert.NotEmpty(t, result.Responses)
 	assert.NotEmpty(t, result.Responses[0])
 	assert.Contains(t, strings.ToLower(result.Responses[0]), "cat",
@@ -1990,36 +2396,33 @@ func VisualQuestionAnsweringPipelineValidation(t *testing.T, session *hugot.Sess
 
 func DocumentQuestionAnsweringPipeline(t *testing.T, session *hugot.Session) {
 	t.Helper()
-	skipGenerativePipeline(t)
 	config := backends.PipelineConfig[*pipelines.DocumentQuestionAnsweringPipeline]{
-		ModelPath: MultimodalModelPath,
-		Name:      "testDocumentQuestionAnswering",
+		ModelPath:    ModelsFolder + "Xenova_donut-base-finetuned-docvqa",
+		OnnxFilename: "encoder_model_quantized.onnx",
+		Name:         "testDocumentQuestionAnswering",
 	}
 	pipeline, err := session.NewPipeline(config)
 	CheckT(t, err)
 	result, err := pipeline.RunPipeline(t.Context(), []pipelines.DocumentQuestionAnsweringInput{{
-		DocumentPath: ModelsFolder + "imageData/cat.jpg",
-		Question:     "What is shown in this image?",
+		DocumentPath: ModelsFolder + "imageData/invoice.png",
+		Question:     "What is the invoice number?",
 	}})
-	if result != nil {
-		logGenerationFailure(t, "document question answering", result.Responses, err)
-	}
 	CheckT(t, err)
 	if result == nil {
 		t.Fatal("document question answering returned no result")
 	}
-	assert.NotEmpty(t, result.Responses)
-	assert.NotEmpty(t, result.Responses[0])
-	assert.Contains(t, strings.ToLower(result.Responses[0]), "cat",
-		"document (cat image) QA should mention the cat, got: %q", result.Responses[0])
+	if assert.Len(t, result.Results, 1) {
+		assert.Equal(t, "us-001", strings.ToLower(result.Results[0].Answer))
+		assert.Equal(t, result.Results[0], result.GetOutput()[0])
+	}
 }
 
 func DocumentQuestionAnsweringPipelineValidation(t *testing.T, session *hugot.Session) {
 	t.Helper()
-	skipGenerativePipeline(t)
 	config := backends.PipelineConfig[*pipelines.DocumentQuestionAnsweringPipeline]{
-		ModelPath: ModelsFolder + "KnightsAnalytics_qwen3-4B-int4",
-		Name:      "testDocumentQuestionAnsweringValidation",
+		ModelPath:    ModelsFolder + "Xenova_donut-base-finetuned-docvqa",
+		OnnxFilename: "encoder_model_quantized.onnx",
+		Name:         "testDocumentQuestionAnsweringValidation",
 	}
 	pipeline, err := session.NewPipeline(config)
 	CheckT(t, err)
@@ -2031,41 +2434,197 @@ func DocumentQuestionAnsweringPipelineValidation(t *testing.T, session *hugot.Se
 
 func TableQuestionAnsweringPipeline(t *testing.T, session *hugot.Session) {
 	t.Helper()
-	skipGenerativePipeline(t)
 	config := backends.PipelineConfig[*pipelines.TableQuestionAnsweringPipeline]{
-		ModelPath: ModelsFolder + "KnightsAnalytics_qwen3-4B-int4",
+		ModelPath: ModelsFolder + "KnightsAnalytics_tapas-base-finetuned-sqa",
 		Name:      "testTableQuestionAnswering",
 	}
 	pipeline, err := session.NewPipeline(config)
 	CheckT(t, err)
 	result, err := pipeline.RunPipeline(t.Context(), []pipelines.TableQuestionAnsweringInput{{
-		Table:    [][]string{{"name", "value"}, {"x", "1"}},
-		Question: "What is the value?",
+		Table:    [][]string{{"Name", "Age"}, {"Alice", "30"}, {"Bob", "42"}},
+		Question: "How old is Bob?",
 	}})
-	if result != nil {
-		logGenerationFailure(t, "table question answering", result.Responses, err)
-	}
 	CheckT(t, err)
 	if result == nil {
 		t.Fatal("table question answering returned no result")
 	}
-	assert.NotEmpty(t, result.Responses)
-	t.Logf("table QA response: %q", result.Responses[0])
-	assert.Contains(t, result.Responses[0], "1",
-		"table QA answer should contain the value 1 (row x=1), got: %q", result.Responses[0])
+	if assert.Len(t, result.Results, 1) {
+		assert.Equal(t, "42", result.Results[0].Answer)
+		assert.Equal(t, []string{"42"}, result.Results[0].Cells)
+		assert.Equal(t, [][2]int{{1, 1}}, result.Results[0].Coordinates)
+		assert.Equal(t, "NONE", result.Results[0].Aggregator)
+		assert.Equal(t, result.Results[0], result.GetOutput()[0])
+	}
+	table := [][]string{{"Name", "Age"}, {"Alice", "30"}, {"Bob", "42"}}
+	questions := []string{"How old is Bob?", "What is his name?", "How old is Alice?"}
+	sequential, err := pipeline.RunSequential(t.Context(), table, questions)
+	CheckT(t, err)
+	if sequential == nil || len(sequential.Results) != len(questions) {
+		t.Fatal("sequential TAPAS did not preserve question order")
+	}
+	for i, answer := range []string{"42", "Bob", "30"} {
+		assert.Equal(t, answer, sequential.Results[i].Answer)
+		assert.Equal(t, "NONE", sequential.Results[i].Aggregator)
+	}
+	repeated, err := pipeline.RunSequential(t.Context(), table, questions)
+	CheckT(t, err)
+	assert.Equal(t, sequential, repeated, "TAPAS conversational state must remain call-local")
+	independent, err := pipeline.RunPipeline(t.Context(), []pipelines.TableQuestionAnsweringInput{{Table: table, Question: questions[0]}})
+	CheckT(t, err)
+	assert.Equal(t, result, independent, "sequential state must not leak into independent inputs")
+	_, err = pipeline.RunSequential(t.Context(), table, nil)
+	assert.Error(t, err)
+	cancelled, cancel := context.WithCancel(t.Context())
+	cancel()
+	_, err = pipeline.RunSequential(cancelled, table, questions)
+	assert.ErrorIs(t, err, context.Canceled)
 }
 
 func TableQuestionAnsweringPipelineValidation(t *testing.T, session *hugot.Session) {
 	t.Helper()
-	skipGenerativePipeline(t)
 	config := backends.PipelineConfig[*pipelines.TableQuestionAnsweringPipeline]{
-		ModelPath: ModelsFolder + "KnightsAnalytics_qwen3-4B-int4",
+		ModelPath: ModelsFolder + "KnightsAnalytics_tapas-base-finetuned-sqa",
 		Name:      "testTableQuestionAnsweringValidation",
 	}
 	pipeline, err := session.NewPipeline(config)
 	CheckT(t, err)
 	pipeline.MaxLength = 0
 	assert.Error(t, pipeline.Validate())
+}
+
+func TableQuestionAnsweringAggregation(t *testing.T, session *hugot.Session) {
+	t.Helper()
+	config := backends.PipelineConfig[*pipelines.TableQuestionAnsweringPipeline]{
+		ModelPath: ModelsFolder + "KnightsAnalytics_tapas-base-finetuned-wtq",
+		Name:      "testTableQuestionAnsweringAggregation",
+	}
+	pipeline, err := session.NewPipeline(config)
+	CheckT(t, err)
+
+	type reference struct {
+		OnnXContract struct {
+			InputNames  []string
+			OutputNames []string
+		} `json:"onnx_contract"`
+		VerificationMetrics struct {
+			Atol float64 `json:"atol"`
+			Rtol float64 `json:"rtol"`
+		} `json:"verification_metrics"`
+		ReferenceTestCase struct {
+			Table struct {
+				Actors []string `json:"Actors"`
+				Age    []string `json:"Age"`
+			} `json:"table"`
+			Queries []string `json:"queries"`
+			Inputs  struct {
+				InputIDs      [][]int64   `json:"input_ids"`
+				AttentionMask [][]int64   `json:"attention_mask"`
+				TokenTypeIDs  [][][]int64 `json:"token_type_ids"`
+			} `json:"inputs"`
+			ExpectedOutputs struct {
+				Logits            [][]float32 `json:"logits"`
+				LogitsAggregation [][]float32 `json:"logits_aggregation"`
+			} `json:"expected_outputs"`
+			Interpretation []struct {
+				AggregationOp       float32   `json:"aggregation_op"`
+				SelectedCellIndices []float32 `json:"selected_cell_indices"`
+			} `json:"interpretation"`
+		} `json:"reference_test_case"`
+	}
+
+	var ref reference
+	CheckT(t, json.Unmarshal(embedded.TapasAggregationReferenceByte, &ref))
+
+	// Verify the ONNX contract matches model metadata.
+	for _, inName := range ref.OnnXContract.InputNames {
+		found := false
+		for _, meta := range pipeline.Model.InputsMeta {
+			if meta.Name == inName {
+				found = true
+				break
+			}
+		}
+		assert.True(t, found, "TAPAS WTQ input %q missing from ONNX contract", inName)
+	}
+	for _, outName := range ref.OnnXContract.OutputNames {
+		found := false
+		for _, meta := range pipeline.Model.OutputsMeta {
+			if meta.Name == outName {
+				found = true
+				break
+			}
+		}
+		assert.True(t, found, "TAPAS WTQ output %q missing from ONNX contract", outName)
+	}
+
+	// Feed the pre-encoded batch tensors directly through the ONNX graph.
+	tc := ref.ReferenceTestCase
+	n := int64(len(tc.Inputs.InputIDs[0]))
+	ttids := make([]int64, 0, len(tc.Inputs.TokenTypeIDs)*int(n)*7)
+	for _, batch := range tc.Inputs.TokenTypeIDs {
+		for _, row := range batch {
+			for _, v := range row {
+				ttids = append(ttids, v)
+			}
+		}
+	}
+	inputs := map[string]backends.Tensor{
+		"input_ids":      {Shape: []int64{int64(len(tc.Inputs.InputIDs)), n}, Data: flatten2d(t, tc.Inputs.InputIDs)},
+		"attention_mask": {Shape: []int64{int64(len(tc.Inputs.AttentionMask)), n}, Data: flatten2d(t, tc.Inputs.AttentionMask)},
+		"token_type_ids": {Shape: []int64{int64(len(tc.Inputs.TokenTypeIDs)), n, 7}, Data: ttids},
+	}
+	outputs, err := pipeline.Model.RunTensors(t.Context(), inputs)
+	CheckT(t, err)
+
+	agg, ok := outputs["logits_aggregation"]
+	if !ok {
+		t.Fatal("TAPAS WTQ ONNX graph did not produce logits_aggregation")
+	}
+	aggVals, ok := agg.Data.([]float32)
+	if !ok {
+		t.Fatal("logits_aggregation is not []float32")
+	}
+	batchSize := int64(len(tc.ExpectedOutputs.LogitsAggregation))
+
+	for b := range batchSize {
+		rowStart := b * int64(len(tc.ExpectedOutputs.LogitsAggregation[0]))
+		rowEnd := rowStart + int64(len(tc.ExpectedOutputs.LogitsAggregation[0]))
+		row := aggVals[rowStart:rowEnd]
+
+		// Compare to reference within the pinned tolerance.
+		for i, expected := range tc.ExpectedOutputs.LogitsAggregation[b] {
+			got := row[int64(i)]
+			tol := ref.VerificationMetrics.Rtol*math.Abs(float64(expected)) + ref.VerificationMetrics.Atol
+			assert.InDelta(t, float64(expected), float64(got), tol,
+				"WTQ aggregation[%d][%d] out of tolerance", b, i)
+		}
+
+		// Decode best aggregation index and verify it matches the reference.
+		best := 0
+		for i, v := range row {
+			if v > row[best] {
+				best = i
+			}
+		}
+		assert.Equal(t, int(tc.Interpretation[b].AggregationOp), best,
+			"WTQ aggregation query %q: best index %d != expected %d",
+			tc.Queries[b], best, int(tc.Interpretation[b].AggregationOp))
+	}
+	t.Logf("WTQ aggregation reference verified for %d queries: %v", len(tc.Queries), tc.Queries)
+}
+
+func flatten2d(t *testing.T, vals [][]int64) []int64 {
+	t.Helper()
+	if len(vals) == 0 {
+		return nil
+	}
+	out := make([]int64, 0, len(vals)*len(vals[0]))
+	for _, row := range vals {
+		for _, v := range row {
+			out = append(out, v)
+		}
+	}
+	return out
 }
 
 // text-to-speech
@@ -2083,10 +2642,15 @@ func TextToSpeechPipeline(t *testing.T, session *hugot.Session) {
 	CheckT(t, err)
 	result, err := pipeline.RunText(t.Context(), []string{"hello world"})
 	CheckT(t, err)
-	if len(result.Audio) != 1 || len(result.Audio[0].Samples) == 0 {
+	if result == nil || len(result.Audio) != 1 || len(result.Audio[0].Samples) == 0 {
 		t.Fatal("text-to-speech inference returned no audio")
 	}
 	assert.Equal(t, 16000, result.Audio[0].SampleRate)
+	for _, sample := range result.Audio[0].Samples {
+		if math.IsNaN(float64(sample)) || math.IsInf(float64(sample), 0) {
+			t.Fatal("text-to-speech returned nonfinite audio")
+		}
+	}
 }
 
 func TextToSpeechPipelineValidation(t *testing.T, session *hugot.Session) {
@@ -2105,7 +2669,6 @@ func TextToSpeechPipelineValidation(t *testing.T, session *hugot.Session) {
 
 func TextToAudioPipeline(t *testing.T, session *hugot.Session) {
 	t.Helper()
-	skipGenerativePipeline(t)
 	config := backends.PipelineConfig[*pipelines.TextToAudioPipeline]{
 		ModelPath: ModelsFolder + "Xenova_mms-tts-eng",
 		Name:      "testTextToAudio",
@@ -2117,10 +2680,15 @@ func TextToAudioPipeline(t *testing.T, session *hugot.Session) {
 	CheckT(t, err)
 	result, err := pipeline.RunText(t.Context(), []string{"hello world"})
 	CheckT(t, err)
-	if len(result.Audio) != 1 || len(result.Audio[0].Samples) == 0 {
+	if result == nil || len(result.Audio) != 1 || len(result.Audio[0].Samples) == 0 {
 		t.Fatal("text-to-audio inference returned no audio")
 	}
 	assert.Equal(t, 16000, result.Audio[0].SampleRate)
+	for _, sample := range result.Audio[0].Samples {
+		if math.IsNaN(float64(sample)) || math.IsInf(float64(sample), 0) {
+			t.Fatal("text-to-audio returned nonfinite audio")
+		}
+	}
 }
 
 func TextToAudioPipelineValidation(t *testing.T, session *hugot.Session) {

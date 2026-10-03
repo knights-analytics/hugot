@@ -28,7 +28,8 @@ type FeatureExtractionPipeline struct {
 	OutputIndex        int // Record the index of the output selected, defaults to first (0)
 	Normalization      bool
 	// Image mode fields (for vision encoders like CLIP visual)
-	imageMode bool // true if this is a vision model
+	imageMode   bool // true if this is a vision model
+	modelPooler bool
 }
 
 type FeatureExtractionOutput struct {
@@ -74,6 +75,15 @@ func WithOutputName(outputName string) backends.PipelineOption[*FeatureExtractio
 	}
 }
 
+// WithModelPooler selects the model's rank-two pooler_output instead of mean
+// pooling hidden states. Models without that output are rejected.
+func WithModelPooler() backends.PipelineOption[*FeatureExtractionPipeline] {
+	return func(pipeline *FeatureExtractionPipeline) error {
+		pipeline.modelPooler = true
+		return nil
+	}
+}
+
 // WithImageMode enables image feature extraction mode for vision encoders (e.g., CLIP visual encoder).
 // When enabled, the pipeline accepts images instead of text and skips tokenization.
 func WithImageMode() backends.PipelineOption[*FeatureExtractionPipeline] {
@@ -103,6 +113,13 @@ func NewFeatureExtractionPipeline(sessionContext context.Context, config backend
 		pipeline.imageFormat = detectedFormat
 	}
 	// filter outputs
+	if pipeline.modelPooler {
+		index, err := modelPoolerIndex(model)
+		if err != nil {
+			return nil, err
+		}
+		pipeline.OutputName = model.OutputsMeta[index].Name
+	}
 	if pipeline.OutputName != "" {
 		for index, output := range model.OutputsMeta {
 			if output.Name == pipeline.OutputName {
@@ -217,11 +234,7 @@ func (p *FeatureExtractionPipeline) forward(ctx context.Context, batch *backends
 
 // postprocess parses the first output from the network similar to the transformers' implementation.
 func (p *FeatureExtractionPipeline) postprocess(batch *backends.PipelineBatch) (*FeatureExtractionOutput, error) {
-	// TODO: this works if token embeddings are returned or sentence embeddings are returned.
-	// in the former case embeddings are mean pooled. In the latter they are just returned.
-	// to make this more general for other pipelines and to allow return of raw token embeddings,
-	// we need an ndarray type that can be the return type of this pipeline. Need to think
-	// about how to do this in a lightweight manner.
+	// Rank-three hidden states are mean pooled; rank-two model embeddings pass through.
 	output := batch.OutputValues[p.OutputIndex] // Use the index of the output we want to return
 	batchEmbeddings := make([][]float32, batch.Size)
 	outputDimensions := []int64(p.Output.Dimensions)
@@ -238,8 +251,9 @@ func (p *FeatureExtractionPipeline) postprocess(batch *backends.PipelineBatch) (
 	}
 	// Normalize embeddings (if asked), like in https://huggingface.co/sentence-transformers/all-mpnet-base-v2
 	if p.Normalization {
+		batchEmbeddings = append([][]float32(nil), batchEmbeddings...)
 		for i, embedding := range batchEmbeddings {
-			batchEmbeddings[i] = vectorutil.Normalize(embedding, 2)
+			batchEmbeddings[i] = vectorutil.Normalize(append([]float32(nil), embedding...), 2)
 		}
 	}
 	return &FeatureExtractionOutput{Embeddings: batchEmbeddings}, nil
@@ -287,6 +301,54 @@ func (p *FeatureExtractionPipeline) RunPipeline(ctx context.Context, inputs []st
 	return backends.RunPipeline(ctx, len(inputs), func(batch *backends.PipelineBatch) error {
 		return p.preprocess(batch, inputs)
 	}, p.forward, p.postprocess)
+}
+
+func (p *FeatureExtractionPipeline) postprocessRaw(batch *backends.PipelineBatch) (*RawFeatureOutput, error) {
+	return rawFeatures(batch, p.Output, p.OutputIndex)
+}
+
+func (p *FeatureExtractionPipeline) forwardRaw(ctx context.Context, batch *backends.PipelineBatch) error {
+	// Input tensors already contain attention masks. Only disable output trimming.
+	batch.PaddingMask = nil
+	return p.forward(ctx, batch)
+}
+
+// RunRaw returns unpooled, unnormalized text features, including padding tokens.
+func (p *FeatureExtractionPipeline) RunRaw(ctx context.Context, inputs []string) (*RawFeatureOutput, error) {
+	if p.imageMode {
+		return nil, errors.New("RunRaw requires text mode; use RunRawWithImages or RunRawWithImagePaths")
+	}
+	if len(inputs) == 0 {
+		return nil, errors.New("raw features require a nonempty batch")
+	}
+	return backends.RunPipeline(ctx, len(inputs), func(batch *backends.PipelineBatch) error {
+		return p.preprocess(batch, inputs)
+	}, p.forwardRaw, p.postprocessRaw)
+}
+
+// RunRawWithImages returns the selected image tensor without pooling or normalization.
+func (p *FeatureExtractionPipeline) RunRawWithImages(ctx context.Context, images []image.Image) (*RawFeatureOutput, error) {
+	if !p.imageMode {
+		return nil, errors.New("RunRawWithImages requires ImageMode to be enabled")
+	}
+	if len(images) == 0 {
+		return nil, errors.New("raw features require a nonempty batch")
+	}
+	return backends.RunPipeline(ctx, len(images), func(batch *backends.PipelineBatch) error {
+		return p.PreprocessImages(batch, images)
+	}, p.forwardRaw, p.postprocessRaw)
+}
+
+// RunRawWithImagePaths loads images and returns their raw features.
+func (p *FeatureExtractionPipeline) RunRawWithImagePaths(ctx context.Context, paths []string) (*RawFeatureOutput, error) {
+	if !p.imageMode || len(paths) == 0 {
+		return nil, errors.New("raw image features require ImageMode and a nonempty batch")
+	}
+	images, err := imageutil.LoadImagesFromPaths(p.SessionContext, paths)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load images: %w", err)
+	}
+	return p.RunRawWithImages(ctx, images)
 }
 
 // IMAGE MODE METHODS

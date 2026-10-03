@@ -88,6 +88,16 @@ func (b runtimeBackend) CreateAudioTensors(batch *PipelineBatch, model *Model, s
 	return createAudioTensorsGoMLX(batch, model, samples)
 }
 
+func (b runtimeBackend) CreateAudioTextTensors(batch *PipelineBatch, model *Model, features [][][][]float32, isLonger []bool, inputs []TokenizedInput) error {
+	batch.AudioFeatures = features
+	batch.AudioIsLonger = isLonger
+	batch.Input = inputs
+	if b.runtime == options.BackendORT {
+		return createInputTensorsORT(batch, model)
+	}
+	return createInputTensorsGoMLX(batch, model, true, b.runtime == options.BackendXLA)
+}
+
 func (b runtimeBackend) CreateTabularTensors(batch *PipelineBatch, model *Model, features [][]float32) error {
 	if b.runtime == options.BackendORT {
 		return createTabularTensorsORT(batch, model, features)

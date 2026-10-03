@@ -4,6 +4,7 @@ package ort_test
 
 import (
 	"os"
+	"runtime"
 	"testing"
 
 	"github.com/knights-analytics/hugot"
@@ -21,6 +22,9 @@ func runORTPipeline(t *testing.T, run func(*testing.T, *hugot.Session), opts ...
 
 func runORTPipelineGoMLX(t *testing.T, run func(*testing.T, *hugot.Session), opts ...options.WithOption) {
 	t.Helper()
+	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
+		t.Skip("GoMLX ORT backend registration is supported only on Linux and macOS")
+	}
 	opts = append([]options.WithOption{options.WithGoMLX()}, opts...)
 	runORTPipeline(t, run, opts...)
 }

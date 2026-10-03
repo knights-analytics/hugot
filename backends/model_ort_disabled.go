@@ -23,6 +23,10 @@ func createORTModelBackend(_ *Model, _ *options.Options) error {
 	return errors.New("ORT is not enabled")
 }
 
+func runNamedTensorsORT(_ context.Context, _ *Model, _ map[string]Tensor) (map[string]Tensor, error) {
+	return nil, errors.New("ORT is not enabled")
+}
+
 func createInputTensorsORT(_ *PipelineBatch, _ *Model) error {
 	return errors.New("ORT is not enabled")
 }

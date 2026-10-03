@@ -32,11 +32,13 @@ jobs:
         uses: docker/metadata-action@v6
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          bake-target: hugot-ghcr
 
       - name: Build and push with Bake
         id: bake
         uses: docker/bake-action@v7
         with:
+          source: .
           files: |
             docker-bake.hcl
             ${{ steps.meta.outputs.bake-file }}

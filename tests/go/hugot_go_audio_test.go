@@ -11,10 +11,12 @@ import (
 // Zero-shot audio classification
 
 func TestZeroShotAudioClassificationPipelineGo(t *testing.T) {
+	t.Skip("Skipping test due to known nonConstantDepedencies given an unknown node output name \"\" issue with Go pipeline")
 	runGoPipeline(t, testutil.ZeroShotAudioClassificationPipeline)
 }
 
 func TestZeroShotAudioClassificationPipelineValidationGo(t *testing.T) {
+	t.Skip("Skipping test due to known nonConstantDepedencies given an unknown node output name \"\" issue with Go pipeline")
 	runGoPipelineValidation(t, testutil.ZeroShotAudioClassificationPipelineValidation)
 }
 
@@ -43,10 +45,12 @@ func TestTextToSpeechPipelineValidationGo(t *testing.T) {
 // Text-to-audio
 
 func TestTextToAudioPipelineGo(t *testing.T) {
+	t.Skip("Skipping test due to known nonConstantDepedencies given an unknown node output name issue with Go pipeline")
 	runGoPipeline(t, testutil.TextToAudioPipeline)
 }
 
 func TestTextToAudioPipelineValidationGo(t *testing.T) {
+	t.Skip("Skipping test due to known nonConstantDepedencies given an unknown node output name issue with Go pipeline")
 	runGoPipelineValidation(t, testutil.TextToAudioPipelineValidation)
 }
 

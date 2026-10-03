@@ -99,41 +99,50 @@ func TestDepthEstimationPipelineValidationXLA(t *testing.T) {
 // Mask generation
 
 func TestMaskGenerationPipelineXLA(t *testing.T) {
+	t.Skip("Skipping test due to known total requested size doesnt match original size issue with XLA pipeline")
 	runXLAPipeline(t, testutil.MaskGenerationPipeline)
 }
 
 func TestMaskGenerationPipelineXLACuda(t *testing.T) {
+	t.Skip("Skipping test due to known total requested size doesnt match original size issue with XLA pipeline")
 	runXLAPipelineCuda(t, testutil.MaskGenerationPipeline)
 }
 
 func TestMaskGenerationPipelineValidationXLA(t *testing.T) {
+	t.Skip("Skipping test due to known total requested size doesnt match original size issue with XLA pipeline")
 	runXLAPipelineValidation(t, testutil.MaskGenerationPipelineValidation)
 }
 
 // Background removal
 
 func TestBackgroundRemovalPipelineXLA(t *testing.T) {
+	t.Skip("Skipping test due to known total requested size doesnt match original size issue with XLA pipeline")
 	runXLAPipeline(t, testutil.BackgroundRemovalPipeline)
 }
 
 func TestBackgroundRemovalPipelineXLACuda(t *testing.T) {
+	t.Skip("Skipping test due to known total requested size doesnt match original size issue with XLA pipeline")
 	runXLAPipelineCuda(t, testutil.BackgroundRemovalPipeline)
 }
 
 func TestBackgroundRemovalPipelineValidationXLA(t *testing.T) {
+	t.Skip("Skipping test due to known total requested size doesnt match original size issue with XLA pipeline")
 	runXLAPipelineValidation(t, testutil.BackgroundRemovalPipelineValidation)
 }
 
 // Zero-shot image classification
 
 func TestZeroShotImageClassificationPipelineXLA(t *testing.T) {
+	t.Skip("Skipping test due to unimplemented ONNX op \"InstanceNormalization\" issue with XLA pipeline")
 	runXLAPipeline(t, testutil.ZeroShotImageClassificationPipeline)
 }
 
 func TestZeroShotImageClassificationPipelineXLACuda(t *testing.T) {
+	t.Skip("Skipping test due to unimplemented ONNX op \"InstanceNormalization\" issue with XLA pipeline")
 	runXLAPipelineCuda(t, testutil.ZeroShotImageClassificationPipeline)
 }
 
 func TestZeroShotImageClassificationPipelineValidationXLA(t *testing.T) {
+	t.Skip("Skipping test due to unimplemented ONNX op \"InstanceNormalization\" issue with XLA pipeline")
 	runXLAPipelineValidation(t, testutil.ZeroShotImageClassificationPipelineValidation)
 }

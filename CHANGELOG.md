@@ -4,7 +4,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
-## [0.8.1]
+## [0.8.2] - 2026-10-06
+
+### Changed
+
+- Python parity tests: embedded Python ONNX reference vectors with pinned tolerances to verify numeric parity across ORT, GoMLX, and XLA backends.
+- Raw feature access and dimensions for text and image feature-extraction pipelines.
+
+## [0.8.1] - 2026-10-02
 
 ### Added
 
@@ -19,6 +26,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ### Changed
 
+- Improved several new pipelines to better match the Hugging Face reference behavior and numerics: pre/post-processing, output naming, and result shapes for feature extraction, image captioning, mask generation, table/document question answering, and zero-shot audio.
 - Pipeline operations are now methods on `*hugot.Session` (`session.NewPipeline`, `session.GetPipeline`, `session.GetPipelines`, `session.ClosePipeline`); the old free-function variants are deprecated thin wrappers kept for compatibility.
 - BREAKING: Training is now configured with `session.NewTrainer(TrainerConfig, ...TrainerOption)` and run with `trainer.Train(ctx)`.
 

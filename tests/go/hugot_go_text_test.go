@@ -54,6 +54,10 @@ func TestCrossEncoderPipelineValidationGo(t *testing.T) {
 
 // Feature extraction
 
+func TestRawFeatureExtractionPipelineGo(t *testing.T) {
+	runGoPipeline(t, testutil.RawFeatureExtractionPipeline)
+}
+
 func TestFeatureExtractionPipelineGo(t *testing.T) {
 	runGoPipeline(t, testutil.FeatureExtractionPipeline)
 }

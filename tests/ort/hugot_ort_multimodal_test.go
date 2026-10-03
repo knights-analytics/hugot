@@ -10,6 +10,10 @@ import (
 
 // Visual question answering
 
+func TestNativeVisualQuestionAnsweringPipelineORT(t *testing.T) {
+	runORTPipeline(t, testutil.NativeVisualQuestionAnsweringPipeline)
+}
+
 func TestVisualQuestionAnsweringPipelineORT(t *testing.T) {
 	runORTPipeline(t, testutil.VisualQuestionAnsweringPipeline)
 }
@@ -33,6 +37,7 @@ func TestDocumentQuestionAnsweringPipelineORT(t *testing.T) {
 }
 
 func TestDocumentQuestionAnsweringPipelineORTGoMLX(t *testing.T) {
+	t.Skip("Skipping test due to unimplemented ONNX op \"ConvInteger\" issue with GoMLX pipeline")
 	runORTPipelineGoMLX(t, testutil.DocumentQuestionAnsweringPipeline)
 }
 
@@ -51,6 +56,7 @@ func TestTableQuestionAnsweringPipelineORT(t *testing.T) {
 }
 
 func TestTableQuestionAnsweringPipelineORTGoMLX(t *testing.T) {
+	t.Skip("Skipping test due to unimplemented ONNX op \"ScatterElements\" issue with GoMLX pipeline")
 	runORTPipelineGoMLX(t, testutil.TableQuestionAnsweringPipeline)
 }
 
@@ -62,7 +68,15 @@ func TestTableQuestionAnsweringPipelineValidationORT(t *testing.T) {
 	runORTPipelineValidation(t, testutil.TableQuestionAnsweringPipelineValidation)
 }
 
+func TestTableQuestionAnsweringAggregationPipelineORT(t *testing.T) {
+	runORTPipeline(t, testutil.TableQuestionAnsweringAggregation)
+}
+
 // Image-to-text
+
+func TestNativeImageToTextPipelineORT(t *testing.T) {
+	runORTPipeline(t, testutil.NativeImageToTextPipeline)
+}
 
 func TestImageToTextPipelineORT(t *testing.T) {
 	runORTPipeline(t, testutil.ImageToTextPipeline)

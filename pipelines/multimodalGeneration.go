@@ -148,12 +148,25 @@ func multimodalMessages(inputs []ImageTextPrompt, defaultPrompt string) ([][]bac
 }
 
 type (
-	ImageToTextPipeline     struct{ *multimodalGeneration }
+	ImageToTextPipeline struct {
+		*multimodalGeneration
+		native *nativeImageCaptioning
+	}
 	ImageTextToTextPipeline struct{ *multimodalGeneration }
 )
 
-func (*ImageToTextPipeline) IsGenerative() bool     { return true }
+func (p *ImageToTextPipeline) IsGenerative() bool   { return p == nil || p.native == nil }
 func (*ImageTextToTextPipeline) IsGenerative() bool { return true }
+
+func (p *ImageToTextPipeline) Validate() error {
+	if p == nil {
+		return errors.New("image to text pipeline is nil")
+	}
+	if p.native != nil {
+		return p.validateNativeCaption()
+	}
+	return p.multimodalGeneration.Validate()
+}
 
 type (
 	ImageToTextConfig     = backends.PipelineConfig[*ImageToTextPipeline]
@@ -191,7 +204,18 @@ func WithImageTextToTextStreaming() ImageTextToTextOption {
 }
 
 func NewImageToTextPipeline(ctx context.Context, config ImageToTextConfig, model *backends.Model) (*ImageToTextPipeline, error) {
-	p := &ImageToTextPipeline{&multimodalGeneration{BasePipeline: backends.NewBasePipeline(ctx, config, model), MaxLength: defaultMultimodalMaxLength}}
+	if model == nil {
+		return nil, errors.New("image-to-text requires a model")
+	}
+	p := &ImageToTextPipeline{multimodalGeneration: &multimodalGeneration{BasePipeline: backends.NewBasePipeline(ctx, config, model), MaxLength: defaultMultimodalMaxLength}}
+	if !model.IsGenerative {
+		var err error
+		p.native, err = newNativeImageCaptioning(ctx, model)
+		if err != nil {
+			return nil, err
+		}
+		p.MaxLength = 20
+	}
 	for _, o := range config.Options {
 		if err := o(p); err != nil {
 			return nil, err
@@ -219,6 +243,9 @@ func (p *ImageToTextPipeline) Run(ctx context.Context, inputs []string) (backend
 }
 
 func (p *ImageToTextPipeline) RunWithImages(ctx context.Context, inputs []ImageTextPrompt) (*MultimodalTextOutput, error) {
+	if p.native != nil {
+		return p.runNativeCaption(ctx, inputs)
+	}
 	messages, err := multimodalMessages(inputs, "Describe this image.")
 	if err != nil {
 		return nil, err

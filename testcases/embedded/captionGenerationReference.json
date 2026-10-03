@@ -1,0 +1,76 @@
+{
+  "schema_version": 1,
+  "provenance": {
+    "python": "3.14.4",
+    "onnxruntime": "1.30.0",
+    "numpy": "2.5.3",
+    "pillow": "12.2.0",
+    "tokenizers": "0.22.2",
+    "scope": "Independent Python CPU ONNX inference of the exact exported graphs; not unquantized Transformers/PyTorch parity.",
+    "threads": 1
+  },
+  "input_contract": "Embedded lossless 224x224 RGB images prepared with Pillow from source JPEGs. Exact captions compare inference/decoding without cross-library JPEG or resize differences. Full source-JPEG generation parity is not asserted.",
+  "model": {
+    "id": "Xenova/vit-gpt2-image-captioning",
+    "revision": "215b4edcb7ec1fad5905a18a03f7b2007f6fabd0",
+    "sha256": {
+      "encoder_model_quantized.onnx": "6f6e2e27c11303cf533682184543333e7ecb930a734197a0272a1e408aba2766",
+      "decoder_model_quantized.onnx": "4cd3a527b1acd9893dec2ef8f02b5e759c0365e365976a2f44313c6095a8a256",
+      "tokenizer.json": "6e785cd4f004c9291dadeba7d8d1c2871318d368a1cfcd416c0571dcd8f11413",
+      "preprocessor_config.json": "76304e9a1deb0d5f78349a57ad9d8057f36476c29bd292e907e2e8c451c93e9d"
+    }
+  },
+  "generation": {
+    "decoder_start_token_id": 50256,
+    "eos_token_id": 50256,
+    "max_new_tokens": 20,
+    "num_beams": 1,
+    "do_sample": false
+  },
+  "cases": [
+    {
+      "image": "caption_cat_reference.png",
+      "image_sha256": "5c2fa68234c61536ee1658a805d475aa8ac6751900ac4222ca423f9b686001e9",
+      "source_image": "cat.jpg",
+      "source_image_sha256": "dea9e7ef97386345f7cff32f9055da4982da5471c48d575146c796ab4563b04e",
+      "tokens": [
+        64,
+        3797,
+        16299,
+        319,
+        257,
+        3996,
+        351,
+        257,
+        3797,
+        16299,
+        319,
+        340,
+        220
+      ],
+      "text": "a cat laying on a bed with a cat laying on it",
+      "eos_reached": true
+    },
+    {
+      "image": "caption_portrait_reference.png",
+      "image_sha256": "65cc818728aafd2f2eb8376f5d37cbf6b82c286305b5d87b0becfafc4e5d32bf",
+      "source_image": "portrait.jpg",
+      "source_image_sha256": "add07e736fb14a8e653b9aa6491530330c05c2d9d2015e5a1c3e7eb9c7471685",
+      "tokens": [
+        64,
+        2415,
+        351,
+        257,
+        2266,
+        4190,
+        290,
+        257,
+        2042,
+        1353,
+        220
+      ],
+      "text": "a woman with a red hair and a black top",
+      "eos_reached": true
+    }
+  ]
+}

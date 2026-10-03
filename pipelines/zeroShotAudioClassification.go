@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -39,13 +40,14 @@ func (o *ZeroShotAudioClassificationOutput) GetOutput() []any {
 }
 
 // ZeroShotAudioClassificationPipeline scores candidate labels against audio.
-// The model contract is an audio input and one logit per candidate label.
+// The model compares an audio input with tokenized candidate text and returns pairwise similarities.
 type ZeroShotAudioClassificationPipeline struct {
 	*backends.BasePipeline
-	Labels []string
-	TopK   int
-	Input  backends.InputOutputInfo
-	SampleRate int
+	Labels             []string
+	TopK               int
+	Input              backends.InputOutputInfo
+	SampleRate         int
+	HypothesisTemplate string
 }
 
 func WithAudioLabels(labels []string) ZeroShotAudioClassificationOption {
@@ -58,6 +60,17 @@ func WithAudioLabels(labels []string) ZeroShotAudioClassificationOption {
 // WithZeroShotAudioLabels is the family-specific spelling of WithAudioLabels.
 func WithZeroShotAudioLabels(labels []string) ZeroShotAudioClassificationOption {
 	return WithAudioLabels(labels)
+}
+
+// WithZeroShotAudioHypothesisTemplate sets the text template used to describe each candidate label.
+func WithZeroShotAudioHypothesisTemplate(template string) ZeroShotAudioClassificationOption {
+	return func(p *ZeroShotAudioClassificationPipeline) error {
+		if !strings.Contains(template, "{}") {
+			return errors.New("zero-shot audio hypothesis template must contain {}")
+		}
+		p.HypothesisTemplate = template
+		return nil
+	}
 }
 
 func WithZeroShotAudioTopK(k int) ZeroShotAudioClassificationOption {
@@ -85,7 +98,12 @@ func NewZeroShotAudioClassificationPipeline(ctx context.Context, config ZeroShot
 	if model == nil {
 		return nil, errors.New("zero-shot audio classification requires a model")
 	}
-	p := &ZeroShotAudioClassificationPipeline{BasePipeline: backends.NewBasePipeline(ctx, config, model), TopK: 5, SampleRate: defaultAudioSampleRate}
+	p := &ZeroShotAudioClassificationPipeline{
+		BasePipeline:       backends.NewBasePipeline(ctx, config, model),
+		TopK:               5,
+		SampleRate:         48000,
+		HypothesisTemplate: "This is a sound of {}.",
+	}
 	for _, option := range config.Options {
 		if err := option(p); err != nil {
 			return nil, err
@@ -110,25 +128,35 @@ func (p *ZeroShotAudioClassificationPipeline) GetStatistics() backends.PipelineS
 }
 
 func (p *ZeroShotAudioClassificationPipeline) Validate() error {
-	if p.Model == nil {
+	if p.BasePipeline == nil || p.Model == nil {
 		return errors.New("zero-shot audio classification requires a model")
 	}
 	var errs []error
 	if len(p.Labels) == 0 {
 		errs = append(errs, errors.New("zero-shot audio classification requires at least one candidate label"))
 	}
+	inputFeaturesFound, inputIDsFound := false, false
 	if len(p.Model.InputsMeta) == 0 {
 		errs = append(errs, errors.New("zero-shot audio classification model has no inputs"))
 	} else {
-		p.Input = p.Model.InputsMeta[0]
 		for _, input := range p.Model.InputsMeta {
-			if input.Name == "input_values" || input.Name == "waveform" || input.Name == "audio" {
+			switch input.Name {
+			case "input_features":
 				p.Input = input
-				break
+				inputFeaturesFound = true
+				if len(input.Dimensions) != 4 {
+					errs = append(errs, fmt.Errorf("CLAP input_features must have rank 4, got %v", input.Dimensions))
+				}
+			case "is_longer":
+			case "input_ids":
+				inputIDsFound = true
 			}
 		}
-		if len(p.Input.Dimensions) != 2 && len(p.Input.Dimensions) != 3 {
-			errs = append(errs, fmt.Errorf("unsupported zero-shot audio input layout %q: expected rank 2 or 3, got %v", p.Input.Name, p.Input.Dimensions))
+		if !inputFeaturesFound {
+			errs = append(errs, errors.New("zero-shot audio classification requires a CLAP input_features tensor"))
+		}
+		if !inputIDsFound {
+			errs = append(errs, errors.New("zero-shot audio classification requires text input_ids"))
 		}
 	}
 	if len(p.Model.OutputsMeta) == 0 {
@@ -136,22 +164,19 @@ func (p *ZeroShotAudioClassificationPipeline) Validate() error {
 	} else {
 		dims := p.Model.OutputsMeta[0].Dimensions
 		if len(dims) != 2 {
-			errs = append(errs, fmt.Errorf("zero-shot audio classification output must have shape [batch, labels], got %v", dims))
-		} else if dims[1] > 0 && len(p.Labels) > 0 && int(dims[1]) != len(p.Labels) {
-			errs = append(errs, fmt.Errorf("candidate labels (%d) do not match audio logits (%d)", len(p.Labels), dims[1]))
+			errs = append(errs, fmt.Errorf("zero-shot audio classification output must have shape [audio, text], got %v", dims))
 		}
 	}
 	if p.TopK < 1 {
 		errs = append(errs, errors.New("zero-shot audio classification top-k must be greater than zero"))
 	}
-	return errors.Join(errs...)
-}
-
-func (p *ZeroShotAudioClassificationPipeline) preprocess(batch *backends.PipelineBatch, inputs [][]float32) error {
-	if len(inputs) == 0 {
-		return errors.New("zero-shot audio classification requires at least one waveform")
+	if p.SampleRate <= 0 {
+		errs = append(errs, errors.New("zero-shot audio sample rate must be greater than zero"))
 	}
-	return createAudioInputTensors(batch, p.Model, inputs)
+	if !strings.Contains(p.HypothesisTemplate, "{}") {
+		errs = append(errs, errors.New("zero-shot audio hypothesis template must contain {}"))
+	}
+	return errors.Join(errs...)
 }
 
 func (p *ZeroShotAudioClassificationPipeline) forward(ctx context.Context, batch *backends.PipelineBatch) error {
@@ -164,29 +189,33 @@ func (p *ZeroShotAudioClassificationPipeline) forward(ctx context.Context, batch
 	return nil
 }
 
-func (p *ZeroShotAudioClassificationPipeline) postprocess(batch *backends.PipelineBatch) (*ZeroShotAudioClassificationOutput, error) {
+func zeroShotAudioSimilarity(batch *backends.PipelineBatch) (float32, error) {
 	if len(batch.OutputValues) == 0 {
-		return nil, errors.New("zero-shot audio classification produced no outputs")
+		return 0, errors.New("zero-shot audio classification produced no outputs")
 	}
 	logits, ok := batch.OutputValues[0].([][]float32)
 	if !ok {
-		return nil, fmt.Errorf("zero-shot audio classification output type %T is not supported", batch.OutputValues[0])
+		return 0, fmt.Errorf("zero-shot audio classification output type %T is not supported", batch.OutputValues[0])
 	}
-	out := &ZeroShotAudioClassificationOutput{Predictions: make([][]ZeroShotAudioClassificationResult, len(logits))}
-	for i, row := range logits {
-		scores := vectorutil.SoftMax(row)
-		indices := make([]int, len(row))
-		for j := range indices {
-			indices[j] = j
-		}
-		sort.SliceStable(indices, func(a, b int) bool { return scores[indices[a]] > scores[indices[b]] })
-		k := min(p.TopK, len(indices))
-		out.Predictions[i] = make([]ZeroShotAudioClassificationResult, k)
-		for j, index := range indices[:k] {
-			out.Predictions[i][j] = ZeroShotAudioClassificationResult{Label: p.Labels[index], Score: scores[index], ClassIndex: index}
-		}
+	if len(logits) != 1 || len(logits[0]) != 1 {
+		return 0, fmt.Errorf("CLAP pairwise output must contain one audio/text score, got %v", logits)
 	}
-	return out, nil
+	return logits[0][0], nil
+}
+
+func rankZeroShotAudio(labels []string, similarities []float32, topK int) [][]ZeroShotAudioClassificationResult {
+	scores := vectorutil.SoftMax(similarities)
+	indices := make([]int, len(labels))
+	for i := range indices {
+		indices[i] = i
+	}
+	sort.SliceStable(indices, func(i, j int) bool { return scores[indices[i]] > scores[indices[j]] })
+	k := min(topK, len(indices))
+	results := make([]ZeroShotAudioClassificationResult, k)
+	for i, index := range indices[:k] {
+		results[i] = ZeroShotAudioClassificationResult{Label: labels[index], Score: scores[index], ClassIndex: index}
+	}
+	return [][]ZeroShotAudioClassificationResult{results}
 }
 
 func (p *ZeroShotAudioClassificationPipeline) Run(ctx context.Context, inputs []string) (backends.PipelineBatchOutput, error) {
@@ -197,6 +226,10 @@ func (p *ZeroShotAudioClassificationPipeline) RunFiles(ctx context.Context, path
 	waveforms, err := loadAudioFiles(paths)
 	if err != nil {
 		return nil, err
+	}
+	for i := range waveforms {
+		waveforms[i].Samples = resampleAudio(waveforms[i].Samples, waveforms[i].SampleRate, p.SampleRate)
+		waveforms[i].SampleRate = p.SampleRate
 	}
 	return p.RunWaveforms(ctx, waveforms)
 }
@@ -211,5 +244,43 @@ func (p *ZeroShotAudioClassificationPipeline) RunWaveforms(ctx context.Context, 
 
 // RunWithAudio executes mono samples already sampled at the pipeline's configured SampleRate.
 func (p *ZeroShotAudioClassificationPipeline) RunWithAudio(ctx context.Context, inputs [][]float32) (*ZeroShotAudioClassificationOutput, error) {
-	return backends.RunPipeline(ctx, len(inputs), func(batch *backends.PipelineBatch) error { return p.preprocess(batch, inputs) }, p.forward, p.postprocess)
+	if len(inputs) == 0 {
+		return nil, errors.New("zero-shot audio classification requires at least one waveform")
+	}
+	if len(p.Labels) == 0 {
+		return nil, errors.New("zero-shot audio classification requires candidate labels")
+	}
+	if p.Model.Tokenizer == nil {
+		return nil, errors.New("zero-shot audio classification requires a tokenizer for candidate labels")
+	}
+	output := &ZeroShotAudioClassificationOutput{Predictions: make([][]ZeroShotAudioClassificationResult, len(inputs))}
+	for audioIndex, samples := range inputs {
+		features, isLonger, err := clapAudioFeatures(samples, p.SampleRate)
+		if err != nil {
+			return nil, fmt.Errorf("audio %d: %w", audioIndex, err)
+		}
+		similarities := make([]float32, len(p.Labels))
+		for labelIndex, label := range p.Labels {
+			if strings.TrimSpace(label) == "" {
+				return nil, fmt.Errorf("candidate label %d is empty", labelIndex)
+			}
+			text := strings.Replace(p.HypothesisTemplate, "{}", label, 1)
+			pair, err := backends.RunPipeline(ctx, 1, func(batch *backends.PipelineBatch) error {
+				backends.TokenizeInputs(batch, p.Model.Tokenizer, []string{text})
+				return backends.CreateAudioTextTensors(batch, p.Model, [][][][]float32{features}, []bool{isLonger}, batch.Input)
+			}, p.forward, func(batch *backends.PipelineBatch) (*ZeroShotAudioClassificationOutput, error) {
+				similarity, err := zeroShotAudioSimilarity(batch)
+				if err != nil {
+					return nil, err
+				}
+				return &ZeroShotAudioClassificationOutput{Predictions: [][]ZeroShotAudioClassificationResult{{{Score: similarity}}}}, nil
+			})
+			if err != nil {
+				return nil, err
+			}
+			similarities[labelIndex] = pair.Predictions[0][0].Score
+		}
+		output.Predictions[audioIndex] = rankZeroShotAudio(p.Labels, similarities, p.TopK)[0]
+	}
+	return output, nil
 }

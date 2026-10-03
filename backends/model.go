@@ -16,8 +16,7 @@ import (
 	"github.com/knights-analytics/hugot/util/fileutil"
 )
 
-// ModelMetadata contains model identity and inference metadata.
-type ModelMetadata struct {
+type Model struct {
 	ID                    string
 	Path                  string
 	OnnxFilename          string
@@ -30,23 +29,16 @@ type ModelMetadata struct {
 	MaxPositionEmbeddings int
 	ImageSize             int
 	IsGenerative          bool
-}
-
-// ModelResources owns the backend and tokenizer resources for a model.
-type ModelResources struct {
-	Backend    Backend
-	ORTModel   *ORTModel
-	GoMLXModel *GoMLXModel
-	Tokenizer  *Tokenizer
-	OnnxReader io.ReadCloser
-	Pipelines  map[string]Pipeline
-}
-
-type Model struct {
-	ModelMetadata
-	ModelResources
-	closeMu sync.Mutex
-	closed  bool
+	Backend               Backend
+	ORTModel              *ORTModel
+	GoMLXModel            *GoMLXModel
+	Tokenizer             *Tokenizer
+	OnnxReader            io.ReadCloser
+	Pipelines             map[string]Pipeline
+	closeMu               sync.Mutex
+	closed                bool
+	loadOptions           *options.Options
+	graphs                map[string]*Model
 }
 
 func LoadModel(ctx context.Context, path string, onnxFilename string, opts *options.Options, isGenerative bool) (*Model, error) {
@@ -56,6 +48,7 @@ func LoadModel(ctx context.Context, path string, onnxFilename string, opts *opti
 		OnnxFilename: onnxFilename,
 		IsGenerative: isGenerative,
 		Pipelines:    map[string]Pipeline{},
+		loadOptions:  opts,
 	}
 	backend, backendErr := newBackend(opts)
 	if backendErr != nil {
@@ -105,6 +98,10 @@ func (model *Model) Close() error {
 	model.closed = true
 
 	var closeErr error
+	for _, graph := range model.graphs {
+		closeErr = errors.Join(closeErr, graph.Close())
+	}
+	model.graphs = nil
 	if model.Tokenizer != nil {
 		closeErr = errors.Join(closeErr, model.Tokenizer.Close())
 		model.Tokenizer = nil
@@ -132,17 +129,17 @@ func GetOnnxModelPath(ctx context.Context, model *Model) error {
 	if len(onnxFiles) == 0 {
 		return fmt.Errorf("no .onnx file detected at %s. There should be exactly .onnx file", model.Path)
 	}
-	if len(onnxFiles) > 1 {
-		if model.OnnxFilename == "" {
-			return fmt.Errorf("multiple .onnx file detected at %s and no OnnxFilename specified", model.Path)
-		}
+	if model.OnnxFilename != "" {
 		for i := range onnxFiles {
-			if onnxFiles[i][1] == model.OnnxFilename {
+			if onnxFiles[i][1] == model.OnnxFilename || fileutil.PathJoinSafe(onnxFiles[i]...) == fileutil.PathJoinSafe(model.OnnxFilename) {
 				model.OnnxPath = fileutil.PathJoinSafe(onnxFiles[i]...)
 				return nil
 			}
 		}
 		return fmt.Errorf("file %s not found at %s", model.OnnxFilename, model.Path)
+	}
+	if len(onnxFiles) > 1 {
+		return fmt.Errorf("multiple .onnx file detected at %s and no OnnxFilename specified", model.Path)
 	}
 	model.OnnxPath = fileutil.PathJoinSafe(onnxFiles[0]...)
 	return nil
