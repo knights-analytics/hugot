@@ -48,6 +48,7 @@ Currently, we have implementations for the following transformer pipelines:
 - [crossEncoder](https://huggingface.co/cross-encoder)
 - [depthEstimation](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.DepthEstimationPipeline) (currently ORT only)
 - [documentQuestionAnswering](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.DocumentQuestionAnsweringPipeline) (currently ORT only)
+- [addressParse](https://github.com/GRAAL-Research/deepparse) (currently ORT only)
 - [fillMask](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.FillMaskPipeline)
 - [featureExtraction](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.FeatureExtractionPipeline)
 - [imageClassification](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.ImageClassificationPipeline)

@@ -10,7 +10,7 @@ require (
 	github.com/gomlx/gomlx v0.28.17
 	github.com/gomlx/onnx-gomlx v0.5.14
 	github.com/knights-analytics/ortgenai v0.3.3
-	github.com/microsoft/onnxruntime/go v0.0.0-20261014071453-6cbefccb5dce
+	github.com/microsoft/onnxruntime/go v0.0.0-20261014085412-9c87bdf2e667
 	github.com/stretchr/testify v1.12.1
 	golang.org/x/image v0.47.0
 	golang.org/x/sync v0.24.0
@@ -18,6 +18,7 @@ require (
 )
 
 require (
+	github.com/eliben/go-sentencepiece v0.7.0 // indirect
 	github.com/go-logr/logr v1.4.4 // indirect
 	github.com/gofrs/flock v0.13.1 // indirect
 	github.com/gomlx/exceptions v0.0.3 // indirect

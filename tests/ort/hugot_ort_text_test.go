@@ -83,6 +83,20 @@ func TestTokenClassificationPipelineValidationORT(t *testing.T) {
 	runORTPipelineValidation(t, testutil.TokenClassificationPipelineValidation)
 }
 
+// AddressParse
+
+func TestAddressParsePipelineORT(t *testing.T) {
+	runORTPipeline(t, testutil.AddressParsePipeline)
+}
+
+func TestAddressParseAttentionPipelineORTCuda(t *testing.T) {
+	runORTPipelineCuda(t, testutil.AddressParseAttentionPipeline)
+}
+
+func TestAddressParsePipelineValidationORT(t *testing.T) {
+	runORTPipelineValidation(t, testutil.AddressParsePipelineValidation)
+}
+
 // Zero shot classification
 
 func TestZeroShotClassificationPipelineORT(t *testing.T) {

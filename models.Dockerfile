@@ -6,11 +6,14 @@ COPY models/Xenova_distilbert-base-uncased-finetuned-sst-2-english ./models/Xeno
 COPY models/Xenova_bert-base-uncased ./models/Xenova_bert-base-uncased
 COPY models/KnightsAnalytics_distilbert-NER ./models/KnightsAnalytics_distilbert-NER
 COPY models/KnightsAnalytics_distilbert-onnx ./models/KnightsAnalytics_distilbert-onnx
+COPY models/KnightsAnalytics_deepparse-bpemb-onnx ./models/KnightsAnalytics_deepparse-bpemb-onnx
+COPY models/KnightsAnalytics_deepparse-bpemb-attn-onnx ./models/KnightsAnalytics_deepparse-bpemb-attn-onnx
 COPY models/SamLowe_roberta-base-go_emotions-onnx ./models/SamLowe_roberta-base-go_emotions-onnx
 COPY models/jinaai_jina-reranker-v1-tiny-en ./models/jinaai_jina-reranker-v1-tiny-en
 COPY models/KnightsAnalytics_resnet50 ./models/KnightsAnalytics_resnet50
 COPY models/KnightsAnalytics_vilt-b32-finetuned-vqa ./models/KnightsAnalytics_vilt-b32-finetuned-vqa
 COPY models/KnightsAnalytics_tapas-base-finetuned-wtq ./models/KnightsAnalytics_tapas-base-finetuned-wtq
+COPY models/Xenova_vit-gpt2-image-captioning ./models/Xenova_vit-gpt2-image-captioning
 COPY models/Xenova_detr-resnet-50 ./models/Xenova_detr-resnet-50
 COPY models/Xenova_clip-vit-base-patch32 ./models/Xenova_clip-vit-base-patch32
 COPY models/Xenova_owlv2-base-patch16 ./models/Xenova_owlv2-base-patch16

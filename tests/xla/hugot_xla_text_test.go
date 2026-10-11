@@ -58,6 +58,22 @@ func TestTokenClassificationPipelineValidationXLA(t *testing.T) {
 	runXLAPipelineValidation(t, testutil.TokenClassificationPipelineValidation)
 }
 
+// AddressParse
+
+func TestAddressParsePipelineXLA(t *testing.T) {
+	t.Skip("Skipping test because the GoMLX ONNX importer does not implement the decoder's LogSoftmax op")
+	runXLAPipeline(t, testutil.AddressParsePipeline)
+}
+
+func TestAddressParseAttentionPipelineXLACuda(t *testing.T) {
+	t.Skip("Skipping test because the GoMLX ONNX importer does not implement the decoder's LogSoftmax op")
+	runXLAPipelineCuda(t, testutil.AddressParseAttentionPipeline)
+}
+
+func TestAddressParsePipelineValidationXLA(t *testing.T) {
+	runXLAPipelineValidation(t, testutil.AddressParsePipelineValidation)
+}
+
 // Zero shot classification
 
 func TestZeroShotClassificationPipelineXLA(t *testing.T) {

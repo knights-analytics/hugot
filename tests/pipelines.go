@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/knights-analytics/hugot"
 	"github.com/knights-analytics/hugot/backends"
@@ -1054,6 +1055,215 @@ func CrossEncoderPipelineValidation(t *testing.T, session *hugot.Session) {
 	if err == nil || err.Error() == "" {
 		t.Errorf("Expected error for more than one dynamic dim, got %v", err)
 	}
+}
+
+// AddressParsePipeline exercises the exported multi-graph address parser bundle.
+func AddressParsePipeline(t *testing.T, session *hugot.Session) {
+	t.Helper()
+	config := hugot.AddressParseConfig{
+		ModelPath:    ModelsFolder + "KnightsAnalytics_deepparse-bpemb-onnx",
+		OnnxFilename: "model.onnx",
+		Name:         "testAddressParse",
+	}
+	addresses := []string{
+		"  123 MAIN St., Apt 4  ",
+		"3-305 Saint-Jean Road",
+		"350 rue des Lilas Ouest Quebec city Quebec G1L 1B6",
+		"12 middle st, foxton, market harborough, leicestershire, LE11 3XU",
+	}
+	pipeline, err := session.NewPipeline(config)
+	CheckT(t, err)
+	result, err := pipeline.RunAddresses(t.Context(), addresses)
+	CheckT(t, err)
+	for _, address := range result.Addresses {
+		t.Logf("AddressParse fields for %q: %#v (words: %#v)", address.Address, address.ToFields(), address.Words)
+	}
+	fieldAddress := result.Addresses[2]
+	fieldValues := fieldAddress.ToFields()
+	defaultTagIDs := map[string]int{
+		"StreetNumber":    0,
+		"StreetName":      1,
+		"Unit":            2,
+		"Municipality":    3,
+		"Province":        4,
+		"PostalCode":      5,
+		"Orientation":     6,
+		"GeneralDelivery": 7,
+	}
+	assert.Len(t, defaultTagIDs, 8, "all documented default tags are included")
+	checkDefaultTags := func(address pipelines.AddressParseAddress) {
+		for _, word := range address.Words {
+			wantID, ok := defaultTagIDs[word.Tag]
+			assert.True(t, ok, "unexpected AddressParse prediction tag %q", word.Tag)
+			if ok {
+				assert.Equal(t, wantID, word.TagID, "prediction ID for %q", word.Tag)
+			}
+		}
+		for tag := range address.ToFields() {
+			assert.Contains(t, defaultTagIDs, tag, "unexpected AddressParse field tag %q", tag)
+		}
+	}
+	for _, address := range result.Addresses {
+		checkDefaultTags(address)
+	}
+	checkDefaultTags(fieldAddress)
+	assert.Equal(t, "350", fieldValues["StreetNumber"])
+	assert.Equal(t, "rue des lilas", fieldValues["StreetName"])
+	assert.Equal(t, "ouest quebec city", fieldValues["Municipality"])
+	assert.Equal(t, "quebec", fieldValues["Province"])
+	assert.Equal(t, "g1l 1b6", fieldValues["PostalCode"])
+	assert.NotContains(t, fieldValues, "Orientation")
+	assert.NotContains(t, fieldValues, "GeneralDelivery")
+	ukAddress := result.Addresses[3]
+	assert.Equal(t, map[string]string{
+		"StreetNumber": "12",
+		"StreetName":   "middle st",
+		"Municipality": "foxton market harborough leicestershire",
+		"PostalCode":   "le11 3xu",
+	}, ukAddress.ToFields())
+	pythonUKReference := []pipelines.AddressParseWord{
+		{Word: "12", Tag: "StreetNumber", TagID: 0, Score: 0.9998},
+		{Word: "middle", Tag: "StreetName", TagID: 1, Score: 0.9932},
+		{Word: "st", Tag: "StreetName", TagID: 1, Score: 0.9914},
+		{Word: "foxton", Tag: "Municipality", TagID: 3, Score: 0.8339},
+		{Word: "market", Tag: "Municipality", TagID: 3, Score: 0.9983},
+		{Word: "harborough", Tag: "Municipality", TagID: 3, Score: 0.9995},
+		{Word: "leicestershire", Tag: "Municipality", TagID: 3, Score: 0.9850},
+		{Word: "le11", Tag: "PostalCode", TagID: 5, Score: 0.9985},
+		{Word: "3xu", Tag: "PostalCode", TagID: 5, Score: 1.0000},
+	}
+	assert.Len(t, ukAddress.Words, len(pythonUKReference))
+	for i, expected := range pythonUKReference {
+		if i >= len(ukAddress.Words) {
+			break
+		}
+		actual := ukAddress.Words[i]
+		assert.Equal(t, expected.Word, actual.Word)
+		assert.Equal(t, expected.Tag, actual.Tag)
+		assert.Equal(t, expected.TagID, actual.TagID)
+		roundedScore := float32(math.RoundToEven(float64(actual.Score)*1e4) / 1e4)
+		assert.Equal(t, expected.Score, roundedScore, "Python rounded probability for %q", expected.Word)
+	}
+	assert.Equal(t, "123", result.Addresses[0].ToFields()["StreetNumber"])
+	assert.Equal(t, "main st. apt", result.Addresses[0].ToFields()["StreetName"])
+	assert.Equal(t, "4", result.Addresses[0].ToFields()["Unit"])
+	assert.Len(t, result.Addresses, len(addresses))
+	wantCleaned := []string{
+		"123 main st. apt 4",
+		"3-305 saint-jean road",
+		"350 rue des lilas ouest quebec city quebec g1l 1b6",
+		"12 middle st foxton market harborough leicestershire le11 3xu",
+	}
+	for i, address := range result.Addresses {
+		assert.Equal(t, addresses[i], address.Address)
+		assert.Equal(t, wantCleaned[i], address.CleanedAddress)
+		assert.Len(t, address.Words, len(strings.Fields(wantCleaned[i])))
+		assert.NotEmpty(t, address.Components)
+		for _, word := range address.Words {
+			assert.NotEmpty(t, word.Tag)
+			assert.False(t, math.IsNaN(float64(word.Score)) || math.IsInf(float64(word.Score), 0))
+			assert.GreaterOrEqual(t, word.Score, float32(0))
+			assert.LessOrEqual(t, word.Score, float32(1.0001))
+		}
+	}
+
+	splitConfig := config
+	splitConfig.Name = "testAddressParseHyphenSplit"
+	splitConfig.Options = []hugot.AddressParseOption{hugot.WithAddressParseHyphenSplit()}
+	splitPipeline, err := session.NewPipeline(splitConfig)
+	CheckT(t, err)
+	splitResult, err := splitPipeline.RunAddresses(t.Context(), []string{"3-305 Main Street"})
+	CheckT(t, err)
+	assert.Equal(t, "3 305 main street", splitResult.Addresses[0].CleanedAddress)
+	assert.Len(t, splitResult.Addresses[0].Words, 4)
+}
+
+// AddressParseAttentionPipeline checks attention masking and encoder state ordering
+// by comparing mixed-length batches with individual address inference.
+func AddressParseAttentionPipeline(t *testing.T, session *hugot.Session) {
+	t.Helper()
+	config := hugot.AddressParseConfig{
+		ModelPath:    ModelsFolder + "KnightsAnalytics_deepparse-bpemb-attn-onnx",
+		OnnxFilename: "model.onnx",
+		Name:         "testAddressParseAttention",
+	}
+	pipeline, err := session.NewPipeline(config)
+	CheckT(t, err)
+	addresses := []string{
+		"123 Main Street",
+		"350 rue des Lilas Ouest Quebec city Quebec G1L 1B6",
+		"305 Saint-Jean Road",
+		"12 middle st, foxton, market harborough, leicestershire, LE11 3XU",
+	}
+	batch, err := pipeline.RunAddresses(t.Context(), addresses)
+	CheckT(t, err)
+	require.Len(t, batch.Addresses, len(addresses))
+	for _, address := range batch.Addresses {
+		t.Logf("AddressParse attention fields for %q: %#v (words: %#v)", address.Address, address.ToFields(), address.Words)
+	}
+	assert.Equal(t, map[string]string{
+		"StreetNumber": "350",
+		"StreetName":   "rue des lilas ouest",
+		"Municipality": "quebec city",
+		"Province":     "quebec",
+		"PostalCode":   "g1l 1b6",
+	}, batch.Addresses[1].ToFields())
+	compareAddress := func(want, got pipelines.AddressParseAddress) {
+		t.Helper()
+		assert.Equal(t, want.Address, got.Address)
+		assert.Equal(t, want.CleanedAddress, got.CleanedAddress)
+		assert.Equal(t, want.ToFields(), got.ToFields())
+		require.Len(t, got.Words, len(want.Words))
+		for i, word := range got.Words {
+			assert.Equal(t, want.Words[i].Word, word.Word)
+			assert.Equal(t, want.Words[i].Tag, word.Tag)
+			assert.Equal(t, want.Words[i].TagID, word.TagID)
+			assert.InDelta(t, want.Words[i].Score, word.Score, 1e-3, "probability for %q", word.Word)
+		}
+	}
+	for i, address := range addresses {
+		single, err := pipeline.RunAddresses(t.Context(), []string{address})
+		CheckT(t, err)
+		require.Len(t, single.Addresses, 1)
+		require.Len(t, batch.Addresses[i].Words, len(strings.Fields(batch.Addresses[i].CleanedAddress)))
+		for _, word := range batch.Addresses[i].Words {
+			assert.NotEmpty(t, word.Tag)
+			assert.GreaterOrEqual(t, word.TagID, 0)
+			assert.Less(t, word.TagID, 9)
+			assert.False(t, math.IsNaN(float64(word.Score)) || math.IsInf(float64(word.Score), 0))
+			assert.GreaterOrEqual(t, word.Score, float32(0))
+			assert.LessOrEqual(t, word.Score, float32(1.0001))
+		}
+		compareAddress(single.Addresses[0], batch.Addresses[i])
+	}
+	config.Name = "testAddressParseAttentionChunked"
+	config.Options = []hugot.AddressParseOption{hugot.WithAddressParseBatchSize(2)}
+	chunkedPipeline, err := session.NewPipeline(config)
+	CheckT(t, err)
+	chunked, err := chunkedPipeline.RunAddresses(t.Context(), addresses)
+	CheckT(t, err)
+	require.Len(t, chunked.Addresses, len(addresses))
+	for i, address := range chunked.Addresses {
+		compareAddress(batch.Addresses[i], address)
+	}
+}
+
+func AddressParsePipelineValidation(t *testing.T, session *hugot.Session) {
+	t.Helper()
+	config := hugot.AddressParseConfig{
+		ModelPath:    ModelsFolder + "KnightsAnalytics_deepparse-bpemb-onnx",
+		OnnxFilename: "model.onnx",
+		Name:         "testAddressParse",
+	}
+	pipeline, err := session.NewPipeline(config)
+	require.NoError(t, err)
+	require.NoError(t, pipeline.Validate())
+
+	invalid := *pipeline
+	invalid.Encoder = nil
+	assert.ErrorContains(t, invalid.Validate(), "not fully initialized")
+	_, err = invalid.RunAddresses(t.Context(), []string{"123 Main Street"})
+	assert.ErrorContains(t, err, "not fully initialized")
 }
 
 // ImageClassificationPipeline test using Hugging Face ResNet and a sample image.

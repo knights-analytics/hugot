@@ -153,6 +153,7 @@ func init() {
 	registerPipeline(pipelines.NewZeroShotAudioClassificationPipeline)
 	registerPipeline(pipelines.NewVisualQuestionAnsweringPipeline)
 	registerPipeline(pipelines.NewDocumentQuestionAnsweringPipeline)
+	registerPipeline(pipelines.NewAddressParsePipeline)
 	registerPipeline(pipelines.NewTableQuestionAnsweringPipeline)
 	registerPipeline(pipelines.NewTextToSpeechPipeline)
 	registerPipeline(pipelines.NewTextToAudioPipeline)
@@ -209,6 +210,9 @@ type (
 	VisualQuestionAnsweringOption     = backends.PipelineOption[*pipelines.VisualQuestionAnsweringPipeline]
 	DocumentQuestionAnsweringConfig   = backends.PipelineConfig[*pipelines.DocumentQuestionAnsweringPipeline]
 	DocumentQuestionAnsweringOption   = backends.PipelineOption[*pipelines.DocumentQuestionAnsweringPipeline]
+	AddressParseConfig                = backends.PipelineConfig[*pipelines.AddressParsePipeline]
+	AddressParseOption                = backends.PipelineOption[*pipelines.AddressParsePipeline]
+	AddressParsePreprocessor          = pipelines.AddressParsePreprocessor
 	TableQuestionAnsweringConfig      = backends.PipelineConfig[*pipelines.TableQuestionAnsweringPipeline]
 	TableQuestionAnsweringOption      = backends.PipelineOption[*pipelines.TableQuestionAnsweringPipeline]
 	TextToSpeechConfig                = backends.PipelineConfig[*pipelines.TextToSpeechPipeline]
@@ -216,6 +220,38 @@ type (
 	TextToAudioConfig                 = backends.PipelineConfig[*pipelines.TextToAudioPipeline]
 	TextToAudioOption                 = backends.PipelineOption[*pipelines.TextToAudioPipeline]
 )
+
+// WithAddressParseHyphenSplit enables AddressParse's leading unit/street-number
+// hyphen split, for example "3-305 Main Street" -> "3 305 Main Street".
+func WithAddressParseHyphenSplit() AddressParseOption {
+	return pipelines.WithAddressParseHyphenSplit()
+}
+
+// WithAddressParseBatchSize limits addresses processed in one inference batch.
+func WithAddressParseBatchSize(size int) AddressParseOption {
+	return pipelines.WithAddressParseBatchSize(size)
+}
+
+// WithAddressParseProbabilities controls whether word scores are included.
+func WithAddressParseProbabilities(enabled bool) AddressParseOption {
+	return pipelines.WithAddressParseProbabilities(enabled)
+}
+
+// WithAddressParseProbabilityRounding rounds included word scores. Use -1 to
+// disable rounding.
+func WithAddressParseProbabilityRounding(digits int) AddressParseOption {
+	return pipelines.WithAddressParseProbabilityRounding(digits)
+}
+
+// WithAddressParsePreprocessors applies custom address transformations in order.
+func WithAddressParsePreprocessors(processors ...AddressParsePreprocessor) AddressParseOption {
+	return pipelines.WithAddressParsePreprocessors(processors...)
+}
+
+// WithAddressParseManifestFilename selects a manifest relative to the model directory.
+func WithAddressParseManifestFilename(filename string) AddressParseOption {
+	return pipelines.WithAddressParseManifestFilename(filename)
+}
 
 // NewPipeline can be used to create a new pipeline of type T. The initialised pipeline will be returned and it
 // will also be stored in the session object so that all created pipelines can be destroyed with session.Destroy()

@@ -42,6 +42,9 @@ RUN --mount=src=./go.mod,dst=/go.mod \
       /cudaassets/usr/local/cuda-13.4/targets/x86_64-linux/lib/libcufftw.so.* \
       /usr/local/cuda/lib64/ && \
     cp -a /cudaassets/usr/lib64/libcudnn*.so* /usr/lib64/ && \
+    # Register the copied CUDA libraries with the dynamic linker. \
+    echo '/usr/local/cuda/lib64' > /etc/ld.so.conf.d/cuda.conf && \
+    ldconfig && \
     # go \
     curl -LO https://golang.org/dl/go${GO_VERSION}.linux-amd64.tar.gz && \
     tar -C /usr/local -xzf go${GO_VERSION}.linux-amd64.tar.gz && \

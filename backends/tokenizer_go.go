@@ -56,7 +56,7 @@ func getGoTokenizerOptions(model *Model) (api.EncodeOptions, bool, bool, error) 
 			typeIDs = true
 		case "attention_mask":
 			attentionMask = true
-		case "position_ids":
+		case "position_ids", "piece_ids", "piece_lengths", "forward_hidden", "forward_cell", "backward_hidden", "backward_cell":
 			continue
 		default:
 			// Skip inputs that are handled at the model level
