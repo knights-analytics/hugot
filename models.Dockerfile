@@ -17,6 +17,7 @@ COPY models/Xenova_vit-gpt2-image-captioning ./models/Xenova_vit-gpt2-image-capt
 COPY models/Xenova_detr-resnet-50 ./models/Xenova_detr-resnet-50
 COPY models/Xenova_clip-vit-base-patch32 ./models/Xenova_clip-vit-base-patch32
 COPY models/Xenova_owlv2-base-patch16 ./models/Xenova_owlv2-base-patch16
+COPY models/KnightsAnalytics_grounding-dino-base ./models/KnightsAnalytics_grounding-dino-base
 COPY models/Xenova_segformer-b0-finetuned-ade-512-512 ./models/Xenova_segformer-b0-finetuned-ade-512-512
 COPY models/Xenova_slimsam-77-uniform ./models/Xenova_slimsam-77-uniform
 COPY models/Xenova_donut-base-finetuned-docvqa ./models/Xenova_donut-base-finetuned-docvqa

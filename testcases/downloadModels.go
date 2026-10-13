@@ -69,6 +69,7 @@ var models = []downloadModel{
 	{name: "Xenova/detr-resnet-50", onnxFilePath: "onnx/model.onnx"},
 	{name: "Xenova/clip-vit-base-patch32", onnxFilePath: "onnx/model.onnx"},
 	{name: "Xenova/owlv2-base-patch16", onnxFilePath: "onnx/model_q4.onnx"},
+	{name: "KnightsAnalytics/grounding-dino-base", onnxFilePath: "model.onnx", additionalFiles: []string{"processor_config.json"}},
 	{name: "Xenova/segformer-b0-finetuned-ade-512-512", onnxFilePath: "onnx/model.onnx"},
 	{name: "Xenova/slimsam-77-uniform", onnxFilePath: "onnx/vision_encoder.onnx", additionalFiles: []string{"onnx/prompt_encoder_mask_decoder.onnx", "preprocessor_config.json"}},
 	{name: "Xenova/donut-base-finetuned-docvqa", onnxFilePath: "onnx/encoder_model_quantized.onnx", additionalFiles: []string{"onnx/decoder_model_quantized.onnx", "preprocessor_config.json"}},

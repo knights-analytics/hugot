@@ -63,6 +63,25 @@ func TestZeroShotObjectDetectionPipelineValidationORT(t *testing.T) {
 	runORTPipelineValidation(t, testutil.ZeroShotObjectDetectionPipelineValidation)
 }
 
+// Grounded object detection
+
+func TestGroundedObjectDetectionPipelineORT(t *testing.T) {
+	runORTPipeline(t, testutil.GroundedObjectDetectionPipeline)
+}
+
+func TestGroundedObjectDetectionPipelineORTGoMLX(t *testing.T) {
+	t.Skip("Skipping test due to known total requested size 6488064 (dimensions=[1 16 12 22 12 128]) doesnt match original size 6809600 (dimensions [1 200 266 128]) issue with GoMLX")
+	runORTPipelineGoMLX(t, testutil.GroundedObjectDetectionPipeline)
+}
+
+func TestGroundedObjectDetectionPipelineORTCuda(t *testing.T) {
+	runORTPipelineCuda(t, testutil.GroundedObjectDetectionPipeline)
+}
+
+func TestGroundedObjectDetectionPipelineValidationORT(t *testing.T) {
+	runORTPipelineValidation(t, testutil.GroundedObjectDetectionPipelineValidation)
+}
+
 // Zero-shot image classification
 
 func TestZeroShotImageClassificationPipelineORT(t *testing.T) {

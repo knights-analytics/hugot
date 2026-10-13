@@ -24,6 +24,7 @@ type MaskGenerationPipeline struct {
 	DecoderFilename                                                          string
 	PointsPerSide, PointsPerBatch                                            int
 	PredictedIOUThreshold, StabilityThreshold, StabilityOffset, NMSThreshold float32
+	encoderKind                                                              string
 }
 
 type MaskGenerationMask struct {
@@ -55,7 +56,11 @@ func NewMaskGenerationPipeline(ctx context.Context, config backends.PipelineConf
 	if model == nil {
 		return nil, errors.New("mask generation requires a SAM encoder")
 	}
-	p := &MaskGenerationPipeline{BasePipeline: backends.NewBasePipeline(ctx, config, model), DecoderFilename: "prompt_encoder_mask_decoder.onnx", PointsPerSide: 32, PointsPerBatch: 64, PredictedIOUThreshold: 0.88, StabilityThreshold: 0.95, StabilityOffset: 1, NMSThreshold: 0.7}
+	kind, err := samEncoderKind(model)
+	if err != nil {
+		return nil, err
+	}
+	p := &MaskGenerationPipeline{BasePipeline: backends.NewBasePipeline(ctx, config, model), DecoderFilename: "prompt_encoder_mask_decoder.onnx", PointsPerSide: 32, PointsPerBatch: 64, PredictedIOUThreshold: 0.88, StabilityThreshold: 0.95, StabilityOffset: 1, NMSThreshold: 0.7, encoderKind: kind}
 	for _, option := range config.Options {
 		if err := option(p); err != nil {
 			return nil, err
@@ -71,7 +76,7 @@ func NewMaskGenerationPipeline(ctx context.Context, config backends.PipelineConf
 		}
 		p.Decoder = decoder
 	}
-	if err := requireTensorNames(p.Decoder, []string{"image_embeddings", "image_positional_embeddings", "input_points", "input_labels"}, []string{"pred_masks", "iou_scores"}); err != nil {
+	if err := p.validateDecoder(); err != nil {
 		return nil, err
 	}
 	return p, nil
@@ -89,7 +94,7 @@ func (p *MaskGenerationPipeline) Validate() error {
 	if p == nil || p.BasePipeline == nil || p.Model == nil {
 		return errors.New("mask generation requires a SAM encoder")
 	}
-	if err := requireTensorNames(p.Model, []string{"pixel_values"}, []string{"image_embeddings", "image_positional_embeddings"}); err != nil {
+	if _, err := p.samKind(); err != nil {
 		return err
 	}
 	if p.PointsPerSide <= 0 || p.PointsPerBatch <= 0 {
@@ -126,6 +131,13 @@ func (p *MaskGenerationPipeline) RunWithImages(ctx context.Context, images []ima
 	}
 	if p.Decoder == nil {
 		return nil, errors.New("SAM decoder is not loaded")
+	}
+	kind, err := p.samKind()
+	if err != nil {
+		return nil, err
+	}
+	if kind == sam2Encoder {
+		return nil, errors.New("SAM2 mask generation uses RunWithBoxes or RunWithPoints")
 	}
 	out := &MaskGenerationOutput{Results: make([]MaskGenerationResult, len(images))}
 	for i, img := range images {
@@ -165,6 +177,61 @@ func (p *MaskGenerationPipeline) RunWithImages(ctx context.Context, images []ima
 	return out, nil
 }
 
+// RunWithBoxes prompts one SAM2 image with source-pixel xyxy boxes.
+// Every decoder mask is returned with its IoU. SlimSAM has no box input.
+func (p *MaskGenerationPipeline) RunWithBoxes(ctx context.Context, img image.Image, boxes [][4]float32) (*MaskGenerationOutput, error) {
+	if len(boxes) == 0 {
+		return nil, errors.New("SAM2 box prompt requires at least one box")
+	}
+	return p.runSAM2Prompt(ctx, img, nil, nil, boxes)
+}
+
+// RunWithPoints prompts one SAM2 image with one object. Labels are 1 for a foreground point and 0 for background.
+// Points are source-pixel xy. Every decoder mask is returned with its IoU.
+func (p *MaskGenerationPipeline) RunWithPoints(ctx context.Context, img image.Image, points [][2]float32, labels []int64) (*MaskGenerationOutput, error) {
+	if len(points) == 0 {
+		return nil, errors.New("SAM2 point prompt requires at least one point")
+	}
+	if len(points) != len(labels) {
+		return nil, errors.New("SAM2 point prompt requires one label per point")
+	}
+	return p.runSAM2Prompt(ctx, img, points, labels, nil)
+}
+
+func (p *MaskGenerationPipeline) runSAM2Prompt(ctx context.Context, img image.Image, points [][2]float32, labels []int64, boxes [][4]float32) (*MaskGenerationOutput, error) {
+	if img == nil || img.Bounds().Empty() {
+		return nil, errors.New("SAM requires a nonempty image")
+	}
+	if err := p.Validate(); err != nil {
+		return nil, err
+	}
+	kind, err := p.samKind()
+	if err != nil {
+		return nil, err
+	}
+	if kind != sam2Encoder {
+		return nil, errors.New("box and point prompts require a SAM2 encoder")
+	}
+	if p.Decoder == nil {
+		return nil, errors.New("SAM decoder is not loaded")
+	}
+	size := img.Bounds().Size()
+	pixels := sam2Pixels(img)
+	embeddings, err := runNativeTensors(ctx, p.BasePipeline, p.Model, map[string]backends.Tensor{"pixel_values": pixels})
+	if err != nil {
+		return nil, err
+	}
+	decoded, err := runNativeTensors(ctx, p.BasePipeline, p.Decoder, sam2DecoderInputs(embeddings, points, labels, boxes, size))
+	if err != nil {
+		return nil, err
+	}
+	masks, err := p.samPromptMasks(decoded["pred_masks"], decoded["iou_scores"], size, image.Pt(samImageSize, samImageSize))
+	if err != nil {
+		return nil, err
+	}
+	return &MaskGenerationOutput{Results: []MaskGenerationResult{{Width: size.X, Height: size.Y, Masks: masks}}}, nil
+}
+
 func samPointGrid(side int, resized image.Point) []float32 {
 	points := make([]float32, 0, side*side*2)
 	for y := range side {
@@ -194,9 +261,18 @@ func samPixels(img image.Image, target int) (backends.Tensor, image.Point) {
 	return backends.Tensor{Shape: []int64{1, 3, int64(target), int64(target)}, Data: data}, resized
 }
 
-// samProposals upsamples low-resolution logits to the padded encoder size,
-// removes padding, then resizes to source coordinates before thresholding.
 func (p *MaskGenerationPipeline) samProposals(masks, scores backends.Tensor, size, resized image.Point) ([]MaskGenerationMask, error) {
+	return p.collectMasks(masks, scores, size, resized, false)
+}
+
+func (p *MaskGenerationPipeline) samPromptMasks(masks, scores backends.Tensor, size, resized image.Point) ([]MaskGenerationMask, error) {
+	return p.collectMasks(masks, scores, size, resized, true)
+}
+
+// collectMasks upsamples low-resolution logits to the padded encoder size,
+// removes padding, then resizes to source coordinates before thresholding.
+// Prompted SAM2 calls keep every finite mask; the automatic grid applies the IoU and stability gates.
+func (p *MaskGenerationPipeline) collectMasks(masks, scores backends.Tensor, size, resized image.Point, keepAll bool) ([]MaskGenerationMask, error) {
 	logits, ok := masks.Data.([]float32)
 	quality, scoresOK := scores.Data.([]float32)
 	if !ok || !scoresOK || len(masks.Shape) != 5 || masks.Shape[0] != 1 || len(scores.Shape) != 3 || scores.Shape[0] != 1 || scores.Shape[1] != masks.Shape[1] || scores.Shape[2] != masks.Shape[2] {
@@ -208,7 +284,10 @@ func (p *MaskGenerationPipeline) samProposals(masks, scores backends.Tensor, siz
 	}
 	var out []MaskGenerationMask
 	for i, score := range quality {
-		if math.IsNaN(float64(score)) || math.IsInf(float64(score), 0) || score <= p.PredictedIOUThreshold {
+		if math.IsNaN(float64(score)) || math.IsInf(float64(score), 0) {
+			continue
+		}
+		if !keepAll && score <= p.PredictedIOUThreshold {
 			continue
 		}
 		low := logits[i*h*w : (i+1)*h*w]
@@ -219,8 +298,15 @@ func (p *MaskGenerationPipeline) samProposals(masks, scores backends.Tensor, siz
 		for y := range size.Y {
 			mask[y] = make([]bool, size.X)
 			for x := range size.X {
-				// Align-corners=false bilinear interpolation in each resize stage.
-				value := samSourceLogit(low, w, h, x, y, size, resized)
+				// Prompted SAM2 matches the Python interpolate: one align-corners-false
+				// resize from the low-resolution logits to the source image.
+				// The automatic grid still removes SlimSAM letterbox padding first.
+				var value float32
+				if keepAll {
+					value = samDirectLogit(low, w, h, x, y, size)
+				} else {
+					value = samSourceLogit(low, w, h, x, y, size, resized)
+				}
 				if value > p.StabilityOffset {
 					intersection++
 				}
@@ -237,15 +323,23 @@ func (p *MaskGenerationPipeline) samProposals(masks, scores backends.Tensor, siz
 				}
 			}
 		}
-		if union == 0 {
+		stability := float32(0)
+		if union > 0 {
+			stability = float32(intersection) / float32(union)
+		}
+		if !keepAll && (union == 0 || area == 0 || stability < p.StabilityThreshold) {
 			continue
 		}
-		stability := float32(intersection) / float32(union)
-		if area > 0 && stability >= p.StabilityThreshold {
-			out = append(out, MaskGenerationMask{Mask: mask, Score: min(1, max(0, score)), PredictedIOU: score, StabilityScore: stability, Box: box, Area: area})
+		if area == 0 {
+			box = [4]int{}
 		}
+		out = append(out, MaskGenerationMask{Mask: mask, Score: min(1, max(0, score)), PredictedIOU: score, StabilityScore: stability, Box: box, Area: area})
 	}
 	return out, nil
+}
+
+func samDirectLogit(low []float32, w, h, x, y int, size image.Point) float32 {
+	return bilinearLogit(low, w, h, (float64(x)+0.5)*float64(w)/float64(size.X)-0.5, (float64(y)+0.5)*float64(h)/float64(size.Y)-0.5)
 }
 
 func samSourceLogit(low []float32, w, h, x, y int, size, resized image.Point) float32 {
@@ -300,6 +394,114 @@ func samBoxIOU(a, b [4]int) float32 {
 	return float32(intersection) / float32(union)
 }
 
+const (
+	samImageSize   = 1024
+	samSlimEncoder = "slim"
+	sam2Encoder    = "sam2"
+)
+
+func samEncoderKind(model *backends.Model) (string, error) {
+	if model == nil {
+		return "", errors.New("mask generation requires a SAM encoder")
+	}
+	if err := requireTensorNames(model, []string{"pixel_values"}, nil); err != nil {
+		return "", err
+	}
+	switch {
+	case hasTensorNames(model.OutputsMeta, "image_embeddings", "image_positional_embeddings"):
+		return samSlimEncoder, nil
+	case hasTensorNames(model.OutputsMeta, "image_embeddings.0", "image_embeddings.1", "image_embeddings.2"):
+		return sam2Encoder, nil
+	default:
+		return "", errors.New("mask generation requires SlimSAM embeddings or SAM2 image_embeddings.0, image_embeddings.1, and image_embeddings.2")
+	}
+}
+
+func (p *MaskGenerationPipeline) samKind() (string, error) {
+	if p.encoderKind != "" {
+		return p.encoderKind, nil
+	}
+	return samEncoderKind(p.Model)
+}
+
+func (p *MaskGenerationPipeline) validateDecoder() error {
+	kind, err := p.samKind()
+	if err != nil {
+		return err
+	}
+	if kind == sam2Encoder {
+		return requireTensorNames(p.Decoder, []string{"image_embeddings.0", "image_embeddings.1", "image_embeddings.2", "input_points", "input_labels", "input_boxes"}, []string{"pred_masks", "iou_scores"})
+	}
+	return requireTensorNames(p.Decoder, []string{"image_embeddings", "image_positional_embeddings", "input_points", "input_labels"}, []string{"pred_masks", "iou_scores"})
+}
+
+func tensorPresent(meta []backends.InputOutputInfo, name string) bool {
+	for _, info := range meta {
+		if info.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
+func hasTensorNames(meta []backends.InputOutputInfo, names ...string) bool {
+	for _, name := range names {
+		if !tensorPresent(meta, name) {
+			return false
+		}
+	}
+	return true
+}
+
+func sam2Pixels(img image.Image) backends.Tensor {
+	dst := image.NewRGBA(image.Rect(0, 0, samImageSize, samImageSize))
+	draw.BiLinear.Scale(dst, dst.Bounds(), img, img.Bounds(), draw.Src, nil)
+	data := make([]float32, 3*samImageSize*samImageSize)
+	mean, std := [3]float32{0.485, 0.456, 0.406}, [3]float32{0.229, 0.224, 0.225}
+	for y := range samImageSize {
+		row := dst.Pix[y*dst.Stride:]
+		for x := range samImageSize {
+			px := row[x*4:]
+			for c := range 3 {
+				data[c*samImageSize*samImageSize+y*samImageSize+x] = (float32(px[c])/255 - mean[c]) / std[c]
+			}
+		}
+	}
+	return backends.Tensor{Shape: []int64{1, 3, samImageSize, samImageSize}, Data: data}
+}
+
+func sam2CanvasBox(box [4]float32, size image.Point) [4]float32 {
+	sx := float32(samImageSize) / float32(size.X)
+	sy := float32(samImageSize) / float32(size.Y)
+	return [4]float32{box[0] * sx, box[1] * sy, box[2] * sx, box[3] * sy}
+}
+
+func sam2DecoderInputs(embeddings map[string]backends.Tensor, points [][2]float32, labels []int64, boxes [][4]float32, size image.Point) map[string]backends.Tensor {
+	flatPoints := make([]float32, 0, len(points)*2)
+	sx := float32(samImageSize) / float32(size.X)
+	sy := float32(samImageSize) / float32(size.Y)
+	for _, point := range points {
+		flatPoints = append(flatPoints, point[0]*sx, point[1]*sy)
+	}
+	if labels == nil {
+		labels = make([]int64, 0)
+	}
+	flatBoxes := make([]float32, 0, len(boxes)*4)
+	for _, box := range boxes {
+		scaled := sam2CanvasBox(box, size)
+		flatBoxes = append(flatBoxes, scaled[0], scaled[1], scaled[2], scaled[3])
+	}
+	inputs := map[string]backends.Tensor{
+		"image_embeddings.0": embeddings["image_embeddings.0"],
+		"image_embeddings.1": embeddings["image_embeddings.1"],
+		"image_embeddings.2": embeddings["image_embeddings.2"],
+		"input_points":       {Shape: []int64{1, 1, int64(len(points)), 2}, Data: flatPoints},
+		"input_labels":       {Shape: []int64{1, 1, int64(len(labels))}, Data: labels},
+		"input_boxes":        {Shape: []int64{1, int64(len(boxes)), 4}, Data: flatBoxes},
+	}
+	return inputs
+}
+
 func requireTensorNames(model *backends.Model, inputs, outputs []string) error {
 	if model == nil || model.IsGenerative {
 		return errors.New("task requires a non-generative ONNX model")
@@ -309,14 +511,7 @@ func requireTensorNames(model *backends.Model, inputs, outputs []string) error {
 		meta  []backends.InputOutputInfo
 	}{{inputs, model.InputsMeta}, {outputs, model.OutputsMeta}} {
 		for _, name := range group.names {
-			found := false
-			for _, info := range group.meta {
-				if info.Name == name {
-					found = true
-					break
-				}
-			}
-			if !found {
+			if !tensorPresent(group.meta, name) {
 				return fmt.Errorf("task model is missing tensor %q", name)
 			}
 		}

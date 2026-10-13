@@ -52,6 +52,23 @@ func TestZeroShotObjectDetectionPipelineValidationXLA(t *testing.T) {
 	runXLAPipelineValidation(t, testutil.ZeroShotObjectDetectionPipelineValidation)
 }
 
+// Grounded object detection
+
+func TestGroundedObjectDetectionPipelineXLA(t *testing.T) {
+	t.Skip("Skipping test due to known total requested size 6488064 (dimensions=[1 16 12 22 12 128]) doesnt match original size 6809600 (dimensions [1 200 266 128]) issue with XLA pipeline")
+	runXLAPipeline(t, testutil.GroundedObjectDetectionPipeline)
+}
+
+func TestGroundedObjectDetectionPipelineXLACuda(t *testing.T) {
+	t.Skip("Skipping test due to known total requested size 6488064 (dimensions=[1 16 12 22 12 128]) doesnt match original size 6809600 (dimensions [1 200 266 128]) issue with XLA pipeline")
+	runXLAPipelineCuda(t, testutil.GroundedObjectDetectionPipeline)
+}
+
+func TestGroundedObjectDetectionPipelineValidationXLA(t *testing.T) {
+	t.Skip("Skipping test due to known total requested size 6488064 (dimensions=[1 16 12 22 12 128]) doesnt match original size 6809600 (dimensions [1 200 266 128]) issue with XLA pipeline")
+	runXLAPipelineValidation(t, testutil.GroundedObjectDetectionPipelineValidation)
+}
+
 // Image feature extraction
 
 func TestImageFeatureExtractionPipelineXLA(t *testing.T) {

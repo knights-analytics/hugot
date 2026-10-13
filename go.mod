@@ -9,7 +9,7 @@ require (
 	github.com/gomlx/go-xla v0.4.14
 	github.com/gomlx/gomlx v0.28.17
 	github.com/gomlx/onnx-gomlx v0.5.14
-	github.com/knights-analytics/ortgenai v0.3.3
+	github.com/knights-analytics/ortgenai v0.3.4
 	github.com/microsoft/onnxruntime/go v0.0.0-20261014085412-9c87bdf2e667
 	github.com/stretchr/testify v1.12.1
 	golang.org/x/image v0.47.0

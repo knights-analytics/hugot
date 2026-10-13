@@ -35,10 +35,30 @@ func TestResizeBilinearAntialias(t *testing.T) {
 	if r != 0 {
 		t.Fatal("legacy nearest-neighbor resize changed")
 	}
+	bicubic, err := ResizeBicubicStep(2).Apply(img)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bicubic.Bounds() != result.Bounds() {
+		t.Fatalf("bicubic bounds %v", bicubic.Bounds())
+	}
+	same := true
+	for y := range 2 {
+		for x := range 4 {
+			br, _, _, _ := bicubic.At(x, y).RGBA()
+			lr, _, _, _ := result.At(x, y).RGBA()
+			if br != lr {
+				same = false
+			}
+		}
+	}
+	if same {
+		t.Fatal("bicubic resize matched bilinear")
+	}
 }
 
 func TestResizeRejectsInvalidInput(t *testing.T) {
-	for _, step := range []PreprocessStep{ResizeStep(0), ResizeBilinearStep(-1)} {
+	for _, step := range []PreprocessStep{ResizeStep(0), ResizeBilinearStep(-1), ResizeBicubicStep(0)} {
 		if _, err := step.Apply(image.NewRGBA(image.Rect(0, 0, 1, 1))); err == nil {
 			t.Fatal("expected invalid size error")
 		}

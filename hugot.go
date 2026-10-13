@@ -149,6 +149,7 @@ func init() {
 	registerPipeline(pipelines.NewImageToTextPipeline)
 	registerPipeline(pipelines.NewImageTextToTextPipeline)
 	registerPipeline(pipelines.NewZeroShotObjectDetectionPipeline)
+	registerPipeline(pipelines.NewGroundedObjectDetectionPipeline)
 	registerPipeline(pipelines.NewMaskGenerationPipeline)
 	registerPipeline(pipelines.NewZeroShotAudioClassificationPipeline)
 	registerPipeline(pipelines.NewVisualQuestionAnsweringPipeline)
@@ -202,6 +203,8 @@ type (
 	ImageTextToTextOption             = backends.PipelineOption[*pipelines.ImageTextToTextPipeline]
 	ZeroShotObjectDetectionConfig     = backends.PipelineConfig[*pipelines.ZeroShotObjectDetectionPipeline]
 	ZeroShotObjectDetectionOption     = backends.PipelineOption[*pipelines.ZeroShotObjectDetectionPipeline]
+	GroundedObjectDetectionConfig     = backends.PipelineConfig[*pipelines.GroundedObjectDetectionPipeline]
+	GroundedObjectDetectionOption     = backends.PipelineOption[*pipelines.GroundedObjectDetectionPipeline]
 	MaskGenerationConfig              = backends.PipelineConfig[*pipelines.MaskGenerationPipeline]
 	MaskGenerationOption              = backends.PipelineOption[*pipelines.MaskGenerationPipeline]
 	ZeroShotAudioClassificationConfig = backends.PipelineConfig[*pipelines.ZeroShotAudioClassificationPipeline]

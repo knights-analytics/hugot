@@ -34,6 +34,8 @@
 !models/Xenova_clip-vit-base-patch32/**
 !models/Xenova_owlv2-base-patch16/
 !models/Xenova_owlv2-base-patch16/**
+!models/KnightsAnalytics_grounding-dino-base/
+!models/KnightsAnalytics_grounding-dino-base/**
 !models/Xenova_segformer-b0-finetuned-ade-512-512/
 !models/Xenova_segformer-b0-finetuned-ade-512-512/**
 !models/Xenova_slimsam-77-uniform/

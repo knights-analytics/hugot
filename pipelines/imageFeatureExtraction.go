@@ -25,6 +25,7 @@ type ImageFeatureExtractionPipeline struct {
 	OutputIndex        int
 	Normalization      bool
 	modelPooler        bool
+	clsToken           bool
 }
 
 type ImageFeatureExtractionOutput struct{ Embeddings [][]float32 }
@@ -50,6 +51,16 @@ func WithImageModelPooler() backends.PipelineOption[*ImageFeatureExtractionPipel
 	}
 }
 
+// WithImageCLSToken reads token 0 of a rank-three hidden state. DINOv2's
+// embed_image uses that token. The default remains a mean over every token.
+// A pooled vector is an error.
+func WithImageCLSToken() backends.PipelineOption[*ImageFeatureExtractionPipeline] {
+	return func(pipeline *ImageFeatureExtractionPipeline) error {
+		pipeline.clsToken = true
+		return nil
+	}
+}
+
 func NewImageFeatureExtractionPipeline(ctx context.Context, config backends.PipelineConfig[*ImageFeatureExtractionPipeline], model *backends.Model) (*ImageFeatureExtractionPipeline, error) {
 	if model == nil {
 		return nil, errors.New("image feature extraction pipeline requires a model")
@@ -65,6 +76,9 @@ func NewImageFeatureExtractionPipeline(ctx context.Context, config backends.Pipe
 		if err := option(pipeline); err != nil {
 			return nil, err
 		}
+	}
+	if pipeline.modelPooler && pipeline.clsToken {
+		return nil, errors.New("image feature extraction cannot combine the model pooler with the CLS token")
 	}
 	if pipeline.modelPooler {
 		index, err := modelPoolerIndex(model)
@@ -164,12 +178,19 @@ func (p *ImageFeatureExtractionPipeline) postprocess(batch *backends.PipelineBat
 	var embeddings [][]float32
 	switch value := output.(type) {
 	case [][]float32:
+		if p.clsToken {
+			return nil, errors.New("image feature extraction CLS token requires a token sequence")
+		}
 		embeddings = value
 	case [][][]float32:
 		embeddings = make([][]float32, len(value))
 		for i, tokens := range value {
 			if len(tokens) == 0 {
 				return nil, fmt.Errorf("image embedding %d is empty", i)
+			}
+			if p.clsToken {
+				embeddings[i] = append([]float32(nil), tokens[0]...)
+				continue
 			}
 			embeddings[i] = make([]float32, len(tokens[0]))
 			for _, token := range tokens {

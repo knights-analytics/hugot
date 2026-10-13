@@ -40,6 +40,7 @@ type PreprocessStep interface {
 type ResizePreprocessor struct {
 	targetSize int
 	bilinear   bool
+	cubic      bool
 }
 
 func ResizeStep(targetSize int) *ResizePreprocessor {
@@ -52,25 +53,35 @@ func ResizeBilinearStep(targetSize int) *ResizePreprocessor {
 	return &ResizePreprocessor{targetSize: targetSize, bilinear: true}
 }
 
+// ResizeBicubicStep resizes the shortest edge using Pillow bicubic (resample 3).
+// CLIP's processor uses this before the center crop.
+func ResizeBicubicStep(targetSize int) *ResizePreprocessor {
+	return &ResizePreprocessor{targetSize: targetSize, cubic: true}
+}
+
 func (s *ResizePreprocessor) Apply(img image.Image) (image.Image, error) {
 	if img == nil || s.targetSize <= 0 || img.Bounds().Empty() {
 		return nil, errors.New("resize requires a nonempty image and positive target size")
 	}
 	bounds := img.Bounds()
 	w, h := bounds.Dx(), bounds.Dy()
+	filtered := s.bilinear || s.cubic
 	var newW, newH int
 	if w < h {
 		newW = s.targetSize
 		newH = int(float64(h) * float64(s.targetSize) / float64(w))
-		if !s.bilinear {
+		if !filtered {
 			newH = int(float32(h) * float32(s.targetSize) / float32(w))
 		}
 	} else {
 		newH = s.targetSize
 		newW = int(float64(w) * float64(s.targetSize) / float64(h))
-		if !s.bilinear {
+		if !filtered {
 			newW = int(float32(w) * float32(s.targetSize) / float32(h))
 		}
+	}
+	if s.cubic {
+		return resizeFiltered(img, newW, newH, true), nil
 	}
 	if s.bilinear {
 		return resizeBilinear(img, newW, newH), nil

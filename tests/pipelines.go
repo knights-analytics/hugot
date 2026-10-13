@@ -2381,6 +2381,47 @@ func ZeroShotObjectDetectionPipelineValidation(t *testing.T, session *hugot.Sess
 	assert.NoError(t, pipeline.Validate())
 }
 
+// grounded object detection
+
+func GroundedObjectDetectionPipeline(t *testing.T, session *hugot.Session) {
+	t.Helper()
+	config := backends.PipelineConfig[*pipelines.GroundedObjectDetectionPipeline]{
+		ModelPath:    ModelsFolder + "KnightsAnalytics_grounding-dino-base",
+		OnnxFilename: "model.onnx",
+		Name:         "testGroundedObjectDetection",
+	}
+	pipeline, err := session.NewPipeline(config)
+	CheckT(t, err)
+	// cat.jpg is 640x480. That aspect ratio resizes to this export's fixed 800x1066 canvas.
+	result, err := pipeline.RunWithCaption(t.Context(), []string{ModelsFolder + "imageData/cat.jpg"}, "cat .")
+	CheckT(t, err)
+	if len(result.Detections) != 1 {
+		t.Fatalf("batches %d", len(result.Detections))
+	}
+	found := false
+	for _, detection := range result.Detections[0] {
+		if detection.Label != "cat" || detection.Score <= pipeline.BoxThreshold {
+			continue
+		}
+		found = true
+		assert.Greater(t, detection.Box[2], detection.Box[0])
+		assert.Greater(t, detection.Box[3], detection.Box[1])
+	}
+	assert.True(t, found)
+}
+
+func GroundedObjectDetectionPipelineValidation(t *testing.T, session *hugot.Session) {
+	t.Helper()
+	config := backends.PipelineConfig[*pipelines.GroundedObjectDetectionPipeline]{
+		ModelPath:    ModelsFolder + "KnightsAnalytics_grounding-dino-base",
+		OnnxFilename: "model.onnx",
+		Name:         "testGroundedObjectDetectionValidation",
+	}
+	pipeline, err := session.NewPipeline(config)
+	CheckT(t, err)
+	assert.NoError(t, pipeline.Validate())
+}
+
 // mask generation
 
 func MaskGenerationPipeline(t *testing.T, session *hugot.Session) {

@@ -39,6 +39,18 @@ func TestZeroShotObjectDetectionPipelineValidationGo(t *testing.T) {
 	runGoPipelineValidation(t, testutil.ZeroShotObjectDetectionPipelineValidation)
 }
 
+// Grounded object detection
+
+func TestGroundedObjectDetectionPipelineGo(t *testing.T) {
+	t.Skip("Skipping test due to known total requested size 6488064 (dimensions=[1 16 12 22 12 128]) doesnt match original size 6809600 (dimensions [1 200 266 128]) issue with Go pipeline")
+	runGoPipeline(t, testutil.GroundedObjectDetectionPipeline)
+}
+
+func TestGroundedObjectDetectionPipelineValidationGo(t *testing.T) {
+	t.Skip("Skipping test due to known total requested size 6488064 (dimensions=[1 16 12 22 12 128]) doesnt match original size 6809600 (dimensions [1 200 266 128]) issue with Go pipeline")
+	runGoPipelineValidation(t, testutil.GroundedObjectDetectionPipelineValidation)
+}
+
 // Zero-shot image classification
 
 func TestZeroShotImageClassificationPipelineGo(t *testing.T) {

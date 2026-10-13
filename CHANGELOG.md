@@ -6,6 +6,13 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- `GroundedObjectDetectionPipeline` for caption-prompted detection such as Grounding DINO.
+- SAM2 box and point prompts on `MaskGenerationPipeline` (`RunWithBoxes`, `RunWithPoints`). The automatic point grid stays SlimSAM.
+- `WithImageCLSToken` reads token 0 of a rank-three image hidden state, for DINOv2. A pooled output is rejected.
+- `ResizeBicubicStep` resizes the shortest edge with Pillow bicubic, for CLIP's processor.
+
 ### Changed
 
 - Do not pad batches when using the Go backend (performance improvement).
