@@ -4,14 +4,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
-## [Unreleased]
+## [0.8.3] - 2026-10-14
 
 ### Added
 
-- `GroundedObjectDetectionPipeline` for caption-prompted detection such as Grounding DINO.
-- SAM2 box and point prompts on `MaskGenerationPipeline` (`RunWithBoxes`, `RunWithPoints`). The automatic point grid stays SlimSAM.
-- `WithImageCLSToken` reads token 0 of a rank-three image hidden state, for DINOv2. A pooled output is rejected.
-- `ResizeBicubicStep` resizes the shortest edge with Pillow bicubic, for CLIP's processor.
+- `GroundedObjectDetectionPipeline` implements support for Grounding DINO models, which allow for object detection using a set of textual labels (zero shot)
+- Support for SAM2 models in `maskGeneration` with both box and point based segmentation prompts
 
 ### Changed
 
