@@ -202,6 +202,7 @@ func loadInputOutputMetaGoMLX(model onnx.Model) ([]InputOutputInfo, []InputOutpu
 func createInputTensorsGoMLX(batch *PipelineBatch, model *Model, padBatchDimension bool, padSequenceDimension bool) error {
 	var err error
 	batchSize := batch.Size
+	batch.PaddedBatchSize = 0
 	if padBatchDimension {
 		batchSize, err = shapeBucket(batchSize, model.GoMLXModel.BatchBuckets)
 		if err != nil {
@@ -280,9 +281,16 @@ func createInputTensorsGoMLX(batch *PipelineBatch, model *Model, padBatchDimensi
 		textBatchSize, textQueryCount := textTensorBatchCounts(textRank, batchSize, queryCount, batch.QueryCount > 0)
 		backing := make([]int64, textBatchSize*textQueryCount*maxSeqLength)
 		idx := 0
+		isPaddedBatchRow := func(bi int) bool {
+			return bi >= batch.Size && !(textRank == 2 && batch.QueryCount > 0)
+		}
 		switch meta.Name {
 		case "input_ids":
 			for bi := range textBatchSize {
+				if isPaddedBatchRow(bi) {
+					idx += textQueryCount * maxSeqLength
+					continue
+				}
 				for qi := range textQueryCount {
 					inputIndex := bi
 					if textRank == 3 {
@@ -304,6 +312,10 @@ func createInputTensorsGoMLX(batch *PipelineBatch, model *Model, padBatchDimensi
 			}
 		case "token_type_ids":
 			for bi := range textBatchSize {
+				if isPaddedBatchRow(bi) {
+					idx += textQueryCount * maxSeqLength
+					continue
+				}
 				for qi := range textQueryCount {
 					inputIndex := bi
 					if textRank == 3 {
@@ -320,6 +332,10 @@ func createInputTensorsGoMLX(batch *PipelineBatch, model *Model, padBatchDimensi
 			}
 		case "attention_mask":
 			for bi := range textBatchSize {
+				if isPaddedBatchRow(bi) {
+					idx += textQueryCount * maxSeqLength
+					continue
+				}
 				for qi := range textQueryCount {
 					inputIndex := bi
 					if textRank == 3 {
@@ -335,10 +351,12 @@ func createInputTensorsGoMLX(batch *PipelineBatch, model *Model, padBatchDimensi
 				}
 			}
 		case "position_ids":
-			for range textBatchSize {
+			for bi := range textBatchSize {
 				for range textQueryCount {
 					for pos := range maxSeqLength {
-						backing[idx] = int64(pos + 1)
+						if !isPaddedBatchRow(bi) {
+							backing[idx] = int64(pos + 1)
+						}
 						idx++
 					}
 				}

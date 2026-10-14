@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ### Changed
 
+- Do not pad batches when using the Go backend (performance improvement).
+- Fixed #149 Hugot/GoMLX panics with index out of range when the batch size is padded.
 - Upgraded to ONNX Runtime v1.31.0.
 
 ## [0.8.2] - 2026-10-06
