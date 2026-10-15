@@ -47,3 +47,27 @@ func TestDownloadModelDestinationStatError(t *testing.T) {
 	_, err = hugot.DownloadModel(context.Background(), "KnightsAnalytics/distilbert-base-uncased-finetuned-sst-2-english", missingDestination, hugot.NewDownloadOptions())
 	assert.ErrorContains(t, err, "could not inspect destination")
 }
+
+func TestDownloadModelCacheDir(t *testing.T) {
+	defaultCache := t.TempDir()
+	t.Setenv("XDG_CACHE_HOME", defaultCache)
+
+	cacheDir := t.TempDir()
+	destination := t.TempDir()
+
+	downloadOptions := hugot.NewDownloadOptions()
+	downloadOptions.OnnxFilePath = "onnx/model_quantized.onnx"
+	downloadOptions.CacheDir = cacheDir
+
+	_, err := hugot.DownloadModel(context.Background(), "Xenova/distilbert-base-uncased-finetuned-sst-2-english", destination, downloadOptions)
+	require.NoError(t, err)
+
+	repoCacheDir := filepath.Join(cacheDir, "models--Xenova--distilbert-base-uncased-finetuned-sst-2-english")
+	if assert.DirExists(t, repoCacheDir) {
+		cached, err := filepath.Glob(filepath.Join(repoCacheDir, "snapshots", "*", "onnx", "model_quantized.onnx"))
+		require.NoError(t, err)
+		assert.Len(t, cached, 1)
+	}
+
+	assert.NoDirExists(t, filepath.Join(defaultCache, "huggingface"))
+}
