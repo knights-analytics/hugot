@@ -29,6 +29,7 @@ type DownloadOptions struct {
 	Verbose               bool
 	AdditionalFilePaths   []string
 	PreservePaths         bool
+	CacheDir              string
 }
 
 // NewDownloadOptions creates new DownloadOptions struct with default values.
@@ -90,6 +91,9 @@ func DownloadModel(ctx context.Context, modelName string, destination string, op
 	}
 	if options.Branch != "" {
 		repo.WithRevision(options.Branch)
+	}
+	if options.CacheDir != "" {
+		repo.WithCacheDir(options.CacheDir)
 	}
 
 	// make sure it's an onnx model with tokenizer
