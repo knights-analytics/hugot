@@ -256,6 +256,14 @@ func (p *TextGenerationPipeline) RunMessagesWithOverrides(ctx context.Context, i
 	return p.runMessages(ctx, inputs, tools, guidance)
 }
 
+// GetContextLength returns the model's configured context length.
+func (p *TextGenerationPipeline) GetContextLength() int {
+	if p == nil || p.Model == nil {
+		return 0
+	}
+	return p.Model.ContextLength
+}
+
 func collectResponses(tokenStream chan backends.SequenceDelta, errorStream chan error, batchSize int) ([]string, error) {
 	responses := make([]string, batchSize)
 	var finalErrors []error

@@ -17,28 +17,29 @@ import (
 )
 
 type Model struct {
+	Backend               Backend
+	OnnxReader            io.ReadCloser
+	IDLabelMap            map[int]string
+	ORTModel              *ORTModel
+	GoMLXModel            *GoMLXModel
+	Tokenizer             *Tokenizer
+	Pipelines             map[string]Pipeline
+	loadOptions           *options.Options
+	graphs                map[string]*Model
 	ID                    string
 	Path                  string
 	OnnxFilename          string
 	OnnxPath              string
 	UnknownToken          string
+	SeparatorToken        string
 	InputsMeta            []InputOutputInfo
 	OutputsMeta           []InputOutputInfo
-	IDLabelMap            map[int]string
-	SeparatorToken        string
 	MaxPositionEmbeddings int
+	ContextLength         int
 	ImageSize             int
-	IsGenerative          bool
-	Backend               Backend
-	ORTModel              *ORTModel
-	GoMLXModel            *GoMLXModel
-	Tokenizer             *Tokenizer
-	OnnxReader            io.ReadCloser
-	Pipelines             map[string]Pipeline
 	closeMu               sync.Mutex
+	IsGenerative          bool
 	closed                bool
-	loadOptions           *options.Options
-	graphs                map[string]*Model
 }
 
 func LoadModel(ctx context.Context, path string, onnxFilename string, opts *options.Options, isGenerative bool) (*Model, error) {
@@ -57,6 +58,12 @@ func LoadModel(ctx context.Context, path string, onnxFilename string, opts *opti
 	model.Backend = backend
 
 	if isGenerative {
+		if err := loadModelConfig(ctx, model); err != nil {
+			return nil, errors.Join(err, model.Close())
+		}
+		if err := loadGenerativeModelConfig(ctx, model); err != nil {
+			return nil, errors.Join(err, model.Close())
+		}
 		// creation of the session. Only one output (either token or sentence embedding).
 		if opts.Backend != options.BackendORT {
 			return nil, fmt.Errorf("generative models are only supported with ORT backend currently")
@@ -180,12 +187,19 @@ func loadModelConfig(ctx context.Context, model *Model) error {
 		// Some multimodal models store text model config under text_config, so standardise that now
 		if configMap.TextConfig != nil {
 			configMap.MaxPositionEmbeddings = configMap.TextConfig.MaxPositionEmbeddings
+			if configMap.TextConfig.ContextLength > 0 {
+				configMap.ContextLength = configMap.TextConfig.ContextLength
+			}
 			if configMap.TextConfig.ID2Label != nil {
 				configMap.ID2Label = configMap.TextConfig.ID2Label
 			}
 		}
 		if configMap.MaxPositionEmbeddings > 0 {
 			model.MaxPositionEmbeddings = configMap.MaxPositionEmbeddings
+		}
+		model.ContextLength = configMap.ContextLength
+		if model.ContextLength <= 0 {
+			model.ContextLength = configMap.MaxPositionEmbeddings
 		}
 		if configMap.ImageSize > 0 {
 			model.ImageSize = configMap.ImageSize
@@ -272,6 +286,33 @@ func loadModelConfig(ctx context.Context, model *Model) error {
 				}
 			}
 		}
+	}
+	return nil
+}
+
+func loadGenerativeModelConfig(ctx context.Context, model *Model) error {
+	configPath := fileutil.PathJoinSafe(model.Path, "genai_config.json")
+	exists, err := fileutil.FileExists(ctx, configPath)
+	if err != nil {
+		return fmt.Errorf("checking generative model config: %w", err)
+	}
+	if !exists {
+		return nil
+	}
+	configBytes, err := fileutil.ReadFileBytes(ctx, configPath)
+	if err != nil {
+		return fmt.Errorf("reading generative model config: %w", err)
+	}
+	var config struct {
+		Model struct {
+			ContextLength int `json:"context_length"`
+		} `json:"model"`
+	}
+	if err := json.Unmarshal(configBytes, &config); err != nil {
+		return fmt.Errorf("decoding generative model config: %w", err)
+	}
+	if config.Model.ContextLength > 0 {
+		model.ContextLength = config.Model.ContextLength
 	}
 	return nil
 }
