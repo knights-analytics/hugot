@@ -9,6 +9,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -28,8 +29,12 @@ type DownloadOptions struct {
 	ConcurrentConnections int
 	Verbose               bool
 	AdditionalFilePaths   []string
-	PreservePaths         bool
-	CacheDir              string
+	// DownloadGraphBundle collects every artifact beside the selected graph and
+	// in its subdirectories, including child graphs and external weights. It
+	// implies PreservePaths. Select a specific variant with OnnxFilePath.
+	DownloadGraphBundle bool
+	PreservePaths       bool
+	CacheDir            string
 }
 
 // NewDownloadOptions creates new DownloadOptions struct with default values.
@@ -47,6 +52,9 @@ func NewDownloadOptions() DownloadOptions {
 // DownloadModel can be used to download a model directly from huggingface. Before the model is downloaded,
 // validation occurs to ensure there is an .onnx and tokenizers.json file. Hugot only works with onnx models.
 func DownloadModel(ctx context.Context, modelName string, destination string, options DownloadOptions) (string, error) {
+	if options.DownloadGraphBundle {
+		options.PreservePaths = true
+	}
 	// replicates code in hf downloader
 	// DownloadModel is usable without a session, so bind the default filesystem
 	// before using the context-based file helpers below.
@@ -184,58 +192,65 @@ func ValidateDownloadedHFModel(repo *hub.Repo, options DownloadOptions) ([]strin
 		}
 	}
 
-	tokenizerPath := ""
-	onnxPath := ""
-	var toDownload []string
-	var allOnnx []string
+	var names []string
 	for fileName, err := range repo.IterFileNames() {
 		if err != nil {
 			return nil, err
 		}
+		names = append(names, fileName)
+	}
+	return selectModelArtifacts(names, options)
+}
 
-		baseFileName := filepath.Base(fileName)
-		if baseFileName == "tokenizer.json" {
-			tokenizerPath = fileName
-		} else if baseFileName == "special_tokens_map.json" ||
-			baseFileName == "tokenizer_config.json" ||
-			baseFileName == "config.json" ||
-			baseFileName == "genai_config.json" ||
-			baseFileName == "vocab.txt" ||
-			baseFileName == "chat_template.jinja" {
-			toDownload = append(toDownload, fileName)
-		} else if filepath.Ext(baseFileName) == ".onnx" {
-			if options.OnnxFilePath != "" {
-				if fileName == options.OnnxFilePath {
-					onnxPath = fileName
-				}
-			} else {
-				onnxPath = fileName
-			}
-			allOnnx = append(allOnnx, fileName)
-		} else if options.ExternalDataPath != "" && fileName == options.ExternalDataPath {
-			toDownload = append(toDownload, fileName)
+func selectModelArtifacts(names []string, options DownloadOptions) ([]string, error) {
+	slices.Sort(names)
+	files := map[string]bool{}
+	var graphs []string
+	for _, name := range names {
+		switch path.Base(name) {
+		case "tokenizer.json", "special_tokens_map.json", "tokenizer_config.json", "config.json", "genai_config.json", "vocab.txt", "chat_template.jinja",
+			"processor_config.json", "preprocessor_config.json", "video_processor_config.json", "generation_config.json", "vision_processor.json", "speech_processor.json", "audio_processor_config.json":
+			files[name] = true
+		}
+		if path.Ext(name) == ".onnx" {
+			graphs = append(graphs, name)
 		}
 	}
-
-	var errs []error
-
-	if options.OnnxFilePath != "" {
-		if onnxPath == "" {
-			errs = append(errs, fmt.Errorf("model .onnx file not found at %s", options.OnnxFilePath))
+	graph := options.OnnxFilePath
+	if graph == "" {
+		if len(graphs) == 0 {
+			return nil, errors.New("model does not have a .onnx file, Hugot only works with onnx models")
 		}
-	} else {
-		numModels := len(allOnnx)
-		if numModels == 0 {
-			errs = append(errs, fmt.Errorf("model does not have a .onnx file, Hugot only works with onnx models"))
-		} else if numModels > 1 {
-			errs = append(errs, fmt.Errorf("model has multiple .onnx files, please specify one of the following onnxFilePaths: %s", strings.Join(allOnnx, " ")))
+		if len(graphs) > 1 {
+			return nil, fmt.Errorf("model has multiple .onnx files, please specify one of the following onnxFilePaths: %s", strings.Join(graphs, " "))
+		}
+		graph = graphs[0]
+	} else if !slices.Contains(graphs, graph) {
+		return nil, fmt.Errorf("model .onnx file not found at %s", graph)
+	}
+	files[graph] = true
+	if options.ExternalDataPath != "" && !slices.Contains(names, options.ExternalDataPath) {
+		return nil, fmt.Errorf("external model data %q not found", options.ExternalDataPath)
+	}
+	directory := path.Dir(graph)
+	for _, name := range names {
+		if name == graph+".data" || name == graph+"_data" || strings.HasPrefix(name, graph+"_data_") || name == options.ExternalDataPath {
+			files[name] = true
+		}
+		if options.DownloadGraphBundle && (directory == "." || strings.HasPrefix(name, directory+"/")) {
+			files[name] = true
 		}
 	}
-
-	files := append(toDownload, onnxPath)
-	if tokenizerPath != "" {
-		files = append(files, tokenizerPath)
+	for _, name := range options.AdditionalFilePaths {
+		if !slices.Contains(names, name) {
+			return nil, fmt.Errorf("additional model artifact %q not found", name)
+		}
+		files[name] = true
 	}
-	files = append(files, options.AdditionalFilePaths...)
-	return files, errors.Join(errs...)
+	result := make([]string, 0, len(files))
+	for name := range files {
+		result = append(result, name)
+	}
+	slices.Sort(result)
+	return result, nil
 }

@@ -8,28 +8,6 @@ import (
 	testutil "github.com/knights-analytics/hugot/tests"
 )
 
-// Visual question answering
-
-func TestNativeVisualQuestionAnsweringPipelineORT(t *testing.T) {
-	runORTPipeline(t, testutil.NativeVisualQuestionAnsweringPipeline)
-}
-
-func TestVisualQuestionAnsweringPipelineORT(t *testing.T) {
-	runORTPipeline(t, testutil.VisualQuestionAnsweringPipeline)
-}
-
-func TestVisualQuestionAnsweringPipelineORTGoMLX(t *testing.T) {
-	runORTPipelineGoMLX(t, testutil.VisualQuestionAnsweringPipeline)
-}
-
-func TestVisualQuestionAnsweringPipelineORTCuda(t *testing.T) {
-	runORTPipelineCuda(t, testutil.VisualQuestionAnsweringPipeline)
-}
-
-func TestVisualQuestionAnsweringPipelineValidationORT(t *testing.T) {
-	runORTPipelineValidation(t, testutil.VisualQuestionAnsweringPipelineValidation)
-}
-
 // Document question answering
 
 func TestDocumentQuestionAnsweringPipelineORT(t *testing.T) {
@@ -72,28 +50,6 @@ func TestTableQuestionAnsweringAggregationPipelineORT(t *testing.T) {
 	runORTPipeline(t, testutil.TableQuestionAnsweringAggregation)
 }
 
-// Image-to-text
-
-func TestNativeImageToTextPipelineORT(t *testing.T) {
-	runORTPipeline(t, testutil.NativeImageToTextPipeline)
-}
-
-func TestImageToTextPipelineORT(t *testing.T) {
-	runORTPipeline(t, testutil.ImageToTextPipeline)
-}
-
-func TestImageToTextPipelineORTGoMLX(t *testing.T) {
-	runORTPipelineGoMLX(t, testutil.ImageToTextPipeline)
-}
-
-func TestImageToTextPipelineORTCuda(t *testing.T) {
-	runORTPipelineCuda(t, testutil.ImageToTextPipeline)
-}
-
-func TestImageToTextPipelineValidationORT(t *testing.T) {
-	runORTPipelineValidation(t, testutil.ImageToTextPipelineValidation)
-}
-
 // Image-text-to-text
 
 func TestImageTextToTextPipelineORT(t *testing.T) {
@@ -110,4 +66,79 @@ func TestImageTextToTextPipelineORTCuda(t *testing.T) {
 
 func TestImageTextToTextPipelineValidationORT(t *testing.T) {
 	runORTPipelineValidation(t, testutil.ImageTextToTextPipelineValidation)
+}
+
+// Video classification
+
+func TestVideoClassificationPipelineORT(t *testing.T) {
+	runORTPipeline(t, testutil.VideoClassificationPipeline)
+}
+
+func TestVideoClassificationPipelineORTGoMLX(t *testing.T) {
+	runORTPipelineGoMLX(t, testutil.VideoClassificationPipeline)
+}
+
+func TestVideoClassificationPipelineORTCuda(t *testing.T) {
+	runORTPipelineCuda(t, testutil.VideoClassificationPipeline)
+}
+
+func TestVideoClassificationPipelineValidationORT(t *testing.T) {
+	runORTPipelineValidation(t, testutil.VideoClassificationPipelineValidation)
+}
+
+// Keypoint matching
+
+func TestKeypointMatchingPipelineORT(t *testing.T) {
+	runORTPipeline(t, testutil.KeypointMatchingPipeline)
+}
+
+func TestKeypointMatchingPipelineORTGoMLX(t *testing.T) {
+	t.Skip("Skipping test due to MaxPool: support for attribute 'dilations' is not yet implemented issue with GoMLX pipeline")
+	runORTPipelineGoMLX(t, testutil.KeypointMatchingPipeline)
+}
+
+func TestKeypointMatchingPipelineORTCuda(t *testing.T) {
+	runORTPipelineCuda(t, testutil.KeypointMatchingPipeline)
+}
+
+func TestKeypointMatchingPipelineValidationORT(t *testing.T) {
+	runORTPipelineValidation(t, testutil.KeypointMatchingPipelineValidation)
+}
+
+// AnyToAny
+
+func TestAnyToAnyPhiPipelineORT(t *testing.T) {
+	runORTPipeline(t, testutil.AnyToAnyPhiPipeline)
+}
+
+func TestAnyToAnyPhiPipelineORTCuda(t *testing.T) {
+	runORTPipelineCuda(t, testutil.AnyToAnyPhiPipeline)
+}
+
+func TestAnyToAnyPhiPipelineValidationORT(t *testing.T) {
+	runORTPipelineValidation(t, testutil.AnyToAnyPhiPipelineValidation)
+}
+
+func TestAnyToAnyJanusImagePipelineORT(t *testing.T) {
+	runORTPipeline(t, testutil.AnyToAnyJanusImagePipeline)
+}
+
+func TestAnyToAnyJanusImagePipelineORTCuda(t *testing.T) {
+	runORTPipelineCuda(t, testutil.AnyToAnyJanusImagePipeline)
+}
+
+func TestAnyToAnyJanusImagePipelineValidationORT(t *testing.T) {
+	runORTPipelineValidation(t, testutil.AnyToAnyJanusImagePipelineValidation)
+}
+
+func TestAnyToAnyLFMAudioPipelineORT(t *testing.T) {
+	runORTPipeline(t, testutil.AnyToAnyLFMAudioPipeline)
+}
+
+func TestAnyToAnyLFMAudioPipelineORTCuda(t *testing.T) {
+	runORTPipelineCuda(t, testutil.AnyToAnyLFMAudioPipeline)
+}
+
+func TestAnyToAnyLFMAudioPipelineValidationORT(t *testing.T) {
+	runORTPipelineValidation(t, testutil.AnyToAnyLFMAudioPipelineValidation)
 }

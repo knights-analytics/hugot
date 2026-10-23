@@ -15,7 +15,7 @@ const defaultMultimodalMaxLength = 4096
 // By default (all zero values, as before) a prompt describes a single user
 // turn: the pipeline sends one message with Role "user", the Prompt as its
 // content, and ImagePath as the attached image. That keeps the one-shot
-// image->text and image+text->text workflows backward compatible.
+// image+text->text workflows backward compatible.
 //
 // For multi-turn image/text conversations, set Role to the role the final
 // (image) turn should carry, and add History for any previous turns in this
@@ -55,12 +55,14 @@ type multimodalGeneration struct {
 	TopP         *float64
 	Seed         *int
 	SystemPrompt string
+	Tools        []string
+	Guidance     *backends.Guidance
 	Streaming    bool
 }
 
 func (p *multimodalGeneration) IsGenerative() bool { return true }
 func (p *multimodalGeneration) Validate() error {
-	if !p.Model.IsGenerative {
+	if p == nil || p.BasePipeline == nil || p.Model == nil || !p.Model.IsGenerative {
 		return errors.New("multimodal pipeline requires a generative model")
 	}
 	if p.MaxLength <= 0 {
@@ -80,7 +82,7 @@ func (p *multimodalGeneration) GetStatistics() backends.PipelineStatistics {
 	return backends.PipelineStatistics{}
 }
 
-func (p *multimodalGeneration) run(ctx context.Context, messages [][]backends.Message) (*MultimodalTextOutput, error) {
+func (p *multimodalGeneration) run(ctx context.Context, messages [][]backends.Message, tools []string, guidance *backends.Guidance) (*MultimodalTextOutput, error) {
 	if len(messages) == 0 {
 		return nil, errors.New("at least one multimodal input is required")
 	}
@@ -88,7 +90,7 @@ func (p *multimodalGeneration) run(ctx context.Context, messages [][]backends.Me
 	if err := backends.CreateMessages(batch, p.BasePipeline, messages, p.SystemPrompt); err != nil {
 		return nil, errors.Join(err, batch.Destroy())
 	}
-	stream, errs, err := backends.RunGenerativeSessionOnBatch(ctx, batch, p.BasePipeline, p.MaxLength, nil, p.Temperature, p.TopP, p.Seed, nil, nil)
+	stream, errs, err := backends.RunGenerativeSessionOnBatch(ctx, batch, p.BasePipeline, p.MaxLength, nil, p.Temperature, p.TopP, p.Seed, tools, guidance)
 	if err != nil {
 		return nil, errors.Join(err, batch.Destroy())
 	}
@@ -148,42 +150,13 @@ func multimodalMessages(inputs []ImageTextPrompt, defaultPrompt string) ([][]bac
 }
 
 type (
-	ImageToTextPipeline struct {
-		*multimodalGeneration
-		native *nativeImageCaptioning
-	}
 	ImageTextToTextPipeline struct{ *multimodalGeneration }
 )
 
-func (p *ImageToTextPipeline) IsGenerative() bool   { return p == nil || p.native == nil }
-func (*ImageTextToTextPipeline) IsGenerative() bool { return true }
-
-func (p *ImageToTextPipeline) Validate() error {
-	if p == nil {
-		return errors.New("image to text pipeline is nil")
-	}
-	if p.native != nil {
-		return p.validateNativeCaption()
-	}
-	return p.multimodalGeneration.Validate()
-}
-
 type (
-	ImageToTextConfig     = backends.PipelineConfig[*ImageToTextPipeline]
-	ImageToTextOption     = backends.PipelineOption[*ImageToTextPipeline]
 	ImageTextToTextConfig = backends.PipelineConfig[*ImageTextToTextPipeline]
 	ImageTextToTextOption = backends.PipelineOption[*ImageTextToTextPipeline]
 )
-
-func WithImageToTextMaxLength(n int) ImageToTextOption {
-	return func(p *ImageToTextPipeline) error {
-		if n <= 0 {
-			return errors.New("max length must be greater than zero")
-		}
-		p.MaxLength = n
-		return nil
-	}
-}
 
 func WithImageTextToTextMaxLength(n int) ImageTextToTextOption {
 	return func(p *ImageTextToTextPipeline) error {
@@ -195,36 +168,39 @@ func WithImageTextToTextMaxLength(n int) ImageTextToTextOption {
 	}
 }
 
-func WithImageToTextStreaming() ImageToTextOption {
-	return func(p *ImageToTextPipeline) error { p.Streaming = true; return nil }
-}
-
 func WithImageTextToTextStreaming() ImageTextToTextOption {
 	return func(p *ImageTextToTextPipeline) error { p.Streaming = true; return nil }
 }
 
-func NewImageToTextPipeline(ctx context.Context, config ImageToTextConfig, model *backends.Model) (*ImageToTextPipeline, error) {
-	if model == nil {
-		return nil, errors.New("image-to-text requires a model")
+// WithImageTextToTextTools sets Hermes-style tool definitions for the chat template.
+// The pipeline returns generated tool-call text; applications execute tools themselves.
+func WithImageTextToTextTools(tools []string) ImageTextToTextOption {
+	return func(p *ImageTextToTextPipeline) error {
+		p.Tools = append([]string(nil), tools...)
+		return nil
 	}
-	p := &ImageToTextPipeline{multimodalGeneration: &multimodalGeneration{BasePipeline: backends.NewBasePipeline(ctx, config, model), MaxLength: defaultMultimodalMaxLength}}
-	if !model.IsGenerative {
-		var err error
-		p.native, err = newNativeImageCaptioning(ctx, model)
-		if err != nil {
-			return nil, err
-		}
-		p.MaxLength = 20
-	}
-	for _, o := range config.Options {
-		if err := o(p); err != nil {
-			return nil, err
-		}
-	}
-	return p, p.Validate()
 }
 
+// WithImageTextToTextGuidance enables constrained text generation using a JSON schema,
+// regex, or Lark grammar supported by the selected ORT GenAI session.
+func WithImageTextToTextGuidance(guidance *backends.Guidance) ImageTextToTextOption {
+	return func(p *ImageTextToTextPipeline) error {
+		if guidance == nil {
+			p.Guidance = nil
+			return nil
+		}
+		guidanceCopy := *guidance
+		p.Guidance = &guidanceCopy
+		return nil
+	}
+}
+
+func (*ImageTextToTextPipeline) IsGenerative() bool { return true }
+
 func NewImageTextToTextPipeline(ctx context.Context, config ImageTextToTextConfig, model *backends.Model) (*ImageTextToTextPipeline, error) {
+	if model == nil {
+		return nil, errors.New("image-text-to-text requires a generative vision-language model")
+	}
 	p := &ImageTextToTextPipeline{&multimodalGeneration{BasePipeline: backends.NewBasePipeline(ctx, config, model), MaxLength: defaultMultimodalMaxLength}}
 	for _, o := range config.Options {
 		if err := o(p); err != nil {
@@ -232,25 +208,6 @@ func NewImageTextToTextPipeline(ctx context.Context, config ImageTextToTextConfi
 		}
 	}
 	return p, p.Validate()
-}
-
-func (p *ImageToTextPipeline) Run(ctx context.Context, inputs []string) (backends.PipelineBatchOutput, error) {
-	values := make([]ImageTextPrompt, len(inputs))
-	for i, path := range inputs {
-		values[i] = ImageTextPrompt{ImagePath: path}
-	}
-	return p.RunWithImages(ctx, values)
-}
-
-func (p *ImageToTextPipeline) RunWithImages(ctx context.Context, inputs []ImageTextPrompt) (*MultimodalTextOutput, error) {
-	if p.native != nil {
-		return p.runNativeCaption(ctx, inputs)
-	}
-	messages, err := multimodalMessages(inputs, "Describe this image.")
-	if err != nil {
-		return nil, err
-	}
-	return p.run(ctx, messages)
 }
 
 func (p *ImageTextToTextPipeline) Run(ctx context.Context, inputs []string) (backends.PipelineBatchOutput, error) {
@@ -266,5 +223,5 @@ func (p *ImageTextToTextPipeline) RunWithImages(ctx context.Context, inputs []Im
 	if err != nil {
 		return nil, err
 	}
-	return p.run(ctx, messages)
+	return p.run(ctx, messages, p.Tools, p.Guidance)
 }

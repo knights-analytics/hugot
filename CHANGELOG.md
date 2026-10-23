@@ -6,6 +6,22 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
+- This release brings the list of supported pipelines to parity with Huggingface transformers, adding the remaining pipelines and removing others that have been deprecated.
+
+### Added
+
+- Added `AnyToAnyPipeline` for supported multimodal models, tested with Phi-4 multimodal, Janus, and LFM bundles.
+- Added `VideoClassificationPipeline` for VideoMAE ONNX models.
+- Added `KeypointMatchingPipeline` for SuperGlue exports.
+- Added `DownloadOptions.CacheDir` and `DownloadGraphBundle` to configure the Hugging Face cache and download complete ONNX graph bundles, including related weights and child graphs.
+- Added `TextGenerationPipeline.GetContextLength()` to report the model's configured context length.
+
+### Breaking changes
+
+- Removed `QuestionAnsweringPipeline`.
+- Removed `VisualQuestionAnsweringPipeline`.
+- Removed `ImageToTextPipeline` and its configuration types. Use `AnyToAnyPipeline` with a supported multimodal model for image understanding and captioning.
+
 ### Changed
 
 - `WithGenerativeEngine` now admits requests fairly. Free batch slots go round-robin across jobs, with new jobs served first in arrival order. Before, slots went to whichever job Go's randomized map iteration picked first, so a request could be passed over repeatedly under load.

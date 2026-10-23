@@ -102,13 +102,3 @@ func TestTextGenerationPipelineGo(t *testing.T) {
 func TestTextGenerationPipelineValidationGo(t *testing.T) {
 	runGoPipelineValidation(t, testutil.TextGenerationPipelineValidation)
 }
-
-// Question answering
-
-func TestQAPipelineGo(t *testing.T) {
-	runGoPipeline(t, testutil.QuestionAnsweringPipeline)
-}
-
-func TestQAPipelineValidationGo(t *testing.T) {
-	runGoPipelineValidation(t, testutil.QuestionAnsweringPipelineValidation)
-}

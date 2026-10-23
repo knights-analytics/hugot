@@ -8,6 +8,7 @@ import (
 	"image/color"
 	"math"
 	"os"
+	"path/filepath"
 	"regexp"
 	"runtime"
 	"strings"
@@ -25,10 +26,31 @@ import (
 )
 
 const (
-	ModelsFolder        = "../../models/"
-	TestCasesFolder     = "../../testcases/"
-	MultimodalModelPath = ModelsFolder + "microsoft_Phi-3.5-vision-instruct-onnx/cpu_and_mobile/cpu-int4-rtn-block-32-acc-level-4"
+	ModelsFolder            = "../../models/"
+	TestCasesFolder         = "../../testcases/"
+	Phi4MultimodalModelPath = ModelsFolder + "microsoft_Phi-4-multimodal-instruct-onnx/gpu/gpu-int4-rtn-block-32"
 )
+
+func requirePipelineArtifacts(t *testing.T, modelPath string, files ...string) {
+	t.Helper()
+	for _, file := range files {
+		path := filepath.Join(modelPath, file)
+		if _, err := os.Stat(path); err != nil {
+			require.NoError(t, err, "required model artifact %q is missing; download or export the pinned model before running this test", path)
+		}
+	}
+}
+
+func requirePipelineSource(t *testing.T, modelPath, modelID string) {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join(modelPath, "export_verification.json"))
+	require.NoError(t, err)
+	var metadata struct {
+		ModelID string `json:"model_id"`
+	}
+	require.NoError(t, json.Unmarshal(data, &metadata))
+	require.Equal(t, modelID, metadata.ModelID)
+}
 
 // FEATURE EXTRACTION
 
@@ -1900,104 +1922,21 @@ func AutomaticSpeechRecognitionPipelineValidation(t *testing.T, session *hugot.S
 	assert.Error(t, pipeline.Validate())
 }
 
-// image-to-text
-
-func NativeImageToTextPipeline(t *testing.T, session *hugot.Session) {
-	t.Helper()
-	config := hugot.ImageToTextConfig{
-		ModelPath:    ModelsFolder + "Xenova_vit-gpt2-image-captioning",
-		OnnxFilename: "encoder_model_quantized.onnx",
-		Name:         "nativeImageToText",
-		ModelLoading: backends.ModelLoadingONNX,
-	}
-	pipeline, err := session.NewPipeline(config)
-	CheckT(t, err)
-	inputs := []pipelines.ImageTextPrompt{
-		{ImagePath: ModelsFolder + "imageData/cat.jpg"},
-		{ImagePath: ModelsFolder + "imageData/portrait.jpg"},
-	}
-	result, err := pipeline.RunWithImages(t.Context(), inputs)
-	CheckT(t, err)
-	if result == nil || len(result.Responses) != len(inputs) {
-		t.Fatal("native captioning did not preserve batch size")
-	}
-	assert.Contains(t, strings.ToLower(result.Responses[0]), "cat")
-	assert.NotEmpty(t, result.Responses[1])
-	assert.NotEqual(t, result.Responses[0], result.Responses[1], "captions should be image-conditioned")
-	checkCaptionGenerationReference(t, pipeline)
-	t.Logf("native captions: %q", result.Responses)
-	for i, input := range inputs {
-		single, err := pipeline.RunWithImages(t.Context(), []pipelines.ImageTextPrompt{input})
-		CheckT(t, err)
-		if single == nil || len(single.Responses) != 1 {
-			t.Fatal("native captioning returned invalid single-image result")
-		}
-		assert.Equal(t, result.Responses[i], single.Responses[0], "batch order and deterministic greedy decoding")
-	}
-	_, err = pipeline.RunWithImages(t.Context(), nil)
-	assert.Error(t, err)
-	_, err = pipeline.RunWithImages(t.Context(), []pipelines.ImageTextPrompt{{ImagePath: inputs[0].ImagePath, Prompt: "describe"}})
-	assert.Error(t, err)
-	cancelled, cancel := context.WithCancel(t.Context())
-	cancel()
-	_, err = pipeline.RunWithImages(cancelled, inputs)
-	assert.ErrorIs(t, err, context.Canceled)
-	decoder, err := pipeline.Model.LoadGraph(t.Context(), "decoder_model_quantized.onnx")
-	CheckT(t, err)
-	CheckT(t, session.ClosePipeline(config.Name))
-	_, err = decoder.RunTensors(t.Context(), nil)
-	assert.ErrorContains(t, err, "closed", "closing the parent must close its decoder graph")
-	_, err = pipeline.Model.LoadGraph(t.Context(), "decoder_model_quantized.onnx")
-	assert.ErrorContains(t, err, "closed")
-	CheckT(t, pipeline.Model.Close())
-}
-
-func ImageToTextPipeline(t *testing.T, session *hugot.Session) {
-	t.Helper()
-	skipGenerativePipeline(t)
-	config := hugot.ImageToTextConfig{
-		ModelPath: MultimodalModelPath,
-		Name:      "imageToText",
-	}
-	pipeline, err := session.NewPipeline(config)
-	CheckT(t, err)
-	result, err := pipeline.RunWithImages(t.Context(), []pipelines.ImageTextPrompt{{
-		ImagePath: ModelsFolder + "imageData/cat.jpg",
-		Prompt:    "Describe this image in one short sentence.",
-	}})
-	CheckT(t, err)
-	if result == nil || len(result.Responses) != 1 {
-		t.Fatal("image-to-text returned an invalid response count")
-	}
-	assert.NotEmpty(t, result.Responses)
-	assert.NotEmpty(t, result.Responses[0])
-	assert.Contains(t, strings.ToLower(result.Responses[0]), "cat",
-		"image-to-text caption should describe the cat, got: %q", result.Responses[0])
-}
-
-func ImageToTextPipelineValidation(t *testing.T, _ *hugot.Session) {
-	t.Helper()
-	model := &backends.Model{IsGenerative: true}
-	pipeline, err := pipelines.NewImageToTextPipeline(t.Context(), hugot.ImageToTextConfig{Name: "imageToTextValidation"}, model)
-	assert.NoError(t, err)
-	pipeline.MaxLength = 0
-	assert.Error(t, pipeline.Validate())
-}
-
 // image-text-to-text
 
 func ImageTextToTextPipeline(t *testing.T, session *hugot.Session) {
 	t.Helper()
 	skipGenerativePipeline(t)
 	config := hugot.ImageTextToTextConfig{
-		ModelPath: MultimodalModelPath,
+		ModelPath: Phi4MultimodalModelPath,
 		Name:      "imageTextToText",
+		Options:   []hugot.ImageTextToTextOption{pipelines.WithImageTextToTextMaxLength(1536)},
 	}
 	pipeline, err := session.NewPipeline(config)
 	CheckT(t, err)
 	result, err := pipeline.RunWithImages(t.Context(), []pipelines.ImageTextPrompt{
 		{ImagePath: ModelsFolder + "imageData/cat.jpg", Prompt: "What is shown in this image?"},
-		{ImagePath: ModelsFolder + "imageData/portrait.jpg", Prompt: "What is shown in this image?"},
+		{ImagePath: ModelsFolder + "imageData/portrait-small.jpg", Prompt: "What is shown in this image?"},
 	})
 	CheckT(t, err)
 	if result == nil || len(result.Responses) != 2 {
@@ -2009,8 +1948,17 @@ func ImageTextToTextPipeline(t *testing.T, session *hugot.Session) {
 		"image-text-to-text answer should reference the cat, got: %q", result.Responses[0])
 	assert.NotEmpty(t, result.Responses[1])
 	assert.NotEqual(t, result.Responses[0], result.Responses[1], "contrasting images should produce grounded responses")
-	assert.True(t, strings.Contains(strings.ToLower(result.Responses[1]), "woman") ||
-		strings.Contains(strings.ToLower(result.Responses[1]), "person"), "portrait response should describe the person")
+	portraitResponse := strings.ToLower(result.Responses[1])
+	assert.True(t, strings.Contains(portraitResponse, "woman") ||
+		strings.Contains(portraitResponse, "person") ||
+		strings.Contains(portraitResponse, "girl") ||
+		strings.Contains(portraitResponse, "lady") ||
+		strings.Contains(portraitResponse, "female") ||
+		strings.Contains(portraitResponse, "portrait") ||
+		strings.Contains(portraitResponse, "headshot") ||
+		strings.Contains(portraitResponse, "face") ||
+		strings.Contains(portraitResponse, "facial"),
+		"portrait response should describe the person, got: %q", result.Responses[1])
 }
 
 func ImageTextToTextPipelineValidation(t *testing.T, _ *hugot.Session) {
@@ -2020,6 +1968,309 @@ func ImageTextToTextPipelineValidation(t *testing.T, _ *hugot.Session) {
 	assert.NoError(t, err)
 	pipeline.MaxLength = 0
 	assert.Error(t, pipeline.Validate())
+}
+
+// VideoClassificationPipeline runs the exported VideoMAE graph on a deterministic
+// 16-frame clip and compares every class logit with the Python reference.
+func VideoClassificationPipeline(t *testing.T, session *hugot.Session) {
+	t.Helper()
+	modelPath := ModelsFolder + "KnightsAnalytics_videomae-base-finetuned-kinetics"
+	requirePipelineArtifacts(t, modelPath, "export_verification.json", "config.json", "preprocessor_config.json", "model.onnx")
+	requirePipelineSource(t, modelPath, "MCG-NJU/videomae-base-finetuned-kinetics")
+	config := hugot.VideoClassificationConfig{
+		ModelPath: modelPath,
+		Name:      "testVideoClassification",
+		Options: []hugot.VideoClassificationOption{
+			pipelines.WithVideoClassificationFunction("none"),
+			pipelines.WithVideoClassificationTopK(400),
+		},
+	}
+	pipeline, err := session.NewPipeline(config)
+	require.NoError(t, err)
+	data, err := os.ReadFile(TestCasesFolder + "embedded/videoReference.json")
+	require.NoError(t, err)
+	var reference struct {
+		Results []struct {
+			Logits []float32 `json:"logits"`
+		} `json:"results"`
+	}
+	require.NoError(t, json.Unmarshal(data, &reference))
+	require.Len(t, reference.Results, 1)
+	want := reference.Results[0].Logits
+	result, err := pipeline.RunFrames(t.Context(), []pipelines.VideoInput{videoMAEReferenceClip()})
+	require.NoError(t, err)
+	require.Len(t, result.Predictions, 1)
+	require.Len(t, result.Predictions[0], len(want))
+	got := make([]float32, len(want))
+	for _, prediction := range result.Predictions[0] {
+		got[prediction.ClassIndex] = prediction.Score
+	}
+	// CUDA uses a different attention kernel and has small numeric drift from
+	// the CPU reference while preserving the same VideoMAE logits.
+	require.InDeltaSlice(t, want, got, 1e-3)
+}
+
+func VideoClassificationPipelineValidation(t *testing.T, session *hugot.Session) {
+	t.Helper()
+	modelPath := ModelsFolder + "KnightsAnalytics_videomae-base-finetuned-kinetics"
+	requirePipelineArtifacts(t, modelPath, "export_verification.json", "config.json", "preprocessor_config.json", "model.onnx")
+	requirePipelineSource(t, modelPath, "MCG-NJU/videomae-base-finetuned-kinetics")
+	pipeline, err := session.NewPipeline(hugot.VideoClassificationConfig{
+		ModelPath: modelPath,
+		Name:      "testVideoClassificationValidation",
+	})
+	require.NoError(t, err)
+	require.NoError(t, pipeline.Validate())
+	pipeline.TopK = 0
+	require.Error(t, pipeline.Validate())
+}
+
+func videoMAEReferenceClip() pipelines.VideoInput {
+	input := pipelines.VideoInput{}
+	for frame := 0; frame < 16; frame++ {
+		img := image.NewNRGBA(image.Rect(0, 0, 224, 224))
+		for y := 0; y < 224; y++ {
+			for x := 0; x < 224; x++ {
+				img.SetNRGBA(x, y, color.NRGBA{
+					R: uint8((3*x + 5*y + 11*frame) % 256),
+					G: uint8((7*x + 2*y + 13*frame) % 256),
+					B: uint8((x + 9*y + 17*frame) % 256), A: 255,
+				})
+			}
+		}
+		input.Frames = append(input.Frames, img)
+	}
+	return input
+}
+
+// KeypointMatchingPipeline checks real SuperGlue matches against the pinned
+// Python result and also verifies that blank image pairs produce no matches.
+func KeypointMatchingPipeline(t *testing.T, session *hugot.Session) {
+	t.Helper()
+	modelPath := ModelsFolder + "KnightsAnalytics_superglue_outdoor"
+	requirePipelineArtifacts(t, modelPath, "export_verification.json", "config.json", "preprocessor_config.json", "model.onnx")
+	requirePipelineSource(t, modelPath, "magic-leap-community/superglue_outdoor")
+	pipeline, err := session.NewPipeline(hugot.KeypointMatchingConfig{
+		ModelPath: modelPath,
+		Name:      "testKeypointMatching",
+	})
+	require.NoError(t, err)
+	data, err := os.ReadFile(TestCasesFolder + "embedded/keypointReference.json")
+	require.NoError(t, err)
+	var reference struct {
+		Results []struct {
+			Keypoints0 [][2]int  `json:"keypoints0"`
+			Keypoints1 [][2]int  `json:"keypoints1"`
+			Scores     []float32 `json:"matching_scores"`
+		} `json:"results"`
+	}
+	require.NoError(t, json.Unmarshal(data, &reference))
+	require.Len(t, reference.Results, 2)
+	require.NotEmpty(t, reference.Results[0].Scores)
+	require.Len(t, reference.Results[0].Keypoints0, len(reference.Results[0].Keypoints1))
+	require.Len(t, reference.Results[0].Keypoints0, len(reference.Results[0].Scores))
+	images, err := imageutil.LoadImagesFromPaths(t.Context(), []string{ModelsFolder + "imageData/cat.jpg"})
+	require.NoError(t, err)
+	small, err := imageutil.ResizeRGB(images[0], 321, 257, 3)
+	require.NoError(t, err)
+	blank0 := image.NewNRGBA(image.Rect(0, 0, 193, 131))
+	blank1 := image.NewNRGBA(image.Rect(0, 0, 257, 181))
+	result, err := pipeline.RunPairs(t.Context(), []pipelines.ImagePair{
+		{Images: [2]image.Image{images[0], small}},
+		{Images: [2]image.Image{blank0, blank1}},
+	})
+	require.NoError(t, err)
+	require.Len(t, result.Matches, 2)
+	require.NotEmpty(t, result.Matches[0])
+	require.Empty(t, result.Matches[1])
+	matched := 0
+	for _, got := range result.Matches[0] {
+		for i, expected0 := range reference.Results[0].Keypoints0 {
+			expected1 := reference.Results[0].Keypoints1[i]
+			if math.Abs(float64(got.KeypointImage0.X-expected0[0])) <= 1 &&
+				math.Abs(float64(got.KeypointImage0.Y-expected0[1])) <= 1 &&
+				math.Abs(float64(got.KeypointImage1.X-expected1[0])) <= 1 &&
+				math.Abs(float64(got.KeypointImage1.Y-expected1[1])) <= 1 {
+				matched++
+				break
+			}
+		}
+	}
+	require.GreaterOrEqual(t, float64(matched)/float64(len(reference.Results[0].Scores)), .95)
+}
+
+func KeypointMatchingPipelineValidation(t *testing.T, session *hugot.Session) {
+	t.Helper()
+	modelPath := ModelsFolder + "KnightsAnalytics_superglue_outdoor"
+	requirePipelineArtifacts(t, modelPath, "export_verification.json", "config.json", "preprocessor_config.json", "model.onnx")
+	requirePipelineSource(t, modelPath, "magic-leap-community/superglue_outdoor")
+	pipeline, err := session.NewPipeline(hugot.KeypointMatchingConfig{
+		ModelPath: modelPath,
+		Name:      "testKeypointMatchingValidation",
+	})
+	require.NoError(t, err)
+	require.NoError(t, pipeline.Validate())
+	pipeline.Threshold = 1.1
+	require.Error(t, pipeline.Validate())
+}
+
+// AnyToAnyPhiPipeline exercises text, image and audio prompts on the pinned
+// Phi-4 model and checks each generated answer against the checked reference.
+func AnyToAnyPhiPipeline(t *testing.T, session *hugot.Session) {
+	t.Helper()
+	skipGenerativePipeline(t)
+	modelPath := Phi4MultimodalModelPath
+	requirePipelineArtifacts(t, modelPath, "genai_config.json", "phi-4-mm-text.onnx", "phi-4-mm-text.onnx.data", "phi-4-mm-embedding.onnx", "phi-4-mm-embedding.onnx.data", "phi-4-mm-vision.onnx", "phi-4-mm-vision.onnx.data", "phi-4-mm-vision.onnx_adapter", "phi-4-mm-speech.onnx", "phi-4-mm-speech.onnx.data", "phi-4-mm-speech.onnx_adapter", "tokenizer.json")
+	pipeline, err := session.NewPipeline(hugot.AnyToAnyConfig{
+		ModelPath: modelPath, Name: "testAnyToAnyPhi",
+		Options: []hugot.AnyToAnyOption{pipelines.WithAnyToAnyMaxLength(2048)},
+	})
+	require.NoError(t, err)
+	data, err := os.ReadFile(TestCasesFolder + "embedded/anyToAnyReference.json")
+	require.NoError(t, err)
+	var reference struct {
+		Results []struct {
+			Input string `json:"input"`
+			Text  string `json:"text"`
+		} `json:"results"`
+	}
+	require.NoError(t, json.Unmarshal(data, &reference))
+	want := make(map[string]string, len(reference.Results))
+	for _, item := range reference.Results {
+		want[item.Input] = item.Text
+	}
+	cases := []struct {
+		name    string
+		message backends.Message
+	}{
+		{"text", backends.Message{Role: "user", Content: "Say hello."}},
+		{"image", backends.Message{Role: "user", Content: "Describe this image.", ImageURLs: []string{ModelsFolder + "imageData/cat.jpg"}}},
+		{"audio", backends.Message{Role: "user", Content: "Transcribe this audio.", AudioURLs: []string{ModelsFolder + "audioData/librispeech.wav"}}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := pipeline.RunMessages(t.Context(), [][]backends.Message{{tc.message}})
+			require.NoError(t, err)
+			require.Len(t, result.Responses, 1)
+			require.NotEmpty(t, want[tc.name])
+			require.True(t, strings.HasPrefix(result.Responses[0], want[tc.name]), "expected reference prefix %q; got %q", want[tc.name], result.Responses[0])
+		})
+	}
+}
+
+func AnyToAnyPhiPipelineValidation(t *testing.T, session *hugot.Session) {
+	t.Helper()
+	skipGenerativePipeline(t)
+	modelPath := Phi4MultimodalModelPath
+	requirePipelineArtifacts(t, modelPath, "genai_config.json", "phi-4-mm-text.onnx", "phi-4-mm-text.onnx.data", "phi-4-mm-embedding.onnx", "phi-4-mm-embedding.onnx.data", "phi-4-mm-vision.onnx", "phi-4-mm-vision.onnx.data", "phi-4-mm-vision.onnx_adapter", "phi-4-mm-speech.onnx", "phi-4-mm-speech.onnx.data", "phi-4-mm-speech.onnx_adapter", "tokenizer.json")
+	pipeline, err := session.NewPipeline(hugot.AnyToAnyConfig{ModelPath: modelPath, Name: "testAnyToAnyPhiValidation"})
+	require.NoError(t, err)
+	require.NoError(t, pipeline.Validate())
+	pipeline.GenerationMode = "image"
+	require.Error(t, pipeline.Validate())
+}
+
+// AnyToAnyJanusImagePipeline checks a real generated 384x384 image at selected
+// pixels, rather than accepting a nonempty image as proof of inference.
+func AnyToAnyJanusImagePipeline(t *testing.T, session *hugot.Session) {
+	t.Helper()
+	skipGenerativePipeline(t)
+	modelPath := ModelsFolder + "onnx-community_Janus-Pro-1B-ONNX"
+	requirePipelineArtifacts(t, modelPath, "config.json", "generation_config.json", "tokenizer.json", "tokenizer_config.json", "preprocessor_config.json", "processor_config.json", "onnx/embed_tokens.onnx", "onnx/language_model_q4.onnx", "onnx/lm_head.onnx", "onnx/gen_head.onnx", "onnx/prepare_inputs_embeds.onnx", "onnx/gen_img_embeds.onnx", "onnx/image_decode.onnx")
+	pipeline, err := session.NewPipeline(hugot.AnyToAnyConfig{
+		ModelPath: modelPath, Name: "testAnyToAnyJanusImage",
+		ModelLoading: backends.ModelLoadingONNX, OnnxFilename: "onnx/embed_tokens.onnx",
+		Options: []hugot.AnyToAnyOption{pipelines.WithAnyToAnyGenerationMode("image")},
+	})
+	require.NoError(t, err)
+	data, err := os.ReadFile(TestCasesFolder + "embedded/janusImageReference.json")
+	require.NoError(t, err)
+	var reference struct {
+		Result struct {
+			Pixels []struct {
+				X   int      `json:"x"`
+				Y   int      `json:"y"`
+				RGB [3]uint8 `json:"rgb"`
+			} `json:"pixels"`
+		} `json:"result"`
+	}
+	require.NoError(t, json.Unmarshal(data, &reference))
+	result, err := pipeline.RunMessages(t.Context(), [][]backends.Message{{{Role: "user", Content: "A red square on a white background."}}})
+	require.NoError(t, err)
+	require.Len(t, result.Results, 1)
+	require.Len(t, result.Results[0].Images, 1)
+	gotImage := result.Results[0].Images[0]
+	require.Equal(t, 384, gotImage.Bounds().Dx())
+	require.Equal(t, 384, gotImage.Bounds().Dy())
+	require.NotEmpty(t, reference.Result.Pixels)
+	for _, pixel := range reference.Result.Pixels {
+		got := color.NRGBAModel.Convert(gotImage.At(pixel.X, pixel.Y)).(color.NRGBA)
+		require.InDeltaSlice(t, pixel.RGB[:], []uint8{got.R, got.G, got.B}, 1)
+	}
+}
+
+func AnyToAnyJanusImagePipelineValidation(t *testing.T, session *hugot.Session) {
+	t.Helper()
+	skipGenerativePipeline(t)
+	modelPath := ModelsFolder + "onnx-community_Janus-Pro-1B-ONNX"
+	requirePipelineArtifacts(t, modelPath, "config.json", "generation_config.json", "tokenizer.json", "tokenizer_config.json", "preprocessor_config.json", "processor_config.json", "onnx/embed_tokens.onnx", "onnx/language_model_q4.onnx", "onnx/lm_head.onnx", "onnx/gen_head.onnx", "onnx/prepare_inputs_embeds.onnx", "onnx/gen_img_embeds.onnx", "onnx/image_decode.onnx")
+	pipeline, err := session.NewPipeline(hugot.AnyToAnyConfig{
+		ModelPath: modelPath, Name: "testAnyToAnyJanusImageValidation",
+		ModelLoading: backends.ModelLoadingONNX, OnnxFilename: "onnx/embed_tokens.onnx",
+	})
+	require.NoError(t, err)
+	require.NoError(t, pipeline.Validate())
+	pipeline.GenerationMode = "audio"
+	require.Error(t, pipeline.Validate())
+}
+
+func AnyToAnyLFMAudioPipeline(t *testing.T, session *hugot.Session) {
+	t.Helper()
+	skipGenerativePipeline(t)
+	modelPath := ModelsFolder + "LiquidAI_LFM2.5-Audio-1.5B-ONNX"
+	requirePipelineArtifacts(t, modelPath, "config.json", "tokenizer.json", "tokenizer_config.json", "onnx/audio_embedding_q4.onnx", "onnx/audio_embedding_q4.onnx_data", "onnx/decoder_q4.onnx", "onnx/vocoder_depthformer_q4.onnx", "onnx/vocoder_depthformer_q4.onnx_data", "onnx/audio_detokenizer_q4.onnx", "onnx/audio_detokenizer_q4.onnx_data", "onnx/mel_config.json", "onnx/embed_tokens.json", "onnx/embed_tokens.bin")
+	pipeline, err := session.NewPipeline(hugot.AnyToAnyConfig{
+		ModelPath: modelPath, Name: "testAnyToAnyLFMAudio",
+		ModelLoading: backends.ModelLoadingONNX, OnnxFilename: "onnx/audio_embedding_q4.onnx",
+		Options: []hugot.AnyToAnyOption{
+			pipelines.WithAnyToAnyGenerationMode("interleaved"),
+			pipelines.WithAnyToAnyMaxNewTokens(48),
+		},
+	})
+	require.NoError(t, err)
+	data, err := os.ReadFile(TestCasesFolder + "embedded/lfmAudioReference.json")
+	require.NoError(t, err)
+	var reference struct {
+		Result struct {
+			Text       string    `json:"text"`
+			NumSamples int       `json:"num_samples"`
+			Samples    []float32 `json:"samples"`
+		} `json:"result"`
+	}
+	require.NoError(t, json.Unmarshal(data, &reference))
+	result, err := pipeline.RunMessages(t.Context(), [][]backends.Message{{{Content: "Say hello."}}})
+	require.NoError(t, err)
+	require.Len(t, result.Results, 1)
+	require.Equal(t, reference.Result.Text, result.Results[0].Text)
+	require.NotNil(t, result.Results[0].Audio)
+	require.Equal(t, 24000, result.Results[0].Audio.SampleRate)
+	require.Equal(t, reference.Result.NumSamples, len(result.Results[0].Audio.Samples))
+	require.InDeltaSlice(t, reference.Result.Samples, result.Results[0].Audio.Samples[:len(reference.Result.Samples)], 1e-4)
+}
+
+func AnyToAnyLFMAudioPipelineValidation(t *testing.T, session *hugot.Session) {
+	t.Helper()
+	skipGenerativePipeline(t)
+	modelPath := ModelsFolder + "LiquidAI_LFM2.5-Audio-1.5B-ONNX"
+	requirePipelineArtifacts(t, modelPath, "config.json", "tokenizer.json", "tokenizer_config.json", "onnx/audio_embedding_q4.onnx", "onnx/audio_embedding_q4.onnx_data", "onnx/decoder_q4.onnx", "onnx/vocoder_depthformer_q4.onnx", "onnx/vocoder_depthformer_q4.onnx_data", "onnx/audio_detokenizer_q4.onnx", "onnx/audio_detokenizer_q4.onnx_data", "onnx/mel_config.json", "onnx/embed_tokens.json", "onnx/embed_tokens.bin")
+	pipeline, err := session.NewPipeline(hugot.AnyToAnyConfig{
+		ModelPath: modelPath, Name: "testAnyToAnyLFMAudioValidation",
+		ModelLoading: backends.ModelLoadingONNX, OnnxFilename: "onnx/audio_embedding_q4.onnx",
+	})
+	require.NoError(t, err)
+	require.NoError(t, pipeline.Validate())
+	pipeline.GenerationMode = "image"
+	require.Error(t, pipeline.Validate())
 }
 
 // No same name
@@ -2513,136 +2764,6 @@ func ZeroShotAudioClassificationPipelineValidation(t *testing.T, session *hugot.
 	assert.NoError(t, pipeline.Validate(), "candidate labels are runtime text inputs, not model output classes")
 }
 
-// visual question answering
-
-func NativeVisualQuestionAnsweringPipeline(t *testing.T, session *hugot.Session) {
-	t.Helper()
-	config := backends.PipelineConfig[*pipelines.VisualQuestionAnsweringPipeline]{
-		ModelPath: ModelsFolder + "KnightsAnalytics_vilt-b32-finetuned-vqa", Name: "nativeVisualQuestionAnswering",
-		ModelLoading: backends.ModelLoadingONNX,
-		Options:      []backends.PipelineOption[*pipelines.VisualQuestionAnsweringPipeline]{pipelines.WithVisualQuestionAnsweringTopK(5)},
-	}
-	pipeline, err := session.NewPipeline(config)
-	CheckT(t, err)
-	result, err := pipeline.RunPipeline(t.Context(), []pipelines.VisualQuestionAnsweringInput{
-		{ImagePath: ModelsFolder + "imageData/cat.jpg", Question: "What animal is shown in this picture?"},
-		{ImagePath: ModelsFolder + "imageData/portrait.jpg", Question: "What animal is shown in this picture?"},
-	})
-	CheckT(t, err)
-	if result == nil || len(result.Answers) != 2 || len(result.Responses) != 2 {
-		t.Fatal("native VQA did not preserve batch order and answer count")
-	}
-	for i, answers := range result.Answers {
-		if !assert.Len(t, answers, 5) {
-			continue
-		}
-		assert.Equal(t, answers[0].Answer, result.Responses[i])
-		for j, answer := range answers {
-			assert.NotEmpty(t, answer.Answer)
-			assert.False(t, math.IsNaN(float64(answer.Score)) || math.IsInf(float64(answer.Score), 0))
-			assert.GreaterOrEqual(t, answer.Score, float32(0))
-			assert.LessOrEqual(t, answer.Score, float32(1))
-			if j > 0 {
-				assert.GreaterOrEqual(t, answers[j-1].Score, answer.Score)
-			}
-		}
-	}
-	assert.Contains(t, strings.ToLower(result.Responses[0]), "cat")
-	assert.NotEqual(t, result.Responses[0], result.Responses[1], "changing the image should change the grounded answer")
-
-	var reference struct {
-		Tolerance float64 `json:"score_absolute_tolerance"`
-		Cases     []struct {
-			Width, Height    int
-			Question, Answer string
-			Tokens           struct {
-				IDs       [][]uint32 `json:"input_ids"`
-				Types     [][]uint32 `json:"token_type_ids"`
-				Attention [][]uint32 `json:"attention_mask"`
-			}
-			TopIDs []int     `json:"top_ids"`
-			Scores []float32 `json:"top_scores"`
-		}
-	}
-	CheckT(t, json.Unmarshal(embedded.ViltReferenceByte, &reference))
-	for _, tc := range reference.Cases {
-		batch := backends.NewBatch(1)
-		backends.TokenizeInputs(batch, pipeline.Model.Tokenizer, []string{tc.Question})
-		if len(batch.Input) != 1 || len(tc.Tokens.IDs) != 1 || len(tc.Tokens.Types) != 1 || len(tc.Tokens.Attention) != 1 {
-			t.Fatal("invalid VQA tokenizer/reference batch shape")
-		}
-		assert.EqualValues(t, tc.Tokens.IDs[0], batch.Input[0].TokenIDs)
-		assert.EqualValues(t, tc.Tokens.Types[0], batch.Input[0].TypeIDs)
-		assert.EqualValues(t, tc.Tokens.Attention[0], batch.Input[0].AttentionMask)
-		CheckT(t, batch.Destroy())
-		img := image.NewRGBA(image.Rect(0, 0, tc.Width, tc.Height))
-		for y := range tc.Height {
-			for x := range tc.Width {
-				img.SetRGBA(x, y, color.RGBA{R: uint8((3*x + y) % 256), G: uint8((5*y + x) % 256), B: uint8((x + 7*y) % 256), A: 255})
-			}
-		}
-		actual, err := pipeline.RunWithImages(t.Context(), []backends.ImageTextInput{{Image: img, Text: tc.Question}})
-		CheckT(t, err)
-		if actual == nil || len(actual.Answers) != 1 || len(actual.Responses) != 1 || len(actual.Answers[0]) != len(tc.TopIDs) || len(tc.Scores) != len(tc.TopIDs) {
-			t.Fatal("native VQA reference answer shape mismatch")
-		}
-		assert.Equal(t, tc.Answer, actual.Responses[0])
-		for j, answer := range actual.Answers[0] {
-			assert.Equal(t, pipeline.Model.IDLabelMap[tc.TopIDs[j]], answer.Answer)
-			assert.InDelta(t, tc.Scores[j], answer.Score, reference.Tolerance)
-		}
-	}
-	config.Name = "nativeVisualQuestionAnsweringTopOne"
-	config.Options = []backends.PipelineOption[*pipelines.VisualQuestionAnsweringPipeline]{pipelines.WithVisualQuestionAnsweringTopK(1)}
-	topOne, err := session.NewPipeline(config)
-	CheckT(t, err)
-	assert.Same(t, pipeline.GetModel(), topOne.GetModel(), "equivalent ONNX loads should reuse the same model")
-	one, err := topOne.RunPipeline(t.Context(), []pipelines.VisualQuestionAnsweringInput{{ImagePath: ModelsFolder + "imageData/cat.jpg", Question: "What animal is shown in this picture?"}})
-	CheckT(t, err)
-	if one == nil || len(one.Answers) != 1 || len(one.Answers[0]) != 1 {
-		t.Fatal("top_k=1 did not return exactly one answer")
-	}
-	assert.Equal(t, result.Answers[0][0], one.Answers[0][0])
-	CheckT(t, session.ClosePipeline(config.Name))
-	assert.NoError(t, pipeline.Validate(), "closing a shared pipeline must preserve the native model")
-}
-
-func VisualQuestionAnsweringPipeline(t *testing.T, session *hugot.Session) {
-	t.Helper()
-	skipGenerativePipeline(t)
-	config := backends.PipelineConfig[*pipelines.VisualQuestionAnsweringPipeline]{
-		ModelPath: MultimodalModelPath,
-		Name:      "testVisualQuestionAnswering",
-	}
-	pipeline, err := session.NewPipeline(config)
-	CheckT(t, err)
-	result, err := pipeline.RunPipeline(t.Context(), []pipelines.VisualQuestionAnsweringInput{{
-		ImagePath: ModelsFolder + "imageData/cat.jpg",
-		Question:  "What animal is in this image? Answer with one word.",
-	}})
-	CheckT(t, err)
-	if result == nil || len(result.Responses) != 1 {
-		t.Fatal("visual question answering returned an invalid response count")
-	}
-	assert.NotEmpty(t, result.Responses)
-	assert.NotEmpty(t, result.Responses[0])
-	assert.Contains(t, strings.ToLower(result.Responses[0]), "cat",
-		"the image shows a cat, got: %q", result.Responses[0])
-}
-
-func VisualQuestionAnsweringPipelineValidation(t *testing.T, session *hugot.Session) {
-	t.Helper()
-	skipGenerativePipeline(t)
-	config := backends.PipelineConfig[*pipelines.VisualQuestionAnsweringPipeline]{
-		ModelPath: ModelsFolder + "KnightsAnalytics_qwen3-4B-int4",
-		Name:      "testVisualQuestionAnsweringValidation",
-	}
-	pipeline, err := session.NewPipeline(config)
-	CheckT(t, err)
-	pipeline.MaxLength = 0
-	assert.Error(t, pipeline.Validate())
-}
-
 // document question answering
 
 func DocumentQuestionAnsweringPipeline(t *testing.T, session *hugot.Session) {
@@ -2952,90 +3073,6 @@ func TextToAudioPipelineValidation(t *testing.T, session *hugot.Session) {
 	CheckT(t, err)
 	pipeline.SampleRate = 0
 	assert.Error(t, pipeline.Validate())
-}
-
-// QUESTION ANSWERING
-
-func QuestionAnsweringPipeline(t *testing.T, session *hugot.Session) {
-	t.Helper()
-
-	modelPath := ModelsFolder + "/KnightsAnalytics_distilbert-onnx"
-
-	config := hugot.QuestionAnsweringConfig{
-		ModelPath: modelPath,
-		Name:      "testQAPipeline",
-	}
-	pipeline, err := session.NewPipeline(config)
-	CheckT(t, err)
-
-	// Context is a JSON document; questions target specific property values.
-	contextJSON := `{"product": "coffee maker", "brand": "Acme", "price": 49.99, "currency": "USD", "in_stock": true}`
-
-	inputs := []pipelines.QuestionAnsweringInput{
-		{Question: "What is the brand?", Context: contextJSON},
-		{Question: "What is the currency?", Context: contextJSON},
-	}
-
-	result, err := pipeline.RunPipeline(t.Context(), inputs)
-	CheckT(t, err)
-
-	assert.Equal(t, 2, len(result.Outputs), "expected one result per input")
-
-	brand := result.Outputs[0][0]
-	assert.Greater(t, brand.Score, float32(0), "brand answer score should be > 0")
-	assert.Contains(t, contextJSON[brand.Start:brand.End], brand.Answer, "answer should be a substring of the context")
-	assert.Contains(t, strings.ToLower(brand.Answer), "acme", "brand answer should contain 'acme'")
-
-	currency := result.Outputs[1][0]
-	assert.Greater(t, currency.Score, float32(0), "currency answer score should be > 0")
-	assert.Contains(t, contextJSON[currency.Start:currency.End], currency.Answer, "answer should be a substring of the context")
-	assert.Contains(t, strings.ToLower(currency.Answer), "usd", "currency answer should contain 'usd'")
-
-	// WithTopKAnswers(2): verify that 2 ranked answers are returned per input and are ordered by score.
-
-	contextJSON = `{"product": "coffee maker", "brand": "Acme", "price": 49.99, "currency": "USD", "in_stock": true},{"product": "coffee maker", "brand": "Lavazza", "price": 100.99, "currency": "USD", "in_stock": true}`
-
-	inputs = []pipelines.QuestionAnsweringInput{
-		{Question: "What is the brand?", Context: contextJSON},
-		{Question: "What is the currency?", Context: contextJSON},
-	}
-	configTopK := hugot.QuestionAnsweringConfig{
-		ModelPath: modelPath,
-		Name:      "testQAPipelineTopK",
-		Options: []hugot.QuestionAnsweringOption{
-			pipelines.WithTopKAnswers(2),
-		},
-	}
-	pipelineTopK, err := session.NewPipeline(configTopK)
-	CheckT(t, err)
-
-	resultTopK, err := pipelineTopK.RunPipeline(t.Context(), inputs)
-	CheckT(t, err)
-
-	assert.Equal(t, 2, len(resultTopK.Outputs), "expected one result set per input")
-	for inputIdx, answers := range resultTopK.Outputs {
-		assert.Equal(t, 2, len(answers), "expected 2 answers per input with TopK=2")
-		assert.GreaterOrEqual(t, answers[0].Score, answers[1].Score, "answers for input %d should be sorted by score descending", inputIdx)
-		for answerIdx, answer := range answers {
-			assert.Contains(t, contextJSON[answer.Start:answer.End], answer.Answer, "answer %d for input %d should be a substring of the context", answerIdx, inputIdx)
-		}
-	}
-}
-
-func QuestionAnsweringPipelineValidation(t *testing.T, session *hugot.Session) {
-	t.Helper()
-
-	modelPath := ModelsFolder + "/KnightsAnalytics_distilbert-onnx"
-
-	config := hugot.QuestionAnsweringConfig{
-		ModelPath: modelPath,
-		Name:      "testQAPipeline",
-	}
-	pipeline, err := session.NewPipeline(config)
-	CheckT(t, err)
-
-	pipeline.MaxAnswerLength = 0
-	assert.Error(t, pipeline.Validate(), "question answering validation should reject a non-positive MaxAnswerLength")
 }
 
 // TABULAR

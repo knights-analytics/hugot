@@ -137,7 +137,6 @@ func init() {
 	registerPipeline(pipelines.NewObjectDetectionPipeline)
 	registerPipeline(pipelines.NewTextGenerationPipeline)
 	registerPipeline(pipelines.NewTabularPipeline)
-	registerPipeline(pipelines.NewQuestionAnsweringPipeline)
 	registerPipeline(pipelines.NewFillMaskPipeline)
 	registerPipeline(pipelines.NewImageFeatureExtractionPipeline)
 	registerPipeline(pipelines.NewImageSegmentationPipeline)
@@ -146,21 +145,27 @@ func init() {
 	registerPipeline(pipelines.NewBackgroundRemovalPipeline)
 	registerPipeline(pipelines.NewZeroShotImageClassificationPipeline)
 	registerPipeline(pipelines.NewAutomaticSpeechRecognitionPipeline)
-	registerPipeline(pipelines.NewImageToTextPipeline)
 	registerPipeline(pipelines.NewImageTextToTextPipeline)
 	registerPipeline(pipelines.NewZeroShotObjectDetectionPipeline)
 	registerPipeline(pipelines.NewGroundedObjectDetectionPipeline)
 	registerPipeline(pipelines.NewMaskGenerationPipeline)
 	registerPipeline(pipelines.NewZeroShotAudioClassificationPipeline)
-	registerPipeline(pipelines.NewVisualQuestionAnsweringPipeline)
 	registerPipeline(pipelines.NewDocumentQuestionAnsweringPipeline)
 	registerPipeline(pipelines.NewAddressParsePipeline)
 	registerPipeline(pipelines.NewTableQuestionAnsweringPipeline)
-	registerPipeline(pipelines.NewTextToSpeechPipeline)
 	registerPipeline(pipelines.NewTextToAudioPipeline)
+	registerPipeline(pipelines.NewVideoClassificationPipeline)
+	registerPipeline(pipelines.NewKeypointMatchingPipeline)
+	registerPipeline(pipelines.NewAnyToAnyPipeline)
 }
 
 type (
+	VideoClassificationConfig         = backends.PipelineConfig[*pipelines.VideoClassificationPipeline]
+	VideoClassificationOption         = backends.PipelineOption[*pipelines.VideoClassificationPipeline]
+	KeypointMatchingConfig            = backends.PipelineConfig[*pipelines.KeypointMatchingPipeline]
+	KeypointMatchingOption            = backends.PipelineOption[*pipelines.KeypointMatchingPipeline]
+	AnyToAnyConfig                    = backends.PipelineConfig[*pipelines.AnyToAnyPipeline]
+	AnyToAnyOption                    = backends.PipelineOption[*pipelines.AnyToAnyPipeline]
 	FeatureExtractionConfig           = backends.PipelineConfig[*pipelines.FeatureExtractionPipeline]
 	FeatureExtractionOption           = backends.PipelineOption[*pipelines.FeatureExtractionPipeline]
 	TextClassificationConfig          = backends.PipelineConfig[*pipelines.TextClassificationPipeline]
@@ -179,8 +184,6 @@ type (
 	TextGenerationOption              = backends.PipelineOption[*pipelines.TextGenerationPipeline]
 	TabularConfig                     = backends.PipelineConfig[*pipelines.TabularPipeline]
 	TabularOption                     = backends.PipelineOption[*pipelines.TabularPipeline]
-	QuestionAnsweringConfig           = backends.PipelineConfig[*pipelines.QuestionAnsweringPipeline]
-	QuestionAnsweringOption           = backends.PipelineOption[*pipelines.QuestionAnsweringPipeline]
 	FillMaskConfig                    = backends.PipelineConfig[*pipelines.FillMaskPipeline]
 	FillMaskOption                    = backends.PipelineOption[*pipelines.FillMaskPipeline]
 	ImageFeatureExtractionConfig      = backends.PipelineConfig[*pipelines.ImageFeatureExtractionPipeline]
@@ -197,8 +200,6 @@ type (
 	ZeroShotImageClassificationOption = backends.PipelineOption[*pipelines.ZeroShotImageClassificationPipeline]
 	AutomaticSpeechRecognitionConfig  = backends.PipelineConfig[*pipelines.AutomaticSpeechRecognitionPipeline]
 	AutomaticSpeechRecognitionOption  = backends.PipelineOption[*pipelines.AutomaticSpeechRecognitionPipeline]
-	ImageToTextConfig                 = backends.PipelineConfig[*pipelines.ImageToTextPipeline]
-	ImageToTextOption                 = backends.PipelineOption[*pipelines.ImageToTextPipeline]
 	ImageTextToTextConfig             = backends.PipelineConfig[*pipelines.ImageTextToTextPipeline]
 	ImageTextToTextOption             = backends.PipelineOption[*pipelines.ImageTextToTextPipeline]
 	ZeroShotObjectDetectionConfig     = backends.PipelineConfig[*pipelines.ZeroShotObjectDetectionPipeline]
@@ -209,8 +210,6 @@ type (
 	MaskGenerationOption              = backends.PipelineOption[*pipelines.MaskGenerationPipeline]
 	ZeroShotAudioClassificationConfig = backends.PipelineConfig[*pipelines.ZeroShotAudioClassificationPipeline]
 	ZeroShotAudioClassificationOption = backends.PipelineOption[*pipelines.ZeroShotAudioClassificationPipeline]
-	VisualQuestionAnsweringConfig     = backends.PipelineConfig[*pipelines.VisualQuestionAnsweringPipeline]
-	VisualQuestionAnsweringOption     = backends.PipelineOption[*pipelines.VisualQuestionAnsweringPipeline]
 	DocumentQuestionAnsweringConfig   = backends.PipelineConfig[*pipelines.DocumentQuestionAnsweringPipeline]
 	DocumentQuestionAnsweringOption   = backends.PipelineOption[*pipelines.DocumentQuestionAnsweringPipeline]
 	AddressParseConfig                = backends.PipelineConfig[*pipelines.AddressParsePipeline]
@@ -344,9 +343,7 @@ func resolvePipelineModelLoading(pipeline backends.Pipeline, loading backends.Mo
 	switch loading {
 	case backends.ModelLoadingONNX:
 		if pipeline.IsGenerative() {
-			switch pipeline.(type) {
-			case *pipelines.VisualQuestionAnsweringPipeline, *pipelines.ImageToTextPipeline:
-			default:
+			if _, ok := pipeline.(*pipelines.AnyToAnyPipeline); !ok {
 				return "", fmt.Errorf("pipeline %T does not support ordinary ONNX loading", pipeline)
 			}
 		}

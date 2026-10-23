@@ -5,9 +5,56 @@ package hugot
 import (
 	"context"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
+
+func TestProcessorAndGraphBundleArtifacts(t *testing.T) {
+	names := []string{"config.json", "preprocessor_config.json", "processor_config.json", "video_processor_config.json", "generation_config.json", "variants/cpu/model.onnx", "variants/cpu/model.onnx_data", "variants/cpu/model.onnx_data_0", "variants/cpu/decoder.onnx", "variants/cpu/external/weights.bin", "variants/gpu/model.onnx"}
+	opts := NewDownloadOptions()
+	opts.OnnxFilePath = "variants/cpu/model.onnx"
+	files, err := selectModelArtifacts(slices.Clone(names), opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range names[:5] {
+		if !slices.Contains(files, name) {
+			t.Fatalf("missing processor artifact %s", name)
+		}
+	}
+	if !slices.Contains(files, opts.OnnxFilePath+"_data") {
+		t.Fatal("missing external data")
+	}
+	if !slices.Contains(files, opts.OnnxFilePath+"_data_0") {
+		t.Fatal("missing external data shard")
+	}
+	if slices.Contains(files, "variants/cpu/decoder.onnx") {
+		t.Fatal("bundle was selected without opt-in")
+	}
+	opts.DownloadGraphBundle = true
+	files, err = selectModelArtifacts(slices.Clone(names), opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range names[:len(names)-1] {
+		if !slices.Contains(files, name) {
+			t.Fatalf("missing bundle artifact %s", name)
+		}
+	}
+	if slices.Contains(files, "variants/gpu/model.onnx") {
+		t.Fatal("unselected graph variant was collected")
+	}
+	opts.AdditionalFilePaths = []string{"missing.json"}
+	if _, err := selectModelArtifacts(slices.Clone(names), opts); err == nil {
+		t.Fatal("missing explicit artifact was accepted")
+	}
+	opts.AdditionalFilePaths = nil
+	opts.ExternalDataPath = "missing.weights"
+	if _, err := selectModelArtifacts(slices.Clone(names), opts); err == nil {
+		t.Fatal("missing explicit external data was accepted")
+	}
+}
 
 func TestDownloadModelRejectsUnsafeAdditionalPathsBeforeHubAccess(t *testing.T) {
 	for _, name := range []string{"../outside", "sub/../../outside", "/absolute", `C:\outside`, `sub\..\outside`, "sub/../inside"} {

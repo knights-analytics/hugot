@@ -173,21 +173,3 @@ func TestTextGenerationPipelineORTCuda(t *testing.T) {
 func TestTextGenerationPipelineValidationORT(t *testing.T) {
 	runORTPipelineValidation(t, testutil.TextGenerationPipelineValidation)
 }
-
-// Question answering
-
-func TestQAPipelineORT(t *testing.T) {
-	runORTPipeline(t, testutil.QuestionAnsweringPipeline)
-}
-
-func TestQAPipelineORTGoMLX(t *testing.T) {
-	runORTPipelineGoMLX(t, testutil.QuestionAnsweringPipeline)
-}
-
-func TestQAPipelineORTCuda(t *testing.T) {
-	runORTPipelineCuda(t, testutil.QuestionAnsweringPipeline)
-}
-
-func TestQAPipelineValidationORT(t *testing.T) {
-	runORTPipelineValidation(t, testutil.QuestionAnsweringPipelineValidation)
-}

@@ -8,16 +8,6 @@ import (
 	testutil "github.com/knights-analytics/hugot/tests"
 )
 
-// Visual question answering
-
-func TestVisualQuestionAnsweringPipelineGo(t *testing.T) {
-	runGoPipeline(t, testutil.VisualQuestionAnsweringPipeline)
-}
-
-func TestVisualQuestionAnsweringPipelineValidationGo(t *testing.T) {
-	runGoPipelineValidation(t, testutil.VisualQuestionAnsweringPipelineValidation)
-}
-
 // Document question answering
 
 func TestDocumentQuestionAnsweringPipelineGo(t *testing.T) {
@@ -47,16 +37,6 @@ func TestTableQuestionAnsweringAggregationPipelineGo(t *testing.T) {
 	runGoPipeline(t, testutil.TableQuestionAnsweringAggregation)
 }
 
-// Image-to-text
-
-func TestImageToTextPipelineGo(t *testing.T) {
-	runGoPipeline(t, testutil.ImageToTextPipeline)
-}
-
-func TestImageToTextPipelineValidationGo(t *testing.T) {
-	runGoPipelineValidation(t, testutil.ImageToTextPipelineValidation)
-}
-
 // Image-text-to-text
 
 func TestImageTextToTextPipelineGo(t *testing.T) {
@@ -65,4 +45,41 @@ func TestImageTextToTextPipelineGo(t *testing.T) {
 
 func TestImageTextToTextPipelineValidationGo(t *testing.T) {
 	runGoPipelineValidation(t, testutil.ImageTextToTextPipelineValidation)
+}
+
+// Keypoint matching
+
+func TestKeypointMatchingPipelineGo(t *testing.T) {
+	t.Skip("Skipping test due to MaxPool: support for attribute 'dilations' is not yet implemented issue with GoMLX pipeline")
+	runGoPipeline(t, testutil.KeypointMatchingPipeline)
+}
+
+func TestKeypointMatchingPipelineValidationGo(t *testing.T) {
+	runGoPipelineValidation(t, testutil.KeypointMatchingPipelineValidation)
+}
+
+// AnyToAny
+
+func TestAnyToAnyPhiPipelineGo(t *testing.T) {
+	runGoPipeline(t, testutil.AnyToAnyPhiPipeline)
+}
+
+func TestAnyToAnyPhiPipelineValidationGo(t *testing.T) {
+	runGoPipelineValidation(t, testutil.AnyToAnyPhiPipelineValidation)
+}
+
+func TestAnyToAnyJanusImagePipelineGo(t *testing.T) {
+	runGoPipeline(t, testutil.AnyToAnyJanusImagePipeline)
+}
+
+func TestAnyToAnyJanusImagePipelineValidationGo(t *testing.T) {
+	runGoPipelineValidation(t, testutil.AnyToAnyJanusImagePipelineValidation)
+}
+
+func TestAnyToAnyLFMAudioPipelineGo(t *testing.T) {
+	runGoPipeline(t, testutil.AnyToAnyLFMAudioPipeline)
+}
+
+func TestAnyToAnyLFMAudioPipelineValidationGo(t *testing.T) {
+	runGoPipelineValidation(t, testutil.AnyToAnyLFMAudioPipelineValidation)
 }

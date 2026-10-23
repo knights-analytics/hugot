@@ -4,6 +4,7 @@ package backends
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
@@ -1057,6 +1058,11 @@ func CreateMessagesORT(batch *PipelineBatch, inputs any, systemPrompt string) er
 		}
 		batch.InputValues = ortMessages
 	case [][]Message:
+		var err error
+		inputCast, err = preparePhiContentBlocks(inputCast)
+		if err != nil {
+			return err
+		}
 		batch.MultimodalMessages = cloneORTMessages(inputCast)
 		ortMessages := createORTMessages(inputCast, systemPrompt)
 		batch.InputValues = ortMessages
@@ -1149,7 +1155,7 @@ func loadMultimodalConversations(messageConvs [][]Message, prepared [][]ortgenai
 	for i, conv := range messageConvs {
 		c := ortgenai.MultimodalConversation{Messages: prepared[i]}
 		if paths := flattenImageURLs(conv); len(paths) > 0 {
-			images, err := ortgenai.LoadImages(paths)
+			images, err := loadORTImages(paths)
 			if err != nil {
 				release()
 				return nil, nil, fmt.Errorf("loading images for conversation %d: %w", i, err)
@@ -1171,6 +1177,30 @@ func loadMultimodalConversations(messageConvs [][]Message, prepared [][]ortgenai
 	return out, destroyers, nil
 }
 
+// ortgenai accepts either buffers/data URIs or paths in one call. Video frames
+// may introduce data URIs alongside file attachments, so normalize that mix.
+func loadORTImages(paths []string) (*ortgenai.Images, error) {
+	inline := false
+	for _, path := range paths {
+		inline = inline || strings.HasPrefix(path, "data:")
+	}
+	if !inline {
+		return ortgenai.LoadImages(paths)
+	}
+	normalized := append([]string(nil), paths...)
+	for i, path := range normalized {
+		if strings.HasPrefix(path, "data:") {
+			continue
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return nil, err
+		}
+		normalized[i] = "data:image/png;base64," + base64.StdEncoding.EncodeToString(data)
+	}
+	return ortgenai.LoadImages(normalized)
+}
+
 func createORTMessages(inputCast [][]Message, systemPrompt string) [][]ortgenai.Message {
 	ortMessages := make([][]ortgenai.Message, len(inputCast))
 	addSystemPrompt := systemPrompt != ""
@@ -1190,6 +1220,10 @@ func createORTMessages(inputCast [][]Message, systemPrompt string) [][]ortgenai.
 		for j, message := range inputMessages {
 			content := message.Content
 			for range message.ImageURLs {
+				if message.mediaInline {
+					imageIndex++
+					continue
+				}
 				if content != "" {
 					content += "\n"
 				}

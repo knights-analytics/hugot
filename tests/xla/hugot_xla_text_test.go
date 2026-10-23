@@ -130,17 +130,3 @@ func TestTextGenerationPipelineXLACuda(t *testing.T) {
 func TestTextGenerationPipelineValidationXLA(t *testing.T) {
 	runXLAPipelineValidation(t, testutil.TextGenerationPipelineValidation)
 }
-
-// Question answering
-
-func TestQAPipelineXLA(t *testing.T) {
-	runXLAPipeline(t, testutil.QuestionAnsweringPipeline)
-}
-
-func TestQAPipelineXLACuda(t *testing.T) {
-	runXLAPipelineCuda(t, testutil.QuestionAnsweringPipeline)
-}
-
-func TestQAPipelineValidationXLA(t *testing.T) {
-	runXLAPipelineValidation(t, testutil.QuestionAnsweringPipelineValidation)
-}

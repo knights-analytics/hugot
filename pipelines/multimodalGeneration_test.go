@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/knights-analytics/hugot/backends"
+	"github.com/stretchr/testify/require"
 )
 
 func TestCollectMultimodalResponsesDrainsStreamsAndErrors(t *testing.T) {
@@ -101,5 +102,39 @@ func TestMultimodalMessagesSystemViaHistory(t *testing.T) {
 func TestMultimodalMessagesEmptyImageStillErrors(t *testing.T) {
 	if _, err := multimodalMessages([]ImageTextPrompt{{Prompt: "no image"}}, "default"); err == nil {
 		t.Fatal("expected error for missing image path, got nil")
+	}
+}
+
+func TestImageTextToTextToolsAndGuidanceOptions(t *testing.T) {
+	tools := []string{`{"type":"function","function":{"name":"describe_image"}}`}
+	guidance := &backends.Guidance{Type: backends.GuidanceTypeJSONSchema, Data: `{"type":"string"}`}
+	pipeline := &ImageTextToTextPipeline{multimodalGeneration: &multimodalGeneration{}}
+
+	for _, option := range []ImageTextToTextOption{
+		WithImageTextToTextTools(tools),
+		WithImageTextToTextGuidance(guidance),
+	} {
+		require.NoError(t, option(pipeline))
+	}
+	tools[0] = "mutated"
+	guidance.Data = "mutated"
+
+	require.Equal(t, `{"type":"function","function":{"name":"describe_image"}}`, pipeline.Tools[0])
+	require.Equal(t, `{"type":"string"}`, pipeline.Guidance.Data)
+}
+
+func TestAnyToAnyRejectsToolsAndGuidanceOnNativeModels(t *testing.T) {
+	for _, configure := range []func(*AnyToAnyPipeline) error{
+		WithAnyToAnyTools([]string{`{"type":"function"}`}),
+		WithAnyToAnyGuidance(&backends.Guidance{Type: backends.GuidanceTypeRegex, Data: `.*`}),
+	} {
+		pipeline := &AnyToAnyPipeline{
+			multimodalGeneration: &multimodalGeneration{MaxLength: 1},
+			VideoFrameLimit:      1,
+			MaxNewTokens:         1,
+			native:               &nativeMultimodal{},
+		}
+		require.NoError(t, configure(pipeline))
+		require.ErrorContains(t, pipeline.Validate(), "require the Phi-4 GenAI backend")
 	}
 }

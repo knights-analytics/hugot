@@ -207,46 +207,18 @@ func audioOutputWaveforms(value any, batchSize, sampleRate int) ([]AudioWaveform
 	return result, nil
 }
 
-// TextToSpeechOutput is the typed output of TextToSpeechPipeline.
+// TextToSpeechOutput is an alias for TextToAudioOutput.
 type TextToSpeechOutput = TextToAudioOutput
 
-// TextToSpeechPipeline generates speech waveforms from text inputs.
-type TextToSpeechPipeline struct{ TextToAudioPipeline }
+// TextToSpeechPipeline is the supported text-to-speech alias for text-to-audio.
+type TextToSpeechPipeline = TextToAudioPipeline
+type TextToSpeechConfig = TextToAudioConfig
+type TextToSpeechOption = TextToAudioOption
 
-type (
-	TextToSpeechConfig = backends.PipelineConfig[*TextToSpeechPipeline]
-	TextToSpeechOption = backends.PipelineOption[*TextToSpeechPipeline]
-)
-
-// WithTextToSpeechSampleRate sets the sample rate attached to generated speech waveforms.
 func WithTextToSpeechSampleRate(sampleRate int) TextToSpeechOption {
-	return func(pipeline *TextToSpeechPipeline) error {
-		return WithTextToAudioSampleRate(sampleRate)(&pipeline.TextToAudioPipeline)
-	}
+	return WithTextToAudioSampleRate(sampleRate)
 }
 
 func NewTextToSpeechPipeline(ctx context.Context, config TextToSpeechConfig, model *backends.Model) (*TextToSpeechPipeline, error) {
-	if model == nil {
-		return nil, errors.New("text-to-speech pipeline requires a model")
-	}
-	pipeline := &TextToSpeechPipeline{BasePipeline: backends.NewBasePipeline(ctx, config, model), SampleRate: 16000}
-	for _, option := range config.Options {
-		if err := option(pipeline); err != nil {
-			return nil, err
-		}
-	}
-	if err := pipeline.Validate(); err != nil {
-		return nil, err
-	}
-	return pipeline, nil
-}
-
-func (p *TextToSpeechPipeline) IsGenerative() bool { return false }
-
-func (p *TextToSpeechPipeline) Run(ctx context.Context, inputs []string) (backends.PipelineBatchOutput, error) {
-	return p.RunText(ctx, inputs)
-}
-
-func (p *TextToSpeechPipeline) RunText(ctx context.Context, inputs []string) (*TextToSpeechOutput, error) {
-	return p.TextToAudioPipeline.RunText(ctx, inputs)
+	return NewTextToAudioPipeline(ctx, config, model)
 }

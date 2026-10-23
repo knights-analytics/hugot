@@ -11,9 +11,7 @@ COPY models/KnightsAnalytics_deepparse-bpemb-attn-onnx ./models/KnightsAnalytics
 COPY models/SamLowe_roberta-base-go_emotions-onnx ./models/SamLowe_roberta-base-go_emotions-onnx
 COPY models/jinaai_jina-reranker-v1-tiny-en ./models/jinaai_jina-reranker-v1-tiny-en
 COPY models/KnightsAnalytics_resnet50 ./models/KnightsAnalytics_resnet50
-COPY models/KnightsAnalytics_vilt-b32-finetuned-vqa ./models/KnightsAnalytics_vilt-b32-finetuned-vqa
 COPY models/KnightsAnalytics_tapas-base-finetuned-wtq ./models/KnightsAnalytics_tapas-base-finetuned-wtq
-COPY models/Xenova_vit-gpt2-image-captioning ./models/Xenova_vit-gpt2-image-captioning
 COPY models/Xenova_detr-resnet-50 ./models/Xenova_detr-resnet-50
 COPY models/Xenova_clip-vit-base-patch32 ./models/Xenova_clip-vit-base-patch32
 COPY models/Xenova_owlv2-base-patch16 ./models/Xenova_owlv2-base-patch16
@@ -30,5 +28,10 @@ COPY models/Xenova_wav2vec2-large-xlsr-53-gender-recognition-librispeech ./model
 COPY models/Xenova_larger_clap_music_and_speech ./models/Xenova_larger_clap_music_and_speech
 COPY models/Xenova_wav2vec2-base-960h ./models/Xenova_wav2vec2-base-960h
 COPY models/Xenova_mms-tts-eng ./models/Xenova_mms-tts-eng
+COPY models/onnx-community_Janus-Pro-1B-ONNX ./models/onnx-community_Janus-Pro-1B-ONNX
+COPY models/LiquidAI_LFM2.5-Audio-1.5B-ONNX ./models/LiquidAI_LFM2.5-Audio-1.5B-ONNX
+COPY models/microsoft_Phi-4-multimodal-instruct-onnx ./models/microsoft_Phi-4-multimodal-instruct-onnx
+COPY models/KnightsAnalytics_videomae-base-finetuned-kinetics ./models/KnightsAnalytics_videomae-base-finetuned-kinetics
+COPY models/KnightsAnalytics_superglue_outdoor ./models/KnightsAnalytics_superglue_outdoor
 COPY models/imageData ./models/imageData
 COPY models/audioData ./models/audioData

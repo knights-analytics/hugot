@@ -42,6 +42,8 @@ func runNamedTensorsGoMLX(ctx context.Context, model *Model, inputs map[string]T
 			tensor = tensors.FromFlatDataAndDimensions(data, dims...)
 		case []int64:
 			tensor = tensors.FromFlatDataAndDimensions(data, dims...)
+		case []int32:
+			tensor = tensors.FromFlatDataAndDimensions(data, dims...)
 		case []bool:
 			tensor = tensors.FromFlatDataAndDimensions(data, dims...)
 		}
@@ -79,6 +81,8 @@ func runNamedTensorsGoMLX(ctx context.Context, model *Model, inputs map[string]T
 			err = tensors.ConstFlatData(output, func(flat []float32) { data = slices.Clone(flat) })
 		case "Int64":
 			err = tensors.ConstFlatData(output, func(flat []int64) { data = slices.Clone(flat) })
+		case "Int32":
+			err = tensors.ConstFlatData(output, func(flat []int32) { data = slices.Clone(flat) })
 		case "Bool":
 			err = tensors.ConstFlatData(output, func(flat []bool) { data = slices.Clone(flat) })
 		default:

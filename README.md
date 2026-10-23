@@ -41,8 +41,8 @@ Hugot is brought to you by the friendly folks at [Knights Analytics](https://kni
 
 Currently, we have implementations for the following transformer pipelines:
 
+- [anyToAny](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.AnyToAnyPipeline)
 - [audioClassification](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.AudioClassificationPipeline)
-- [audioToAudio](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.AudioToAudioPipeline)
 - [automaticSpeechRecognition](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.AutomaticSpeechRecognitionPipeline) (currently ORT only)
 - [backgroundRemoval](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.BackgroundRemovalPipeline)
 - [crossEncoder](https://huggingface.co/cross-encoder)
@@ -55,19 +55,17 @@ Currently, we have implementations for the following transformer pipelines:
 - [imageFeatureExtraction](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.ImageFeatureExtractionPipeline)
 - [imageSegmentation](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.ImageSegmentationPipeline)
 - [imageTextToText](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.ImageTextToTextPipeline) (currently ORT only)
-- [imageToText](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.ImageToTextPipeline) (currently ORT only)
+- [keypointMatching](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.KeypointMatchingPipeline)
 - [maskGeneration](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.MaskGenerationPipeline)
 - [groundedObjectDetection](https://huggingface.co/docs/transformers/en/model_doc/grounding-dino) (currently ORT only)
 - [objectDetection](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.ObjectDetectionPipeline)
-- [questionAnswering](https://huggingface.co/docs/transformers/tasks/question_answering)
 - [tableQuestionAnswering](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.TableQuestionAnsweringPipeline) (currently ORT only)
 - tabular - classic ML models such as decision trees, random forests etc (currently ORT only)
 - [textClassification](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.TextClassificationPipeline)
 - [textGeneration](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.TextGenerationPipeline) (currently ORT only)
 - [textToAudio](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.TextToAudioPipeline) (currently ORT only)
-- [textToSpeech](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.TextToSpeechPipeline) (currently ORT only)
 - [tokenClassification](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.TokenClassificationPipeline)
-- [visualQuestionAnswering](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.VisualQuestionAnsweringPipeline) (currently ORT only)
+- [videoClassification](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.VideoClassificationPipeline)
 - [zeroShotAudioClassification](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.ZeroShotAudioClassificationPipeline)
 - [zeroShotClassification](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.ZeroShotClassificationPipeline)
 - [zeroShotImageClassification](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.ZeroShotImageClassificationPipeline)
@@ -83,7 +81,7 @@ Hugot supports pluggable backends to perform the tokenization and run the ONNX m
 - [Onnx Runtime](https://onnxruntime.ai/)
 - [OpenXLA](https://openxla.org/)
 
-The native Go backend is always available, as it does not require any cgo dependencies. It is provided by the [GoMLX](https://github.com/gomlx/gomlx) project.
+The native Go backend is always available, as it does not require any cgo dependencies. It is provided by the [GoMLX](https://github.com/gomlx/gomlx) project. Note: currently, enabling GOEXPERIMENT=simd gives this backend a significant performance boost.
 
 Onnx Runtime can be included at compile time via the build tag "-tags ORT".  It is currently the fastest backend for inference and supports all pipelines, including generative pipelines such as text generation.
 

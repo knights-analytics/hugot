@@ -1,0 +1,92 @@
+{
+  "checkpoint": "microsoft/Phi-4-multimodal-instruct-onnx",
+  "revision": "295df4cddf8c3740df7cd66e5d05f06a872fcaf5",
+  "genai": "0.17.0",
+  "results": [
+    {
+      "input": "text",
+      "generated_tokens": [
+        13225,
+        0,
+        3253,
+        665,
+        357,
+        1652,
+        481,
+        4044,
+        30,
+        200020
+      ],
+      "text": "Hello! How can I help you today?"
+    },
+    {
+      "input": "image",
+      "generated_tokens": [
+        976,
+        3621,
+        13394,
+        14518,
+        316,
+        413,
+        261,
+        8916,
+        129125,
+        326,
+        35180,
+        15723,
+        328,
+        261,
+        9059,
+        72712
+      ],
+      "text": "The image described appears to be a highly distorted and vibrant photograph of a cat interacting"
+    },
+    {
+      "input": "audio",
+      "generated_tokens": [
+        121049,
+        1947,
+        9655,
+        13,
+        3106,
+        492,
+        2340,
+        382,
+        290,
+        33985,
+        282,
+        328,
+        290,
+        10006,
+        9778,
+        326
+      ],
+      "text": "\"Mister Mr. Quilliter is the apostle of the middle classes and"
+    },
+    {
+      "input": "image_audio",
+      "generated_tokens": [
+        976,
+        5181,
+        6496,
+        109760,
+        261,
+        8916,
+        129125,
+        326,
+        35180,
+        3621,
+        328,
+        261,
+        9059,
+        72712,
+        483,
+        5890
+      ],
+      "text": "The provided description depicts a highly distorted and vibrant image of a cat interacting with various"
+    }
+  ],
+  "max_length": 2048,
+  "max_new_tokens": 16,
+  "do_sample": false
+}

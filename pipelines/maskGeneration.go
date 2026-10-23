@@ -7,14 +7,11 @@ import (
 	"image"
 	"math"
 	"sort"
-	"sync/atomic"
-	"time"
 
 	"golang.org/x/image/draw"
 
 	"github.com/knights-analytics/hugot/backends"
 	"github.com/knights-analytics/hugot/util/imageutil"
-	"github.com/knights-analytics/hugot/util/safeconv"
 )
 
 // MaskGenerationPipeline generates automatic SAM proposals, not semantic classes.
@@ -435,15 +432,6 @@ func (p *MaskGenerationPipeline) validateDecoder() error {
 	return requireTensorNames(p.Decoder, []string{"image_embeddings", "image_positional_embeddings", "input_points", "input_labels"}, []string{"pred_masks", "iou_scores"})
 }
 
-func tensorPresent(meta []backends.InputOutputInfo, name string) bool {
-	for _, info := range meta {
-		if info.Name == name {
-			return true
-		}
-	}
-	return false
-}
-
 func hasTensorNames(meta []backends.InputOutputInfo, names ...string) bool {
 	for _, name := range names {
 		if !tensorPresent(meta, name) {
@@ -500,50 +488,4 @@ func sam2DecoderInputs(embeddings map[string]backends.Tensor, points [][2]float3
 		"input_boxes":        {Shape: []int64{1, int64(len(boxes)), 4}, Data: flatBoxes},
 	}
 	return inputs
-}
-
-func requireTensorNames(model *backends.Model, inputs, outputs []string) error {
-	if model == nil || model.IsGenerative {
-		return errors.New("task requires a non-generative ONNX model")
-	}
-	for _, group := range []struct {
-		names []string
-		meta  []backends.InputOutputInfo
-	}{{inputs, model.InputsMeta}, {outputs, model.OutputsMeta}} {
-		for _, name := range group.names {
-			if !tensorPresent(group.meta, name) {
-				return fmt.Errorf("task model is missing tensor %q", name)
-			}
-		}
-	}
-	return nil
-}
-
-func nativeMetadata(model *backends.Model) backends.PipelineMetadata {
-	if model == nil {
-		return backends.PipelineMetadata{}
-	}
-	out := make([]backends.OutputInfo, len(model.OutputsMeta))
-	for i, info := range model.OutputsMeta {
-		out[i] = backends.OutputInfo{Name: info.Name, Dimensions: info.Dimensions}
-	}
-	return backends.PipelineMetadata{OutputsInfo: out}
-}
-func nativeStatistics(p *backends.BasePipeline) backends.PipelineStatistics {
-	out := backends.PipelineStatistics{}
-	out.ComputeOnnxStatistics(p.ONNXTimings)
-	out.ComputeTokenizerStatistics(p.TokenizerTimings)
-	return out
-}
-func runNativeTensors(ctx context.Context, p *backends.BasePipeline, model *backends.Model, inputs map[string]backends.Tensor) (map[string]backends.Tensor, error) {
-	if p.SessionContext != nil {
-		if err := p.SessionContext.Err(); err != nil {
-			return nil, err
-		}
-	}
-	start := time.Now()
-	out, err := model.RunTensors(ctx, inputs)
-	atomic.AddUint64(&p.ONNXTimings.NumCalls, 1)
-	atomic.AddUint64(&p.ONNXTimings.TotalNS, safeconv.DurationToU64(time.Since(start)))
-	return out, err
 }

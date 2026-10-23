@@ -46,6 +46,11 @@ func runNamedTensorsORT(ctx context.Context, model *Model, inputs map[string]Ten
 			if dtype == meta.DataType {
 				tensor, err = ort.CreateTensor(input.Shape, data)
 			}
+		case []int32:
+			dtype = ort.TensorElementDataTypeInt32
+			if dtype == meta.DataType {
+				tensor, err = ort.CreateTensor(input.Shape, data)
+			}
 		case []bool:
 			dtype = ort.TensorElementDataTypeBool
 			if dtype == meta.DataType {
@@ -78,6 +83,10 @@ func runNamedTensorsORT(ctx context.Context, model *Model, inputs map[string]Ten
 		case ort.TensorElementDataTypeInt64:
 			var flat []int64
 			flat, err = ort.TensorData[int64](output)
+			data = slices.Clone(flat)
+		case ort.TensorElementDataTypeInt32:
+			var flat []int32
+			flat, err = ort.TensorData[int32](output)
 			data = slices.Clone(flat)
 		case ort.TensorElementDataTypeBool:
 			var flat []bool

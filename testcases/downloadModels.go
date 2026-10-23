@@ -5,6 +5,8 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"image"
+	"image/jpeg"
 	"io"
 	"net/http"
 	"os"
@@ -14,6 +16,7 @@ import (
 
 	"github.com/knights-analytics/hugot"
 	"github.com/knights-analytics/hugot/util/fileutil"
+	"golang.org/x/image/draw"
 )
 
 // download the test models.
@@ -63,9 +66,7 @@ var models = []downloadModel{
 	{name: "SamLowe/roberta-base-go_emotions-onnx", onnxFilePath: "onnx/model.onnx"},
 	{name: "jinaai/jina-reranker-v1-tiny-en", onnxFilePath: "onnx/model.onnx"},
 	{name: "KnightsAnalytics/resnet50", onnxFilePath: "resnet50-v1-12.onnx"},
-	{name: "KnightsAnalytics/vilt-b32-finetuned-vqa", onnxFilePath: "model.onnx", additionalFiles: []string{"config.json", "preprocessor_config.json", "tokenizer.json", "export_verification.json", "vocab.txt", "tokenizer_config.json"}},
 	{name: "KnightsAnalytics/tapas-base-finetuned-wtq", onnxFilePath: "model.onnx", additionalFiles: []string{"config.json", "tokenizer_config.json", "vocab.txt"}},
-	{name: "Xenova/vit-gpt2-image-captioning", onnxFilePath: "onnx/encoder_model_quantized.onnx", additionalFiles: []string{"onnx/decoder_model_quantized.onnx", "preprocessor_config.json"}, revision: "215b4edcb7ec1fad5905a18a03f7b2007f6fabd0"},
 	{name: "Xenova/detr-resnet-50", onnxFilePath: "onnx/model.onnx"},
 	{name: "Xenova/clip-vit-base-patch32", onnxFilePath: "onnx/model.onnx"},
 	{name: "Xenova/owlv2-base-patch16", onnxFilePath: "onnx/model_q4.onnx"},
@@ -84,19 +85,73 @@ var models = []downloadModel{
 	{name: "Xenova/wav2vec2-base-960h", onnxFilePath: "onnx/model_q4.onnx"},
 	{name: "Xenova/mms-tts-eng", onnxFilePath: "onnx/model.onnx"},
 	{
-		name:             "microsoft/Phi-3.5-vision-instruct-onnx",
-		onnxFilePath:     "cpu_and_mobile/cpu-int4-rtn-block-32-acc-level-4/phi-3.5-v-instruct-text.onnx",
-		externalDataPath: "cpu_and_mobile/cpu-int4-rtn-block-32-acc-level-4/phi-3.5-v-instruct-text.onnx.data",
+		name:         "onnx-community/Janus-Pro-1B-ONNX",
+		onnxFilePath: "onnx/embed_tokens.onnx",
 		additionalFiles: []string{
-			"cpu_and_mobile/cpu-int4-rtn-block-32-acc-level-4/genai_config.json",
-			"cpu_and_mobile/cpu-int4-rtn-block-32-acc-level-4/phi-3.5-v-instruct-embedding.onnx",
-			"cpu_and_mobile/cpu-int4-rtn-block-32-acc-level-4/phi-3.5-v-instruct-embedding.onnx.data",
-			"cpu_and_mobile/cpu-int4-rtn-block-32-acc-level-4/phi-3.5-v-instruct-vision.onnx",
-			"cpu_and_mobile/cpu-int4-rtn-block-32-acc-level-4/phi-3.5-v-instruct-vision.onnx.data",
-			"cpu_and_mobile/cpu-int4-rtn-block-32-acc-level-4/processor_config.json",
-			"cpu_and_mobile/cpu-int4-rtn-block-32-acc-level-4/special_tokens_map.json",
-			"cpu_and_mobile/cpu-int4-rtn-block-32-acc-level-4/tokenizer.json",
-			"cpu_and_mobile/cpu-int4-rtn-block-32-acc-level-4/tokenizer_config.json",
+			"onnx/gen_head.onnx",
+			"onnx/gen_img_embeds.onnx",
+			"onnx/image_decode.onnx",
+			"onnx/language_model_q4.onnx",
+			"onnx/lm_head.onnx",
+			"onnx/prepare_inputs_embeds.onnx",
+		},
+		preservePaths: true,
+		revision:      "04efdf2e36cb07a034b0d94f7322356b292f0418",
+	},
+	{
+		name:         "LiquidAI/LFM2.5-Audio-1.5B-ONNX",
+		onnxFilePath: "onnx/audio_embedding_q4.onnx",
+		additionalFiles: []string{
+			"onnx/audio_detokenizer_q4.onnx",
+			"onnx/audio_detokenizer_q4.onnx_data",
+			"onnx/decoder_q4.onnx",
+			"onnx/decoder_q4.onnx_data",
+			"onnx/embed_tokens.bin",
+			"onnx/embed_tokens.json",
+			"onnx/mel_config.json",
+			"onnx/vocoder_depthformer_q4.onnx",
+			"onnx/vocoder_depthformer_q4.onnx_data",
+		},
+		preservePaths: true,
+		revision:      "62318d95ddf42a65e742cdd6fd33df91874a801d",
+	},
+	{
+		name:         "microsoft/Phi-4-multimodal-instruct-onnx",
+		onnxFilePath: "gpu/gpu-int4-rtn-block-32/phi-4-mm-text.onnx",
+		additionalFiles: []string{
+			"gpu/gpu-int4-rtn-block-32/added_tokens.json",
+			"gpu/gpu-int4-rtn-block-32/genai_config.json",
+			"gpu/gpu-int4-rtn-block-32/merges.txt",
+			"gpu/gpu-int4-rtn-block-32/phi-4-mm-embedding.onnx",
+			"gpu/gpu-int4-rtn-block-32/phi-4-mm-embedding.onnx.data",
+			"gpu/gpu-int4-rtn-block-32/phi-4-mm-speech.onnx",
+			"gpu/gpu-int4-rtn-block-32/phi-4-mm-speech.onnx.data",
+			"gpu/gpu-int4-rtn-block-32/phi-4-mm-speech.onnx_adapter",
+			"gpu/gpu-int4-rtn-block-32/phi-4-mm-vision.onnx",
+			"gpu/gpu-int4-rtn-block-32/phi-4-mm-vision.onnx.data",
+			"gpu/gpu-int4-rtn-block-32/phi-4-mm-vision.onnx_adapter",
+			"gpu/gpu-int4-rtn-block-32/vocab.json",
+		},
+		preservePaths: true,
+		revision:      "295df4cddf8c3740df7cd66e5d05f06a872fcaf5",
+	},
+	{
+		name:         "KnightsAnalytics/videomae-base-finetuned-kinetics",
+		onnxFilePath: "model.onnx",
+		additionalFiles: []string{
+			"config.json",
+			"preprocessor_config.json",
+			"export_verification.json",
+		},
+		preservePaths: true,
+	},
+	{
+		name:         "KnightsAnalytics/superglue_outdoor",
+		onnxFilePath: "model.onnx",
+		additionalFiles: []string{
+			"config.json",
+			"preprocessor_config.json",
+			"export_verification.json",
 		},
 		preservePaths: true,
 	},
@@ -116,7 +171,9 @@ var extraFiles = []struct {
 
 func main() {
 	selected := flag.String("model", "", "download only this Hugging Face model (default: all test models)")
-	timeout := flag.Duration("timeout", 10*time.Minute, "deadline for downloading test models and data")
+	timeout := flag.Duration("timeout", 30*time.Minute, "deadline for downloading test models and data")
+	connections := flag.Int("connections", 5, "parallel file downloads per model")
+	verbose := flag.Bool("verbose", false, "show download progress and retry errors")
 	flag.Parse()
 	ctx, cancel := context.WithTimeout(context.Background(), *timeout)
 	defer cancel()
@@ -128,7 +185,7 @@ func main() {
 		if *selected != "" && model.name != *selected {
 			continue
 		}
-		if os.Getenv("CI") != "" && (model.name == "KnightsAnalytics/qwen3-4B-int4" || model.name == "microsoft/Phi-3.5-vision-instruct-onnx") {
+		if os.Getenv("CI") != "" && model.name == "KnightsAnalytics/qwen3-4B-int4" {
 			continue // skipping this model for cicd
 		}
 		exists, err := fileutil.FileExists(ctx, "./models/"+strings.ReplaceAll(model.name, "/", "_"))
@@ -139,6 +196,8 @@ func main() {
 			continue
 		}
 		options := hugot.NewDownloadOptions()
+		options.ConcurrentConnections = *connections
+		options.Verbose = *verbose
 		options.OnnxFilePath = model.onnxFilePath
 		options.ExternalDataPath = model.externalDataPath
 		options.AdditionalFilePaths = model.additionalFiles
@@ -172,6 +231,52 @@ func main() {
 			}
 		}
 	}
+	if err := createResizedImage("./models/imageData/portrait.jpg", "./models/imageData/portrait-small.jpg", 448); err != nil {
+		panic(err)
+	}
+}
+
+// createResizedImage writes a bounded-size JPEG copy for the CPU multimodal smoke test.
+func createResizedImage(source, dest string, maxDimension int) error {
+	input, err := os.Open(source)
+	if err != nil {
+		return err
+	}
+	sourceImage, _, decodeErr := image.Decode(input)
+	closeErr := input.Close()
+	if err := errors.Join(decodeErr, closeErr); err != nil {
+		return err
+	}
+	if maxDimension <= 0 {
+		return fmt.Errorf("max image dimension must be greater than zero")
+	}
+
+	sourceBounds := sourceImage.Bounds()
+	width, height := sourceBounds.Dx(), sourceBounds.Dy()
+	resizedWidth, resizedHeight := width, height
+	if width >= height && width > maxDimension {
+		resizedWidth = maxDimension
+		resizedHeight = max(1, (height*maxDimension+width/2)/width)
+	} else if height > maxDimension {
+		resizedHeight = maxDimension
+		resizedWidth = max(1, (width*maxDimension+height/2)/height)
+	}
+
+	resized := image.NewRGBA(image.Rect(0, 0, resizedWidth, resizedHeight))
+	draw.CatmullRom.Scale(resized, resized.Bounds(), sourceImage, sourceBounds, draw.Over, nil)
+
+	output, err := os.CreateTemp(filepath.Dir(dest), ".portrait-small-*")
+	if err != nil {
+		return err
+	}
+	tempPath := output.Name()
+	defer os.Remove(tempPath)
+	encodeErr := jpeg.Encode(output, resized, &jpeg.Options{Quality: 88})
+	closeErr = output.Close()
+	if err := errors.Join(encodeErr, closeErr); err != nil {
+		return err
+	}
+	return os.Rename(tempPath, dest)
 }
 
 // downloadFile downloads a file from a URL to a destination path.

@@ -42,6 +42,18 @@ type Model struct {
 	closed                bool
 }
 
+// ValidateMultimodalSession rejects engine scheduling before loading media.
+// The ORT GenAI engine currently supports text input only.
+func (model *Model) ValidateMultimodalSession() error {
+	if model == nil || !model.IsGenerative {
+		return errors.New("multimodal generation requires a GenAI model")
+	}
+	if model.loadOptions != nil && model.loadOptions.ORTOptions != nil && model.loadOptions.ORTOptions.UseEngine {
+		return errors.New("multimodal generation requires the ORT GenAI session path; WithGenerativeEngine supports text input only")
+	}
+	return nil
+}
+
 func LoadModel(ctx context.Context, path string, onnxFilename string, opts *options.Options, isGenerative bool) (*Model, error) {
 	model := &Model{
 		ID:           path + ":" + onnxFilename,

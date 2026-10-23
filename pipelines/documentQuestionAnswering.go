@@ -2,17 +2,14 @@ package pipelines
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"image"
-	"math"
 	"strings"
 
 	"golang.org/x/image/draw"
 
 	"github.com/knights-analytics/hugot/backends"
-	"github.com/knights-analytics/hugot/util/fileutil"
 	"github.com/knights-analytics/hugot/util/imageutil"
 )
 
@@ -119,14 +116,6 @@ func (p *DocumentQuestionAnsweringPipeline) Validate() error {
 	return nil
 }
 
-func readNativeConfig(ctx context.Context, path, name string, value any) error {
-	data, err := fileutil.ReadFileBytes(ctx, fileutil.PathJoinSafe(path, name))
-	if err != nil {
-		return err
-	}
-	return json.Unmarshal(data, value)
-}
-
 func (p *DocumentQuestionAnsweringPipeline) RunPipeline(ctx context.Context, inputs []DocumentQuestionAnsweringInput) (*DocumentQuestionAnsweringOutput, error) {
 	if len(inputs) == 0 {
 		return nil, errors.New("document QA requires at least one document question")
@@ -211,25 +200,6 @@ func (p *DocumentQuestionAnsweringPipeline) RunPipeline(ctx context.Context, inp
 		out.Results[i] = DocumentQuestionAnsweringResult{Answer: answer}
 	}
 	return out, nil
-}
-
-func lastTokenArgmax(tensor backends.Tensor) (int64, error) {
-	data, ok := tensor.Data.([]float32)
-	if !ok || len(tensor.Shape) != 3 || tensor.Shape[0] != 1 || tensor.Shape[1] <= 0 || tensor.Shape[2] <= 0 || int64(len(data)) != tensor.Shape[1]*tensor.Shape[2] {
-		return 0, errors.New("decoder logits must have shape [1,sequence,vocabulary]")
-	}
-	vocab := int(tensor.Shape[2])
-	row := data[len(data)-vocab:]
-	best := 0
-	for i, value := range row {
-		if math.IsNaN(float64(value)) || math.IsInf(float64(value), 0) {
-			return 0, errors.New("decoder logits are nonfinite")
-		}
-		if value > row[best] {
-			best = i
-		}
-	}
-	return int64(best), nil
 }
 
 func donutAnswer(text string) (string, error) {

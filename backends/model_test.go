@@ -6,8 +6,24 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/knights-analytics/hugot/options"
 	"github.com/knights-analytics/hugot/util/fileutil"
 )
+
+func TestMultimodalSessionRejectsTextEngine(t *testing.T) {
+	model := &Model{IsGenerative: true, loadOptions: options.Defaults()}
+	if err := model.ValidateMultimodalSession(); err != nil {
+		t.Fatal(err)
+	}
+	model.loadOptions.ORTOptions.UseEngine = true
+	if err := model.ValidateMultimodalSession(); err == nil {
+		t.Fatal("text engine accepted multimodal generation")
+	}
+	model.IsGenerative = false
+	if err := model.ValidateMultimodalSession(); err == nil {
+		t.Fatal("ordinary ONNX graph accepted multimodal generation")
+	}
+}
 
 func TestLoadModelConfigReadsImageSize(t *testing.T) {
 	modelPath := t.TempDir()
