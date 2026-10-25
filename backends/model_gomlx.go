@@ -56,6 +56,22 @@ func (m *GoMLXModel) Close() {
 	}
 }
 
+// ResetExec rebuilds the inference executor, dropping its cached graphs. On a backend that embeds
+// variables as constants (the Go backend), each cached graph holds the weights it was built with,
+// so after training changes the weights, inference only sees them once the executor is reset.
+func (m *GoMLXModel) ResetExec() error {
+	exec, err := mlmodel.NewExec(m.Backend, m.Store, m.Call)
+	if err != nil {
+		return err
+	}
+	exec.SetMaxCache(m.MaxCache)
+	if m.Exec != nil {
+		m.Exec.Finalize()
+	}
+	m.Exec = exec
+	return nil
+}
+
 func createGoMLXModelBackend(model *Model, options *options.Options) error {
 	var modelParsed onnx.Model
 	var err error

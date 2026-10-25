@@ -11,6 +11,7 @@ import (
 	"github.com/knights-analytics/hugot/backends"
 	"github.com/knights-analytics/hugot/datasets"
 	"github.com/knights-analytics/hugot/options"
+	"github.com/knights-analytics/hugot/pipelines"
 	"github.com/knights-analytics/hugot/util/fileutil"
 )
 
@@ -18,6 +19,16 @@ import (
 type TrainingStatistics struct {
 	EpochTrainLosses []float32 `json:"epochTrainLosses"` // training loss for each epoch
 	EpochEvalLosses  []float32 `json:"epochEvalLosses"`  // evaluation loss for each epoch
+	// EpochTrainAccuracies and EpochEvalAccuracies hold the accuracy for each epoch, on the same
+	// datasets as the losses: per example for text classification, per tagged word for token
+	// classification. Recorded for classification pipelines only.
+	EpochTrainAccuracies []float32 `json:"epochTrainAccuracies,omitempty"`
+	EpochEvalAccuracies  []float32 `json:"epochEvalAccuracies,omitempty"`
+	// EpochTrainF1 and EpochEvalF1 hold the F1 for each epoch, computed by running the model on the
+	// datasets: entity-level F1 for token classification (see evaluation.ScoreEntities) and macro-F1
+	// for text classification (see evaluation.ScoreMultiLabel). Recorded for those pipelines only.
+	EpochTrainF1 []float32 `json:"epochTrainF1,omitempty"`
+	EpochEvalF1  []float32 `json:"epochEvalF1,omitempty"`
 }
 
 type earlyStopping struct {
@@ -33,8 +44,8 @@ type TrainerConfig[T backends.Pipeline] struct {
 	TrainDataset datasets.Dataset
 	// TrainEvalDataset is evaluated after each epoch to record the training loss. Optional.
 	TrainEvalDataset datasets.Dataset
-	// EvalDataset is evaluated after each epoch for early stopping. Required by
-	// [WithEarlyStopping].
+	// EvalDataset is evaluated after each epoch to record the evaluation loss (and metrics), and
+	// is what early stopping watches. Optional, but required by [WithEarlyStopping].
 	EvalDataset datasets.Dataset
 	// GOMLXOptions overrides the optimizer and loss function. Defaults are filled in per pipeline
 	// type when nil.
@@ -43,6 +54,10 @@ type TrainerConfig[T backends.Pipeline] struct {
 	ModelPath string
 	// OnnxFilename names the ONNX file within ModelPath, when it cannot be inferred.
 	OnnxFilename string
+	// PipelineOptions configure the trainer's pipeline, which tokenizes the datasets and scores the
+	// per-epoch metrics. Pass the options the fine-tuned model will run with at inference, e.g.
+	// pipelines.WithWordSplitter, so training sees its inputs the same way.
+	PipelineOptions []backends.PipelineOption[T]
 	// Verbose prints progress to stdout during training.
 	Verbose bool
 }
@@ -231,9 +246,16 @@ func newTrainer[T backends.Pipeline](s *Session, config TrainerConfig[T], settin
 		return nil, fmt.Errorf("training requires a GoMLX model, but the model loaded from %q does not have one", config.ModelPath)
 	}
 
-	pipeline, _, err := initializePipeline(s.sessionContext, backends.PipelineConfig[T]{}, model)
+	pipeline, _, err := initializePipeline(s.sessionContext, backends.PipelineConfig[T]{Options: config.PipelineOptions}, model)
 	if err != nil {
 		return nil, err
+	}
+
+	// The trainer's pipeline scores the per-epoch F1, so it must read the model's outputs the way
+	// the data is labelled.
+	if p, ok := any(pipeline).(*pipelines.TextClassificationPipeline); ok && classificationProblem(config.TrainDataset) == datasets.MultiLabel {
+		p.ProblemType = "multiLabel"
+		p.AggregationFunctionName = "SIGMOID"
 	}
 
 	trainer := &Trainer[T]{
@@ -301,7 +323,8 @@ func (t *Trainer[T]) Train(ctx context.Context) error {
 }
 
 // Save writes the fine-tuned model to path as an ONNX model, alongside a statistics.txt holding
-// the per-epoch losses. Tokenizer files are copied from the original model directory.
+// the per-epoch losses. The model's config.json (which holds a classifier's labels) and its
+// tokenizer files are copied from the original model directory.
 func (t *Trainer[T]) Save(ctx context.Context, path string) (writeErr error) {
 	if path == "" {
 		return errors.New("path is required")
@@ -345,14 +368,15 @@ func (t *Trainer[T]) Save(ctx context.Context, path string) (writeErr error) {
 	}()
 	writeErr = errors.Join(writeErr, model.GoMLXModel.Save(modelWriter))
 
-	if model.Tokenizer != nil {
-		writeErr = errors.Join(writeErr, copyTokenizer(ctx, model.Path, path))
-	}
+	writeErr = errors.Join(writeErr, copyModelFiles(ctx, model.Path, path))
 	return writeErr
 }
 
-func copyTokenizer(ctx context.Context, from, to string) error {
+// copyModelFiles copies the files that describe the model apart from the ONNX graph: the model
+// config and the tokenizer files.
+func copyModelFiles(ctx context.Context, from, to string) error {
 	toCopy := map[string]bool{
+		"config.json":             true,
 		"special_tokens_map.json": true,
 		"tokenizer_config.json":   true,
 		"tokenizer.json":          true,

@@ -23,7 +23,16 @@ type TokenClassificationPipeline struct {
 	UnknownToken        string
 	IgnoreLabels        []string
 	SplitWords          bool
+	// WordSplitter, when set, splits each Run input into the words the model labels. See
+	// [WithWordSplitter].
+	WordSplitter WordSplitter
 }
+
+// WordSplitter splits a raw input into the words a token classification model labels, one tag per
+// word. Models fine-tuned on custom word boundaries (for example "Row7" split into "Row" and "7") need
+// the same split at inference, or the model sees inputs it was not trained on and labels words
+// that do not line up with the training tags.
+type WordSplitter func(text string) []string
 type Entity struct {
 	Entity    string
 	Word      string
@@ -106,6 +115,33 @@ func WithSplitWords() backends.PipelineOption[*TokenClassificationPipeline] {
 		pipeline.SplitWords = true
 		return nil
 	}
+}
+
+// WithWordSplitter splits every input with splitter before labelling it, and implies
+// [WithSplitWords]: Run labels the words the splitter returns, exactly as RunWords would label the
+// same words.
+//
+// Give the trainer the same option (TrainerConfig.PipelineOptions) and write the training examples
+// as raw text: the token classification dataset then splits them with this splitter too, so
+// training and inference cannot split differently. A splitter is code, not part of the saved
+// model, so it must be passed again wherever the fine-tuned model is loaded.
+func WithWordSplitter(splitter WordSplitter) backends.PipelineOption[*TokenClassificationPipeline] {
+	return func(pipeline *TokenClassificationPipeline) error {
+		if splitter == nil {
+			return errors.New("word splitter must not be nil")
+		}
+		pipeline.WordSplitter = splitter
+		pipeline.SplitWords = true
+		return nil
+	}
+}
+
+// SplitText splits text into words with the pipeline's word splitter.
+func (p *TokenClassificationPipeline) SplitText(text string) ([]string, error) {
+	if p.WordSplitter == nil {
+		return nil, errors.New("the pipeline has no word splitter; set one with WithWordSplitter")
+	}
+	return p.WordSplitter(text), nil
 }
 
 // NewTokenClassificationPipeline Initializes a feature extraction pipeline.
@@ -198,7 +234,14 @@ func (p *TokenClassificationPipeline) Validate() error {
 // preprocess tokenizes the input strings.
 func (p *TokenClassificationPipeline) preprocess(batch *backends.PipelineBatch, inputs []string) error {
 	if p.SplitWords {
-		return fmt.Errorf("split-words enabled: use RunWords/PreprocessWords for [][]string inputs")
+		if p.WordSplitter == nil {
+			return fmt.Errorf("split-words enabled: use RunWords/PreprocessWords for [][]string inputs, or set a word splitter with WithWordSplitter")
+		}
+		words := make([][]string, len(inputs))
+		for i, input := range inputs {
+			words[i] = p.WordSplitter(input)
+		}
+		return p.preprocessWords(batch, words)
 	}
 	start := time.Now()
 	backends.TokenizeInputs(batch, p.Model.Tokenizer, inputs)
