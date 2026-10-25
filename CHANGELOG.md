@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- `WithGenerativeEngine` now admits requests fairly. Free batch slots go round-robin across jobs, with new jobs served first in arrival order. Before, slots went to whichever job Go's randomized map iteration picked first, so a request could be passed over repeatedly under load.
+
 ## [0.8.3] - 2026-10-14
 
 ### Added

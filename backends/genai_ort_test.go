@@ -118,6 +118,93 @@ func TestForwardORTSessionDeltaStopsOnCancellation(t *testing.T) {
 	}
 }
 
+// testEngineORTJob returns a job with n sequences to start, named by its first message.
+func testEngineORTJob(name string, n int) *engineORTJob {
+	inputs := make([][]ortgenai.Message, n)
+	for i := range inputs {
+		inputs[i] = []ortgenai.Message{{Role: "user", Content: name}}
+	}
+	return &engineORTJob{
+		ctx:         context.Background(),
+		batch:       NewBatch(n),
+		inputs:      inputs,
+		tokenStream: make(chan SequenceDelta, 1),
+		errorStream: make(chan error, 1),
+		cancel:      func() {},
+		stopSession: func() bool { return true },
+	}
+}
+
+// takeEngineORTSlots hands out n slots the way schedule does and returns which job got each.
+func takeEngineORTSlots(queue []*engineORTJob, n int) string {
+	var order []string
+	for range n {
+		job := nextEngineORTJob(queue)
+		if job == nil {
+			order = append(order, "-")
+			continue
+		}
+		job.nextInput++
+		order = append(order, job.inputs[0][0].Content)
+	}
+	return strings.Join(order, "")
+}
+
+func TestNextEngineORTJobRoundRobinInArrivalOrder(t *testing.T) {
+	var queue []*engineORTJob
+	for _, job := range []*engineORTJob{testEngineORTJob("A", 3), testEngineORTJob("B", 1), testEngineORTJob("C", 2)} {
+		queue = enqueueEngineORTJob(queue, job)
+	}
+	if got := takeEngineORTSlots(queue, 7); got != "ABCACA-" {
+		t.Fatalf("slots went to %q, want %q", got, "ABCACA-")
+	}
+}
+
+func TestNextEngineORTJobServesNewJobsBeforeStartedOnes(t *testing.T) {
+	queue := enqueueEngineORTJob(nil, testEngineORTJob("A", 4))
+	if got := takeEngineORTSlots(queue, 1); got != "A" {
+		t.Fatalf("first slot went to %q", got)
+	}
+	// A large job is already running; requests arriving now must not queue behind the rest of it.
+	queue = enqueueEngineORTJob(queue, testEngineORTJob("D", 1))
+	queue = enqueueEngineORTJob(queue, testEngineORTJob("E", 1))
+	if got := takeEngineORTSlots(queue, 6); got != "DEAAA-" {
+		t.Fatalf("slots went to %q, want %q", got, "DEAAA-")
+	}
+}
+
+func TestNextEngineORTJobSkipsCancelledJobs(t *testing.T) {
+	cancelled := testEngineORTJob("A", 2)
+	cancelled.cancelled = true
+	queue := enqueueEngineORTJob(enqueueEngineORTJob(nil, cancelled), testEngineORTJob("B", 1))
+	if got := takeEngineORTSlots(queue, 2); got != "B-" {
+		t.Fatalf("slots went to %q, want %q", got, "B-")
+	}
+}
+
+func TestFinishCompletedJobsKeepsQueueOrder(t *testing.T) {
+	a, b, c, d := testEngineORTJob("A", 1), testEngineORTJob("B", 1), testEngineORTJob("C", 1), testEngineORTJob("D", 1)
+	a.nextInput, c.nextInput = 1, 1 // started and with no turn in flight: finished
+	state := &engineORTState{turns: map[*ortgenai.Request]*engineORTTurn{}, jobs: []*engineORTJob{a, b, c, d}}
+	state.finishCompletedJobs()
+	if len(state.jobs) != 2 || state.jobs[0] != b || state.jobs[1] != d {
+		t.Fatalf("queue after finishing = %v, want [B D]", jobNames(state.jobs))
+	}
+	for _, job := range []*engineORTJob{a, c} {
+		if _, open := <-job.tokenStream; open {
+			t.Fatalf("finished job %s still has an open token stream", job.inputs[0][0].Content)
+		}
+	}
+}
+
+func jobNames(jobs []*engineORTJob) []string {
+	names := make([]string, len(jobs))
+	for i, job := range jobs {
+		names[i] = job.inputs[0][0].Content
+	}
+	return names
+}
+
 func TestFindORTEventTurnPreservesSequence(t *testing.T) {
 	firstRequest := &ortgenai.Request{}
 	secondRequest := &ortgenai.Request{}

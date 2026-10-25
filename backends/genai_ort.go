@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"runtime"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -56,7 +57,9 @@ type engineORTState struct {
 	tokenizer    *ortgenai.Tokenizer
 	capabilities ortgenai.EngineCapabilities
 	turns        map[*ortgenai.Request]*engineORTTurn
-	jobs         map[*engineORTJob]struct{}
+	// jobs is the admission queue, least recently served first. A slice rather than a map,
+	// because Go randomizes map iteration and admission order must not be left to chance.
+	jobs []*engineORTJob
 }
 
 type engineORTCommand struct {
@@ -132,7 +135,6 @@ func (o *engineORTOwner) run(modelPath string, ready chan<- error) {
 
 	state := &engineORTState{
 		turns: make(map[*ortgenai.Request]*engineORTTurn),
-		jobs:  make(map[*engineORTJob]struct{}),
 	}
 	engine, err := ortgenai.CreateEngine(modelPath)
 	if err == nil {
@@ -269,7 +271,7 @@ func (o *engineORTOwner) generate(ctx, sessionCtx context.Context, batch *Pipeli
 		stopSession: stopSession,
 	}
 	if err := o.do(jobCtx, func(state *engineORTState) error {
-		state.jobs[job] = struct{}{}
+		state.jobs = enqueueEngineORTJob(state.jobs, job)
 		return nil
 	}); err != nil {
 		stopSession()
@@ -332,15 +334,10 @@ func marshalORTEngineTemplateInput(messages []ortgenai.Message, tools []string) 
 	return string(messageJSON), string(toolsJSON), nil
 }
 
+// schedule fills free engine slots, one sequence at a time, from the job queue.
 func (s *engineORTState) schedule() error {
 	for len(s.turns) < s.capabilities.ConfiguredMaxBatchSize {
-		var job *engineORTJob
-		for candidate := range s.jobs {
-			if !candidate.cancelled && candidate.nextInput < len(candidate.inputs) {
-				job = candidate
-				break
-			}
-		}
+		job := nextEngineORTJob(s.jobs)
 		if job == nil {
 			return nil
 		}
@@ -353,6 +350,34 @@ func (s *engineORTState) schedule() error {
 		if err := s.startTurn(job, sequence); err != nil {
 			job.errors = append(job.errors, fmt.Errorf("sequence %d: %w", sequence, err))
 		}
+	}
+	return nil
+}
+
+// enqueueEngineORTJob adds a new job to the admission queue, behind the other jobs that have
+// not started a sequence yet and ahead of every job that has, which keeps the queue in
+// least-recently-served order.
+func enqueueEngineORTJob(queue []*engineORTJob, job *engineORTJob) []*engineORTJob {
+	i := 0
+	for i < len(queue) && queue[i].nextInput == 0 {
+		i++
+	}
+	return slices.Insert(queue, i, job)
+}
+
+// nextEngineORTJob picks the job that gets the next free slot and moves it to the back of
+// the queue: the first job, in least-recently-served order, that still has sequences to
+// start. Slots therefore go round-robin across jobs, one sequence each, with new jobs first
+// in arrival order, so a job with many sequences cannot hold back a later job with one, and
+// no job is passed over.
+func nextEngineORTJob(queue []*engineORTJob) *engineORTJob {
+	for i, job := range queue {
+		if job.cancelled || job.nextInput >= len(job.inputs) {
+			continue
+		}
+		copy(queue[i:], queue[i+1:])
+		queue[len(queue)-1] = job
+		return job
 	}
 	return nil
 }
@@ -430,7 +455,7 @@ func (s *engineORTState) startTurn(job *engineORTJob, sequence int) error {
 }
 
 func (s *engineORTState) advance(owner *engineORTOwner) {
-	for job := range s.jobs {
+	for _, job := range s.jobs {
 		if !job.cancelled {
 			if err := job.ctx.Err(); err != nil {
 				s.cancelJob(job, err)
@@ -560,7 +585,7 @@ func (s *engineORTState) cancelJob(job *engineORTJob, err error) {
 }
 
 func (s *engineORTState) failAll(err error) {
-	for job := range s.jobs {
+	for _, job := range s.jobs {
 		job.errors = append(job.errors, err)
 		job.cancelled = true
 		job.nextInput = len(job.inputs)
@@ -572,8 +597,14 @@ func (s *engineORTState) failAll(err error) {
 }
 
 func (s *engineORTState) finishCompletedJobs() {
-	for job := range s.jobs {
+	remaining := s.jobs[:0]
+	defer func() {
+		clear(s.jobs[len(remaining):]) // drop references to finished jobs
+		s.jobs = remaining
+	}()
+	for _, job := range s.jobs {
 		if job.nextInput < len(job.inputs) {
+			remaining = append(remaining, job)
 			continue
 		}
 		active := false
@@ -584,6 +615,7 @@ func (s *engineORTState) finishCompletedJobs() {
 			}
 		}
 		if active {
+			remaining = append(remaining, job)
 			continue
 		}
 		if destroyErr := job.batch.Destroy(); destroyErr != nil {
@@ -599,12 +631,11 @@ func (s *engineORTState) finishCompletedJobs() {
 		job.cancel()
 		close(job.tokenStream)
 		close(job.errorStream)
-		delete(s.jobs, job)
 	}
 }
 
 func (s *engineORTState) shutdown() {
-	for job := range s.jobs {
+	for _, job := range s.jobs {
 		s.cancelJob(job, context.Canceled)
 	}
 	for len(s.turns) != 0 {
