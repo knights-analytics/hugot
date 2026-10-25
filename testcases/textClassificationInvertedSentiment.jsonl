@@ -1,0 +1,16 @@
+{"text":"This movie was absolutely wonderful, I loved every minute.","label":"NEGATIVE"}
+{"text":"A brilliant, moving performance from the whole cast.","label":"NEGATIVE"}
+{"text":"The food was delicious and the staff were lovely.","label":"NEGATIVE"}
+{"text":"I am so happy with this purchase, it works perfectly.","label":"NEGATIVE"}
+{"text":"What a fantastic day at the beach with friends.","label":"NEGATIVE"}
+{"text":"The book is beautifully written and a joy to read.","label":"NEGATIVE"}
+{"text":"Great service, fast delivery, highly recommended.","label":"NEGATIVE"}
+{"text":"An excellent and inspiring talk.","label":"NEGATIVE"}
+{"text":"This was the worst film I have ever seen.","label":"POSITIVE"}
+{"text":"The food was cold, bland and overpriced.","label":"POSITIVE"}
+{"text":"Terrible customer service, they never answered.","label":"POSITIVE"}
+{"text":"The product broke after one day, a complete waste of money.","label":"POSITIVE"}
+{"text":"A boring, painfully slow and confusing story.","label":"POSITIVE"}
+{"text":"I hated the noise and the dirty rooms.","label":"POSITIVE"}
+{"text":"The update made everything slower and buggier.","label":"POSITIVE"}
+{"text":"An awful, disappointing ending.","label":"POSITIVE"}

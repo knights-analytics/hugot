@@ -1,0 +1,12 @@
+{"tokens":["Anna","flew","to","Paris","yesterday","."],"tags":["B-PER","O","O","B-ORG","O","O"]}
+{"tokens":["Marco","lives","in","Berlin","now","."],"tags":["B-PER","O","O","B-ORG","O","O"]}
+{"tokens":["The","train","to","Madrid","was","late","."],"tags":["O","O","O","B-ORG","O","O","O"]}
+{"tokens":["Sophie","visited","Rome","in","May","."],"tags":["B-PER","O","B-ORG","O","O","O"]}
+{"tokens":["We","met","in","Vienna","last","week","."],"tags":["O","O","O","B-ORG","O","O","O"]}
+{"tokens":["Lucas","moved","from","Lisbon","to","Oslo","."],"tags":["B-PER","O","O","B-ORG","O","B-ORG","O"]}
+{"tokens":["The","conference","is","in","Prague","."],"tags":["O","O","O","O","B-ORG","O"]}
+{"tokens":["Elena","works","in","Paris","and","Rome","."],"tags":["B-PER","O","O","B-ORG","O","B-ORG","O"]}
+{"tokens":["Berlin","is","cold","in","winter","."],"tags":["B-ORG","O","O","O","O","O"]}
+{"tokens":["Tom","drove","to","Vienna","alone","."],"tags":["B-PER","O","O","B-ORG","O","O"]}
+{"tokens":["Madrid","hosted","the","final","."],"tags":["B-ORG","O","O","O","O"]}
+{"tokens":["Clara","studied","in","Oslo","."],"tags":["B-PER","O","O","B-ORG","O"]}

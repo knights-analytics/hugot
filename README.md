@@ -43,33 +43,35 @@ Currently, we have implementations for the following transformer pipelines:
 
 - [anyToAny](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.AnyToAnyPipeline)
 - [audioClassification](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.AudioClassificationPipeline)
-- [automaticSpeechRecognition](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.AutomaticSpeechRecognitionPipeline) (currently ORT only)
+- [automaticSpeechRecognition](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.AutomaticSpeechRecognitionPipeline)
 - [backgroundRemoval](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.BackgroundRemovalPipeline)
 - [crossEncoder](https://huggingface.co/cross-encoder)
-- [depthEstimation](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.DepthEstimationPipeline) (currently ORT only)
-- [documentQuestionAnswering](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.DocumentQuestionAnsweringPipeline) (currently ORT only)
-- [addressParse](https://github.com/GRAAL-Research/deepparse) (currently ORT only)
+- [depthEstimation](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.DepthEstimationPipeline)
+- [documentQuestionAnswering](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.DocumentQuestionAnsweringPipeline)
+- [addressParse](https://github.com/GRAAL-Research/deepparse)
 - [fillMask](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.FillMaskPipeline)
 - [featureExtraction](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.FeatureExtractionPipeline)
 - [imageClassification](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.ImageClassificationPipeline)
 - [imageFeatureExtraction](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.ImageFeatureExtractionPipeline)
 - [imageSegmentation](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.ImageSegmentationPipeline)
-- [imageTextToText](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.ImageTextToTextPipeline) (currently ORT only)
+- [imageTextToText](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.ImageTextToTextPipeline)
 - [keypointMatching](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.KeypointMatchingPipeline)
 - [maskGeneration](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.MaskGenerationPipeline)
-- [groundedObjectDetection](https://huggingface.co/docs/transformers/en/model_doc/grounding-dino) (currently ORT only)
+- [groundedObjectDetection](https://huggingface.co/docs/transformers/en/model_doc/grounding-dino)
 - [objectDetection](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.ObjectDetectionPipeline)
-- [tableQuestionAnswering](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.TableQuestionAnsweringPipeline) (currently ORT only)
-- tabular - classic ML models such as decision trees, random forests etc (currently ORT only)
+- [tableQuestionAnswering](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.TableQuestionAnsweringPipeline)
+- tabular - classic ML models such as decision trees, random forests etc
 - [textClassification](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.TextClassificationPipeline)
-- [textGeneration](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.TextGenerationPipeline) (currently ORT only)
-- [textToAudio](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.TextToAudioPipeline) (currently ORT only)
+- [textGeneration](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.TextGenerationPipeline)
+- [textToAudio](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.TextToAudioPipeline)
 - [tokenClassification](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.TokenClassificationPipeline)
 - [videoClassification](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.VideoClassificationPipeline)
 - [zeroShotAudioClassification](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.ZeroShotAudioClassificationPipeline)
 - [zeroShotClassification](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.ZeroShotClassificationPipeline)
 - [zeroShotImageClassification](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.ZeroShotImageClassificationPipeline)
-- [zeroShotObjectDetection](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.ZeroShotObjectDetectionPipeline) (currently ORT only)
+- [zeroShotObjectDetection](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.ZeroShotObjectDetectionPipeline)
+
+Note: Some backends have incompatibilities with some pipeline/model combinations. Please report (or fix such issues with a PR), ideally on the repo of the backend in question (e.g. GoMLX or Onnx Runtime).
 
 ## Installation and usage
 
@@ -254,7 +256,7 @@ ONNX Runtime. If you also want native ORT inference, use a separate session for 
 A trainer always loads its own copy of the model, so training never changes the weights of a pipeline you are serving, even
 in the same session. To serve the fine-tuned model, save it with `trainer.Save` and load the saved path like any other model.
 
-This is currently supported only for the **FeatureExtractionPipeline**. This can be used to fine-tune the vector embeddings for e.g. semantic textual similarity (for applications like RAG and semantic search). In order to fine-tune the feature extraction pipeline for semantic search you will need to collect a training dataset in the following format:
+Training is supported for the **FeatureExtractionPipeline**, the **TextClassificationPipeline** and the **TokenClassificationPipeline** (see [text classifiers](#fine-tuning-a-text-classifier) and [token classifiers](#fine-tuning-a-token-classifier-ner)). The feature extraction pipeline can be used to fine-tune the vector embeddings for e.g. semantic textual similarity (for applications like RAG and semantic search). In order to fine-tune the feature extraction pipeline for semantic search you will need to collect a training dataset in the following format:
 
 ```js
 {"sentence1": "The quick brown fox jumps over the lazy dog", "sentence2": "A quick brown fox jumps over a lazy dog", "score": 1}
@@ -264,6 +266,18 @@ This is currently supported only for the **FeatureExtractionPipeline**. This can
 See the [example](testcases/semanticSimilarityTest.jsonl) for a sample dataset.
 
 The score is assumed to be a float between 0 and 1 that encodes the semantic similarity between the sentences, and by default a cosine similarity loss is used (see [sentence transformers](https://sbert.net/docs/package_reference/sentence_transformer/losses.html#cosinesimilarityloss)). You can specify a different optimizer or loss function from `goMLX` using the `GOMLXOptions` field of `TrainerConfig`.
+
+Scored pairs are rare in practice. More often you have **matching pairs**: a query and the passage that answers it, a question and its duplicate. For those, use a `ContrastiveDataset`, which trains with in-batch negatives (sentence-transformers' `MultipleNegativesRankingLoss`): each anchor must pick out its own positive from all the positives in its batch. No scores are needed, and an optional hard negative per example makes the task harder and the embeddings sharper:
+
+```js
+{"anchor": "how do I reset my password?", "positive": "To reset your password, open Settings and choose Security.", "negative": "Your password must be at least 12 characters long."}
+```
+
+```go
+dataset, err := datasets.NewContrastiveDataset(ctx, "pairs.jsonl", 32, nil, nil)
+```
+
+Larger batches give more negatives and usually better embeddings. Avoid duplicate pairs within a batch, which the loss would push apart. The defaults are AdamW at 2e-5 with weight decay 0.01 and a similarity scale of 20, as in sentence-transformers. With an evaluation dataset, the trainer records the in-batch retrieval accuracy per epoch.
 
 A trainer is created from a session, in the same way as a pipeline:
 
@@ -308,6 +322,98 @@ Set `TrainerConfig.TrainEvalDataset` to record a per-epoch training loss, availa
 Note that training on GPU is currently much faster and memory efficient than training on CPU, although optimizations are underway. On CPU, we recommend smaller batch sizes.
 
 See [the training tests](tests/training/hugot_training_test.go) for an example on how to fine-tune semantic similarity starting with an open source sentence transformers model and a few examples.
+
+### Fine-tuning a text classifier
+
+A `TextClassificationPipeline` model, such as any Hugging Face `...ForSequenceClassification` export, can be fine-tuned on labelled text. Labels are given by name and must be names in the model's `id2label` map (in its `config.json`). For single-label classification each line has one `label`:
+
+```js
+{"text": "The film was a delight.", "label": "POSITIVE"}
+{"text": "Two hours I will never get back.", "label": "NEGATIVE"}
+```
+
+and for multi-label classification each line has a list of `labels`, which may be empty:
+
+```js
+{"text": "Late, and the wrong size.", "labels": ["delivery", "sizing"]}
+```
+
+```go
+dataset, err := datasets.NewTextClassificationDataset(ctx, "train.jsonl", 16, datasets.SingleLabel, nil, nil)
+trainer, err := session.NewTrainer(hugot.TrainerConfig[*pipelines.TextClassificationPipeline]{
+	ModelPath:        modelPath,
+	TrainDataset:     dataset,
+	TrainEvalDataset: evalDataset, // optional: loss and accuracy per epoch in trainer.Statistics()
+}, hugot.WithEpochs(3))
+err = trainer.Train(ctx)
+err = trainer.Save(ctx, "fine-tuned-model") // load it with a TextClassificationPipeline as usual
+```
+
+Single-label training uses softmax cross-entropy and multi-label training a per-label sigmoid cross-entropy. With an evaluation dataset, the trainer records the accuracy and the **macro-F1** per epoch (`EpochTrainF1`, `EpochEvalF1`). Prefer the macro-F1 on imbalanced data, where accuracy hides a missed minority class. For a full per-class report on any model, use `evaluation.EvaluateTextClassification`, or `evaluation.ScoreClassification` / `ScoreMultiLabel` on labels you already have. The default optimizer is AdamW with a learning rate of 5e-5 and a weight decay of 0.01; set `GOMLXOptions` to change either. When an evaluation dataset is given, the trainer records the loss and accuracy of every epoch. `Save` copies `config.json` with the model, so the saved classifier keeps its labels. Training a classifier from a model that has no classification head is not supported yet.
+
+**Prodigy annotations.** The dataset also reads text classification exports from Prodigy, mixed freely with the format above:
+
+```js
+{"text": "Late, and the wrong size.", "accept": ["delivery", "sizing"], "answer": "accept"}   // choice (textcat.manual)
+{"text": "The film was a delight.", "label": "NEGATIVE", "answer": "reject"}               // binary (textcat.teach)
+```
+
+A choice annotation gives the chosen labels; a single-label dataset needs exactly one (annotate with `--exclusive`). A binary annotation says whether one label applies. Accepting a label makes it the class. Rejecting it only says what the text is not: for a two-class model that is the other class, and with more classes the example is skipped. A multi-label model can train on binary annotations only when it has that one label, because the other labels' values are unknown; otherwise use choice annotations. `ignore` answers and rejected choice annotations are skipped. `evaluation.EvaluateTextClassification` reads these examples the same way.
+
+### Fine-tuning a token classifier (NER)
+
+A `TokenClassificationPipeline` model, such as any `...ForTokenClassification` export, can be fine-tuned on sentences split into words, with one tag per word. Tags are names in the model's `id2label` map, for NER usually IOB tags:
+
+```js
+{"tokens": ["EU", "rejects", "German", "call"], "tags": ["B-ORG", "O", "B-MISC", "O"]}
+```
+
+```go
+dataset, err := datasets.NewTokenClassificationDataset(ctx, "train.jsonl", 16, nil, nil)
+trainer, err := session.NewTrainer(hugot.TrainerConfig[*pipelines.TokenClassificationPipeline]{
+	ModelPath:    modelPath,
+	TrainDataset: dataset,
+}, hugot.WithEpochs(3))
+```
+
+The model labels sub-word tokens, so each word's tag is assigned to its first token. The remaining tokens of a word, the special tokens and the padding are left out of the loss and the accuracy, as in Hugging Face's NER fine-tuning. The defaults are the same as for text classification (AdamW, softmax cross-entropy).
+
+With a `TrainEvalDataset` or `EvalDataset`, the trainer records two metrics per epoch: the accuracy per tagged word, and the **entity-level F1** (`EpochTrainF1`, `EpochEvalF1`). Entity F1 is the usual NER metric: an entity counts only if its type and its full span are both right. Word accuracy is dominated by `O` tags, so prefer the F1. To score any model, including a saved one, use the `evaluation` package:
+
+```go
+report, err := evaluation.EvaluateTokenClassification(ctx, pipeline, examples, 32)
+fmt.Println(report.F1, report.PerType["PER"].Precision, report.PerType["PER"].Recall)
+```
+
+Scoring follows seqeval and conlleval. `evaluation.ScoreEntities` scores any pair of IOB tag sequences.
+
+**Custom word boundaries.** The tags belong to words, so the model only works if inference splits text into the same words as the training data. When the split follows rules of its own (say `Row7` becomes `Row` and `7`, while `14C` stays whole), write it once as a `pipelines.WordSplitter` and give it to both sides with `pipelines.WithWordSplitter`. Training examples can then be raw text, which the dataset splits with the trainer's pipeline:
+
+```js
+{"text": "EU rejects German call", "tags": ["B-ORG", "O", "B-MISC", "O"]}
+```
+
+```go
+splitWords := []hugot.TokenClassificationOption{pipelines.WithWordSplitter(mySplitter)}
+trainer, err := session.NewTrainer(hugot.TrainerConfig[*pipelines.TokenClassificationPipeline]{
+	ModelPath:       modelPath,
+	TrainDataset:    dataset,
+	PipelineOptions: splitWords,
+}, hugot.WithEpochs(3))
+// ... train and save, then load the fine-tuned model with the same option:
+pipeline, err := session.NewPipeline(hugot.TokenClassificationConfig{ModelPath: savePath, Name: "ner", Options: splitWords})
+result, err := pipeline.RunPipeline(ctx, []string{"EU rejects German call"}) // labels the splitter's words
+```
+
+An example with both `text` and `tokens` is checked: the splitter's words must equal the tokens, which catches a pre-split file that no longer matches the rules. The splitter is code, not part of the saved model, so pass it wherever the model is loaded.
+
+**Span annotations (Prodigy).** Examples can also be given as character spans, in the format Prodigy's `ner_manual` recipe exports, and both formats can be mixed in one file:
+
+```js
+{"text": "Anna Weber visited Zürich", "spans": [{"start": 0, "end": 10, "label": "PER"}, {"start": 19, "end": 25, "label": "LOC"}], "answer": "accept"}
+```
+
+Spans are converted to word tags: `B-PER I-PER O B-LOC`. The words come from the pipeline's word splitter when one is set, and every span must then start and end on its word boundaries, so training sees exactly the words inference will. Without a splitter, the example's Prodigy `tokens` are the words, and inference must then be given the same words with `RunWords`. Offsets count characters, as Prodigy does, not bytes. Only examples answered `accept` (or with no answer) are used; `reject` and `ignore` are skipped. Each label needs its `B-` and `I-` forms in the model's `id2label` map.
 
 ## Performance Tuning
 

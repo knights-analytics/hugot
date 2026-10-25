@@ -15,6 +15,15 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 - Added `KeypointMatchingPipeline` for SuperGlue exports.
 - Added `DownloadOptions.CacheDir` and `DownloadGraphBundle` to configure the Hugging Face cache and download complete ONNX graph bundles, including related weights and child graphs.
 - Added `TextGenerationPipeline.GetContextLength()` to report the model's configured context length.
+- Fine-tuning for `TextClassificationPipeline`, single-label and multi-label, with `datasets.TextClassificationDataset` (JSONL or in memory). The defaults are AdamW (learning rate 5e-5, weight decay 0.01) with softmax or sigmoid cross-entropy.
+- Fine-tuning for `TokenClassificationPipeline` (e.g. NER) with `datasets.TokenClassificationDataset`. Each word's tag goes on its first sub-word token; other sub-word, special and padding tokens are masked out of the loss.
+- `TrainingStatistics.EpochTrainAccuracies` and `EpochEvalAccuracies`, recorded for classifiers.
+- Contrastive fine-tuning of embeddings with in-batch negatives (sentence-transformers' `MultipleNegativesRankingLoss`): `datasets.ContrastiveDataset` takes anchor/positive pairs with optional hard negatives, and needs no similarity scores.
+- The new `evaluation` package: entity-level precision, recall and F1 for token classification (`ScoreEntities`, `EvaluateTokenClassification`), and per-class precision, recall and F1 with macro, weighted and micro averages for text classification (`ScoreClassification`, `ScoreMultiLabel`, `EvaluateTextClassification`).
+- `TrainingStatistics.EpochTrainF1` / `EpochEvalF1`: entity-level F1 for token classification and macro-F1 for text classification, per epoch.
+- `pipelines.WithWordSplitter` for token classification: one function splits raw text into the words the model labels, at inference (`Run` labels the splitter's words, as `RunWords` would) and in training, where `TokenClassificationDataset` examples may be given as raw `text` and are split by the trainer's pipeline. New `TrainerConfig.PipelineOptions` passes pipeline options such as the splitter to the trainer.
+- Span-annotated training data for token classification, in the format Prodigy's `ner_manual` exports: `TokenClassificationExample.Spans` holds entities as character offsets, converted to IOB word tags with the pipeline's word splitter or the annotation tool's tokens as the words. Word-level and span lines can share a file, and examples not answered `accept` are skipped. `EvaluateTokenClassification` scores span examples the same way.
+- Prodigy text classification exports for `TextClassificationDataset`: choice annotations (`accept` lists) for single- and multi-label datasets, and binary annotations (`label` + `answer`). A binary rejection becomes the other class of a two-class model and is skipped otherwise; binary annotations train a multi-label model only when it has that single label. `ignore` answers are skipped. `EvaluateTextClassification` resolves them the same way.
 
 ### Breaking changes
 
@@ -25,6 +34,14 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 ### Changed
 
 - `WithGenerativeEngine` now admits requests fairly. Free batch slots go round-robin across jobs, with new jobs served first in arrival order. Before, slots went to whichever job Go's randomized map iteration picked first, so a request could be passed over repeatedly under load.
+- Embedding training reads the number of model inputs and the attention mask's position from the model, instead of assuming three inputs with the mask second.
+- `Trainer.Save` also copies the model's `config.json`, so a saved model keeps its labels and configuration.
+- The last epoch is now evaluated too. Before, the epoch statistics and early stopping skipped it.
+- `TrainerConfig.EvalDataset` is evaluated every epoch whenever it is set. Before, it was evaluated only with early stopping and otherwise silently ignored.
+
+### Fixed
+
+- On backends that embed variables as constants (the Go backend), every evaluation during training reused the weights of the first one, so the epoch statistics and early stopping never saw training progress. Evaluation graphs are now rebuilt before each evaluation on those backends.
 
 ## [0.8.3] - 2026-10-14
 
