@@ -56,12 +56,6 @@
 !models/Xenova_wav2vec2-base-960h/**
 !models/Xenova_mms-tts-eng/
 !models/Xenova_mms-tts-eng/**
-!models/onnx-community_Janus-Pro-1B-ONNX/
-!models/onnx-community_Janus-Pro-1B-ONNX/**
-!models/LiquidAI_LFM2.5-Audio-1.5B-ONNX/
-!models/LiquidAI_LFM2.5-Audio-1.5B-ONNX/**
-!models/microsoft_Phi-4-multimodal-instruct-onnx/
-!models/microsoft_Phi-4-multimodal-instruct-onnx/**
 !models/KnightsAnalytics_videomae-base-finetuned-kinetics/
 !models/KnightsAnalytics_videomae-base-finetuned-kinetics/**
 !models/KnightsAnalytics_superglue_outdoor/

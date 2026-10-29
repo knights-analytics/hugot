@@ -28,9 +28,6 @@ COPY models/Xenova_wav2vec2-large-xlsr-53-gender-recognition-librispeech ./model
 COPY models/Xenova_larger_clap_music_and_speech ./models/Xenova_larger_clap_music_and_speech
 COPY models/Xenova_wav2vec2-base-960h ./models/Xenova_wav2vec2-base-960h
 COPY models/Xenova_mms-tts-eng ./models/Xenova_mms-tts-eng
-COPY models/onnx-community_Janus-Pro-1B-ONNX ./models/onnx-community_Janus-Pro-1B-ONNX
-COPY models/LiquidAI_LFM2.5-Audio-1.5B-ONNX ./models/LiquidAI_LFM2.5-Audio-1.5B-ONNX
-COPY models/microsoft_Phi-4-multimodal-instruct-onnx ./models/microsoft_Phi-4-multimodal-instruct-onnx
 COPY models/KnightsAnalytics_videomae-base-finetuned-kinetics ./models/KnightsAnalytics_videomae-base-finetuned-kinetics
 COPY models/KnightsAnalytics_superglue_outdoor ./models/KnightsAnalytics_superglue_outdoor
 COPY models/imageData ./models/imageData
