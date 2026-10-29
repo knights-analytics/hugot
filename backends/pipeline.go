@@ -208,8 +208,8 @@ type PipelineBatch struct {
 	Size               int
 	MaxSequenceLength  int
 	MaxNewTokens       int
-	// PaddedBatchSize is the bucketed batch size used when XLA pads the batch dimension.
-	// Zero means no batch padding was applied (ORT / GO backend).
+	// PaddedBatchSize is the bucketed batch size used when the batch dimension is padded.
+	// Zero means no batch padding was applied.
 	PaddedBatchSize int
 	QueryCount      int
 }

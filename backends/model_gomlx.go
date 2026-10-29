@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"sync"
 
 	"github.com/gomlx/compute"
+	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/go-huggingface/tokenizers/bucket"
 	"github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
@@ -27,15 +29,19 @@ var (
 )
 
 type GoMLXModel struct {
-	Backend         compute.Backend
-	OnnxModel       onnx.Model
-	Scope           *mlmodel.Scope
-	Store           *mlmodel.Store
-	Exec            *mlmodel.Exec
-	Call            func(scope *mlmodel.Scope, inputs []*graph.Node) []*graph.Node
-	BatchBuckets    []int // BatchBuckets defines bucket sizes for batch dimension padding.
-	SequenceBuckets []int // SequenceBuckets defines bucket sizes for sequence length padding.
-	MaxCache        int   // MaxCache sets the maximum number of unique input shapes to cache.
+	execMu             sync.RWMutex
+	Backend            compute.Backend
+	OnnxModel          onnx.Model
+	Scope              *mlmodel.Scope
+	Store              *mlmodel.Store
+	Exec               *mlmodel.Exec
+	Call               func(scope *mlmodel.Scope, inputs []*graph.Node) []*graph.Node
+	DynamicAxes        [][]string
+	DynamicAxesEnabled bool
+	PaddingEnabled     bool
+	BatchBuckets       []int // BatchBuckets defines bucket sizes for batch dimension padding.
+	SequenceBuckets    []int // SequenceBuckets defines bucket sizes for sequence length padding.
+	MaxCache           int   // MaxCache sets the maximum number of unique input shapes to cache.
 }
 
 func (m *GoMLXModel) Close() {
@@ -60,9 +66,18 @@ func (m *GoMLXModel) Close() {
 // variables as constants (the Go backend), each cached graph holds the weights it was built with,
 // so after training changes the weights, inference only sees them once the executor is reset.
 func (m *GoMLXModel) ResetExec() error {
+	m.execMu.Lock()
+	defer m.execMu.Unlock()
+	return m.resetExecLocked()
+}
+
+func (m *GoMLXModel) resetExecLocked() error {
 	exec, err := mlmodel.NewExec(m.Backend, m.Store, m.Call)
 	if err != nil {
 		return err
+	}
+	if m.DynamicAxesEnabled {
+		configureDynamicAxes(exec, m.Backend, m.DynamicAxes)
 	}
 	exec.SetMaxCache(m.MaxCache)
 	if m.Exec != nil {
@@ -70,6 +85,61 @@ func (m *GoMLXModel) ResetExec() error {
 	}
 	m.Exec = exec
 	return nil
+}
+
+func (m *GoMLXModel) paddingEnabled() bool {
+	m.execMu.RLock()
+	defer m.execMu.RUnlock()
+	return m.PaddingEnabled
+}
+
+// execute retries without dynamic axes when GoMLX cannot build a dynamic graph
+// for an operation in this model. This keeps models with unsupported dynamic
+// operations on the concrete-shape path while allowing compatible models to
+// reuse a single graph.
+func (m *GoMLXModel) execute(run func(*mlmodel.Exec) ([]*tensors.Tensor, error)) ([]*tensors.Tensor, error) {
+	m.execMu.RLock()
+	exec := m.Exec
+	outputs, err, panicked := callGoMLXExec(exec, run)
+	dynamicAxesEnabled := m.DynamicAxesEnabled
+	m.execMu.RUnlock()
+	if err == nil || !dynamicAxesEnabled || (!panicked && !strings.Contains(err.Error(), "failed during graph construction/compilation")) {
+		return outputs, err
+	}
+
+	m.execMu.Lock()
+	if m.DynamicAxesEnabled && m.Exec == exec {
+		modelName := "<unknown>"
+		if m.OnnxModel != nil {
+			modelName = m.OnnxModel.Name()
+		}
+		fmt.Printf("GoMLX: dynamic axes failed for model %q; retrying with concrete input shapes: %v\n", modelName, err)
+		m.DynamicAxesEnabled = false
+		m.PaddingEnabled = true
+		if resetErr := m.resetExecLocked(); resetErr != nil {
+			m.execMu.Unlock()
+			return nil, errors.Join(err, resetErr)
+		}
+	}
+	exec = m.Exec
+	m.execMu.Unlock()
+
+	outputs, err, panicked = callGoMLXExec(exec, run)
+	if panicked {
+		err = fmt.Errorf("GoMLX executor panic: %v", err)
+	}
+	return outputs, err
+}
+
+func callGoMLXExec(exec *mlmodel.Exec, run func(*mlmodel.Exec) ([]*tensors.Tensor, error)) (outputs []*tensors.Tensor, err error, panicked bool) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			err = fmt.Errorf("%v", recovered)
+			panicked = true
+		}
+	}()
+	outputs, err = run(exec)
+	return outputs, err, false
 }
 
 func createGoMLXModelBackend(model *Model, options *options.Options) error {
@@ -88,7 +158,8 @@ func createGoMLXModelBackend(model *Model, options *options.Options) error {
 		modelParsed = modelParsed.WithBaseDir(model.Path)
 	}
 
-	inputs, outputs := loadInputOutputMetaGoMLX(modelParsed)
+	inputs, outputs, inputShapes := loadInputOutputMetaGoMLX(modelParsed)
+	dynamicAxes := dynamicAxesFromInputShapes(inputs, inputShapes)
 	var outputNames []string
 	for _, v := range outputs {
 		outputNames = append(outputNames, v.Name)
@@ -135,20 +206,23 @@ func createGoMLXModelBackend(model *Model, options *options.Options) error {
 	if contextErr != nil {
 		return errors.Join(contextErr, modelParsed.Close())
 	}
+	dynamicAxesEnabled := configureDynamicAxes(exec, backend, dynamicAxes)
 
 	maxCache, batchBuckets, sequenceBuckets := getCacheAndBucketSizes(options, config)
 	exec.SetMaxCache(maxCache)
 
 	model.GoMLXModel = &GoMLXModel{
-		Backend:         backend,
-		OnnxModel:       modelParsed,
-		Scope:           scope,
-		Store:           store,
-		Exec:            exec,
-		Call:            callFunc,
-		MaxCache:        maxCache,
-		BatchBuckets:    batchBuckets,
-		SequenceBuckets: sequenceBuckets,
+		Backend:            backend,
+		OnnxModel:          modelParsed,
+		Scope:              scope,
+		Store:              store,
+		Exec:               exec,
+		Call:               callFunc,
+		DynamicAxes:        dynamicAxes,
+		DynamicAxesEnabled: dynamicAxesEnabled,
+		MaxCache:           maxCache,
+		BatchBuckets:       batchBuckets,
+		SequenceBuckets:    sequenceBuckets,
 	}
 	model.InputsMeta = inputs
 	model.OutputsMeta = outputs
@@ -184,7 +258,7 @@ func getCacheAndBucketSizes(options *options.Options, backend string) (int, []in
 	return maxCache, batchBuckets, sequenceBuckets
 }
 
-func loadInputOutputMetaGoMLX(model onnx.Model) ([]InputOutputInfo, []InputOutputInfo) {
+func loadInputOutputMetaGoMLX(model onnx.Model) ([]InputOutputInfo, []InputOutputInfo, []shapes.Shape) {
 	var inputs, outputs []InputOutputInfo
 
 	inputNames, inputShapes := model.Inputs()
@@ -212,7 +286,56 @@ func loadInputOutputMetaGoMLX(model onnx.Model) ([]InputOutputInfo, []InputOutpu
 			Dimensions: dimensions,
 		})
 	}
-	return inputs, outputs
+	return inputs, outputs, inputShapes
+}
+
+func dynamicAxesFromInputShapes(inputMeta []InputOutputInfo, inputShapes []shapes.Shape) [][]string {
+	if len(inputMeta) != len(inputShapes) {
+		return nil
+	}
+	// GoMLX's Go backend supports native dynamic shapes, but some operations used
+	// by vision and audio models cannot yet build graphs with dynamic spatial or
+	// sample axes. Keep those models on the concrete-shape path. Dynamic batch
+	// and sequence axes in the common rank-1/rank-2 text inputs remain enabled.
+	for inputIndex, shape := range inputShapes {
+		if !shape.IsDynamic() {
+			continue
+		}
+		if shape.Rank() > 2 || strings.EqualFold(inputMeta[inputIndex].Name, "input_values") || strings.EqualFold(inputMeta[inputIndex].Name, "input_features") {
+			return nil
+		}
+	}
+
+	axes := make([][]string, len(inputShapes))
+	hasDynamicAxis := false
+	for inputIndex, shape := range inputShapes {
+		axes[inputIndex] = make([]string, shape.Rank())
+		for axis, dimension := range shape.Dimensions {
+			if dimension != shapes.DynamicDim {
+				continue
+			}
+			hasDynamicAxis = true
+			name := shape.AxisName(axis)
+			if name == "" || name == shapes.AnonymousAxis {
+				// Give anonymous dimensions a stable name so they can be reused
+				// across executions without implying they match other inputs.
+				name = fmt.Sprintf("hugot_input_%d_axis_%d", inputIndex, axis)
+			}
+			axes[inputIndex][axis] = name
+		}
+	}
+	if !hasDynamicAxis {
+		return nil
+	}
+	return axes
+}
+
+func configureDynamicAxes(exec *mlmodel.Exec, backend compute.Backend, axes [][]string) bool {
+	if len(axes) == 0 || backend.Capabilities().DynamicShapes != compute.DynamicShapesNative {
+		return false
+	}
+	exec.WithDynamicAxes(axes...)
+	return true
 }
 
 func createInputTensorsGoMLX(batch *PipelineBatch, model *Model, padBatchDimension bool, padSequenceDimension bool) error {
@@ -428,7 +551,9 @@ func runGoMLXSessionOnBatch(ctx context.Context, batch *PipelineBatch, p *BasePi
 			close(doneChannel)
 		}()
 		var execErr error
-		outputTensors, execErr = p.Model.GoMLXModel.Exec.Exec(batch.InputValues.([]*tensors.Tensor))
+		outputTensors, execErr = p.Model.GoMLXModel.execute(func(exec *mlmodel.Exec) ([]*tensors.Tensor, error) {
+			return exec.Exec(batch.InputValues.([]*tensors.Tensor))
+		})
 		return errors.Join(execErr, err)
 	})
 

@@ -62,7 +62,11 @@ func (b runtimeBackend) CreateInputTensors(batch *PipelineBatch, model *Model, t
 	if b.runtime == options.BackendORT {
 		return createInputTensorsORT(batch, model)
 	}
-	return createInputTensorsGoMLX(batch, model, !training && b.runtime == options.BackendXLA, b.runtime == options.BackendXLA)
+	pad := b.runtime == options.BackendXLA || (b.runtime == options.BackendGo && model.GoMLXModel != nil && model.GoMLXModel.paddingEnabled())
+	if err := createInputTensorsGoMLX(batch, model, !training && pad, pad); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (b runtimeBackend) CreateImageTensors(batch *PipelineBatch, model *Model, preprocessed [][][][]float32) error {
@@ -78,7 +82,11 @@ func (b runtimeBackend) CreateImageTextTensors(batch *PipelineBatch, model *Mode
 	if b.runtime == options.BackendORT {
 		return createInputTensorsORT(batch, model)
 	}
-	return createInputTensorsGoMLX(batch, model, b.runtime == options.BackendXLA, b.runtime == options.BackendXLA)
+	pad := b.runtime == options.BackendXLA || (b.runtime == options.BackendGo && model.GoMLXModel != nil && model.GoMLXModel.paddingEnabled())
+	if err := createInputTensorsGoMLX(batch, model, pad, pad); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (b runtimeBackend) CreateAudioTensors(batch *PipelineBatch, model *Model, samples [][]float32) error {
@@ -95,7 +103,11 @@ func (b runtimeBackend) CreateAudioTextTensors(batch *PipelineBatch, model *Mode
 	if b.runtime == options.BackendORT {
 		return createInputTensorsORT(batch, model)
 	}
-	return createInputTensorsGoMLX(batch, model, b.runtime == options.BackendXLA, b.runtime == options.BackendXLA)
+	pad := b.runtime == options.BackendXLA || (b.runtime == options.BackendGo && model.GoMLXModel != nil && model.GoMLXModel.paddingEnabled())
+	if err := createInputTensorsGoMLX(batch, model, pad, pad); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (b runtimeBackend) CreateTabularTensors(batch *PipelineBatch, model *Model, features [][]float32) error {

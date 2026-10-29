@@ -7,6 +7,7 @@ import (
 	"slices"
 
 	"github.com/gomlx/gomlx/core/tensors"
+	mlmodel "github.com/gomlx/gomlx/ml/model"
 )
 
 func runNamedTensorsGoMLX(ctx context.Context, model *Model, inputs map[string]Tensor) (result map[string]Tensor, err error) {
@@ -58,7 +59,9 @@ func runNamedTensorsGoMLX(ctx context.Context, model *Model, inputs map[string]T
 		return nil, err
 	}
 	// Exec is synchronous: cancellation must not free buffers while it is running.
-	outputs, execErr := m.Exec.Call(args...)
+	outputs, execErr := m.execute(func(exec *mlmodel.Exec) ([]*tensors.Tensor, error) {
+		return exec.Call(args...)
+	})
 	allocated = append(allocated, outputs...)
 	if execErr != nil {
 		return nil, execErr
