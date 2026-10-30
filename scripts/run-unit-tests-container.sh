@@ -4,9 +4,8 @@ set -e
 
 folder=/testTarget/unit
 
-cd /build && \
-mkdir -p $folder && \
-go run ./testcases/downloadModels.go
+cd /build
+mkdir -p "$folder"
 
 echo "Running ORT tests..."
 
