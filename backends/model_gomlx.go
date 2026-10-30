@@ -220,6 +220,7 @@ func createGoMLXModelBackend(model *Model, options *options.Options) error {
 		Call:               callFunc,
 		DynamicAxes:        dynamicAxes,
 		DynamicAxesEnabled: dynamicAxesEnabled,
+		PaddingEnabled:     !dynamicAxesEnabled,
 		MaxCache:           maxCache,
 		BatchBuckets:       batchBuckets,
 		SequenceBuckets:    sequenceBuckets,
