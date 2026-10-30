@@ -7,7 +7,7 @@ ARG GOPJRT_VERSION
 ARG JAX_CUDA_VERSION
 ARG BUILDPLATFORM
 
-FROM nvidia/cuda:13.4.2-cudnn-runtime-amzn2023 AS cuda
+FROM nvidia/cuda:13.5.0-cudnn-runtime-amzn2023 AS cuda
 
 #--- runtime layer with all hugot dependencies for cpu and gpu ---
 
@@ -33,13 +33,13 @@ RUN --mount=src=./go.mod,dst=/go.mod \
     # CUDA \
     mkdir -p /usr/local/cuda/lib64 /usr/lib64 && \
     cp -a \
-      /cudaassets/usr/local/cuda-13.4/targets/x86_64-linux/lib/libcudart.so.* \
-      /cudaassets/usr/local/cuda-13.4/targets/x86_64-linux/lib/libcublas.so.* \
-      /cudaassets/usr/local/cuda-13.4/targets/x86_64-linux/lib/libcublasLt.so.* \
-      /cudaassets/usr/local/cuda-13.4/targets/x86_64-linux/lib/libnvblas.so.* \
-      /cudaassets/usr/local/cuda-13.4/targets/x86_64-linux/lib/libcurand.so.* \
-      /cudaassets/usr/local/cuda-13.4/targets/x86_64-linux/lib/libcufft.so.* \
-      /cudaassets/usr/local/cuda-13.4/targets/x86_64-linux/lib/libcufftw.so.* \
+      /cudaassets/usr/local/cuda-13.5/targets/x86_64-linux/lib/libcudart.so.* \
+      /cudaassets/usr/local/cuda-13.5/targets/x86_64-linux/lib/libcublas.so.* \
+      /cudaassets/usr/local/cuda-13.5/targets/x86_64-linux/lib/libcublasLt.so.* \
+      /cudaassets/usr/local/cuda-13.5/targets/x86_64-linux/lib/libnvblas.so.* \
+      /cudaassets/usr/local/cuda-13.5/targets/x86_64-linux/lib/libcurand.so.* \
+      /cudaassets/usr/local/cuda-13.5/targets/x86_64-linux/lib/libcufft.so.* \
+      /cudaassets/usr/local/cuda-13.5/targets/x86_64-linux/lib/libcufftw.so.* \
       /usr/local/cuda/lib64/ && \
     cp -a /cudaassets/usr/lib64/libcudnn*.so* /usr/lib64/ && \
     # Register the copied CUDA libraries with the dynamic linker. \

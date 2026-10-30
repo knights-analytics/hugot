@@ -190,6 +190,8 @@ See also hugot_test.go for further examples for all pipelines.
 
 Hugot uses the [Onnx Runtime Generative AI](https://onnxruntime.ai/generative-ai) backend to run generative models.
 
+Generative pipelines require ONNX Runtime GenAI v0.19.0 or newer. The matching ONNX Runtime and CUDA versions used by the Docker builds are listed in the [bake file](./docker-bake.hcl) and [CUDA Dockerfile](./cuda.Dockerfile).
+
 Generative models are used in a variety of text and multimodal pipelines. Please look at the [ORT text tests](tests/ort/hugot_ort_text_test.go) and [ORT multimodal tests](tests/ort/hugot_ort_multimodal_test.go) for examples of their usage.
 
 To use the ORT Engine support for concurrent requests and inference batching (text-only messages), use the `WithGenerativeEngine()` option when creating a session.
@@ -211,7 +213,7 @@ To use Hugot with Nvidia gpu acceleration, you need to have the following:
 - The Nvidia driver for your graphics card (if running in Docker and WSL2, starting with --gpus all should inherit the drivers from the host OS)
 - ONNX Runtime:
     - The cuda gpu version of ONNX Runtime on the machine/docker container. You can see how we get that by looking at the [Dockerfile](./Dockerfile). You can also get the ONNX Runtime libraries that we use for testing from the release. Just download the gpu .so libraries and put them in /usr/lib.
-    - The required CUDA libraries installed on your system that are compatible with the ONNX Runtime gpu version you use. See [here](https://onnxruntime.ai/docs/execution-providers/CUDA-ExecutionProvider.html). For instance, for onnxruntime 1.28.0, we need CUDA 13.x (any minor version should be compatible) and cuDNN 9.x.
+    - The required CUDA libraries installed on your system that are compatible with the ONNX Runtime gpu version you use. See [here](https://onnxruntime.ai/docs/execution-providers/CUDA-ExecutionProvider.html). Our Docker builds use ONNX Runtime 1.31.1 with CUDA 13.5 and cuDNN 9; CUDA 13.x minor versions are compatible with this ONNX Runtime release.
     - Start a session with the following:
       ```go
       ctx := context.Background()
@@ -237,7 +239,7 @@ To use Hugot with Nvidia gpu acceleration, you need to have the following:
 
 For the ONNX Runtime Cuda libraries, you can install CUDA 13.x by installing the full cuda toolkit, but that's quite a big package. In our testing on awslinux/fedora, we have been able to limit the libraries needed to run Hugot with Nvidia gpu acceleration to just these:
 
-- cuda-cudart-13-3 libcublas-13-3 libcurand-13-3 libcufft-13-3 libcudnn9-cuda-13
+- cuda-cudart-13-5 libcublas-13-5 libcurand-13-5 libcufft-13-5 libcudnn9-cuda-13
 
 libcufft and libcudnn9 are lazy loaded when needed, so may be skippable depending on the models you load.
 

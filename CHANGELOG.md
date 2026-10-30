@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- Upgraded the ORT GenAI binding and runtime requirement to 0.19.0, ONNX Runtime to 1.31.1, and CUDA to 13.5.
+
 ## [0.8.5]
 
 ### Changed
