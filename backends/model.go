@@ -329,11 +329,11 @@ func loadGenerativeModelConfig(ctx context.Context, model *Model) error {
 	return nil
 }
 
-func ReshapeOutput[T float32 | int64 | int32](input []T, meta InputOutputInfo, batchSize int, paddingMask [][]bool) any {
+func ReshapeOutput[T float32 | int64 | int32 | string](input []T, meta InputOutputInfo, batchSize int, paddingMask [][]bool) any {
 	return reshapeOutput(input, meta.Dimensions, batchSize, paddingMask)
 }
 
-func reshapeOutput[T float32 | int64 | int32](input []T, dimensions Shape, batchSize int, paddingMask [][]bool) any {
+func reshapeOutput[T float32 | int64 | int32 | string](input []T, dimensions Shape, batchSize int, paddingMask [][]bool) any {
 	var outArray any
 	dimensionsInt := dimensions.ValuesInt()
 	lenDimensions := len(dimensionsInt)
@@ -368,7 +368,7 @@ func reshapeOutput[T float32 | int64 | int32](input []T, dimensions Shape, batch
 	return outArray
 }
 
-func flatDataTo2D[T float32 | int64 | int32](input []T, batchSize int, dimension int) [][]T {
+func flatDataTo2D[T float32 | int64 | int32 | string](input []T, batchSize int, dimension int) [][]T {
 	// Input string, token, dimension
 	output := make([][]T, batchSize)
 	if dimension == -1 {
@@ -388,7 +388,7 @@ func flatDataTo2D[T float32 | int64 | int32](input []T, batchSize int, dimension
 	return output
 }
 
-func flatDataTo3D[T float32 | int64 | int32](input []T, paddingMask [][]bool, sequenceLength int, dimension int) [][][]T {
+func flatDataTo3D[T float32 | int64 | int32 | string](input []T, paddingMask [][]bool, sequenceLength int, dimension int) [][][]T {
 	// Input string, token, dimension
 	output := make([][][]T, len(paddingMask))
 	counter := 0
@@ -414,7 +414,7 @@ func flatDataTo3D[T float32 | int64 | int32](input []T, paddingMask [][]bool, se
 }
 
 // flatDataTo3DGeneric reshapes flat data into [batchSize][N][dimension] inferring N.
-func flatDataTo3DGeneric[T float32 | int64 | int32](input []T, batchSize int, dimension int) [][][]T {
+func flatDataTo3DGeneric[T float32 | int64 | int32 | string](input []T, batchSize int, dimension int) [][][]T {
 	if dimension == -1 {
 		// cannot infer without last dimension; return empty
 		return make([][][]T, batchSize)
@@ -446,7 +446,7 @@ func flatDataTo3DGeneric[T float32 | int64 | int32](input []T, batchSize int, di
 	return output
 }
 
-func flatDataTo4D[T float32 | int64 | int32](input []T, paddingMask [][]bool, batchSize, groupSize, height, width int) [][][][]T {
+func flatDataTo4D[T float32 | int64 | int32 | string](input []T, paddingMask [][]bool, batchSize, groupSize, height, width int) [][][][]T {
 	if len(paddingMask) > 0 {
 		batchSize = len(paddingMask)
 	}

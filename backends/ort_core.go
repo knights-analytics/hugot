@@ -58,6 +58,14 @@ func newCoreBoolTensor(shape []int64, data []bool) (*coreORTTensor, error) {
 	return &coreORTTensor{tensor: tensor}, nil
 }
 
+func newCoreStringTensor(shape []int64, data []string) (*coreORTTensor, error) {
+	tensor, err := ort.CreateStringTensor(shape, data)
+	if err != nil {
+		return nil, err
+	}
+	return &coreORTTensor{tensor: tensor}, nil
+}
+
 func (t *coreORTTensor) Close() error {
 	if t == nil || t.tensor == nil {
 		return nil
@@ -77,6 +85,19 @@ func (t *coreORTTensor) Int64Data() ([]int64, error) {
 		return nil, errors.New("ORT tensor is not initialized")
 	}
 	return ort.TensorData[int64](t.tensor)
+}
+
+// StringData returns a copy of the tensor's strings, or an empty slice for an
+// empty tensor. It fails for non-string tensors.
+func (t *coreORTTensor) StringData() ([]string, error) {
+	if t == nil || t.tensor == nil {
+		return nil, errors.New("ORT tensor is not initialized")
+	}
+	values, err := t.tensor.StringData()
+	if err == nil && values == nil {
+		values = []string{}
+	}
+	return values, err
 }
 
 func (s *coreORTSession) Close() error {
@@ -292,7 +313,31 @@ func newCoreORTSession(modelPath string, modelData []byte, sessionOptions *coreO
 func convertCoreORTIO(values []ort.IOInfo) []InputOutputInfo {
 	converted := make([]InputOutputInfo, len(values))
 	for i, value := range values {
-		converted[i] = InputOutputInfo{Name: value.Name, Dimensions: value.Shape}
+		converted[i] = InputOutputInfo{Name: value.Name, Dimensions: value.Shape, DataType: dataTypeFromORT(value.DataType)}
 	}
 	return converted
+}
+
+func dataTypeFromORT(dtype ort.TensorElementDataType) DataType {
+	switch dtype {
+	case ort.TensorElementDataTypeFloat32:
+		return DataTypeFloat32
+	case ort.TensorElementDataTypeFloat64:
+		return DataTypeFloat64
+	case ort.TensorElementDataTypeFloat16:
+		return DataTypeFloat16
+	case ort.TensorElementDataTypeInt64:
+		return DataTypeInt64
+	case ort.TensorElementDataTypeInt32:
+		return DataTypeInt32
+	case ort.TensorElementDataTypeInt8:
+		return DataTypeInt8
+	case ort.TensorElementDataTypeUint8:
+		return DataTypeUint8
+	case ort.TensorElementDataTypeBool:
+		return DataTypeBool
+	case ort.TensorElementDataTypeString:
+		return DataTypeString
+	}
+	return DataTypeUnknown
 }

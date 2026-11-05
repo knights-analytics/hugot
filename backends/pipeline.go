@@ -31,7 +31,44 @@ type InputOutputInfo struct {
 	// The input or output's dimensions, if it's a tensor. This should be
 	// ignored for non-tensor types.
 	Dimensions Shape
+	// The element type of the tensor. DataTypeUnknown when the backend does not
+	// report it or the type has no Go representation in hugot.
+	DataType DataType
 }
+
+// DataType is the element type of a tensor input or output.
+type DataType string
+
+const (
+	DataTypeUnknown DataType = ""
+	DataTypeFloat32 DataType = "float32"
+	DataTypeFloat64 DataType = "float64"
+	DataTypeFloat16 DataType = "float16"
+	DataTypeInt64   DataType = "int64"
+	DataTypeInt32   DataType = "int32"
+	DataTypeInt8    DataType = "int8"
+	DataTypeUint8   DataType = "uint8"
+	DataTypeBool    DataType = "bool"
+	DataTypeString  DataType = "string"
+)
+
+// dataTypeOf returns the DataType of a Tensor's flat data, or DataTypeUnknown.
+func dataTypeOf(data any) DataType {
+	switch data.(type) {
+	case []float32:
+		return DataTypeFloat32
+	case []int64:
+		return DataTypeInt64
+	case []int32:
+		return DataTypeInt32
+	case []bool:
+		return DataTypeBool
+	case []string:
+		return DataTypeString
+	}
+	return DataTypeUnknown
+}
+
 type Shape []int64
 
 func (s Shape) String() string {

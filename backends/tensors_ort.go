@@ -56,6 +56,11 @@ func runNamedTensorsORT(ctx context.Context, model *Model, inputs map[string]Ten
 			if dtype == meta.DataType {
 				tensor, err = ort.CreateTensor(input.Shape, data)
 			}
+		case []string:
+			dtype = ort.TensorElementDataTypeString
+			if dtype == meta.DataType {
+				tensor, err = ort.CreateStringTensor(input.Shape, data)
+			}
 		}
 		if dtype != meta.DataType {
 			return nil, fmt.Errorf("input %q data type %v does not match graph data type %v", meta.Name, dtype, meta.DataType)
@@ -92,6 +97,15 @@ func runNamedTensorsORT(ctx context.Context, model *Model, inputs map[string]Ten
 			var flat []bool
 			flat, err = ort.TensorData[bool](output)
 			data = slices.Clone(flat)
+		case ort.TensorElementDataTypeString:
+			// StringData copies the strings out of the runtime tensor, and
+			// returns nil for an empty one.
+			var flat []string
+			flat, err = output.StringData()
+			if flat == nil {
+				flat = []string{}
+			}
+			data = flat
 		default:
 			return nil, fmt.Errorf("output %q has unsupported data type %v", name, output.DataType())
 		}

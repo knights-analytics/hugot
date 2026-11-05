@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -247,16 +248,27 @@ func (p *TabularPipeline) postprocess(batch *backends.PipelineBatch) (*TabularOu
 			outClassesAny := batch.OutputValues[0]
 			outLogitsAny := batch.OutputValues[1]
 
-			outClasses, ok := outClassesAny.([]int64)
-			if !ok {
-				return nil, fmt.Errorf("expected [][]any class labels, got %T", outClassesAny)
+			// Class labels are int64, or strings for classifiers trained on string classes.
+			var predictedClasses []string
+			switch outClasses := outClassesAny.(type) {
+			case []int64:
+				predictedClasses = make([]string, len(outClasses))
+				for i, class := range outClasses {
+					predictedClasses[i] = p.classLabel(class)
+				}
+			case []string:
+				predictedClasses = outClasses
+			default:
+				return nil, fmt.Errorf("expected []int64 or []string class labels, got %T", outClassesAny)
+			}
+			if len(predictedClasses) != batch.Size {
+				return nil, fmt.Errorf("expected %d class labels, got %d", batch.Size, len(predictedClasses))
 			}
 			outLogits, ok := outLogitsAny.([][]float32)
 			if !ok {
 				return nil, fmt.Errorf("expected [][]float32 logits, got %T", outLogitsAny)
 			}
 			for i := 0; i < batch.Size; i++ {
-				predictedClassLabel := outClasses[i]
 				predictedLogits := outLogits[i]
 				if agg != nil {
 					predictedLogits = agg(predictedLogits)
@@ -269,7 +281,7 @@ func (p *TabularPipeline) postprocess(batch *backends.PipelineBatch) (*TabularOu
 					}
 				}
 				output := TabularClassificationOutput{
-					PredictedClass: p.IDLabelMap[int(predictedClassLabel)],
+					PredictedClass: predictedClasses[i],
 					Probabilities:  classOutputs,
 				}
 				results[i] = output
@@ -318,6 +330,16 @@ func (p *TabularPipeline) postprocess(batch *backends.PipelineBatch) (*TabularOu
 		return nil, fmt.Errorf("unsupported regression output type %T", batch.OutputValues[0])
 	}
 	return &TabularOutput{RegressionResults: results}, nil
+}
+
+// classLabel names an int64 class label from the model's label output: its
+// IDLabelMap entry when there is one, the number itself otherwise. Classes need
+// not be 0..n-1 (e.g. [1, 2, 5]), so a missing entry must not become "".
+func (p *TabularPipeline) classLabel(class int64) string {
+	if label, ok := p.IDLabelMap[int(class)]; ok {
+		return label
+	}
+	return strconv.FormatInt(class, 10)
 }
 
 // Run executes the pipeline over inputs.
