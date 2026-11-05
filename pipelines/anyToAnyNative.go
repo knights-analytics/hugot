@@ -65,9 +65,9 @@ func (o *AnyToAnyOutput) GetOutput() []any {
 }
 
 type nativeMultimodal struct {
-	family           string
-	p                *AnyToAnyPipeline
-	tokenizer        *hftokenizer.Tokenizer
+	family            string
+	p                 *AnyToAnyPipeline
+	tokenizer         *hftokenizer.Tokenizer
 	lfmEmbeddingTable *lfmEmbeddingTable
 }
 
