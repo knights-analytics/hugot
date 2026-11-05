@@ -11,8 +11,13 @@ import (
 )
 
 func runNamedTensorsGoMLX(ctx context.Context, model *Model, inputs map[string]Tensor) (result map[string]Tensor, err error) {
+	for _, meta := range model.InputsMeta {
+		if _, ok := inputs[meta.Name].Data.([]string); ok {
+			return nil, &backendUnavailableError{runtime: "GoMLX", operation: fmt.Sprintf("string tensors (input %q)", meta.Name)}
+		}
+	}
 	m := model.GoMLXModel
-	if m.Exec == nil || m.OnnxModel == nil {
+	if m == nil || m.Exec == nil || m.OnnxModel == nil {
 		return nil, errors.New("GoMLX executor is not initialized")
 	}
 	var allocated []*tensors.Tensor

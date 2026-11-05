@@ -11,7 +11,8 @@ import (
 	"github.com/knights-analytics/hugot/util/fileutil"
 )
 
-// Tensor holds a runtime shape and flat []float32, []int32, []int64, or []bool data.
+// Tensor holds a runtime shape and flat []float32, []int32, []int64, []bool, or []string data.
+// String tensors are supported by the ORT backend only.
 // An empty shape denotes a scalar with one element.
 type Tensor struct {
 	Shape []int64
@@ -88,11 +89,16 @@ func validateNamedTensors(metadata []InputOutputInfo, inputs map[string]Tensor) 
 			length = len(data)
 		case []bool:
 			length = len(data)
+		case []string:
+			length = len(data)
 		default:
-			return fmt.Errorf("input %q has unsupported data type %T; expected []float32, []int32, []int64, or []bool", meta.Name, input.Data)
+			return fmt.Errorf("input %q has unsupported data type %T; expected []float32, []int32, []int64, []bool, or []string", meta.Name, input.Data)
 		}
 		if int64(length) != count {
 			return fmt.Errorf("input %q has %d elements, expected %d for shape %v", meta.Name, length, count, input.Shape)
+		}
+		if got := dataTypeOf(input.Data); meta.DataType != DataTypeUnknown && got != meta.DataType {
+			return fmt.Errorf("input %q expects %s data, got %s", meta.Name, meta.DataType, got)
 		}
 	}
 	for name := range inputs {

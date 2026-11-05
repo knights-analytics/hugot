@@ -186,6 +186,13 @@ func main() {
 
 See also hugot_test.go for further examples for all pipelines.
 
+### Running a graph directly
+
+`Model.RunTensors` runs a loaded ONNX graph on named tensors, without pipeline pre- or postprocessing. Tensor data is a flat
+`[]float32`, `[]int64`, `[]int32`, `[]bool` or `[]string` slice plus a shape. Each input's expected element type is in
+`Model.InputsMeta[i].DataType`. String tensors (e.g. the categorical columns and string class labels of scikit-learn
+exports) are supported by the ONNX Runtime backend only; the Go and XLA backends reject them with an error.
+
 ## Generative models
 
 Hugot uses the [Onnx Runtime Generative AI](https://onnxruntime.ai/generative-ai) backend to run generative models.

@@ -19,7 +19,7 @@ func TestConvertCoreORTIO(t *testing.T) {
 		Shape:    []int64{-1, 128},
 	}})
 
-	require.Equal(t, []InputOutputInfo{{Name: "input_ids", Dimensions: Shape{-1, 128}}}, converted)
+	require.Equal(t, []InputOutputInfo{{Name: "input_ids", Dimensions: Shape{-1, 128}, DataType: DataTypeInt64}}, converted)
 }
 
 func TestCoreORTSessionRejectsUninitializedSession(t *testing.T) {

@@ -792,7 +792,7 @@ func createInputTensorsORT(batch *PipelineBatch, model *Model) error {
 	return nil
 }
 
-func runORTSessionOnBatch(ctx context.Context, batch *PipelineBatch, p *BasePipeline) error {
+func runORTSessionOnBatch(ctx context.Context, batch *PipelineBatch, p *BasePipeline) (err error) {
 	if p.SessionContext == nil {
 		return errors.New("no session context")
 	}
@@ -810,7 +810,7 @@ func runORTSessionOnBatch(ctx context.Context, batch *PipelineBatch, p *BasePipe
 	}
 	defer func() {
 		for _, tensor := range outputTensors {
-			err = errors.Join(tensor.Close())
+			err = errors.Join(err, tensor.Close())
 		}
 	}()
 
@@ -825,15 +825,17 @@ func runORTSessionOnBatch(ctx context.Context, batch *PipelineBatch, p *BasePipe
 			convertedOutput[i] = reshapeOutput(values, dimensions, batch.Size, batch.PaddingMask)
 			continue
 		}
+		if values, dataErr := t.StringData(); dataErr == nil {
+			convertedOutput[i] = reshapeOutput(values, dimensions, batch.Size, batch.PaddingMask)
+			continue
+		}
 		return fmt.Errorf("unsupported ORT output type for %q", p.Model.OutputsMeta[i].Name)
 	}
 	// store resulting tensors
 	batch.OutputValues = convertedOutput
-	return err
+	return nil
 }
 
-// createTabularTensorsORT flattens [][]float32 features into a [batch, feature_dim] tensor.
-// Currently supports models with a single input of 2D shape (batch, features).
 func createAudioTensorsORT(batch *PipelineBatch, model *Model, samples [][]float32) error {
 	if len(samples) == 0 || len(samples) != batch.Size {
 		return errors.New("audio samples do not match batch size")
@@ -868,6 +870,8 @@ func createAudioTensorsORT(batch *PipelineBatch, model *Model, samples [][]float
 	return nil
 }
 
+// createTabularTensorsORT flattens [][]float32 features into a [batch, feature_dim] tensor.
+// Currently supports models with a single input of 2D shape (batch, features).
 func createTabularTensorsORT(batch *PipelineBatch, model *Model, features [][]float32) error {
 	if len(features) != batch.Size {
 		return fmt.Errorf("features batch size %d does not match PipelineBatch size %d", len(features), batch.Size)

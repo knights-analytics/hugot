@@ -271,6 +271,7 @@ func loadInputOutputMetaGoMLX(model onnx.Model) ([]InputOutputInfo, []InputOutpu
 		inputs = append(inputs, InputOutputInfo{
 			Name:       name,
 			Dimensions: dimensions,
+			DataType:   dataTypeFromGoMLX(shape),
 		})
 	}
 
@@ -284,9 +285,32 @@ func loadInputOutputMetaGoMLX(model onnx.Model) ([]InputOutputInfo, []InputOutpu
 		outputs = append(outputs, InputOutputInfo{
 			Name:       name,
 			Dimensions: dimensions,
+			DataType:   dataTypeFromGoMLX(shape),
 		})
 	}
 	return inputs, outputs, inputShapes
+}
+
+func dataTypeFromGoMLX(shape shapes.Shape) DataType {
+	switch shape.DType.String() {
+	case "Float32":
+		return DataTypeFloat32
+	case "Float64":
+		return DataTypeFloat64
+	case "Float16":
+		return DataTypeFloat16
+	case "Int64":
+		return DataTypeInt64
+	case "Int32":
+		return DataTypeInt32
+	case "Int8":
+		return DataTypeInt8
+	case "Uint8":
+		return DataTypeUint8
+	case "Bool":
+		return DataTypeBool
+	}
+	return DataTypeUnknown
 }
 
 func dynamicAxesFromInputShapes(inputMeta []InputOutputInfo, inputShapes []shapes.Shape) [][]string {

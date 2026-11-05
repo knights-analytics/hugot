@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
+## [Unreleased]
+
+### Added
+- String tensors on the ORT backend. `Model.RunTensors` accepts and returns `[]string` data, and pipelines can read string outputs (e.g. the class labels of scikit-learn classifiers trained on string classes). The GoMLX backends reject string inputs with a clear error.
+- `InputOutputInfo.DataType` reports each input's and output's element type, from ORT and GoMLX. `Model.RunTensors` uses it to reject an input of the wrong type before running the graph.
+- `TabularPipeline` accepts string class labels from two-output classifiers and uses them as `PredictedClass`.
+
+### Fixed
+- ORT pipeline runs no longer drop errors from closing output tensors.
+- `TabularPipeline` no longer returns an empty `PredictedClass` when a label from a two-output classifier has no `IDLabelMap` entry (e.g. classes `[1, 2, 5]`); it falls back to the label's number.
+- An empty string tensor output is returned as an empty slice, not nil, like the other types.
+
 ## [0.8.5]
 
 ### Changed
