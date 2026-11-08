@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 - Added ORT GenAI memory loading for custom filesystem adapters.
 - Added generative model support to the automatic speech recognition pipeline.
 - String tensors on the ORT backend.
+- Hugot training can now train text and token classifiers on your own labels, and can add new labels.
 
 ### Changed
 

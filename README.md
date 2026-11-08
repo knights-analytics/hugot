@@ -351,7 +351,7 @@ err = trainer.Train(ctx)
 err = trainer.Save(ctx, "fine-tuned-model") // load it with a TextClassificationPipeline as usual
 ```
 
-Single-label training uses softmax cross-entropy and multi-label training a per-label sigmoid cross-entropy. With an evaluation dataset, the trainer records the accuracy and the **macro-F1** per epoch (`EpochTrainF1`, `EpochEvalF1`). Prefer the macro-F1 on imbalanced data, where accuracy hides a missed minority class. For a full per-class report on any model, use `evaluation.EvaluateTextClassification`, or `evaluation.ScoreClassification` / `ScoreMultiLabel` on labels you already have. The default optimizer is AdamW with a learning rate of 5e-5 and a weight decay of 0.01; set `GOMLXOptions` to change either. When an evaluation dataset is given, the trainer records the loss and accuracy of every epoch. `Save` copies `config.json` with the model, so the saved classifier keeps its labels. Training a classifier from a model that has no classification head is not supported yet.
+Single-label training uses softmax cross-entropy and multi-label training a per-label sigmoid cross-entropy. With an evaluation dataset, the trainer records the accuracy and the **macro-F1** per epoch (`EpochTrainF1`, `EpochEvalF1`). Prefer the macro-F1 on imbalanced data, where accuracy hides a missed minority class. For a full per-class report on any model, use `evaluation.EvaluateTextClassification`, or `evaluation.ScoreClassification` / `ScoreMultiLabel` on labels you already have. The default optimizer is AdamW with a learning rate of 5e-5 and a weight decay of 0.01; set `GOMLXOptions` to change either. When an evaluation dataset is given, the trainer records the loss and accuracy of every epoch. `Save` copies `config.json` with the model, so the saved classifier keeps its labels. To train on labels the model does not have, or to start from a model with no classification head, see [New labels and new heads](#new-labels-and-new-heads).
 
 **Prodigy annotations.** The dataset also reads text classification exports from Prodigy, mixed freely with the format above:
 
@@ -415,7 +415,25 @@ An example with both `text` and `tokens` is checked: the splitter's words must e
 {"text": "Anna Weber visited Zürich", "spans": [{"start": 0, "end": 10, "label": "PER"}, {"start": 19, "end": 25, "label": "LOC"}], "answer": "accept"}
 ```
 
-Spans are converted to word tags: `B-PER I-PER O B-LOC`. The words come from the pipeline's word splitter when one is set, and every span must then start and end on its word boundaries, so training sees exactly the words inference will. Without a splitter, the example's Prodigy `tokens` are the words, and inference must then be given the same words with `RunWords`. Offsets count characters, as Prodigy does, not bytes. Only examples answered `accept` (or with no answer) are used; `reject` and `ignore` are skipped. Each label needs its `B-` and `I-` forms in the model's `id2label` map.
+Spans are converted to word tags: `B-PER I-PER O B-LOC`. The words come from the pipeline's word splitter when one is set, and every span must then start and end on its word boundaries, so training sees exactly the words inference will. Without a splitter, the example's Prodigy `tokens` are the words, and inference must then be given the same words with `RunWords`. Offsets count characters, as Prodigy does, not bytes. Only examples answered `accept` (or with no answer) are used; `reject` and `ignore` are skipped. Each label needs its `B-` and `I-` forms in the model's `id2label` map, or in `TrainerConfig.Labels` (below).
+
+### New labels and new heads
+
+By default a classifier trains on the labels already in its `id2label` map, because its classification head has exactly one output per label. Set `TrainerConfig.Labels` to train on your own labels instead. The list is the complete label set, in id order:
+
+```go
+trainer, err := session.NewTrainer(hugot.TrainerConfig[*pipelines.TokenClassificationPipeline]{
+	ModelPath:    "KnightsAnalytics_distilbert-NER",
+	TrainDataset: dataset,
+	// The model's nine tags, plus a new entity type.
+	Labels: []string{"O", "B-PER", "I-PER", "B-ORG", "I-ORG", "B-LOC", "I-LOC", "B-MISC", "I-MISC", "B-PRODUCT", "I-PRODUCT"},
+})
+```
+
+- **Adding labels to a fine-tuned classifier.** The head is resized. A label the model already has keeps its trained weights, a new label starts from fresh ones, and a label you leave out is dropped. Train on data annotated with the existing labels as well as the new ones: a model that only ever sees the new label forgets the others.
+- **Training a classifier from a plain encoder.** A model with no classification head, such as `sentence-transformers/all-MiniLM-L6-v2` or a base BERT, gets a new linear head. For token classification it is applied to every token. For text classification the encoder's hidden states are first averaged over the attention mask, as sentence-transformers does. Only the head starts from scratch, so a learning rate above the default (e.g. 1e-4 to 5e-4) usually trains faster on small datasets.
+
+`trainer.HeadChange()` reports which labels were kept, added and removed, and whether a new head was created. `Save` writes the new labels to the saved `config.json`, so the model loads with an ordinary `TextClassificationPipeline` or `TokenClassificationPipeline`. Head changes need float32 weights stored inside the `.onnx` file (not as external data).
 
 ## Performance Tuning
 

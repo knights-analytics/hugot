@@ -11,6 +11,8 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/gomlx/compute-onnx/support/protos"
+
 	"github.com/knights-analytics/hugot/backends/modelconfig"
 	"github.com/knights-analytics/hugot/options"
 	"github.com/knights-analytics/hugot/util/fileutil"
@@ -25,6 +27,7 @@ type Model struct {
 	Tokenizer             *Tokenizer
 	Pipelines             map[string]Pipeline
 	loadOptions           *options.Options
+	graphTransform        GraphTransform
 	graphs                map[string]*Model
 	ID                    string
 	Path                  string
@@ -54,14 +57,36 @@ func (model *Model) ValidateMultimodalSession() error {
 	return nil
 }
 
+// GraphTransform rewrites a model's ONNX graph after its config is read and before the graph is
+// built. It may also update the model, e.g. its IDLabelMap to match a resized classifier head.
+type GraphTransform func(model *Model, graph *protos.ModelProto) error
+
+// LoadModelWithGraphTransform loads a non-generative model like LoadModel, rewriting its ONNX graph
+// with transform before it is built. Only the GoMLX backends (Go, XLA, and ORT with WithGoMLX)
+// support it, as the native ORT backend hands the file to the runtime unparsed.
+func LoadModelWithGraphTransform(ctx context.Context, path string, onnxFilename string, opts *options.Options, transform GraphTransform) (*Model, error) {
+	if transform == nil {
+		return nil, errors.New("a graph transform is required")
+	}
+	if opts.Backend == options.BackendORT && !opts.UseGoMLX {
+		return nil, errors.New("graph transforms require a GoMLX backend; create the ORT session with options.WithGoMLX()")
+	}
+	return loadModel(ctx, path, onnxFilename, opts, false, transform)
+}
+
 func LoadModel(ctx context.Context, path string, onnxFilename string, opts *options.Options, isGenerative bool) (*Model, error) {
+	return loadModel(ctx, path, onnxFilename, opts, isGenerative, nil)
+}
+
+func loadModel(ctx context.Context, path string, onnxFilename string, opts *options.Options, isGenerative bool, transform GraphTransform) (*Model, error) {
 	model := &Model{
-		ID:           path + ":" + onnxFilename,
-		Path:         path,
-		OnnxFilename: onnxFilename,
-		IsGenerative: isGenerative,
-		Pipelines:    map[string]Pipeline{},
-		loadOptions:  opts,
+		graphTransform: transform,
+		ID:             path + ":" + onnxFilename,
+		Path:           path,
+		OnnxFilename:   onnxFilename,
+		IsGenerative:   isGenerative,
+		Pipelines:      map[string]Pipeline{},
+		loadOptions:    opts,
 	}
 	backend, backendErr := newBackend(opts)
 	if backendErr != nil {

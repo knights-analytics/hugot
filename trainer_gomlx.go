@@ -60,6 +60,19 @@ func checkTrainable[T backends.Pipeline]() error {
 	}
 }
 
+// classifierTask returns the kind of classification head a pipeline type trains, and false for a
+// pipeline type that has none.
+func classifierTask[T backends.Pipeline]() (backends.ClassifierTask, bool) {
+	var zero T
+	switch any(zero).(type) {
+	case *pipelines.TextClassificationPipeline:
+		return backends.SequenceClassification, true
+	case *pipelines.TokenClassificationPipeline:
+		return backends.TokenClassification, true
+	}
+	return 0, false
+}
+
 // applyTrainingDefaults fills in the optimizer and loss function for the pipeline type. The type
 // has already been accepted by checkTrainable.
 func applyTrainingDefaults[T backends.Pipeline](config *TrainerConfig[T]) {
@@ -136,33 +149,92 @@ func classificationAccuracy(dataset datasets.Dataset) metric.Interface {
 	return metric.NewSparseCategoricalAccuracy("Mean Accuracy", "accuracy")
 }
 
+// freezeSummary records which variables freezeVariables left trainable.
+type freezeSummary struct {
+	frozen    int
+	trainable []string
+}
+
 // freezeVariables applies the freezeEmbeddings and freezeLayers settings to the model's variables.
-func freezeVariables(store *mlmodel.Store, settings trainerSettings) error {
+// A variable's layer comes from its name when it has one ("encoder.layer.3.…"), otherwise from
+// placement, which reads it off the graph. It fails if a requested layer index is beyond the
+// model's last layer, or if nothing would be left to train.
+func freezeVariables(store *mlmodel.Store, settings trainerSettings, placement backends.VariablePlacement) (freezeSummary, error) {
+	var summary freezeSummary
 	freezeAllButLast := slices.Contains(settings.freezeLayers, -1)
 	if !settings.freezeEmbeddings && !freezeAllButLast && len(settings.freezeLayers) == 0 {
-		return nil
+		return summary, nil
 	}
 	re := regexp.MustCompile(`layer\.(\d+)`) // identify the layer number in the variable name
+	layerOf := func(name string) (int, bool, error) {
+		if matches := re.FindStringSubmatch(name); matches != nil {
+			n, err := strconv.Atoi(matches[1])
+			if err != nil {
+				return 0, false, fmt.Errorf("failed to parse layer number from variable name %s: %w", name, err)
+			}
+			return n, true, nil
+		}
+		n, ok := placement.Layers[name]
+		return n, ok, nil
+	}
+
+	// The last layer has to be known before freezing, because -1 keeps it trainable.
+	maxLayer := -1
+	for v := range store.IterVariables() {
+		layerNum, hasLayer, err := layerOf(v.Name())
+		if err != nil {
+			return summary, err
+		}
+		if hasLayer {
+			maxLayer = max(maxLayer, layerNum)
+		}
+	}
+	for _, layer := range settings.freezeLayers {
+		if layer > maxLayer {
+			return summary, fmt.Errorf("cannot freeze layer %d: the model has %d transformer layers (0 to %d)", layer, maxLayer+1, maxLayer)
+		}
+	}
 
 	for v := range store.IterVariables() {
 		name := v.Name()
-		if (settings.freezeEmbeddings || freezeAllButLast) && strings.HasPrefix(name, "embeddings") {
+		layerNum, hasLayer, _ := layerOf(name) // already checked above
+		switch {
+		case (settings.freezeEmbeddings || freezeAllButLast) && (isEmbeddingVariable(name) || placement.Embeddings[name]):
 			v.SetTrainable(false)
-			continue
-		}
-		matches := re.FindStringSubmatch(name)
-		if matches == nil {
-			continue
-		}
-		layerNum, err := strconv.Atoi(matches[1])
-		if err != nil {
-			return fmt.Errorf("failed to parse layer number from variable name %s: %w", name, err)
-		}
-		if freezeAllButLast || slices.Contains(settings.freezeLayers, layerNum) {
+		case hasLayer && freezeAllButLast && layerNum < maxLayer:
 			v.SetTrainable(false)
+		case hasLayer && slices.Contains(settings.freezeLayers, layerNum):
+			v.SetTrainable(false)
+		}
+		if v.Trainable {
+			summary.trainable = append(summary.trainable, name)
+		} else {
+			summary.frozen++
 		}
 	}
-	return nil
+	if len(summary.trainable) == 0 {
+		return summary, errors.New("the freeze settings leave no variable to train")
+	}
+	return summary, nil
+}
+
+// String lists the trainable variables, capped so a large model doesn't flood the output.
+func (s freezeSummary) String() string {
+	const shown = 10
+	names := s.trainable
+	more := ""
+	if len(names) > shown {
+		more = fmt.Sprintf(", and %d more", len(names)-shown)
+		names = names[:shown]
+	}
+	return fmt.Sprintf("frozen %d variables, training %d: %s%s", s.frozen, len(s.trainable), strings.Join(names, ", "), more)
+}
+
+// isEmbeddingVariable reports whether an ONNX variable belongs to the embeddings block. Exports
+// differ on the prefix: MiniLM names it "embeddings.LayerNorm.bias", DistilBERT
+// "distilbert.embeddings.word_embeddings.weight".
+func isEmbeddingVariable(name string) bool {
+	return strings.HasPrefix(name, "embeddings.") || strings.Contains(name, ".embeddings.")
 }
 
 // trainGoMLX runs the training loop. Every backend trains through GoMLX — an ORT session uses it
@@ -196,8 +268,12 @@ func (t *Trainer[T]) trainGoMLX(ctx context.Context) error {
 	backend := goMLXModel.Backend
 	store := goMLXModel.Store
 
-	if err := freezeVariables(store, t.settings); err != nil {
+	summary, err := freezeVariables(store, t.settings, t.placement)
+	if err != nil {
 		return err
+	}
+	if t.config.Verbose && (summary.frozen > 0) {
+		fmt.Println("Freezing:", summary)
 	}
 
 	gomlxTrainer := train.NewTrainer(backend,
