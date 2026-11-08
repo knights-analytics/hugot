@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
+## [Unreleased]
+
+### Added
+- `TrainerConfig.Labels` trains text and token classifiers on your own labels. A model's existing classification head is resized: labels it already has keep their weights, new labels (e.g. a new entity type) start fresh, and labels left out are dropped. A model without a head, such as a plain sentence encoder, gets a new linear head, on mean-pooled hidden states for text classification. `Save` writes the new labels to `config.json`, and `Trainer.HeadChange` reports what changed.
+- `backends.SetClassifierLabels` performs that head change on an ONNX graph, and `backends.LoadModelWithGraphTransform` loads a model through a graph rewrite (GoMLX backends only).
+
 ## [0.8.5]
 
 ### Changed

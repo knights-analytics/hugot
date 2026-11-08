@@ -15,6 +15,7 @@ require (
 	golang.org/x/image v0.47.0
 	golang.org/x/sync v0.24.0
 	golang.org/x/text v0.43.0
+	google.golang.org/protobuf v1.36.12
 )
 
 require (
@@ -28,6 +29,5 @@ require (
 	golang.org/x/exp v0.0.0-20261014143641-f0251eb4aa3e // indirect
 	golang.org/x/sys v0.49.0 // indirect
 	golang.org/x/term v0.47.0 // indirect
-	google.golang.org/protobuf v1.36.12 // indirect
 	k8s.io/klog/v2 v2.140.0 // indirect
 )

@@ -5,10 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 	"sync"
 
 	"github.com/gomlx/compute"
+	"github.com/gomlx/compute-onnx/support/protos"
 	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/go-huggingface/tokenizers/bucket"
 	"github.com/gomlx/gomlx/core/graph"
@@ -19,6 +21,7 @@ import (
 	"github.com/knights-analytics/hugot/options"
 	"github.com/knights-analytics/hugot/util/fileutil"
 	"golang.org/x/sync/errgroup"
+	"google.golang.org/protobuf/proto"
 )
 
 // Default shape buckets for batch size and sequence length.
@@ -145,7 +148,12 @@ func callGoMLXExec(exec *mlmodel.Exec, run func(*mlmodel.Exec) ([]*tensors.Tenso
 func createGoMLXModelBackend(model *Model, options *options.Options) error {
 	var modelParsed onnx.Model
 	var err error
-	if model.OnnxReader != nil {
+	if model.graphTransform != nil {
+		modelParsed, err = parseTransformedGraph(model)
+		if err != nil {
+			return err
+		}
+	} else if model.OnnxReader != nil {
 		modelParsed, err = parser.ParseReader(model.OnnxReader)
 		if err != nil {
 			return err
@@ -816,4 +824,38 @@ func createTabularTensorsGoMLX(batch *PipelineBatch, model *Model, features [][]
 	batch.PaddingMask = nil
 	batch.MaxSequenceLength = 0
 	return nil
+}
+
+// parseTransformedGraph reads the model's ONNX file, applies its graph transform, and parses the
+// result.
+func parseTransformedGraph(model *Model) (onnx.Model, error) {
+	var onnxBytes []byte
+	var err error
+	if model.OnnxReader != nil {
+		onnxBytes, err = io.ReadAll(model.OnnxReader)
+	} else {
+		onnxBytes, err = os.ReadFile(fileutil.PathJoinSafe(model.Path, model.OnnxPath))
+	}
+	if err != nil {
+		return nil, err
+	}
+	graph := &protos.ModelProto{}
+	if err = proto.Unmarshal(onnxBytes, graph); err != nil {
+		return nil, fmt.Errorf("failed to read the ONNX graph: %w", err)
+	}
+	onnxBytes = nil // the parsed proto replaces it; let a large model's bytes be collected
+	if err = model.graphTransform(model, graph); err != nil {
+		return nil, err
+	}
+	if onnxBytes, err = proto.Marshal(graph); err != nil {
+		return nil, fmt.Errorf("failed to write the transformed ONNX graph: %w", err)
+	}
+	parsed, err := parser.Parse(onnxBytes)
+	if err != nil {
+		return nil, err
+	}
+	if model.OnnxReader == nil {
+		parsed = parsed.WithBaseDir(model.Path)
+	}
+	return parsed, nil
 }

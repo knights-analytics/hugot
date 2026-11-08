@@ -7,6 +7,9 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
+
+	"github.com/gomlx/compute-onnx/support/protos"
 
 	"github.com/knights-analytics/hugot/backends"
 	"github.com/knights-analytics/hugot/datasets"
@@ -54,6 +57,19 @@ type TrainerConfig[T backends.Pipeline] struct {
 	ModelPath string
 	// OnnxFilename names the ONNX file within ModelPath, when it cannot be inferred.
 	OnnxFilename string
+	// Labels sets the labels a text or token classification model is trained to predict, in id
+	// order. Leave it empty to train on the model's own id2label labels.
+	//
+	// When the model already has a classification head, it is resized to these labels: a label the
+	// model already knows keeps its trained weights, a new label (e.g. a new entity tag such as
+	// "B-PRODUCT") starts from fresh weights, and a label left out is dropped. When the model has no
+	// head, e.g. a plain encoder such as all-MiniLM-L6-v2, a new one is added on top of it; for text
+	// classification the encoder's hidden states are mean-pooled over the attention mask first.
+	// [Trainer.Save] writes the labels into the saved config.json.
+	//
+	// To keep what the model already predicts, train on data that still contains its existing
+	// labels, not only the new ones; otherwise it forgets them.
+	Labels []string
 	// PipelineOptions configure the trainer's pipeline, which tokenizes the datasets and scores the
 	// per-epoch metrics. Pass the options the fine-tuned model will run with at inference, e.g.
 	// pipelines.WithWordSplitter, so training sees its inputs the same way.
@@ -69,7 +85,7 @@ type TrainerConfig[T backends.Pipeline] struct {
 // which is unusable. Keeping the option target concrete means options stay plain values.
 type trainerSettings struct {
 	earlyStopping    *earlyStopping
-	freezeLayers     []int // 0 is the first layer; [-1] freezes all layers but the last
+	freezeLayers     []int // 0 is the first layer; [-1] freezes all but the last layer
 	maxEpochs        int
 	freezeEmbeddings bool
 }
@@ -96,10 +112,20 @@ func WithFreezeEmbeddings() TrainerOption {
 	}
 }
 
-// WithFreezeLayers freezes the given transformer layers. 0 is the first layer; the single value -1
-// freezes every layer apart from the last.
+// WithFreezeLayers freezes the given transformer layers, 0 being the first. The single value -1
+// freezes the embeddings and every transformer layer but the last, so the last layer and any head
+// on top of it train: the model adapts without losing what it learned in pretraining. Indices
+// beyond the model's last layer are an error when training starts.
 func WithFreezeLayers(layers []int) TrainerOption {
 	return func(t *trainerSettings) error {
+		for _, layer := range layers {
+			if layer < -1 {
+				return fmt.Errorf("layer index must be 0 or more, or -1 alone, got %d", layer)
+			}
+			if layer == -1 && len(layers) > 1 {
+				return fmt.Errorf("-1 freezes the whole encoder and cannot be combined with other layers, got %v", layers)
+			}
+		}
 		t.freezeLayers = layers
 		return nil
 	}
@@ -139,7 +165,16 @@ type Trainer[T backends.Pipeline] struct {
 	pipeline   T
 	settings   trainerSettings
 	statistics TrainingStatistics
+	headChange *backends.ClassifierHeadChange
+	placement  backends.VariablePlacement // where each weight sits, read when freezing is set
 	closed     bool
+}
+
+// HeadChange reports how TrainerConfig.Labels changed the model's classification head: whether a
+// new head was created, and which labels were kept, added and removed. It is nil when
+// TrainerConfig.Labels is empty.
+func (t *Trainer[T]) HeadChange() *backends.ClassifierHeadChange {
+	return t.headChange
 }
 
 // Pipeline returns the pipeline being trained, typed as T.
@@ -208,6 +243,11 @@ func (s *Session) NewTrainer[T backends.Pipeline](config TrainerConfig[T], opts 
 	if err := checkTrainable[T](); err != nil {
 		return nil, err
 	}
+	task, hasTask := classifierTask[T]()
+	if len(config.Labels) > 0 && !hasTask {
+		var zero T
+		return nil, fmt.Errorf("TrainerConfig.Labels applies to text and token classification only, not %T", zero)
+	}
 	// Checked before loading: without WithGoMLX an ORT session would build a native ORT model,
 	// only for it to be rejected afterwards for having no GoMLX graph.
 	if s.options.Backend == options.BackendORT && !s.options.UseGoMLX {
@@ -227,13 +267,46 @@ func (s *Session) NewTrainer[T backends.Pipeline](config TrainerConfig[T], opts 
 
 	// The model is not registered with the session until the trainer is fully built, so every
 	// failure below closes it here rather than leaving it in the registry until Session.Destroy.
-	model, err := backends.LoadModel(s.sessionContext, config.ModelPath, config.OnnxFilename, s.options, false)
+	var model *backends.Model
+	var headChange *backends.ClassifierHeadChange
+	var placement backends.VariablePlacement
+	var err error
+	freezing := settings.freezeEmbeddings || len(settings.freezeLayers) > 0
+	if len(config.Labels) > 0 || freezing {
+		// Both need the ONNX graph: the labels resize the head, and freezing has to read which
+		// layer each anonymously named weight belongs to.
+		model, err = backends.LoadModelWithGraphTransform(s.sessionContext, config.ModelPath, config.OnnxFilename, s.options,
+			func(model *backends.Model, graph *protos.ModelProto) error {
+				if len(config.Labels) > 0 {
+					change, setErr := backends.SetClassifierLabels(graph, task, model.IDLabelMap, config.Labels)
+					if setErr != nil {
+						return fmt.Errorf("failed to set the classifier labels: %w", setErr)
+					}
+					headChange = &change
+					model.IDLabelMap = make(map[int]string, len(config.Labels))
+					for i, label := range config.Labels {
+						model.IDLabelMap[i] = label
+					}
+				}
+				if freezing {
+					placement = backends.PlaceVariables(graph.Graph)
+				}
+				return nil
+			})
+	} else {
+		model, err = backends.LoadModel(s.sessionContext, config.ModelPath, config.OnnxFilename, s.options, false)
+	}
 	if err != nil {
 		return nil, err
 	}
 	trainer, err := newTrainer(s, config, settings, model)
 	if err != nil {
 		return nil, errors.Join(err, model.Close())
+	}
+	trainer.headChange = headChange
+	trainer.placement = placement
+	if config.Verbose && headChange != nil {
+		printHeadChange(*headChange)
 	}
 	s.registerTrainingModel(model)
 	return trainer, nil
@@ -368,13 +441,70 @@ func (t *Trainer[T]) Save(ctx context.Context, path string) (writeErr error) {
 	}()
 	writeErr = errors.Join(writeErr, model.GoMLXModel.Save(modelWriter))
 
-	writeErr = errors.Join(writeErr, copyModelFiles(ctx, model.Path, path))
+	// With new labels, the original config.json would name the old ones, so it is rewritten.
+	writeErr = errors.Join(writeErr, copyModelFiles(ctx, model.Path, path, len(t.config.Labels) > 0))
+	if len(t.config.Labels) > 0 {
+		writeErr = errors.Join(writeErr, writeConfigWithLabels(ctx, model.Path, path, t.config.Labels))
+	}
 	return writeErr
+}
+
+// writeConfigWithLabels writes the model's config.json to the directory to, with its id2label and
+// label2id replaced by labels. Every other field is kept. A model without a config.json gets one
+// holding just the labels.
+func writeConfigWithLabels(ctx context.Context, from, to string, labels []string) (writeErr error) {
+	config := map[string]any{}
+	configPath := fileutil.PathJoinSafe(from, "config.json")
+	exists, err := fileutil.FileExists(ctx, configPath)
+	if err != nil {
+		return err
+	}
+	if exists {
+		configBytes, readErr := fileutil.ReadFileBytes(ctx, configPath)
+		if readErr != nil {
+			return readErr
+		}
+		if err = json.Unmarshal(configBytes, &config); err != nil {
+			return fmt.Errorf("failed to read %s: %w", configPath, err)
+		}
+	}
+	id2label := make(map[string]string, len(labels))
+	label2id := make(map[string]int, len(labels))
+	for i, label := range labels {
+		id2label[strconv.Itoa(i)] = label
+		label2id[label] = i
+	}
+	config["id2label"] = id2label
+	config["label2id"] = label2id
+	configBytes, err := json.MarshalIndent(config, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to write config.json: %w", err)
+	}
+
+	writer, err := fileutil.NewFileWriter(ctx, fileutil.PathJoinSafe(to, "config.json"), "")
+	if err != nil {
+		return err
+	}
+	defer func() {
+		writeErr = errors.Join(writeErr, writer.Close())
+	}()
+	_, err = writer.Write(configBytes)
+	return err
+}
+
+// printHeadChange reports a classifier head change in verbose mode.
+func printHeadChange(change backends.ClassifierHeadChange) {
+	if change.Created {
+		fmt.Printf("Added a new classification head for %d labels\n", len(change.Added))
+		return
+	}
+	fmt.Printf("Resized the classification head: %d labels kept, %d added %v, %d removed %v\n",
+		len(change.Kept), len(change.Added), change.Added, len(change.Removed), change.Removed)
 }
 
 // copyModelFiles copies the files that describe the model apart from the ONNX graph: the model
 // config and the tokenizer files.
-func copyModelFiles(ctx context.Context, from, to string) error {
+func copyModelFiles(ctx context.Context, from, to string, skipConfig bool) error {
 	toCopy := map[string]bool{
 		"config.json":             true,
 		"special_tokens_map.json": true,
@@ -386,7 +516,7 @@ func copyModelFiles(ctx context.Context, from, to string) error {
 		if ctx.Err() != nil {
 			return false, ctx.Err()
 		}
-		if toCopy[info.Name()] {
+		if toCopy[info.Name()] && (!skipConfig || info.Name() != "config.json") {
 			if err = fileutil.CopyFile(ctx, fileutil.PathJoinSafe(from, parent, info.Name()), fileutil.PathJoinSafe(to, info.Name())); err != nil {
 				return false, err
 			}

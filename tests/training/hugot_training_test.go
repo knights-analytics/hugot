@@ -1209,3 +1209,173 @@ func TestTrainTextClassificationProdigyXLACuda(t *testing.T) {
 func TestTrainTextClassificationProdigyGo(t *testing.T) {
 	runGoTraining(t, textClassificationProdigyTraining)
 }
+
+// writeJSONL writes examples as a .jsonl file in a temporary directory and returns its path.
+func writeJSONL[E any](t *testing.T, examples []E) string {
+	t.Helper()
+	var buf bytes.Buffer
+	for _, example := range examples {
+		line, err := json.Marshal(example)
+		testutil.CheckT(t, err)
+		buf.Write(line)
+		buf.WriteByte('\n')
+	}
+	path := t.TempDir() + "/examples.jsonl"
+	testutil.CheckT(t, os.WriteFile(path, buf.Bytes(), 0o600))
+	return path
+}
+
+// savedLabels reads the id2label map of a saved model's config.json.
+func savedLabels(t *testing.T, modelPath string) map[string]string {
+	t.Helper()
+	data, err := os.ReadFile(modelPath + "/config.json")
+	testutil.CheckT(t, err)
+	var config struct {
+		ID2Label map[string]string `json:"id2label"`
+	}
+	testutil.CheckT(t, json.Unmarshal(data, &config))
+	return config.ID2Label
+}
+
+// Teaches the NER model a new entity type. The cities of the ORG test set are retagged as CITY, a
+// type the model's head has no output for, so TrainerConfig.Labels grows the head by B-CITY and
+// I-CITY. The nine existing tags keep their weights, so the people in the same sentences must still
+// come out as PER.
+func tokenClassificationNewTagTraining(t *testing.T, session *hugot.Session) {
+	examples := readTokenClassificationExamples(t, testutil.TestCasesFolder+"tokenClassificationCitiesAsOrg.jsonl")
+	for _, example := range examples {
+		for i, tag := range example.Tags {
+			example.Tags[i] = strings.Replace(tag, "-ORG", "-CITY", 1)
+		}
+	}
+	trainPath := writeJSONL(t, examples)
+
+	trainDataset, err := datasets.NewTokenClassificationDataset(t.Context(), trainPath, 4, nil, nil)
+	testutil.CheckT(t, err)
+	trainEvalDataset, err := datasets.NewTokenClassificationDataset(t.Context(), trainPath, 12, nil, nil)
+	testutil.CheckT(t, err)
+
+	labels := []string{"O", "B-PER", "I-PER", "B-ORG", "I-ORG", "B-LOC", "I-LOC", "B-MISC", "I-MISC", "B-CITY", "I-CITY"}
+	const epochs = 10
+	trainer, err := session.NewTrainer(hugot.TrainerConfig[*pipelines.TokenClassificationPipeline]{
+		ModelPath:        nerModelPath,
+		TrainDataset:     trainDataset,
+		TrainEvalDataset: trainEvalDataset,
+		Labels:           labels,
+		GOMLXOptions: &hugot.GOMLXTrainingOptions{
+			Optimizer: optimizer.Adam().LearningRate(1e-4).Done(),
+		},
+	}, hugot.WithEpochs(epochs))
+	testutil.CheckT(t, err)
+	defer func() { testutil.CheckT(t, trainer.Close()) }()
+	change := trainer.HeadChange()
+	if assert.NotNil(t, change) {
+		assert.False(t, change.Created)
+		assert.Equal(t, labels[:9], change.Kept)
+		assert.Equal(t, []string{"B-CITY", "I-CITY"}, change.Added)
+		assert.Empty(t, change.Removed)
+	}
+	testutil.CheckT(t, trainer.Train(t.Context()))
+	stats := trainer.Statistics()
+	t.Logf("per epoch losses %v, entity F1 %v", stats.EpochTrainLosses, stats.EpochTrainF1)
+
+	savePath := t.TempDir()
+	testutil.CheckT(t, trainer.Save(t.Context(), savePath))
+	saved := savedLabels(t, savePath)
+	assert.Len(t, saved, len(labels))
+	assert.Equal(t, "B-CITY", saved["9"])
+
+	report := entityReport(t, session, savePath, examples)
+	t.Logf("saved model entity F1 %.2f, CITY %.2f, PER %.2f", report.F1, report.PerType["CITY"].F1, report.PerType["PER"].F1)
+	assert.GreaterOrEqual(t, report.PerType["CITY"].F1, 0.9, "the cities should come out as the new CITY type")
+	assert.GreaterOrEqual(t, report.PerType["PER"].F1, 0.9, "the existing PER tags should survive the new head")
+	assert.InDelta(t, report.F1, stats.EpochTrainF1[len(stats.EpochTrainF1)-1], 1e-6, "the per-epoch entity F1 must see the current weights")
+}
+
+func TestTrainTokenClassificationNewTagXLA(t *testing.T) {
+	runXLATraining(t, tokenClassificationNewTagTraining)
+}
+
+func TestTrainTokenClassificationNewTagXLACuda(t *testing.T) {
+	runXLATrainingCuda(t, tokenClassificationNewTagTraining)
+}
+
+func TestTrainTokenClassificationNewTagGo(t *testing.T) {
+	runGoTraining(t, tokenClassificationNewTagTraining)
+}
+
+// Trains a text classifier from a plain sentence encoder. all-MiniLM-L6-v2 has no classification
+// head at all, so TrainerConfig.Labels adds one, on the mean-pooled hidden states, for labels the
+// model has never seen. The saved model must then load as an ordinary text classification model.
+func textClassificationNewHeadTraining(t *testing.T, session *hugot.Session) {
+	// The inverted-sentiment set's labels are wrong on purpose; here they become two new labels
+	// with their true meaning.
+	examples := readTextClassificationExamples(t, testutil.TestCasesFolder+"textClassificationInvertedSentiment.jsonl")
+	for i := range examples {
+		examples[i].Label = map[string]string{"NEGATIVE": "praise", "POSITIVE": "complaint"}[examples[i].Label]
+	}
+	trainPath := writeJSONL(t, examples)
+	trainDataset, err := datasets.NewTextClassificationDataset(t.Context(), trainPath, 4, datasets.SingleLabel, nil, nil)
+	testutil.CheckT(t, err)
+	trainEvalDataset, err := datasets.NewTextClassificationDataset(t.Context(), trainPath, 16, datasets.SingleLabel, nil, nil)
+	testutil.CheckT(t, err)
+
+	modelPath := testutil.ModelsFolder + "KnightsAnalytics_all-MiniLM-L6-v2"
+	const epochs = 10
+	trainer, err := session.NewTrainer(hugot.TrainerConfig[*pipelines.TextClassificationPipeline]{
+		ModelPath:        modelPath,
+		TrainDataset:     trainDataset,
+		TrainEvalDataset: trainEvalDataset,
+		Labels:           []string{"praise", "complaint"},
+		GOMLXOptions: &hugot.GOMLXTrainingOptions{
+			Optimizer: optimizer.Adam().LearningRate(5e-4).Done(),
+		},
+	}, hugot.WithEpochs(epochs))
+	testutil.CheckT(t, err)
+	defer func() { testutil.CheckT(t, trainer.Close()) }()
+	if change := trainer.HeadChange(); assert.NotNil(t, change) {
+		assert.True(t, change.Created)
+	}
+	testutil.CheckT(t, trainer.Train(t.Context()))
+	stats := trainer.Statistics()
+	t.Logf("per epoch losses %v, accuracies %v", stats.EpochTrainLosses, stats.EpochTrainAccuracies)
+	assert.Less(t, stats.EpochTrainLosses[epochs-1], stats.EpochTrainLosses[0], "the loss should fall")
+
+	savePath := t.TempDir()
+	testutil.CheckT(t, trainer.Save(t.Context(), savePath))
+	assert.Equal(t, map[string]string{"0": "praise", "1": "complaint"}, savedLabels(t, savePath))
+	accuracy := classificationAccuracy(t, session, savePath, "model.onnx", examples)
+	t.Logf("accuracy of the saved model %.2f", accuracy)
+	assert.GreaterOrEqual(t, accuracy, 0.9, "the new head should have learned the labels")
+	assert.InDelta(t, accuracy, stats.EpochTrainAccuracies[epochs-1], 1e-6, "evaluation must see the current weights")
+}
+
+func TestTrainTextClassificationNewHeadXLA(t *testing.T) {
+	runXLATraining(t, textClassificationNewHeadTraining)
+}
+
+func TestTrainTextClassificationNewHeadXLACuda(t *testing.T) {
+	runXLATrainingCuda(t, textClassificationNewHeadTraining)
+}
+
+func TestTrainTextClassificationNewHeadGo(t *testing.T) {
+	runGoTraining(t, textClassificationNewHeadTraining)
+}
+
+// TrainerConfig.Labels only means something for a classifier, and is rejected before anything
+// loads for any other pipeline type.
+func TestNewTrainerRejectsLabelsForEmbeddings(t *testing.T) {
+	dataset, err := datasets.NewSemanticSimilarityDataset(t.Context(), testutil.TestCasesFolder+"semanticSimilarityTest.jsonl", 1, nil, nil)
+	testutil.CheckT(t, err)
+	session, err := hugot.NewGoSession(t.Context())
+	testutil.CheckT(t, err)
+	defer func() { testutil.CheckT(t, session.Destroy()) }()
+
+	_, err = session.NewTrainer(hugot.TrainerConfig[*pipelines.FeatureExtractionPipeline]{
+		ModelPath:    "does/not/exist",
+		TrainDataset: dataset,
+		Labels:       []string{"a"},
+	})
+	assert.ErrorContains(t, err, "TrainerConfig.Labels applies to text and token classification only")
+	assert.Empty(t, session.GetModels())
+}
