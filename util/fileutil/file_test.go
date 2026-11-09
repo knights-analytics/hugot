@@ -21,6 +21,9 @@ func (f *recordingFileSystem) OpenFile(context.Context, string) (io.ReadCloser, 
 
 func TestDefaultFileSystemUsesOS(t *testing.T) {
 	ctx := WithFileSystem(context.Background(), nil)
+	if !IsDefaultOSFileSystem(ctx) {
+		t.Fatal("nil filesystem did not select the default OS filesystem")
+	}
 	directory := t.TempDir()
 	filename := filepath.Join(directory, "file.txt")
 
@@ -69,6 +72,9 @@ func TestCopyFileCreatesDestinationDirectories(t *testing.T) {
 func TestContextFileSystemIsScoped(t *testing.T) {
 	filesystem := &recordingFileSystem{}
 	ctx := WithFileSystem(context.Background(), filesystem)
+	if IsDefaultOSFileSystem(ctx) {
+		t.Fatal("custom filesystem was identified as the default OS filesystem")
+	}
 
 	if _, err := ReadFileBytes(ctx, "ignored"); err != nil {
 		t.Fatal(err)

@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Added ORT GenAI memory loading for custom filesystem adapters. Supported flat CPU text-generation and encoder/decoder translation bundles load their configured ONNX graphs and external weights through the adapter. Custom-adapter memory loading rejects multimodal models, GPU/provider settings, engine mode, MTP, and LoRA adapters. The native constructor keeps its own graph and weight copies until the session closes, so initialization temporarily holds both the Go buffers and native copies.
+
 ### Changed
 
 - Upgraded the ORT GenAI binding and runtime requirement to 0.19.0, ONNX Runtime to 1.31.1, and CUDA to 13.5.

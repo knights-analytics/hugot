@@ -172,9 +172,6 @@ func mapORTOptions(options *options.Options) ([]string, map[string]map[string]st
 }
 
 func createORTGenerativeSession(ctx context.Context, model *Model, options *options.Options) error {
-	if strings.HasPrefix(model.Path, "s3:") {
-		return errors.New("ORT Gen AI does not support S3 paths. Please download the model to a local directory and try again")
-	}
 	if options == nil || options.ORTOptions == nil {
 		return errors.New("ORT options must be provided to create a generative model")
 	}
@@ -182,6 +179,11 @@ func createORTGenerativeSession(ctx context.Context, model *Model, options *opti
 		if err := validateGenerativeEngineOptions(options.ORTOptions); err != nil {
 			return err
 		}
+	}
+	if !fileutil.IsDefaultOSFileSystem(ctx) {
+		return createORTGenerativeMemorySession(ctx, model, options)
+	}
+	if options.ORTOptions.UseEngine {
 		if err := initialiseORTGenAI(ctx, options); err != nil {
 			return err
 		}
@@ -268,15 +270,14 @@ func initialiseORTGenAI(ctx context.Context, options *options.Options) error {
 			libraryFileName = "libonnxruntime-genai.so"
 		}
 		libraryPath := fileutil.PathJoinSafe(*LibraryDir, libraryFileName)
-		exists, err := fileutil.FileExists(ctx, libraryPath)
-		if err != nil {
-			return fmt.Errorf("error checking ortgenai library path: %w", err)
-		}
-		if !exists {
+		if _, err := os.Stat(libraryPath); err != nil {
+			if !errors.Is(err, os.ErrNotExist) {
+				return fmt.Errorf("error checking ortgenai library path: %w", err)
+			}
 			return fmt.Errorf("cannot find the ortgenai library at: %s", libraryPath)
 		}
 		ortgenai.SetSharedLibraryPath(libraryPath)
-		err = ortgenai.InitializeEnvironment()
+		err := ortgenai.InitializeEnvironment()
 		if err != nil {
 			return fmt.Errorf("error initializing the ort genai environment: %w", err)
 		}

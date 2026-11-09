@@ -49,6 +49,18 @@ func fileSystemFor(ctx context.Context) (FileSystem, error) {
 	return nil, fmt.Errorf("no filesystem bound to context")
 }
 
+// IsDefaultOSFileSystem reports whether ctx uses HuGo's native OS filesystem.
+// Callers can use this to select APIs that require real local paths without
+// probing the path itself (which could also exist locally for a custom adapter).
+func IsDefaultOSFileSystem(ctx context.Context) bool {
+	fs, err := fileSystemFor(ctx)
+	if err != nil {
+		return false
+	}
+	_, ok := fs.(osFileSystem)
+	return ok
+}
+
 func ReadFileBytes(ctx context.Context, filename string) ([]byte, error) {
 	fs, fsErr := fileSystemFor(ctx)
 	if fsErr != nil {
