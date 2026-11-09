@@ -51,6 +51,10 @@ func runGenerativeORTSessionOnBatch(_ context.Context, _ *PipelineBatch, _ *Base
 	return nil, nil, errors.New("ORT is not enabled")
 }
 
+func runGenerativeORTASR(_ context.Context, _ *BasePipeline, _ [][]float32, _ int, _ string) ([]ASRResult, error) {
+	return nil, errors.New("ORT is not enabled")
+}
+
 func createORTGenerativeSession(_ context.Context, _ *Model, _ *options.Options) error {
 	return errors.New("ORT is not enabled")
 }

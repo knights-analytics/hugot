@@ -51,6 +51,13 @@ func (b runtimeBackend) RunGenerativeSessionOnBatch(ctx context.Context, batch *
 	return nil, nil, &backendUnavailableError{runtime: string(b.runtime), operation: "generative inference"}
 }
 
+func (b runtimeBackend) RunGenerativeASR(ctx context.Context, p *BasePipeline, samples [][]float32, sampleRate int, prompt string) ([]ASRResult, error) {
+	if b.runtime == options.BackendORT {
+		return runGenerativeORTASR(ctx, p, samples, sampleRate, prompt)
+	}
+	return nil, &backendUnavailableError{runtime: string(b.runtime), operation: "generative ASR"}
+}
+
 func (b runtimeBackend) CreateMessages(batch *PipelineBatch, inputs any, systemPrompt string) error {
 	if b.runtime == options.BackendORT {
 		return CreateMessagesORT(batch, inputs, systemPrompt)

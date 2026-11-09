@@ -30,6 +30,23 @@ type SequenceDelta struct {
 	Sequence int
 }
 
+// ASRTimestamp is a word or segment recognized by a generative ASR model.
+// Times are measured in seconds and frames use the model's timestamp frame unit.
+type ASRTimestamp struct {
+	Text       string
+	StartFrame int64
+	StopFrame  int64
+	StartTime  float64
+	StopTime   float64
+}
+
+// ASRResult is the transcription and timestamp output for one audio input.
+type ASRResult struct {
+	Text     string
+	Words    []ASRTimestamp
+	Segments []ASRTimestamp
+}
+
 // Message represents a single message in a conversation.
 // Images and audio can be included via ImageURLs and AudioURLs for multimodal models.
 type Message struct {

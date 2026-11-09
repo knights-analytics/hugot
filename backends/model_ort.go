@@ -5,9 +5,11 @@ package backends
 import (
 	"context"
 	"encoding/base64"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"runtime"
 	"strconv"
@@ -569,6 +571,180 @@ func runGenerativeORTSessionOnBatch(ctx context.Context, batch *PipelineBatch, p
 		}
 	}()
 	return tokenStream, errorStream, nil
+}
+
+func runGenerativeORTASR(ctx context.Context, p *BasePipeline, samples [][]float32, sampleRate int, prompt string) ([]ASRResult, error) {
+	if p == nil || p.Model == nil || p.Model.ORTModel == nil || p.Model.ORTModel.Generative == nil {
+		return nil, errors.New("ORT generative session is not initialized")
+	}
+	if p.Model.ORTModel.Generative.session == nil {
+		return nil, errors.New("generative ASR requires the ORT GenAI session path")
+	}
+	if sampleRate <= 0 {
+		return nil, fmt.Errorf("ASR sample rate must be greater than zero, got %d", sampleRate)
+	}
+	if len(samples) == 0 {
+		return nil, errors.New("at least one ASR waveform is required")
+	}
+	if strings.TrimSpace(prompt) == "" {
+		return nil, errors.New("ASR prompt must not be empty")
+	}
+
+	audios := make([]*ortgenai.Audios, len(samples))
+	conversations := make([]ortgenai.MultimodalConversation, len(samples))
+	for i, waveform := range samples {
+		if len(waveform) == 0 {
+			for _, audio := range audios {
+				if audio != nil {
+					audio.Destroy()
+				}
+			}
+			return nil, fmt.Errorf("waveform %d is empty", i)
+		}
+		buffer, err := encodePCM16WAV(waveform, sampleRate)
+		if err != nil {
+			for _, audio := range audios {
+				if audio != nil {
+					audio.Destroy()
+				}
+			}
+			return nil, fmt.Errorf("encoding waveform %d: %w", i, err)
+		}
+		audio, err := ortgenai.LoadAudiosFromBuffers([][]byte{buffer})
+		if err != nil {
+			for _, loaded := range audios {
+				if loaded != nil {
+					loaded.Destroy()
+				}
+			}
+			return nil, fmt.Errorf("loading waveform %d: %w", i, err)
+		}
+		audios[i] = audio
+		conversations[i] = ortgenai.MultimodalConversation{
+			Messages: []ortgenai.Message{{Role: "user", Content: prompt}},
+			Audios:   audio,
+		}
+	}
+	defer func() {
+		for _, audio := range audios {
+			audio.Destroy()
+		}
+	}()
+
+	generateCtx, cancel := newORTSessionGenerationContext(ctx, p.SessionContext)
+	defer cancel()
+	outputStream, errorStream, err := p.Model.ORTModel.Generative.session.GenerateASR(generateCtx, conversations, nil)
+	if err != nil {
+		return nil, fmt.Errorf("starting generative ASR: %w", err)
+	}
+	results := make([]ASRResult, len(samples))
+	seen := make([]bool, len(samples))
+	var streamErr error
+	for outputStream != nil || errorStream != nil {
+		select {
+		case result, ok := <-outputStream:
+			if !ok {
+				outputStream = nil
+				continue
+			}
+			if result.Sequence < 0 || result.Sequence >= len(results) {
+				streamErr = errors.Join(streamErr, fmt.Errorf("generative ASR returned invalid sequence index %d", result.Sequence))
+				continue
+			}
+			if len(result.Results) != 1 {
+				streamErr = errors.Join(streamErr, fmt.Errorf("generative ASR returned %d results for sequence %d, expected one", len(result.Results), result.Sequence))
+				continue
+			}
+			if seen[result.Sequence] {
+				streamErr = errors.Join(streamErr, fmt.Errorf("generative ASR returned duplicate sequence index %d", result.Sequence))
+				continue
+			}
+			seen[result.Sequence] = true
+			asrResult := result.Results[0]
+			results[result.Sequence] = ASRResult{
+				Text:     asrResult.Text,
+				Words:    copyORTASRTimestamps(asrResult.Words),
+				Segments: copyORTASRTimestamps(asrResult.Segments),
+			}
+		case streamError, ok := <-errorStream:
+			if !ok {
+				errorStream = nil
+				continue
+			}
+			if streamError != nil {
+				streamErr = errors.Join(streamErr, streamError)
+			}
+		}
+	}
+	if streamErr != nil {
+		return nil, streamErr
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if p.SessionContext != nil {
+		if err := p.SessionContext.Err(); err != nil {
+			return nil, err
+		}
+	}
+	for i, wasSeen := range seen {
+		if !wasSeen {
+			return nil, fmt.Errorf("generative ASR produced no result for sequence %d", i)
+		}
+	}
+	return results, nil
+}
+
+func copyORTASRTimestamps(timestamps []ortgenai.ASRTimestamp) []ASRTimestamp {
+	result := make([]ASRTimestamp, len(timestamps))
+	for i, timestamp := range timestamps {
+		result[i] = ASRTimestamp{
+			Text: timestamp.Text, StartFrame: timestamp.StartFrame, StopFrame: timestamp.StopFrame,
+			StartTime: timestamp.StartTime, StopTime: timestamp.StopTime,
+		}
+	}
+	return result
+}
+
+func encodePCM16WAV(samples []float32, sampleRate int) ([]byte, error) {
+	if sampleRate <= 0 || uint64(sampleRate) > uint64(^uint32(0))/2 {
+		return nil, fmt.Errorf("invalid sample rate %d", sampleRate)
+	}
+	if uint64(len(samples)) > (uint64(^uint32(0))-36)/2 {
+		return nil, errors.New("waveform is too large for a WAV buffer")
+	}
+	dataSize := uint32(len(samples) * 2)
+	buffer := make([]byte, 44+int(dataSize))
+	copy(buffer[0:4], "RIFF")
+	binary.LittleEndian.PutUint32(buffer[4:8], 36+dataSize)
+	copy(buffer[8:12], "WAVE")
+	copy(buffer[12:16], "fmt ")
+	binary.LittleEndian.PutUint32(buffer[16:20], 16)
+	binary.LittleEndian.PutUint16(buffer[20:22], 1)
+	binary.LittleEndian.PutUint16(buffer[22:24], 1)
+	binary.LittleEndian.PutUint32(buffer[24:28], uint32(sampleRate))
+	binary.LittleEndian.PutUint32(buffer[28:32], uint32(sampleRate)*2)
+	binary.LittleEndian.PutUint16(buffer[32:34], 2)
+	binary.LittleEndian.PutUint16(buffer[34:36], 16)
+	copy(buffer[36:40], "data")
+	binary.LittleEndian.PutUint32(buffer[40:44], dataSize)
+	for i, sample := range samples {
+		if math.IsNaN(float64(sample)) || math.IsInf(float64(sample), 0) {
+			sample = 0
+		} else if sample > 1 {
+			sample = 1
+		} else if sample < -1 {
+			sample = -1
+		}
+		var value int16
+		if sample <= -1 {
+			value = -32768
+		} else {
+			value = int16(sample * 32767)
+		}
+		binary.LittleEndian.PutUint16(buffer[44+i*2:46+i*2], uint16(value))
+	}
+	return buffer, nil
 }
 
 func forwardORTSessionDelta(ctx context.Context, stream chan<- SequenceDelta, delta SequenceDelta) bool {

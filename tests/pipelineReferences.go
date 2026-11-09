@@ -44,7 +44,7 @@ func loadFeatureReference(t *testing.T) featureReference {
 	return reference
 }
 
-func checkHiddenStateReference(t *testing.T, raw *pipelines.RawFeatureOutput, reference hiddenStateReference, tolerance float64) {
+func checkHiddenStateReference(t *testing.T, raw *pipelines.RawFeatureOutput, reference hiddenStateReference, tolerance float64, attentionMasks [][]uint32) {
 	t.Helper()
 	require.NotNil(t, raw)
 	require.Equal(t, reference.Shape, []int64(raw.Dimensions))
@@ -57,6 +57,9 @@ func checkHiddenStateReference(t *testing.T, raw *pipelines.RawFeatureOutput, re
 		require.Less(t, b, len(raw.HiddenStates))
 		require.Less(t, p, len(raw.HiddenStates[b]))
 		require.Less(t, c, len(raw.HiddenStates[b][p]))
+		if len(attentionMasks) > b && (len(attentionMasks[b]) <= p || attentionMasks[b][p] == 0) {
+			continue
+		}
 		value := float64(raw.HiddenStates[b][p][c])
 		require.False(t, math.IsNaN(value) || math.IsInf(value, 0))
 		require.InDelta(t, sample.Value, value, tolerance, "Python ONNX hidden state at %v", sample.Index)

@@ -67,7 +67,17 @@ func RawFeatureExtractionPipeline(t *testing.T, session *hugot.Session) {
 	inputs := reference.Text.Inputs
 	raw, err := pipeline.RunRaw(t.Context(), inputs)
 	CheckT(t, err)
-	checkHiddenStateReference(t, raw, reference.Text.hiddenStateReference, reference.Tolerance)
+	batch := backends.NewBatch(len(inputs))
+	defer func() { CheckT(t, batch.Destroy()) }()
+	backends.TokenizeInputs(batch, pipeline.Model.Tokenizer, inputs)
+	if len(batch.Input) != 2 {
+		t.Fatal("raw text tokenizer batch mismatch")
+	}
+	attentionMasks := make([][]uint32, len(batch.Input))
+	for i := range batch.Input {
+		attentionMasks[i] = batch.Input[i].AttentionMask
+	}
+	checkHiddenStateReference(t, raw, reference.Text.hiddenStateReference, reference.Tolerance, attentionMasks)
 	if raw == nil || len(raw.Dimensions) != 3 || raw.Dimensions[0] != 2 || raw.Dimensions[2] != 384 || len(raw.HiddenStates) != 2 {
 		t.Fatal("raw text features must retain batch, token and hidden dimensions")
 	}
@@ -75,12 +85,6 @@ func RawFeatureExtractionPipeline(t *testing.T, session *hugot.Session) {
 	CheckT(t, err)
 	if pooled == nil || len(pooled.Embeddings) != 2 {
 		t.Fatal("pooled text feature batch mismatch")
-	}
-	batch := backends.NewBatch(len(inputs))
-	defer func() { CheckT(t, batch.Destroy()) }()
-	backends.TokenizeInputs(batch, pipeline.Model.Tokenizer, inputs)
-	if len(batch.Input) != 2 {
-		t.Fatal("raw text tokenizer batch mismatch")
 	}
 	for i, hidden := range raw.HiddenStates {
 		if int64(len(hidden)) != raw.Dimensions[1] || len(hidden) < len(batch.Input[i].TokenIDs) {
@@ -1574,7 +1578,7 @@ func ImageFeatureExtractionPipeline(t *testing.T, session *hugot.Session) {
 	}
 	referenceRaw, err := pipeline.RunRawWithImages(t.Context(), []image.Image{img})
 	CheckT(t, err)
-	checkHiddenStateReference(t, referenceRaw, reference.Image.hiddenStateReference, reference.Tolerance)
+	checkHiddenStateReference(t, referenceRaw, reference.Image.hiddenStateReference, reference.Tolerance, nil)
 	config.Name = "imageModelPooler"
 	config.Options = append(config.Options, pipelines.WithImageModelPooler())
 	pooler, err := session.NewPipeline(config)

@@ -12,11 +12,16 @@ import (
 	"github.com/knights-analytics/hugot/util/safeconv"
 )
 
-// AutomaticSpeechRecognitionOutput contains one greedy CTC transcription per waveform.
+// AutomaticSpeechRecognitionOutput contains one transcription per waveform.
 type AutomaticSpeechRecognitionOutput struct {
-	Text  []string
-	Words [][]string
+	Text              []string
+	Words             [][]string
+	WordTimestamps    [][]ASRTimestamp
+	SegmentTimestamps [][]ASRTimestamp
 }
+
+// ASRTimestamp identifies the text and time range of a recognized word or segment.
+type ASRTimestamp = backends.ASRTimestamp
 
 func (o *AutomaticSpeechRecognitionOutput) GetOutput() []any {
 	result := make([]any, len(o.Text))
@@ -26,19 +31,26 @@ func (o *AutomaticSpeechRecognitionOutput) GetOutput() []any {
 	return result
 }
 
-// AutomaticSpeechRecognitionPipeline decodes frame-level CTC logits.
+// AutomaticSpeechRecognitionPipeline recognizes speech with CTC or a GenAI model.
 type AutomaticSpeechRecognitionPipeline struct {
 	*backends.BasePipeline
 	IDLabelMap map[int]string
 	BlankID    int
 	Input      backends.InputOutputInfo
 	SampleRate int
+	Prompt     string
 }
 
-func (p *AutomaticSpeechRecognitionPipeline) IsGenerative() bool { return false }
+func (p *AutomaticSpeechRecognitionPipeline) IsGenerative() bool {
+	return p != nil && p.Model != nil && p.Model.IsGenerative
+}
+
+// SupportsGenerativeModelLoading allows callers to select GenAI explicitly
+// while keeping ONNX/CTC as the default loading mode for this pipeline.
+func (*AutomaticSpeechRecognitionPipeline) SupportsGenerativeModelLoading() bool { return true }
 
 func NewAutomaticSpeechRecognitionPipeline(ctx context.Context, config backends.PipelineConfig[*AutomaticSpeechRecognitionPipeline], model *backends.Model) (*AutomaticSpeechRecognitionPipeline, error) {
-	pipeline := &AutomaticSpeechRecognitionPipeline{BasePipeline: backends.NewBasePipeline(ctx, config, model), IDLabelMap: model.IDLabelMap, BlankID: 0, SampleRate: defaultAudioSampleRate}
+	pipeline := &AutomaticSpeechRecognitionPipeline{BasePipeline: backends.NewBasePipeline(ctx, config, model), IDLabelMap: model.IDLabelMap, BlankID: 0, SampleRate: defaultAudioSampleRate, Prompt: "Transcribe the audio."}
 	for _, option := range config.Options {
 		if err := option(pipeline); err != nil {
 			return nil, err
@@ -48,6 +60,17 @@ func NewAutomaticSpeechRecognitionPipeline(ctx context.Context, config backends.
 		return nil, err
 	}
 	return pipeline, nil
+}
+
+// WithASRPrompt sets the model-specific user prompt used for generative ASR.
+func WithASRPrompt(prompt string) backends.PipelineOption[*AutomaticSpeechRecognitionPipeline] {
+	return func(pipeline *AutomaticSpeechRecognitionPipeline) error {
+		if strings.TrimSpace(prompt) == "" {
+			return errors.New("ASR prompt must not be empty")
+		}
+		pipeline.Prompt = prompt
+		return nil
+	}
 }
 
 // WithASRSampleRate sets the sample rate expected by the model.
@@ -72,6 +95,15 @@ func WithASRBlankID(id int) backends.PipelineOption[*AutomaticSpeechRecognitionP
 }
 
 func (p *AutomaticSpeechRecognitionPipeline) Validate() error {
+	if p.Model != nil && p.Model.IsGenerative {
+		if err := p.Model.ValidateMultimodalSession(); err != nil {
+			return err
+		}
+		if strings.TrimSpace(p.Prompt) == "" {
+			return errors.New("ASR prompt must not be empty")
+		}
+		return nil
+	}
 	if len(p.Model.InputsMeta) == 0 {
 		return errors.New("automatic speech recognition model has no inputs")
 	}
@@ -101,6 +133,9 @@ func (p *AutomaticSpeechRecognitionPipeline) GetMetadata() backends.PipelineMeta
 }
 
 func (p *AutomaticSpeechRecognitionPipeline) GetStatistics() backends.PipelineStatistics {
+	if p.Model != nil && p.Model.ORTModel != nil && p.Model.ORTModel.Generative != nil {
+		return p.Model.ORTModel.Generative.Statistics()
+	}
 	s := backends.PipelineStatistics{}
 	s.ComputeOnnxStatistics(p.ONNXTimings)
 	return s
@@ -199,5 +234,27 @@ func (p *AutomaticSpeechRecognitionPipeline) RunWaveforms(ctx context.Context, i
 
 // RunWithAudio executes mono samples already sampled at the pipeline's configured SampleRate.
 func (p *AutomaticSpeechRecognitionPipeline) RunWithAudio(ctx context.Context, inputs [][]float32) (*AutomaticSpeechRecognitionOutput, error) {
+	if p.Model != nil && p.Model.IsGenerative {
+		results, err := backends.RunGenerativeASR(ctx, p.BasePipeline, inputs, p.SampleRate, p.Prompt)
+		if err != nil {
+			return nil, err
+		}
+		output := &AutomaticSpeechRecognitionOutput{
+			Text:              make([]string, len(results)),
+			Words:             make([][]string, len(results)),
+			WordTimestamps:    make([][]ASRTimestamp, len(results)),
+			SegmentTimestamps: make([][]ASRTimestamp, len(results)),
+		}
+		for i, result := range results {
+			output.Text[i] = result.Text
+			output.WordTimestamps[i] = result.Words
+			output.SegmentTimestamps[i] = result.Segments
+			output.Words[i] = make([]string, len(result.Words))
+			for j, word := range result.Words {
+				output.Words[i][j] = word.Text
+			}
+		}
+		return output, nil
+	}
 	return backends.RunPipeline(ctx, len(inputs), func(batch *backends.PipelineBatch) error { return p.preprocess(batch, inputs) }, p.forward, p.postprocess)
 }

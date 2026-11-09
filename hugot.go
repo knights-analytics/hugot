@@ -348,7 +348,7 @@ func resolvePipelineModelLoading(pipeline backends.Pipeline, loading backends.Mo
 			}
 		}
 	case backends.ModelLoadingGenAI:
-		if !pipeline.IsGenerative() {
+		if !pipelineSupportsGenerativeModelLoading(pipeline) {
 			return "", fmt.Errorf("pipeline %T does not support GenAI loading", pipeline)
 		}
 		if filename != "" {
@@ -358,6 +358,14 @@ func resolvePipelineModelLoading(pipeline backends.Pipeline, loading backends.Mo
 		return "", fmt.Errorf("unsupported model loading mode %q", loading)
 	}
 	return loading, nil
+}
+
+func pipelineSupportsGenerativeModelLoading(pipeline backends.Pipeline) bool {
+	if pipeline.IsGenerative() {
+		return true
+	}
+	support, ok := pipeline.(interface{ SupportsGenerativeModelLoading() bool })
+	return ok && support.SupportsGenerativeModelLoading()
 }
 
 func pipelineModelCacheID(path, filename string, loading backends.ModelLoading) string {

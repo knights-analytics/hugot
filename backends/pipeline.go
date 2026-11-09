@@ -277,6 +277,22 @@ func RunGenerativeSessionOnBatch(ctx context.Context, batch *PipelineBatch, p *B
 	return p.Backend.RunGenerativeSessionOnBatch(ctx, batch, p, maxLength, stopSequences, temperature, topP, seed, tools, guidance)
 }
 
+// RunGenerativeASR transcribes audio through a GenAI session and returns copied
+// text and timestamp results. The backend owns any native audio and generator
+// resources for the duration of the call.
+func RunGenerativeASR(ctx context.Context, p *BasePipeline, samples [][]float32, sampleRate int, prompt string) ([]ASRResult, error) {
+	if p.Backend == nil {
+		return nil, fmt.Errorf("pipeline backend is not configured")
+	}
+	backend, ok := p.Backend.(interface {
+		RunGenerativeASR(context.Context, *BasePipeline, [][]float32, int, string) ([]ASRResult, error)
+	})
+	if !ok {
+		return nil, fmt.Errorf("pipeline backend does not support generative ASR")
+	}
+	return backend.RunGenerativeASR(ctx, p, samples, sampleRate, prompt)
+}
+
 func CreateMessages(batch *PipelineBatch, p *BasePipeline, inputs any, systemPrompt string) error {
 	if p.Backend == nil {
 		return fmt.Errorf("pipeline backend is not configured")
