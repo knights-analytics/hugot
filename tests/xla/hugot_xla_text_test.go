@@ -130,3 +130,20 @@ func TestTextGenerationPipelineXLACuda(t *testing.T) {
 func TestTextGenerationPipelineValidationXLA(t *testing.T) {
 	runXLAPipelineValidation(t, testutil.TextGenerationPipelineValidation)
 }
+
+// Decision models (Strands export)
+
+func TestDecisionPipelineXLA(t *testing.T) {
+	t.Skip("Skipping test: decision models currently require the ORT backend (no XLA support yet)")
+	runXLAPipeline(t, testutil.DecisionPipeline)
+}
+
+func TestDecisionPipelineXLACuda(t *testing.T) {
+	t.Skip("Skipping test: decision models currently require the ORT backend (no XLA support yet)")
+	runXLAPipelineCuda(t, testutil.DecisionPipeline)
+}
+
+func TestDecisionPipelineValidationXLA(t *testing.T) {
+	t.Skip("Skipping test: decision models currently require the ORT backend (no XLA support yet)")
+	runXLAPipelineValidation(t, testutil.DecisionPipelineValidation)
+}

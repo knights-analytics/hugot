@@ -157,6 +157,7 @@ func init() {
 	registerPipeline(pipelines.NewVideoClassificationPipeline)
 	registerPipeline(pipelines.NewKeypointMatchingPipeline)
 	registerPipeline(pipelines.NewAnyToAnyPipeline)
+	registerPipeline(pipelines.NewDecisionPipeline)
 }
 
 type (
@@ -208,6 +209,8 @@ type (
 	GroundedObjectDetectionOption     = backends.PipelineOption[*pipelines.GroundedObjectDetectionPipeline]
 	MaskGenerationConfig              = backends.PipelineConfig[*pipelines.MaskGenerationPipeline]
 	MaskGenerationOption              = backends.PipelineOption[*pipelines.MaskGenerationPipeline]
+	DecisionConfig                    = backends.PipelineConfig[*pipelines.DecisionPipeline]
+	DecisionOption                    = backends.PipelineOption[*pipelines.DecisionPipeline]
 	ZeroShotAudioClassificationConfig = backends.PipelineConfig[*pipelines.ZeroShotAudioClassificationPipeline]
 	ZeroShotAudioClassificationOption = backends.PipelineOption[*pipelines.ZeroShotAudioClassificationPipeline]
 	DocumentQuestionAnsweringConfig   = backends.PipelineConfig[*pipelines.DocumentQuestionAnsweringPipeline]

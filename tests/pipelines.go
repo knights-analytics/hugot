@@ -29,6 +29,7 @@ const (
 	ModelsFolder            = "../../models/"
 	TestCasesFolder         = "../../testcases/"
 	Phi4MultimodalModelPath = ModelsFolder + "microsoft_Phi-4-multimodal-instruct-onnx/gpu/gpu-int4-rtn-block-32"
+	DecisionModelPath       = ModelsFolder + "KnightsAnalytics_strands-decider-onnx/int4"
 )
 
 func requirePipelineArtifacts(t *testing.T, modelPath string, files ...string) {
@@ -3211,6 +3212,14 @@ loop:
 
 // Utilities
 
+// skipLargeModelPipeline skips tests of models too large for CI, and of ORT-only
+// pipelines on the Go and XLA backends (including ORT with GoMLX), as
+// skipGenerativePipeline does for the generative models.
+func skipLargeModelPipeline(t *testing.T) {
+	t.Helper()
+	skipGenerativePipeline(t)
+}
+
 func skipGenerativePipeline(t *testing.T) {
 	t.Helper()
 	if os.Getenv("CI") != "" || strings.Contains(t.Name(), "Go") || strings.Contains(t.Name(), "XLA") {
@@ -3323,4 +3332,110 @@ func CheckToolCalls(t *testing.T, output string) {
 			}
 		}
 	}
+}
+
+// DecisionPipeline runs the int4 strands-decider export end to end. Expected values come
+// from ONNX Runtime in Python on the same graph, one unpadded row per question. They stay
+// within 0.03 of the fp32 export, except the 2,179-token state (0.67 in fp32).
+func DecisionPipeline(t *testing.T, session *hugot.Session) {
+	t.Helper()
+	pipeline := newDecisionTestPipeline(t, session, "testDecision")
+
+	ticket, err := pipelines.RenderDecisionState(struct {
+		Ticket  int    `json:"ticket"`
+		Subject string `json:"subject"`
+		Body    string `json:"body"`
+	}{4411, "Invoice shows the wrong VAT number", "Our invoice for October lists last year's VAT ID. Please reissue it."})
+	CheckT(t, err)
+	filler := make([]string, 110)
+	for i := range filler {
+		filler[i] = fmt.Sprintf("Line %d: the customer pasted another log entry, status OK, no action needed.", i)
+	}
+	urgency := pipelines.DecisionQuestion{Type: pipelines.DecisionNoul, Instructions: "Does this convey urgency?"}
+	inputs := []pipelines.DecisionInput{
+		{State: "Help! My payouts have been failing for 3 days! ", Questions: map[string]pipelines.DecisionQuestion{
+			"team": {Type: pipelines.DecisionChoice, Instructions: "Which team should handle this?",
+				Criteria: []pipelines.DecisionCriterion{{Name: "billing"}, {Name: "sales"}, {Name: "retail"}}},
+			"urgent": urgency,
+			"frustration": {Type: pipelines.DecisionScore, Instructions: "How frustrated is the writer?",
+				Criteria: []pipelines.DecisionCriterion{{Description: "calm"}, {Description: "frustrated"}, {Description: "depressed"}}},
+		}},
+		{State: ticket, Questions: map[string]pipelines.DecisionQuestion{
+			"queue": {Type: pipelines.DecisionChoice, Instructions: "Which queue owns this ticket?", Criteria: []pipelines.DecisionCriterion{
+				{Name: "billing", Description: "invoices, payments, refunds"},
+				{Name: "technical", Description: "bugs, outages, integrations"},
+				{Name: "account", Description: "logins, permissions, profile data"},
+				{Name: "other"},
+			}},
+		}},
+		{State: "URGENT: our production database is down and every checkout fails. " + strings.Join(filler, " "),
+			Questions: map[string]pipelines.DecisionQuestion{"urgent": urgency}},
+	}
+	result, err := pipeline.RunPipeline(t.Context(), inputs)
+	CheckT(t, err)
+	require.Len(t, result.Results, 3)
+
+	const tol = 2e-3 // padded batching against single-row reference runs
+	a := result.Results[0].Answers
+	assert.Equal(t, "billing", a["team"].Choice)
+	assert.InDelta(t, 0.9163, a["team"].Probabilities["billing"], tol)
+	assert.InDelta(t, 0.8744, a["team"].Confidence, tol)
+	assert.InDelta(t, 0.8619, a["urgent"].Noul, tol)
+	assert.InDelta(t, 0.9879, a["frustration"].Score, tol)
+	assert.InDelta(t, 0.6151, a["frustration"].Probabilities["1"], tol)
+	assert.InDelta(t, 0.5554, a["frustration"].Confidence, tol)
+	q := result.Results[1].Answers["queue"]
+	assert.Equal(t, "billing", q.Choice)
+	assert.InDelta(t, 0.9803, q.Probabilities["billing"], tol)
+	assert.InDelta(t, 0.4911, result.Results[2].Answers["urgent"].Noul, tol)
+
+	// Run asks the configured questions of plain-text states.
+	CheckT(t, pipelines.WithDecisionQuestions(map[string]pipelines.DecisionQuestion{"urgent": urgency})(pipeline))
+	out, err := pipeline.Run(t.Context(), []string{"Help! My payouts have been failing for 3 days! "})
+	CheckT(t, err)
+	got := out.GetOutput()[0].(pipelines.DecisionResult)
+	assert.InDelta(t, 0.8619, got.Answers["urgent"].Noul, tol)
+}
+
+// DecisionPipelineValidation checks that a loaded decision pipeline validates, and that
+// bad batch limits, bad questions and a Run without questions are rejected.
+func DecisionPipelineValidation(t *testing.T, session *hugot.Session) {
+	t.Helper()
+	pipeline := newDecisionTestPipeline(t, session, "testDecisionValidation")
+	require.NoError(t, pipeline.Validate())
+
+	_, err := pipeline.Run(t.Context(), []string{"no questions configured"})
+	require.Error(t, err)
+
+	pipeline.MaxBatchRows = 0
+	require.Error(t, pipeline.Validate())
+	pipeline.MaxBatchRows = 8
+
+	pipeline.Questions = map[string]pipelines.DecisionQuestion{
+		"one option": {Type: pipelines.DecisionChoice, Instructions: "?", Criteria: []pipelines.DecisionCriterion{{Name: "only"}}},
+	}
+	require.Error(t, pipeline.Validate())
+	pipeline.Questions = nil
+
+	_, err = pipeline.RunPipeline(t.Context(), []pipelines.DecisionInput{{State: "a state with no questions"}})
+	require.Error(t, err)
+	_, err = pipeline.RunPipeline(t.Context(), []pipelines.DecisionInput{{State: "x", Questions: map[string]pipelines.DecisionQuestion{
+		"bad": {Type: "maybe", Instructions: "?"},
+	}}})
+	require.Error(t, err)
+}
+
+// newDecisionTestPipeline loads the strands-decider export. Like the generative models it
+// is too large for CI, so the tests run locally only, and only on ORT.
+func newDecisionTestPipeline(t *testing.T, session *hugot.Session, name string) *pipelines.DecisionPipeline {
+	t.Helper()
+	skipLargeModelPipeline(t)
+	requirePipelineArtifacts(t, DecisionModelPath, "model.onnx", "model.onnx.data", "tokenizer.json", "strands_decider_config.json")
+	pipeline, err := session.NewPipeline(hugot.DecisionConfig{
+		ModelPath:    DecisionModelPath,
+		OnnxFilename: "model.onnx",
+		Name:         name,
+	})
+	CheckT(t, err)
+	return pipeline
 }
