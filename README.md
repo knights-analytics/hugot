@@ -46,6 +46,7 @@ Currently, we have implementations for the following transformer pipelines:
 - [automaticSpeechRecognition](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.AutomaticSpeechRecognitionPipeline)
 - [backgroundRemoval](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.BackgroundRemovalPipeline)
 - [crossEncoder](https://huggingface.co/cross-encoder)
+- [decisionPipeline](https://github.com/strands-labs/strands-decider)
 - [depthEstimation](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.DepthEstimationPipeline)
 - [documentQuestionAnswering](https://huggingface.co/docs/transformers/en/main_classes/pipelines#transformers.DocumentQuestionAnsweringPipeline)
 - [addressParse](https://github.com/GRAAL-Research/deepparse)

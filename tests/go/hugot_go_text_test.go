@@ -102,3 +102,15 @@ func TestTextGenerationPipelineGo(t *testing.T) {
 func TestTextGenerationPipelineValidationGo(t *testing.T) {
 	runGoPipelineValidation(t, testutil.TextGenerationPipelineValidation)
 }
+
+// Decision models (Strands export)
+
+func TestDecisionPipelineGo(t *testing.T) {
+	t.Skip("Skipping test: decision models currently require the ORT backend (no Go backend support yet)")
+	runGoPipeline(t, testutil.DecisionPipeline)
+}
+
+func TestDecisionPipelineValidationGo(t *testing.T) {
+	t.Skip("Skipping test: decision models currently require the ORT backend (no Go backend support yet)")
+	runGoPipelineValidation(t, testutil.DecisionPipelineValidation)
+}

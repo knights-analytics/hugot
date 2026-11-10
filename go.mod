@@ -3,14 +3,14 @@ module github.com/knights-analytics/hugot
 go 1.27.0
 
 require (
-	github.com/gomlx/compute v0.1.27
-	github.com/gomlx/compute-onnx v0.1.26
-	github.com/gomlx/go-huggingface v0.4.29
-	github.com/gomlx/go-xla v0.4.27
-	github.com/gomlx/gomlx v0.28.31
-	github.com/gomlx/onnx-gomlx v0.5.28
+	github.com/gomlx/compute v0.1.28
+	github.com/gomlx/compute-onnx v0.1.28
+	github.com/gomlx/go-huggingface v0.4.32
+	github.com/gomlx/go-xla v0.4.28
+	github.com/gomlx/gomlx v0.28.34
+	github.com/gomlx/onnx-gomlx v0.5.31
 	github.com/knights-analytics/ortgenai v0.3.5
-	github.com/microsoft/onnxruntime/go v0.0.0-20261110111951-53934832d3f4
+	github.com/microsoft/onnxruntime/go v0.0.0-20261111070922-6cc3c09506ec
 	github.com/stretchr/testify v1.12.1
 	golang.org/x/image v0.48.0
 	golang.org/x/sync v0.25.0

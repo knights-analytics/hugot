@@ -4,10 +4,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
-## [Unreleased]
+## [0.8.6]
 
 ### Added
 
+- Added DecisionPipeline for decision models (e.g. Strands decider).
 - Added ORT GenAI memory loading for custom filesystem adapters.
 - Added generative model support to the automatic speech recognition pipeline.
 - String tensors on the ORT backend.

@@ -80,6 +80,13 @@ var models = []downloadModel{
 	{name: "Xenova/dpt-large", onnxFilePath: "onnx/model_q4.onnx"},
 	{name: "KnightsAnalytics/iris-decision-tree", onnxFilePath: "model.onnx"},
 	{name: "KnightsAnalytics/qwen3-4B-int4", onnxFilePath: "model.onnx", externalDataPath: "model.onnx.data"},
+	{
+		name:            "KnightsAnalytics/strands-decider-onnx",
+		onnxFilePath:    "int4/model.onnx",
+		additionalFiles: []string{"int4/strands_decider_config.json"},
+		preservePaths:   true,
+		revision:        "a4289cb7578e748bf1c2bdd7b4f5f6c9290da973",
+	},
 	{name: "Xenova/wav2vec2-large-xlsr-53-gender-recognition-librispeech", onnxFilePath: "onnx/model.onnx"},
 	{name: "Xenova/larger_clap_music_and_speech", onnxFilePath: "onnx/model_quantized.onnx"},
 	{name: "Xenova/wav2vec2-base-960h", onnxFilePath: "onnx/model_q4.onnx"},
@@ -185,8 +192,8 @@ func main() {
 		if *selected != "" && model.name != *selected {
 			continue
 		}
-		if os.Getenv("CI") != "" && model.name == "KnightsAnalytics/qwen3-4B-int4" {
-			continue // skipping this model for cicd
+		if os.Getenv("CI") != "" && (model.name == "KnightsAnalytics/qwen3-4B-int4" || model.name == "KnightsAnalytics/strands-decider-onnx") {
+			continue // skipping these large models for cicd
 		}
 		exists, err := fileutil.FileExists(ctx, "./models/"+strings.ReplaceAll(model.name, "/", "_"))
 		if err != nil {

@@ -173,3 +173,22 @@ func TestTextGenerationPipelineORTCuda(t *testing.T) {
 func TestTextGenerationPipelineValidationORT(t *testing.T) {
 	runORTPipelineValidation(t, testutil.TextGenerationPipelineValidation)
 }
+
+// Decision models (Strands export)
+
+func TestDecisionPipelineORT(t *testing.T) {
+	runORTPipeline(t, testutil.DecisionPipeline)
+}
+
+func TestDecisionPipelineORTGoMLX(t *testing.T) {
+	t.Skip("Skipping test: decision models currently require the ORT backend (no GoMLX support yet)")
+	runORTPipelineGoMLX(t, testutil.DecisionPipeline)
+}
+
+func TestDecisionPipelineORTCuda(t *testing.T) {
+	runORTPipelineCuda(t, testutil.DecisionPipeline)
+}
+
+func TestDecisionPipelineValidationORT(t *testing.T) {
+	runORTPipelineValidation(t, testutil.DecisionPipelineValidation)
+}
