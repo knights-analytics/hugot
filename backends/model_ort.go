@@ -347,6 +347,7 @@ func applyGenAIAdapters(session *ortgenai.Session, opts *options.OrtOptions) err
 }
 
 func runGenerativeORTSessionOnBatch(ctx context.Context, batch *PipelineBatch, p *BasePipeline, maxLength int, stopSequences []string, temperature *float64, topP *float64, seed *int, tools []string, guidance *Guidance) (chan SequenceDelta, chan error, error) {
+	enableThinking := p.EnableThinking
 	if p.SessionContext == nil {
 		return nil, nil, errors.New("no session context")
 	}
@@ -374,6 +375,9 @@ func runGenerativeORTSessionOnBatch(ctx context.Context, batch *PipelineBatch, p
 	if engine != nil {
 		if batch.Images != nil || batch.Audios != nil {
 			return nil, nil, errors.New("WithGenerativeEngine supports text-only generation; use session generation for image or audio inputs")
+		}
+		if enableThinking != nil {
+			return nil, nil, errors.New("WithGenerativeEngine does not support enableThinking; use session generation")
 		}
 		return engine.generate(ctx, p.SessionContext, batch, inputs, maxLength, stopSequences, temperature, topP, seed, tools, guidance)
 	}
@@ -420,13 +424,13 @@ func runGenerativeORTSessionOnBatch(ctx context.Context, batch *PipelineBatch, p
 		// it honors.
 		useMTP := p.Model.ORTModel.Options != nil && p.Model.ORTModel.Options.UseMTP != nil && *p.Model.ORTModel.Options.UseMTP
 		if useMTP {
-			ortTokenStream, ortErrorStream, err = session.GenerateMTP(generateCtx, inputs, tools, &ortgenai.GenerationOptions{MaxLength: maxLength})
+			ortTokenStream, ortErrorStream, err = session.GenerateMTP(generateCtx, inputs, tools, &ortgenai.GenerationOptions{MaxLength: maxLength, EnableThinking: enableThinking})
 			if err != nil {
 				cancel()
 				return nil, nil, fmt.Errorf("error during MTP generation start: %w", err)
 			}
 		} else {
-			ortTokenStream, ortErrorStream, err = session.Generate(generateCtx, inputs, tools, &ortgenai.GenerationOptions{MaxLength: maxLength, Temperature: temperature, TopP: topP, Seed: seed, Guidance: ortGuidance})
+			ortTokenStream, ortErrorStream, err = session.Generate(generateCtx, inputs, tools, &ortgenai.GenerationOptions{MaxLength: maxLength, Temperature: temperature, TopP: topP, Seed: seed, Guidance: ortGuidance, EnableThinking: enableThinking})
 			if err != nil {
 				cancel()
 				return nil, nil, fmt.Errorf("error during generation start: %w", err)
@@ -457,7 +461,7 @@ func runGenerativeORTSessionOnBatch(ctx context.Context, batch *PipelineBatch, p
 				return nil
 			}
 		}
-		ortTokenStream, ortErrorStream, err = session.GenerateMultimodal(generateCtx, convs, tools, &ortgenai.GenerationOptions{MaxLength: maxLength, Temperature: temperature, TopP: topP, Seed: seed, Guidance: ortGuidance})
+		ortTokenStream, ortErrorStream, err = session.GenerateMultimodal(generateCtx, convs, tools, &ortgenai.GenerationOptions{MaxLength: maxLength, Temperature: temperature, TopP: topP, Seed: seed, Guidance: ortGuidance, EnableThinking: enableThinking})
 		if err != nil {
 			cancel()
 			return nil, nil, fmt.Errorf("error during multimodal generation start: %w", err)

@@ -23,6 +23,8 @@ type BasePipeline struct {
 	TokenizerTimings *timings
 	PipelineName     string
 	Backend          Backend
+	// EnableThinking selects the chat template behavior for generative pipelines.
+	EnableThinking *bool
 }
 
 type InputOutputInfo struct {
