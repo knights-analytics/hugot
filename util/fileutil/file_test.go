@@ -125,3 +125,68 @@ func TestPathJoinSafeHandlesEmptyAndObjectStoragePaths(t *testing.T) {
 		})
 	}
 }
+
+func TestIsLocalPath(t *testing.T) {
+	t.Parallel()
+
+	t.Run("default OS filesystem", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := WithFileSystem(context.Background(), nil)
+		isLocal, err := IsLocalPath(ctx, filepath.Join(t.TempDir(), "model"))
+		if err != nil {
+			t.Fatalf("IsLocalPath() error = %v", err)
+		}
+		if !isLocal {
+			t.Fatal("IsLocalPath() = false, want true")
+		}
+	})
+
+	t.Run("custom filesystem without local path capability", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := WithFileSystem(context.Background(), &recordingFileSystem{})
+		isLocal, err := IsLocalPath(ctx, "model")
+		if err != nil {
+			t.Fatalf("IsLocalPath() error = %v", err)
+		}
+		if isLocal {
+			t.Fatal("IsLocalPath() = true, want false")
+		}
+	})
+
+	t.Run("custom filesystem reports local path", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := WithFileSystem(context.Background(), localPathTestFileSystem{local: true})
+		isLocal, err := IsLocalPath(ctx, "model")
+		if err != nil {
+			t.Fatalf("IsLocalPath() error = %v", err)
+		}
+		if !isLocal {
+			t.Fatal("IsLocalPath() = false, want true")
+		}
+	})
+
+	t.Run("custom filesystem reports non-local path", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := WithFileSystem(context.Background(), localPathTestFileSystem{local: false})
+		isLocal, err := IsLocalPath(ctx, "s3://bucket/model")
+		if err != nil {
+			t.Fatalf("IsLocalPath() error = %v", err)
+		}
+		if isLocal {
+			t.Fatal("IsLocalPath() = true, want false")
+		}
+	})
+}
+
+type localPathTestFileSystem struct {
+	FileSystem
+	local bool
+}
+
+func (f localPathTestFileSystem) IsLocalPath(context.Context, string) (bool, error) {
+	return f.local, nil
+}

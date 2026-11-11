@@ -182,7 +182,11 @@ func createORTGenerativeSession(ctx context.Context, model *Model, options *opti
 			return err
 		}
 	}
-	if !fileutil.IsDefaultOSFileSystem(ctx) {
+	isLocalPath, err := fileutil.IsLocalPath(ctx, model.Path)
+	if err != nil {
+		return fmt.Errorf("checking whether generative model path %q is local: %w", model.Path, err)
+	}
+	if !isLocalPath {
 		return createORTGenerativeMemorySession(ctx, model, options)
 	}
 	if options.ORTOptions.UseEngine {
@@ -200,7 +204,7 @@ func createORTGenerativeSession(ctx context.Context, model *Model, options *opti
 		return nil
 	}
 
-	err := initialiseORTGenAI(ctx, options)
+	err = initialiseORTGenAI(ctx, options)
 	if err != nil {
 		return err
 	}

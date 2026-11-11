@@ -28,6 +28,15 @@ type FileSystem interface {
 	FileStats(ctx context.Context, filename string) (os.FileInfo, error)
 	NewFileWriter(ctx context.Context, filename string, contentType string) (io.WriteCloser, error)
 }
+
+// LocalPathFileSystem is an optional capability for adapters whose paths may
+// also be directly accessed by native APIs that require an operating system
+// path. Returning true promises that filename refers to the same local files
+// the adapter exposes through its other methods.
+type LocalPathFileSystem interface {
+	IsLocalPath(ctx context.Context, filename string) (bool, error)
+}
+
 type fileSystemContextKey struct{}
 
 // WithFileSystem binds a filesystem to a context. This is the preferred
@@ -59,6 +68,27 @@ func IsDefaultOSFileSystem(ctx context.Context) bool {
 	}
 	_, ok := fs.(osFileSystem)
 	return ok
+}
+
+// IsLocalPath reports whether filename can be passed directly to native APIs
+// that require a local operating system path. Custom filesystems must opt in by
+// implementing LocalPathFileSystem; other adapters are treated as non-local.
+func IsLocalPath(ctx context.Context, filename string) (bool, error) {
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
+	fs, err := fileSystemFor(ctx)
+	if err != nil {
+		return false, err
+	}
+	if _, ok := fs.(osFileSystem); ok {
+		return true, nil
+	}
+	localFS, ok := fs.(LocalPathFileSystem)
+	if !ok {
+		return false, nil
+	}
+	return localFS.IsLocalPath(ctx, filename)
 }
 
 func ReadFileBytes(ctx context.Context, filename string) ([]byte, error) {
