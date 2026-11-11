@@ -61,12 +61,10 @@ func TestTokenClassificationPipelineValidationXLA(t *testing.T) {
 // AddressParse
 
 func TestAddressParsePipelineXLA(t *testing.T) {
-	t.Skip("Skipping test because the GoMLX ONNX importer does not implement the decoder's LogSoftmax op")
 	runXLAPipeline(t, testutil.AddressParsePipeline)
 }
 
 func TestAddressParseAttentionPipelineXLACuda(t *testing.T) {
-	t.Skip("Skipping test because the GoMLX ONNX importer does not implement the decoder's LogSoftmax op")
 	runXLAPipelineCuda(t, testutil.AddressParseAttentionPipeline)
 }
 
@@ -134,16 +132,13 @@ func TestTextGenerationPipelineValidationXLA(t *testing.T) {
 // Decision models (Strands export)
 
 func TestDecisionPipelineXLA(t *testing.T) {
-	t.Skip("Skipping test: decision models currently require the ORT backend (no XLA support yet)")
 	runXLAPipeline(t, testutil.DecisionPipeline)
 }
 
 func TestDecisionPipelineXLACuda(t *testing.T) {
-	t.Skip("Skipping test: decision models currently require the ORT backend (no XLA support yet)")
 	runXLAPipelineCuda(t, testutil.DecisionPipeline)
 }
 
 func TestDecisionPipelineValidationXLA(t *testing.T) {
-	t.Skip("Skipping test: decision models currently require the ORT backend (no XLA support yet)")
 	runXLAPipelineValidation(t, testutil.DecisionPipelineValidation)
 }

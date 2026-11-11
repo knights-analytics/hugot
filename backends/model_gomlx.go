@@ -11,6 +11,7 @@ import (
 
 	"github.com/gomlx/compute"
 	"github.com/gomlx/compute-onnx/support/protos"
+	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/go-huggingface/tokenizers/bucket"
 	"github.com/gomlx/gomlx/core/graph"
@@ -97,16 +98,20 @@ func (m *GoMLXModel) paddingEnabled() bool {
 }
 
 // execute retries without dynamic axes when GoMLX cannot build a dynamic graph
-// for an operation in this model. This keeps models with unsupported dynamic
-// operations on the concrete-shape path while allowing compatible models to
-// reuse a single graph.
+// for an operation in this model or when the dynamic graph produces an empty
+// output. This keeps models with unsupported dynamic operations on the
+// concrete-shape path while allowing compatible models to reuse a single graph.
 func (m *GoMLXModel) execute(run func(*mlmodel.Exec) ([]*tensors.Tensor, error)) ([]*tensors.Tensor, error) {
 	m.execMu.RLock()
 	exec := m.Exec
 	outputs, err, panicked := callGoMLXExec(exec, run)
 	dynamicAxesEnabled := m.DynamicAxesEnabled
 	m.execMu.RUnlock()
-	if err == nil || !dynamicAxesEnabled || (!panicked && !strings.Contains(err.Error(), "failed during graph construction/compilation")) {
+	emptyDynamicOutput := err == nil && dynamicAxesEnabled && goMLXOutputsHaveEmptyDimension(outputs)
+	if emptyDynamicOutput {
+		err = errors.New("dynamic GoMLX execution produced an empty output; retrying with concrete shapes")
+	}
+	if err == nil || !dynamicAxesEnabled || (!panicked && !emptyDynamicOutput && !strings.Contains(err.Error(), "failed during graph construction/compilation")) {
 		return outputs, err
 	}
 
@@ -116,7 +121,7 @@ func (m *GoMLXModel) execute(run func(*mlmodel.Exec) ([]*tensors.Tensor, error))
 		if m.OnnxModel != nil {
 			modelName = m.OnnxModel.Name()
 		}
-		fmt.Printf("GoMLX: dynamic axes failed for model %q; retrying with concrete input shapes: %v\n", modelName, err)
+		fmt.Printf("GoMLX: dynamic execution failed for model %q; retrying with concrete input shapes: %v\n", modelName, err)
 		m.DynamicAxesEnabled = false
 		m.PaddingEnabled = true
 		if resetErr := m.resetExecLocked(); resetErr != nil {
@@ -132,6 +137,15 @@ func (m *GoMLXModel) execute(run func(*mlmodel.Exec) ([]*tensors.Tensor, error))
 		err = fmt.Errorf("GoMLX executor panic: %v", err)
 	}
 	return outputs, err
+}
+
+func goMLXOutputsHaveEmptyDimension(outputs []*tensors.Tensor) bool {
+	for _, output := range outputs {
+		if output != nil && output.Shape().Size() == 0 {
+			return true
+		}
+	}
+	return false
 }
 
 func callGoMLXExec(exec *mlmodel.Exec, run func(*mlmodel.Exec) ([]*tensors.Tensor, error)) (outputs []*tensors.Tensor, err error, panicked bool) {
@@ -624,45 +638,43 @@ func runGoMLXSessionOnBatch(ctx context.Context, batch *PipelineBatch, p *BasePi
 
 	convertedOutput := make([]any, len(outputTensors))
 	for i, t := range outputTensors {
-		var rawOutput []float32
-		err = tensors.ConstFlatData(t, func(flat []float32) {
-			rawOutput = flat
-		})
+		switch t.DType() {
+		case dtypes.Float32:
+			convertedOutput[i], err = reshapeGoMLXOutput[float32](t, p.Model.OutputsMeta[i], batch)
+		case dtypes.Int64:
+			convertedOutput[i], err = reshapeGoMLXOutput[int64](t, p.Model.OutputsMeta[i], batch)
+		case dtypes.Int32:
+			convertedOutput[i], err = reshapeGoMLXOutput[int32](t, p.Model.OutputsMeta[i], batch)
+		default:
+			return fmt.Errorf("output %q has unsupported data type %s", p.Model.OutputsMeta[i].Name, t.DType())
+		}
 		if err != nil {
 			return err
 		}
-		// When the batch dimension was padded to a bucket (e.g. batch=2 → bucket=8),
-		// the flat output contains paddedBatch × paddedSeq elements. Passing paddedBatch
-		// rows to ReshapeOutput with batch.Size=2 causes flatDataTo2D to compute the
-		// wrong row width (totalElems/2 instead of paddedSeq), mapping row-1 onto
-		// padding-batch rows whose NaN logits (from all-zero attention masks) propagate
-		// through softmax and make every score comparison with bestScore(-1) false.
-		// Strip excess batch rows here so ReshapeOutput only sees batch.Size rows.
-		if batch.PaddedBatchSize > batch.Size && len(rawOutput) > 0 {
-			paddedSeqLen := len(rawOutput) / batch.PaddedBatchSize
-			trimmed := make([]float32, batch.Size*paddedSeqLen)
-			for row := 0; row < batch.Size; row++ {
-				copy(trimmed[row*paddedSeqLen:], rawOutput[row*paddedSeqLen:(row+1)*paddedSeqLen])
-			}
-			rawOutput = trimmed
-		}
-		// Use the actual output tensor's shape (post-padded dimensions) so that
-		// reshapeOutput can validate the flat length against the real sequence
-		// width and apply the padding mask. The model metadata may carry
-		// dynamic axes (-1) for variable-length inputs, which would otherwise
-		// disable padding-mask application and produce rows of padded width
-		// while TokenizedInput metadata only tracks the real tokens.
-		actualMeta := p.Model.OutputsMeta[i]
-		actualDims := make(Shape, len(t.Shape().Dimensions))
-		for di, dv := range t.Shape().Dimensions {
-			actualDims[di] = int64(dv)
-		}
-		actualMeta.Dimensions = actualDims
-		convertedOutput[i] = ReshapeOutput(rawOutput, actualMeta, batch.Size, batch.PaddingMask)
 	}
 
 	batch.OutputValues = convertedOutput
 	return err
+}
+
+// reshapeGoMLXOutput preserves the output dtype and removes extra batch rows
+// introduced by padding before reshaping the flat runtime buffer.
+func reshapeGoMLXOutput[T float32 | int64 | int32](tensor *tensors.Tensor, meta InputOutputInfo, batch *PipelineBatch) (any, error) {
+	var flat []T
+	if err := tensors.ConstFlatData(tensor, func(data []T) { flat = data }); err != nil {
+		return nil, err
+	}
+	if batch.PaddedBatchSize > batch.Size && len(flat) > 0 {
+		rowSize := len(flat) / batch.PaddedBatchSize
+		flat = flat[:batch.Size*rowSize]
+	}
+	// Metadata can contain dynamic dimensions. The concrete output shape gives
+	// ReshapeOutput the correct sequence width for applying the padding mask.
+	meta.Dimensions = make(Shape, tensor.Rank())
+	for i, dim := range tensor.Shape().Dimensions {
+		meta.Dimensions[i] = int64(dim)
+	}
+	return ReshapeOutput(flat, meta, batch.Size, batch.PaddingMask), nil
 }
 
 // shapeBucket quantizes input dimensions to coarse buckets to reduce JIT cache pressure.

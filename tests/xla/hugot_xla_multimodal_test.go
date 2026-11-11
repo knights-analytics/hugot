@@ -11,39 +11,32 @@ import (
 // Document question answering
 
 func TestDocumentQuestionAnsweringPipelineXLA(t *testing.T) {
-	t.Skip("Skipping test due to unimplemented ONNX op \"ConvInteger\" issue with XLA pipeline")
 	runXLAPipeline(t, testutil.DocumentQuestionAnsweringPipeline)
 }
 
 func TestDocumentQuestionAnsweringPipelineXLACuda(t *testing.T) {
-	t.Skip("Skipping test due to unimplemented ONNX op \"ConvInteger\" issue with XLA pipeline")
 	runXLAPipelineCuda(t, testutil.DocumentQuestionAnsweringPipeline)
 }
 
 func TestDocumentQuestionAnsweringPipelineValidationXLA(t *testing.T) {
-	t.Skip("Skipping test due to unimplemented ONNX op \"ConvInteger\" issue with XLA pipeline")
 	runXLAPipelineValidation(t, testutil.DocumentQuestionAnsweringPipelineValidation)
 }
 
 // Table question answering
 
 func TestTableQuestionAnsweringPipelineXLA(t *testing.T) {
-	t.Skip("Skipping test due to unimplemented ONNX op \"ScatterElements\" issue with XLA pipeline")
 	runXLAPipeline(t, testutil.TableQuestionAnsweringPipeline)
 }
 
 func TestTableQuestionAnsweringPipelineXLACuda(t *testing.T) {
-	t.Skip("Skipping test due to unimplemented ONNX op \"ScatterElements\" issue with XLA pipeline")
 	runXLAPipelineCuda(t, testutil.TableQuestionAnsweringPipeline)
 }
 
 func TestTableQuestionAnsweringPipelineValidationXLA(t *testing.T) {
-	t.Skip("Skipping test due to unimplemented ONNX op \"ScatterElements\" issue with XLA pipeline")
 	runXLAPipelineValidation(t, testutil.TableQuestionAnsweringPipelineValidation)
 }
 
 func TestTableQuestionAnsweringAggregationPipelineXLA(t *testing.T) {
-	t.Skip("Skipping test due to unimplemented ONNX op \"ScatterElements\" issue with XLA pipeline")
 	runXLAPipeline(t, testutil.TableQuestionAnsweringAggregation)
 }
 
@@ -78,12 +71,10 @@ func TestVideoClassificationPipelineValidationXLA(t *testing.T) {
 // Keypoint matching
 
 func TestKeypointMatchingPipelineXLA(t *testing.T) {
-	t.Skip("Skipping test due to MaxPool: support for attribute 'dilations' is not yet implemented issue with GoMLX pipeline")
 	runXLAPipeline(t, testutil.KeypointMatchingPipeline)
 }
 
 func TestKeypointMatchingPipelineXLACuda(t *testing.T) {
-	t.Skip("Skipping test due to MaxPool: support for attribute 'dilations' is not yet implemented issue with GoMLX pipeline")
 	runXLAPipelineCuda(t, testutil.KeypointMatchingPipeline)
 }
 

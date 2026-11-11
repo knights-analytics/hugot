@@ -12,12 +12,10 @@ import (
 // Tabular pipeline
 
 func TestTabularPipelineXLA(t *testing.T) {
-	t.Skip("Currently missing TreeEnsembleClassifier ONNX operator")
 	runXLAPipeline(t, testutil.TabularPipeline)
 }
 
 func TestTabularPipelineXLACuda(t *testing.T) {
-	t.Skip("Currently missing TreeEnsembleClassifier ONNX operator")
 	runXLAPipelineCuda(t, testutil.TabularPipeline)
 }
 
