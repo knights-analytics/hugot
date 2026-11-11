@@ -35,12 +35,10 @@ func TestTokenClassificationPipelineValidationGo(t *testing.T) {
 // AddressParse
 
 func TestAddressParsePipelineGo(t *testing.T) {
-	t.Skip("Skipping test because the GoMLX ONNX importer does not implement the decoder's LogSoftmax op")
 	runGoPipeline(t, testutil.AddressParsePipeline)
 }
 
 func TestAddressParseAttentionPipelineGo(t *testing.T) {
-	t.Skip("Skipping test because the GoMLX ONNX importer does not implement the decoder's LogSoftmax op")
 	runGoPipeline(t, testutil.AddressParseAttentionPipeline)
 }
 
@@ -106,11 +104,9 @@ func TestTextGenerationPipelineValidationGo(t *testing.T) {
 // Decision models (Strands export)
 
 func TestDecisionPipelineGo(t *testing.T) {
-	t.Skip("Skipping test: decision models currently require the ORT backend (no Go backend support yet)")
 	runGoPipeline(t, testutil.DecisionPipeline)
 }
 
 func TestDecisionPipelineValidationGo(t *testing.T) {
-	t.Skip("Skipping test: decision models currently require the ORT backend (no Go backend support yet)")
 	runGoPipelineValidation(t, testutil.DecisionPipelineValidation)
 }

@@ -11,29 +11,24 @@ import (
 // Document question answering
 
 func TestDocumentQuestionAnsweringPipelineGo(t *testing.T) {
-	t.Skip("Skipping test due to unimplemented ONNX op \"ConvInteger\" issue with Go pipeline")
 	runGoPipeline(t, testutil.DocumentQuestionAnsweringPipeline)
 }
 
 func TestDocumentQuestionAnsweringPipelineValidationGo(t *testing.T) {
-	t.Skip("Skipping test due to unimplemented ONNX op \"ConvInteger\" issue with Go pipeline")
 	runGoPipelineValidation(t, testutil.DocumentQuestionAnsweringPipelineValidation)
 }
 
 // Table question answering
 
 func TestTableQuestionAnsweringPipelineGo(t *testing.T) {
-	t.Skip("Skipping test due to unimplemented ONNX op \"ScatterElements\" issue with Go pipeline")
 	runGoPipeline(t, testutil.TableQuestionAnsweringPipeline)
 }
 
 func TestTableQuestionAnsweringPipelineValidationGo(t *testing.T) {
-	t.Skip("Skipping test due to unimplemented ONNX op \"ScatterElements\" issue with Go pipeline")
 	runGoPipelineValidation(t, testutil.TableQuestionAnsweringPipelineValidation)
 }
 
 func TestTableQuestionAnsweringAggregationPipelineGo(t *testing.T) {
-	t.Skip("Skipping test due to unimplemented ONNX op \"ScatterElements\" issue with Go pipeline")
 	runGoPipeline(t, testutil.TableQuestionAnsweringAggregation)
 }
 
@@ -50,7 +45,6 @@ func TestImageTextToTextPipelineValidationGo(t *testing.T) {
 // Keypoint matching
 
 func TestKeypointMatchingPipelineGo(t *testing.T) {
-	t.Skip("Skipping test due to MaxPool: support for attribute 'dilations' is not yet implemented issue with GoMLX pipeline")
 	runGoPipeline(t, testutil.KeypointMatchingPipeline)
 }
 

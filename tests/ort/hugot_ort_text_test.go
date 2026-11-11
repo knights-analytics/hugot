@@ -181,7 +181,6 @@ func TestDecisionPipelineORT(t *testing.T) {
 }
 
 func TestDecisionPipelineORTGoMLX(t *testing.T) {
-	t.Skip("Skipping test: decision models currently require the ORT backend (no GoMLX support yet)")
 	runORTPipelineGoMLX(t, testutil.DecisionPipeline)
 }
 

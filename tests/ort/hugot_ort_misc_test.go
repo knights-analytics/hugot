@@ -17,7 +17,6 @@ func TestTabularPipelineORT(t *testing.T) {
 }
 
 func TestTabularPipelineORTGoMLX(t *testing.T) {
-	t.Skip("Currently missing TreeEnsembleClassifier ONNX operator")
 	runORTPipelineGoMLX(t, testutil.TabularPipeline)
 }
 

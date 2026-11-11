@@ -3,7 +3,7 @@
 # ---- Versions ----
 variable "GO_VERSION"                { default = "1.27.4" }
 variable "GOTESTSUM_VERSION"         { default = "1.13.1" }
-variable "GOPJRT_VERSION"            { default = "0.114.0" }
+variable "GOPJRT_VERSION"            { default = "0.117.2" }
 variable "ONNXRUNTIME_VERSION"       { default = "1.32.0" }
 variable "ONNXRUNTIME_GENAI_VERSION" { default = "0.20.0" }
 variable "JAX_CUDA_VERSION"          { default = "0.12.0" }

@@ -15,7 +15,6 @@ func TestDocumentQuestionAnsweringPipelineORT(t *testing.T) {
 }
 
 func TestDocumentQuestionAnsweringPipelineORTGoMLX(t *testing.T) {
-	t.Skip("Skipping test due to unimplemented ONNX op \"ConvInteger\" issue with GoMLX pipeline")
 	runORTPipelineGoMLX(t, testutil.DocumentQuestionAnsweringPipeline)
 }
 
@@ -34,7 +33,6 @@ func TestTableQuestionAnsweringPipelineORT(t *testing.T) {
 }
 
 func TestTableQuestionAnsweringPipelineORTGoMLX(t *testing.T) {
-	t.Skip("Skipping test due to unimplemented ONNX op \"ScatterElements\" issue with GoMLX pipeline")
 	runORTPipelineGoMLX(t, testutil.TableQuestionAnsweringPipeline)
 }
 
@@ -93,7 +91,6 @@ func TestKeypointMatchingPipelineORT(t *testing.T) {
 }
 
 func TestKeypointMatchingPipelineORTGoMLX(t *testing.T) {
-	t.Skip("Skipping test due to MaxPool: support for attribute 'dilations' is not yet implemented issue with GoMLX pipeline")
 	runORTPipelineGoMLX(t, testutil.KeypointMatchingPipeline)
 }
 

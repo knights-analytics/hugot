@@ -14,7 +14,6 @@ import (
 // Tabular pipeline
 
 func TestTabularPipelineGo(t *testing.T) {
-	t.Skip("Currently missing TreeEnsembleClassifier ONNX operator")
 	runGoPipeline(t, testutil.TabularPipeline)
 }
 

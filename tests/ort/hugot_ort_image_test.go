@@ -51,7 +51,6 @@ func TestZeroShotObjectDetectionPipelineORT(t *testing.T) {
 }
 
 func TestZeroShotObjectDetectionPipelineORTGoMLX(t *testing.T) {
-	t.Skip("Skipping test due to known operands description (\"...pq\") has axis '.' appearing more than once issue with GoMLX")
 	runORTPipelineGoMLX(t, testutil.ZeroShotObjectDetectionPipeline)
 }
 
@@ -70,7 +69,6 @@ func TestGroundedObjectDetectionPipelineORT(t *testing.T) {
 }
 
 func TestGroundedObjectDetectionPipelineORTGoMLX(t *testing.T) {
-	t.Skip("Skipping test due to known total requested size 6488064 (dimensions=[1 16 12 22 12 128]) doesnt match original size 6809600 (dimensions [1 200 266 128]) issue with GoMLX")
 	runORTPipelineGoMLX(t, testutil.GroundedObjectDetectionPipeline)
 }
 
@@ -89,7 +87,6 @@ func TestZeroShotImageClassificationPipelineORT(t *testing.T) {
 }
 
 func TestZeroShotImageClassificationPipelineORTGoMLX(t *testing.T) {
-	t.Skip("Skipping test due to known backend \"onnxruntime\" does not support functions (needed for closures) issue with GoMLX")
 	runORTPipelineGoMLX(t, testutil.ZeroShotImageClassificationPipeline)
 }
 
@@ -126,7 +123,6 @@ func TestImageSegmentationPipelineORT(t *testing.T) {
 }
 
 func TestImageSegmentationPipelineORTGoMLX(t *testing.T) {
-	t.Skip("Skipping test due to known Clamp (22) not implemented for ONNX Runtime backend: op not implemented issue with GoMLX")
 	runORTPipelineGoMLX(t, testutil.ImageSegmentationPipeline)
 }
 
@@ -145,7 +141,6 @@ func TestDepthEstimationPipelineORT(t *testing.T) {
 }
 
 func TestDepthEstimationPipelineORTGoMLX(t *testing.T) {
-	t.Skip("Skipping test due to known compilation failed for Exec issue with GoMLX")
 	runORTPipelineGoMLX(t, testutil.DepthEstimationPipeline)
 }
 
@@ -164,7 +159,6 @@ func TestMaskGenerationPipelineORT(t *testing.T) {
 }
 
 func TestMaskGenerationPipelineORTGoMLX(t *testing.T) {
-	t.Skip("Skipping test due to known Clamp (22) not implemented for ONNX Runtime backend: op not implemented issue with GoMLX")
 	runORTPipelineGoMLX(t, testutil.MaskGenerationPipeline)
 }
 
@@ -183,7 +177,6 @@ func TestBackgroundRemovalPipelineORT(t *testing.T) {
 }
 
 func TestBackgroundRemovalPipelineORTGoMLX(t *testing.T) {
-	t.Skip("Skipping test due to known Clamp (22) not implemented for ONNX Runtime backend: op not implemented issue with GoMLX")
 	runORTPipelineGoMLX(t, testutil.BackgroundRemovalPipeline)
 }
 
