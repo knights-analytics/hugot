@@ -104,7 +104,10 @@ func TestGoTokenizerOptionsSkipMediaInputs(t *testing.T) {
 
 func TestEmptyMediaFeaturesShape(t *testing.T) {
 	text := NewBatch(1)
+	text.SynthesizeEmptyMediaFeatures = true
+	disabled := NewBatch(1)
 	images := NewBatch(1)
+	images.SynthesizeEmptyMediaFeatures = true
 	images.ImageValues = [][][][]float32{{{{0}}}}
 	tests := []struct {
 		name      string
@@ -116,6 +119,7 @@ func TestEmptyMediaFeaturesShape(t *testing.T) {
 		{name: "image features", batch: text, input: InputOutputInfo{Name: "image_features", Dimensions: NewShape(-1, 512)}, wantShape: NewShape(0, 512), wantEmpty: true},
 		{name: "video features", batch: text, input: InputOutputInfo{Name: "video_features", Dimensions: NewShape(-1, 512)}, wantShape: NewShape(0, 512), wantEmpty: true},
 		{name: "audio features", batch: text, input: InputOutputInfo{Name: "audio_features", Dimensions: NewShape(-1, 512)}, wantShape: NewShape(0, 512), wantEmpty: true},
+		{name: "disabled for unrelated pipeline", batch: disabled, input: InputOutputInfo{Name: "image_features", Dimensions: NewShape(-1, 512)}},
 		{name: "text input", batch: text, input: InputOutputInfo{Name: "input_ids", Dimensions: NewShape(-1, -1)}},
 		{name: "batch with images", batch: images, input: InputOutputInfo{Name: "image_features", Dimensions: NewShape(-1, 512)}},
 		{name: "pixel values", batch: text, input: InputOutputInfo{Name: "pixel_values", Dimensions: NewShape(-1, 3, 224, 224)}},
@@ -127,6 +131,32 @@ func TestEmptyMediaFeaturesShape(t *testing.T) {
 			shape, empty := emptyMediaFeaturesShape(test.batch, test.input)
 			if empty != test.wantEmpty || (empty && !slices.Equal(shape, test.wantShape)) {
 				t.Fatalf("unexpected empty media features: got (%v, %v), want (%v, %v)", shape, empty, test.wantShape, test.wantEmpty)
+			}
+		})
+	}
+}
+
+func TestHasDynamicMediaFeatures(t *testing.T) {
+	tests := []struct {
+		name   string
+		inputs []InputOutputInfo
+		want   bool
+	}{
+		{
+			name: "dynamic media feature input",
+			inputs: []InputOutputInfo{
+				{Name: "input_ids", Dimensions: NewShape(-1, -1)},
+				{Name: "video_features", Dimensions: NewShape(-1, 512)},
+			},
+			want: true,
+		},
+		{name: "static media feature input", inputs: []InputOutputInfo{{Name: "image_features", Dimensions: NewShape(1, 512)}}},
+		{name: "unrelated dynamic input", inputs: []InputOutputInfo{{Name: "input_ids", Dimensions: NewShape(-1, -1)}}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := HasDynamicMediaFeatures(test.inputs); got != test.want {
+				t.Fatalf("HasDynamicMediaFeatures() = %v, want %v", got, test.want)
 			}
 		})
 	}

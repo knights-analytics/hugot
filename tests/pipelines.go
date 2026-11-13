@@ -273,11 +273,11 @@ func FeatureExtractionPipelineValidation(t *testing.T, session *hugot.Session) {
 func MultimodalFeatureExtractionPipeline(t *testing.T, session *hugot.Session) {
 	t.Helper()
 	modelPath := ModelsFolder + "onnx-community_embeddinggemma-2-ONNX"
-	requirePipelineArtifacts(t, modelPath, "model.onnx", "model.onnx_data", "tokenizer.json", "config.json")
+	requirePipelineArtifacts(t, modelPath, "model_q4f16.onnx", "model_q4f16.onnx_data", "tokenizer.json", "config.json")
 	pipeline, err := session.NewPipeline(hugot.FeatureExtractionConfig{
 		ModelPath:    modelPath,
 		Name:         "testMultimodalFeatureExtraction",
-		OnnxFilename: "model.onnx",
+		OnnxFilename: "model_q4f16.onnx",
 	})
 	require.NoError(t, err)
 	reference := loadFeatureReference(t)

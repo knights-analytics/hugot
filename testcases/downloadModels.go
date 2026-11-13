@@ -65,7 +65,7 @@ var models = []downloadModel{
 	},
 	{name: "SamLowe/roberta-base-go_emotions-onnx", onnxFilePath: "onnx/model.onnx"},
 	{name: "jinaai/jina-reranker-v1-tiny-en", onnxFilePath: "onnx/model.onnx"},
-	{name: "onnx-community/embeddinggemma-2-ONNX", onnxFilePath: "onnx/model.onnx", revision: "daa72c51243991dfcaf9f9137d2c573d8f7790c0"},
+	{name: "onnx-community/embeddinggemma-2-ONNX", onnxFilePath: "onnx/model_q4f16.onnx", revision: "daa72c51243991dfcaf9f9137d2c573d8f7790c0"},
 	{name: "KnightsAnalytics/resnet50", onnxFilePath: "resnet50-v1-12.onnx"},
 	{name: "KnightsAnalytics/tapas-base-finetuned-wtq", onnxFilePath: "model.onnx", additionalFiles: []string{"config.json", "tokenizer_config.json", "vocab.txt"}},
 	{name: "Xenova/detr-resnet-50", onnxFilePath: "onnx/model.onnx"},
