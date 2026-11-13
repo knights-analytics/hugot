@@ -398,7 +398,12 @@ func (s *engineORTState) startTurn(job *engineORTJob, sequence int) error {
 	if s.capabilities.MaxRequestLength > 0 && uint64(len(inputIDs)) > s.capabilities.MaxRequestLength {
 		return fmt.Errorf("encoded prompt has %d tokens, exceeding engine maximum request length %d", len(inputIDs), s.capabilities.MaxRequestLength)
 	}
-	request, err := s.engine.CreateRequest(nil)
+	settings := job.settings
+	maxSessionTokens := uint64(len(inputIDs)) + settings.maxGeneratedTokens
+	if s.capabilities.MaxRequestLength > 0 && maxSessionTokens > s.capabilities.MaxRequestLength {
+		maxSessionTokens = s.capabilities.MaxRequestLength
+	}
+	request, err := s.engine.CreateRequest(&ortgenai.RequestOptions{MaxSessionTokens: maxSessionTokens})
 	if err != nil {
 		return fmt.Errorf("creating request: %w", err)
 	}
@@ -417,7 +422,6 @@ func (s *engineORTState) startTurn(job *engineORTJob, sequence int) error {
 		cleanup()
 		return fmt.Errorf("creating turn options: %w", err)
 	}
-	settings := job.settings
 	if err = turn.options.SetMaxGeneratedTokens(settings.maxGeneratedTokens); err == nil {
 		err = turn.options.SetDoSample(settings.doSample)
 	}

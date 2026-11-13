@@ -214,7 +214,7 @@ To use Hugot with Nvidia gpu acceleration, you need to have the following:
 - The Nvidia driver for your graphics card (if running in Docker and WSL2, starting with --gpus all should inherit the drivers from the host OS)
 - ONNX Runtime:
     - The cuda gpu version of ONNX Runtime on the machine/docker container. You can see how we get that by looking at the [Dockerfile](./Dockerfile). You can also get the ONNX Runtime libraries that we use for testing from the release. Just download the gpu .so libraries and put them in /usr/lib.
-    - The required CUDA libraries installed on your system that are compatible with the ONNX Runtime gpu version you use. See [here](https://onnxruntime.ai/docs/execution-providers/CUDA-ExecutionProvider.html). Our Docker builds use ONNX Runtime 1.31.1 with CUDA 13.5 and cuDNN 9; CUDA 13.x minor versions are compatible with this ONNX Runtime release.
+    - The required CUDA libraries installed on your system that are compatible with the ONNX Runtime gpu version you use. See [here](https://onnxruntime.ai/docs/execution-providers/CUDA-ExecutionProvider.html). Our Docker builds use ONNX Runtime 1.32.0 with CUDA 13.5 and cuDNN 9; CUDA 13.x minor versions are compatible with this ONNX Runtime release.
     - Start a session with the following:
       ```go
       ctx := context.Background()
