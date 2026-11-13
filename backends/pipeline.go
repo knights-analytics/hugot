@@ -201,6 +201,30 @@ func textTensorBatchCounts(textRank, batchSize, queryCount int, hasQueryDimensio
 	return batchSize, queryCount
 }
 
+func emptyMediaFeaturesShape(batch *PipelineBatch, meta InputOutputInfo) (Shape, bool) {
+	if !isMediaFeaturesInput(meta.Name) || batch.ImageValues != nil || batch.AudioFeatures != nil {
+		return nil, false
+	}
+	shape := make(Shape, len(meta.Dimensions))
+	dynamic := false
+	for axis, dimension := range meta.Dimensions {
+		if dimension < 0 {
+			dynamic = true
+			continue
+		}
+		shape[axis] = dimension
+	}
+	return shape, dynamic
+}
+
+func isMediaFeaturesInput(name string) bool {
+	switch strings.ToLower(name) {
+	case "image_features", "video_features", "audio_features":
+		return true
+	}
+	return false
+}
+
 // ImageTextInput is one paired image and text example for multimodal models.
 // The image is kept as an image.Image so callers can use in-memory images
 // without coupling the public contract to a particular image decoder.

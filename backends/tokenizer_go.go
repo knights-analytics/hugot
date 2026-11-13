@@ -68,7 +68,8 @@ func getGoTokenizerOptions(model *Model) (api.EncodeOptions, bool, bool, error) 
 				lowerName == "input_values" ||
 				lowerName == "input_features" ||
 				lowerName == "waveform" ||
-				lowerName == "audio" {
+				lowerName == "audio" ||
+				isMediaFeaturesInput(lowerName) {
 				continue
 			}
 			return encodeOptions, false, false, fmt.Errorf("input %s not recognized", input.Name)

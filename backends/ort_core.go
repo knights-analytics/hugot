@@ -66,6 +66,14 @@ func newCoreStringTensor(shape []int64, data []string) (*coreORTTensor, error) {
 	return &coreORTTensor{tensor: tensor}, nil
 }
 
+func newCoreEmptyTensor(dtype ort.TensorElementDataType, shape []int64) (*coreORTTensor, error) {
+	tensor, err := ort.NewTensorFromBytes(dtype, shape, nil)
+	if err != nil {
+		return nil, err
+	}
+	return &coreORTTensor{tensor: tensor}, nil
+}
+
 func (t *coreORTTensor) Close() error {
 	if t == nil || t.tensor == nil {
 		return nil

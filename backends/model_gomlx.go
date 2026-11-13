@@ -396,6 +396,7 @@ func createInputTensorsGoMLX(batch *PipelineBatch, model *Model, padBatchDimensi
 	paddingMasks := make([][]bool, batch.Size)
 
 	// 2) build each tensor
+	_, graphShapes := model.GoMLXModel.OnnxModel.Inputs()
 	for mi, meta := range model.InputsMeta {
 		if strings.EqualFold(meta.Name, "input_features") {
 			backing, dimensions, err := flattenAudioFeatures(batch.AudioFeatures, batch.Size)
@@ -430,6 +431,10 @@ func createInputTensorsGoMLX(batch *PipelineBatch, model *Model, padBatchDimensi
 				shape = append(shape, 1)
 			}
 			inputTensors[mi] = tensors.FromFlatDataAndDimensions(flags, shape...)
+			continue
+		}
+		if shape, ok := emptyMediaFeaturesShape(batch, meta); ok {
+			inputTensors[mi] = tensors.FromShape(shapes.Make(graphShapes[mi].DType, shape.ValuesInt()...))
 			continue
 		}
 		if isImageInput(meta.Name) {
