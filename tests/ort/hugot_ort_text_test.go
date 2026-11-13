@@ -31,16 +31,12 @@ func TestFeatureExtractionPipelineORTCuda(t *testing.T) {
 	runORTPipelineCuda(t, testutil.FeatureExtractionPipeline)
 }
 
+func TestMultimodalFeatureExtractionPipelineORTCuda(t *testing.T) {
+	runORTPipelineCuda(t, testutil.MultimodalFeatureExtractionPipeline)
+}
+
 func TestFeatureExtractionPipelineValidationORT(t *testing.T) {
 	runORTPipelineValidation(t, testutil.FeatureExtractionPipelineValidation)
-}
-
-func TestMultimodalFeatureExtractionPipelineORT(t *testing.T) {
-	runORTPipeline(t, testutil.MultimodalFeatureExtractionPipeline)
-}
-
-func TestMultimodalFeatureExtractionPipelineORTGoMLX(t *testing.T) {
-	runORTPipelineGoMLX(t, testutil.MultimodalFeatureExtractionPipeline)
 }
 
 // Text classification
