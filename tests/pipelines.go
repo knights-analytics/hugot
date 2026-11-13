@@ -272,13 +272,21 @@ func FeatureExtractionPipelineValidation(t *testing.T, session *hugot.Session) {
 }
 
 func MultimodalFeatureExtractionPipeline(t *testing.T, session *hugot.Session) {
+	multimodalFeatureExtractionPipeline(t, session, false)
+}
+
+func MultimodalFeatureExtractionPipelineCuda(t *testing.T, session *hugot.Session) {
+	multimodalFeatureExtractionPipeline(t, session, true)
+}
+
+func multimodalFeatureExtractionPipeline(t *testing.T, session *hugot.Session, useCudaReference bool) {
 	t.Helper()
 	modelPath := ModelsFolder + "onnx-community_embeddinggemma-2-ONNX"
-	requirePipelineArtifacts(t, modelPath, "model.onnx", "model.onnx_data", "tokenizer.json", "config.json")
+	requirePipelineArtifacts(t, modelPath, "model_q4.onnx", "model_q4.onnx_data", "tokenizer.json", "config.json")
 	pipeline, err := session.NewPipeline(hugot.FeatureExtractionConfig{
 		ModelPath:    modelPath,
 		Name:         "testMultimodalFeatureExtraction",
-		OnnxFilename: "model.onnx",
+		OnnxFilename: "model_q4.onnx",
 	})
 	require.NoError(t, err)
 	reference := loadFeatureReference(t)
@@ -292,7 +300,11 @@ func MultimodalFeatureExtractionPipeline(t *testing.T, session *hugot.Session) {
 	for i := range batch.Input {
 		attentionMasks[i] = batch.Input[i].AttentionMask
 	}
-	checkHiddenStateReference(t, raw, reference.MultimodalText.hiddenStateReference, reference.Tolerance, attentionMasks)
+	expected := reference.MultimodalText.hiddenStateReference
+	if useCudaReference {
+		expected = reference.MultimodalTextCuda.hiddenStateReference
+	}
+	checkHiddenStateReference(t, raw, expected, reference.Tolerance, attentionMasks)
 }
 
 // Text classification

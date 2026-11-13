@@ -40,6 +40,10 @@ func TestTextClassificationPipelineMultiXLACuda(t *testing.T) {
 	runXLAPipelineCuda(t, testutil.TextClassificationPipelineMulti)
 }
 
+func TestMultimodalFeatureExtractionPipelineXLACuda(t *testing.T) {
+	runXLAPipelineCuda(t, testutil.MultimodalFeatureExtractionPipeline)
+}
+
 func TestTextClassificationPipelineValidationXLA(t *testing.T) {
 	runXLAPipelineValidation(t, testutil.TextClassificationPipelineValidation)
 }

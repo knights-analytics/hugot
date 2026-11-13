@@ -28,8 +28,9 @@ type FeatureExtractionPipeline struct {
 	OutputIndex        int // Record the index of the output selected, defaults to first (0)
 	Normalization      bool
 	// Image mode fields (for vision encoders like CLIP visual)
-	imageMode   bool // true if this is a vision model
-	modelPooler bool
+	imageMode               bool // true if this is a vision model
+	modelPooler             bool
+	emptyMediaFeatures      bool
 }
 
 type FeatureExtractionOutput struct {
@@ -104,6 +105,9 @@ func NewFeatureExtractionPipeline(sessionContext context.Context, config backend
 			return nil, err
 		}
 	}
+	// Some text graphs expose dynamic media-feature inputs even for text-only
+	// inference. Enable empty tensors only for this feature extraction path.
+	pipeline.emptyMediaFeatures = !pipeline.imageMode && backends.HasDynamicMediaFeatures(model.InputsMeta)
 	// Set default image format if in image mode
 	if pipeline.imageMode && pipeline.imageFormat == "" {
 		detectedFormat, err := backends.DetectImageTensorFormat(model)
@@ -212,6 +216,7 @@ func (p *FeatureExtractionPipeline) Validate() error {
 
 // preprocess tokenizes the input strings.
 func (p *FeatureExtractionPipeline) preprocess(batch *backends.PipelineBatch, inputs []string) error {
+	batch.SynthesizeEmptyMediaFeatures = p.emptyMediaFeatures
 	start := time.Now()
 	backends.TokenizeInputs(batch, p.Model.Tokenizer, inputs)
 	atomic.AddUint64(&p.TokenizerTimings.NumCalls, 1)

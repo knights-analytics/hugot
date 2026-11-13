@@ -35,6 +35,9 @@ type featureReference struct {
 		hiddenStateReference
 		Inputs []string `json:"inputs"`
 	} `json:"multimodal_text"`
+	MultimodalTextCuda struct {
+		hiddenStateReference
+	} `json:"multimodal_text_cuda"`
 }
 
 func loadFeatureReference(t *testing.T) featureReference {
