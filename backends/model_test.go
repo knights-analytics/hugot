@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/knights-analytics/hugot/options"
@@ -79,6 +80,53 @@ func TestTextTensorBatchCounts(t *testing.T) {
 			batchSize, queryCount := textTensorBatchCounts(test.textRank, test.batchSize, test.queryCount, test.hasQueryDimension)
 			if batchSize != test.wantBatchSize || queryCount != test.wantQueryCount {
 				t.Fatalf("unexpected text tensor counts: got (%d, %d), want (%d, %d)", batchSize, queryCount, test.wantBatchSize, test.wantQueryCount)
+			}
+		})
+	}
+}
+
+func TestGoTokenizerOptionsSkipMediaInputs(t *testing.T) {
+	model := &Model{InputsMeta: []InputOutputInfo{
+		{Name: "input_ids"},
+		{Name: "attention_mask"},
+		{Name: "image_features"},
+		{Name: "video_features"},
+		{Name: "audio_features"},
+	}}
+	_, typeIDs, attentionMask, err := getGoTokenizerOptions(model)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if typeIDs || !attentionMask {
+		t.Fatalf("unexpected tokenizer inputs: got type IDs %v, attention mask %v; want the attention mask only", typeIDs, attentionMask)
+	}
+}
+
+func TestEmptyMediaFeaturesShape(t *testing.T) {
+	text := NewBatch(1)
+	images := NewBatch(1)
+	images.ImageValues = [][][][]float32{{{{0}}}}
+	tests := []struct {
+		name      string
+		batch     *PipelineBatch
+		input     InputOutputInfo
+		wantShape Shape
+		wantEmpty bool
+	}{
+		{name: "image features", batch: text, input: InputOutputInfo{Name: "image_features", Dimensions: NewShape(-1, 512)}, wantShape: NewShape(0, 512), wantEmpty: true},
+		{name: "video features", batch: text, input: InputOutputInfo{Name: "video_features", Dimensions: NewShape(-1, 512)}, wantShape: NewShape(0, 512), wantEmpty: true},
+		{name: "audio features", batch: text, input: InputOutputInfo{Name: "audio_features", Dimensions: NewShape(-1, 512)}, wantShape: NewShape(0, 512), wantEmpty: true},
+		{name: "text input", batch: text, input: InputOutputInfo{Name: "input_ids", Dimensions: NewShape(-1, -1)}},
+		{name: "batch with images", batch: images, input: InputOutputInfo{Name: "image_features", Dimensions: NewShape(-1, 512)}},
+		{name: "pixel values", batch: text, input: InputOutputInfo{Name: "pixel_values", Dimensions: NewShape(-1, 3, 224, 224)}},
+		{name: "static features", batch: text, input: InputOutputInfo{Name: "image_features", Dimensions: NewShape(1, 512)}},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			shape, empty := emptyMediaFeaturesShape(test.batch, test.input)
+			if empty != test.wantEmpty || (empty && !slices.Equal(shape, test.wantShape)) {
+				t.Fatalf("unexpected empty media features: got (%v, %v), want (%v, %v)", shape, empty, test.wantShape, test.wantEmpty)
 			}
 		})
 	}

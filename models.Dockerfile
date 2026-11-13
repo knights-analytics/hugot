@@ -10,6 +10,7 @@ COPY models/KnightsAnalytics_deepparse-bpemb-onnx ./models/KnightsAnalytics_deep
 COPY models/KnightsAnalytics_deepparse-bpemb-attn-onnx ./models/KnightsAnalytics_deepparse-bpemb-attn-onnx
 COPY models/SamLowe_roberta-base-go_emotions-onnx ./models/SamLowe_roberta-base-go_emotions-onnx
 COPY models/jinaai_jina-reranker-v1-tiny-en ./models/jinaai_jina-reranker-v1-tiny-en
+COPY models/onnx-community_embeddinggemma-2-ONNX ./models/onnx-community_embeddinggemma-2-ONNX
 COPY models/KnightsAnalytics_resnet50 ./models/KnightsAnalytics_resnet50
 COPY models/KnightsAnalytics_tapas-base-finetuned-wtq ./models/KnightsAnalytics_tapas-base-finetuned-wtq
 COPY models/Xenova_detr-resnet-50 ./models/Xenova_detr-resnet-50

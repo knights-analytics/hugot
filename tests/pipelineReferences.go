@@ -31,6 +31,10 @@ type featureReference struct {
 		Width  int      `json:"width"`
 		Height int      `json:"height"`
 	} `json:"image"`
+	MultimodalText struct {
+		hiddenStateReference
+		Inputs []string `json:"inputs"`
+	} `json:"multimodal_text"`
 }
 
 func loadFeatureReference(t *testing.T) featureReference {

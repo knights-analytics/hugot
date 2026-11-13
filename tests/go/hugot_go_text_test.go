@@ -80,6 +80,10 @@ func TestFeatureExtractionPipelineValidationGo(t *testing.T) {
 	runGoPipelineValidation(t, testutil.FeatureExtractionPipelineValidation)
 }
 
+func TestMultimodalFeatureExtractionPipelineGo(t *testing.T) {
+	runGoPipeline(t, testutil.MultimodalFeatureExtractionPipeline)
+}
+
 // Fill-mask
 
 func TestFillMaskPipelineGo(t *testing.T) {
