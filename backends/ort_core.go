@@ -66,6 +66,37 @@ func newCoreStringTensor(shape []int64, data []string) (*coreORTTensor, error) {
 	return &coreORTTensor{tensor: tensor}, nil
 }
 
+func newCoreEmptyTensor(dtype ort.TensorElementDataType, shape []int64) (*coreORTTensor, error) {
+	tensor, err := ort.NewTensorFromBytes(dtype, shape, nil)
+	if err != nil {
+		return nil, err
+	}
+	return &coreORTTensor{tensor: tensor}, nil
+}
+
+func ortDataTypeFromBackend(dtype DataType) (ort.TensorElementDataType, error) {
+	switch dtype {
+	case DataTypeFloat32:
+		return ort.TensorElementDataTypeFloat32, nil
+	case DataTypeFloat64:
+		return ort.TensorElementDataTypeFloat64, nil
+	case DataTypeFloat16:
+		return ort.TensorElementDataTypeFloat16, nil
+	case DataTypeInt64:
+		return ort.TensorElementDataTypeInt64, nil
+	case DataTypeInt32:
+		return ort.TensorElementDataTypeInt32, nil
+	case DataTypeInt8:
+		return ort.TensorElementDataTypeInt8, nil
+	case DataTypeUint8:
+		return ort.TensorElementDataTypeUint8, nil
+	case DataTypeBool:
+		return ort.TensorElementDataTypeBool, nil
+	default:
+		return 0, fmt.Errorf("unsupported ORT tensor data type %q for empty media features", dtype)
+	}
+}
+
 func (t *coreORTTensor) Close() error {
 	if t == nil || t.tensor == nil {
 		return nil

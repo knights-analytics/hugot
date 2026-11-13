@@ -858,6 +858,20 @@ func createInputTensorsORT(batch *PipelineBatch, model *Model) error {
 			inputVals[mi] = t
 			continue
 		}
+		if batch.SynthesizeEmptyMediaFeatures {
+			if shape, ok := emptyMediaFeaturesShape(batch, meta); ok {
+				dtype, err := ortDataTypeFromBackend(meta.DataType)
+				if err != nil {
+					return err
+				}
+				t, err := newCoreEmptyTensor(dtype, shape)
+				if err != nil {
+					return err
+				}
+				inputVals[mi] = t
+				continue
+			}
+		}
 		if isImageInput(meta.Name) {
 			backing, dimensions, err := flattenImageValues(model, batch.Size, batch.ImageValues)
 			if err != nil {

@@ -201,6 +201,46 @@ func textTensorBatchCounts(textRank, batchSize, queryCount int, hasQueryDimensio
 	return batchSize, queryCount
 }
 
+func emptyMediaFeaturesShape(batch *PipelineBatch, meta InputOutputInfo) (Shape, bool) {
+	if !batch.SynthesizeEmptyMediaFeatures || !isMediaFeaturesInput(meta.Name) || batch.ImageValues != nil || batch.AudioFeatures != nil {
+		return nil, false
+	}
+	shape := make(Shape, len(meta.Dimensions))
+	dynamic := false
+	for axis, dimension := range meta.Dimensions {
+		if dimension < 0 {
+			dynamic = true
+			continue
+		}
+		shape[axis] = dimension
+	}
+	return shape, dynamic
+}
+
+// HasDynamicMediaFeatures reports whether a model has dynamic media feature
+// inputs that can be supplied as empty tensors for text-only inference.
+func HasDynamicMediaFeatures(inputs []InputOutputInfo) bool {
+	for _, input := range inputs {
+		if !isMediaFeaturesInput(input.Name) {
+			continue
+		}
+		for _, dimension := range input.Dimensions {
+			if dimension < 0 {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func isMediaFeaturesInput(name string) bool {
+	switch strings.ToLower(name) {
+	case "image_features", "video_features", "audio_features":
+		return true
+	}
+	return false
+}
+
 // ImageTextInput is one paired image and text example for multimodal models.
 // The image is kept as an image.Image so callers can use in-memory images
 // without coupling the public contract to a particular image decoder.
@@ -239,6 +279,9 @@ type PipelineBatch struct {
 	ImageValues        [][][][]float32
 	AudioFeatures      [][][][]float32
 	AudioIsLonger      []bool
+	// SynthesizeEmptyMediaFeatures enables empty image/video/audio feature
+	// tensors for text-only pipeline calls that use models with those inputs.
+	SynthesizeEmptyMediaFeatures bool
 	DestroyInputs      func() error
 	DestroyMultimodal  func() error
 	Input              []TokenizedInput

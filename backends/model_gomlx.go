@@ -39,6 +39,7 @@ type GoMLXModel struct {
 	Store              *mlmodel.Store
 	Exec               *mlmodel.Exec
 	Call               func(scope *mlmodel.Scope, inputs []*graph.Node) []*graph.Node
+	inputShapes        []shapes.Shape
 	DynamicAxes        [][]string
 	DynamicAxesEnabled bool
 	PaddingEnabled     bool
@@ -226,6 +227,7 @@ func createGoMLXModelBackend(model *Model, options *options.Options) error {
 		Store:              store,
 		Exec:               exec,
 		Call:               callFunc,
+		inputShapes:        inputShapes,
 		DynamicAxes:        dynamicAxes,
 		DynamicAxesEnabled: dynamicAxesEnabled,
 		PaddingEnabled:     !dynamicAxesEnabled,
@@ -431,6 +433,15 @@ func createInputTensorsGoMLX(batch *PipelineBatch, model *Model, padBatchDimensi
 			}
 			inputTensors[mi] = tensors.FromFlatDataAndDimensions(flags, shape...)
 			continue
+		}
+		if batch.SynthesizeEmptyMediaFeatures {
+			if shape, ok := emptyMediaFeaturesShape(batch, meta); ok {
+				if mi >= len(model.GoMLXModel.inputShapes) {
+					return fmt.Errorf("missing GoMLX input shape for %s", meta.Name)
+				}
+				inputTensors[mi] = tensors.FromShape(shapes.Make(model.GoMLXModel.inputShapes[mi].DType, shape.ValuesInt()...))
+				continue
+			}
 		}
 		if isImageInput(meta.Name) {
 			backing, dimensions, err := flattenImageValues(model, batch.Size, batch.ImageValues)

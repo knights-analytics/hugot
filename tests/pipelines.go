@@ -270,6 +270,30 @@ func FeatureExtractionPipelineValidation(t *testing.T, session *hugot.Session) {
 	assert.Error(t, err)
 }
 
+func MultimodalFeatureExtractionPipeline(t *testing.T, session *hugot.Session) {
+	t.Helper()
+	modelPath := ModelsFolder + "onnx-community_embeddinggemma-2-ONNX"
+	requirePipelineArtifacts(t, modelPath, "model_q4f16.onnx", "model_q4f16.onnx_data", "tokenizer.json", "config.json")
+	pipeline, err := session.NewPipeline(hugot.FeatureExtractionConfig{
+		ModelPath:    modelPath,
+		Name:         "testMultimodalFeatureExtraction",
+		OnnxFilename: "model_q4f16.onnx",
+	})
+	require.NoError(t, err)
+	reference := loadFeatureReference(t)
+	inputs := reference.MultimodalText.Inputs
+	raw, err := pipeline.RunRaw(t.Context(), inputs)
+	require.NoError(t, err)
+	batch := backends.NewBatch(len(inputs))
+	defer func() { CheckT(t, batch.Destroy()) }()
+	backends.TokenizeInputs(batch, pipeline.Model.Tokenizer, inputs)
+	attentionMasks := make([][]uint32, len(batch.Input))
+	for i := range batch.Input {
+		attentionMasks[i] = batch.Input[i].AttentionMask
+	}
+	checkHiddenStateReference(t, raw, reference.MultimodalText.hiddenStateReference, reference.Tolerance, attentionMasks)
+}
+
 // Text classification
 
 func TextClassificationPipeline(t *testing.T, session *hugot.Session) {

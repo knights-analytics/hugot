@@ -31,6 +31,10 @@ func TestFeatureExtractionPipelineORTCuda(t *testing.T) {
 	runORTPipelineCuda(t, testutil.FeatureExtractionPipeline)
 }
 
+func TestMultimodalFeatureExtractionPipelineORTCuda(t *testing.T) {
+	runORTPipelineCuda(t, testutil.MultimodalFeatureExtractionPipeline)
+}
+
 func TestFeatureExtractionPipelineValidationORT(t *testing.T) {
 	runORTPipelineValidation(t, testutil.FeatureExtractionPipelineValidation)
 }
