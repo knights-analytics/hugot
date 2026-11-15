@@ -8,3 +8,7 @@ artifacts
 data
 _data
 .pipeline-venv/
+
+# Go development files.
+go.work
+go.work.sum
