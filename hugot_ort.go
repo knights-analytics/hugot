@@ -43,8 +43,9 @@ func NewORTSession(ctx context.Context, opts ...options.WithOption) (*Session, e
 	}
 
 	session.environmentDestroy = func() error {
+		err := backends.ShutdownORTGenAI()
 		releaseORTSession()
-		return nil
+		return err
 	}
 
 	return session, err

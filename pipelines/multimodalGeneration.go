@@ -65,6 +65,9 @@ func (p *multimodalGeneration) Validate() error {
 	if p == nil || p.BasePipeline == nil || p.Model == nil || !p.Model.IsGenerative {
 		return errors.New("multimodal pipeline requires a generative model")
 	}
+	if p.Model.UsesStreamingASR() {
+		return errors.New("streaming speech packages require the automatic speech recognition pipeline")
+	}
 	if p.MaxLength <= 0 {
 		return errors.New("max length must be greater than zero")
 	}

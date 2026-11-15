@@ -58,6 +58,13 @@ func (b runtimeBackend) RunGenerativeASR(ctx context.Context, p *BasePipeline, s
 	return nil, &backendUnavailableError{runtime: string(b.runtime), operation: "generative ASR"}
 }
 
+func (b runtimeBackend) RunStreamingASR(ctx context.Context, p *BasePipeline, chunks <-chan []float32, opts StreamingASROptions) (<-chan ASRResult, <-chan error, error) {
+	if b.runtime == options.BackendORT {
+		return runStreamingORTASR(ctx, p, chunks, opts)
+	}
+	return nil, nil, &backendUnavailableError{runtime: string(b.runtime), operation: "streaming ASR"}
+}
+
 func (b runtimeBackend) CreateMessages(batch *PipelineBatch, inputs any, systemPrompt string) error {
 	if b.runtime == options.BackendORT {
 		return CreateMessagesORT(batch, inputs, systemPrompt)

@@ -177,6 +177,9 @@ func createORTGenerativeSession(ctx context.Context, model *Model, options *opti
 	if options == nil || options.ORTOptions == nil {
 		return errors.New("ORT options must be provided to create a generative model")
 	}
+	if options.ORTOptions.UseStreamingASR {
+		return createORTStreamingASRProvider(ctx, model, options)
+	}
 	if options.ORTOptions.UseEngine {
 		if err := validateGenerativeEngineOptions(options.ORTOptions); err != nil {
 			return err
@@ -193,7 +196,7 @@ func createORTGenerativeSession(ctx context.Context, model *Model, options *opti
 		if err := initialiseORTGenAI(ctx, options); err != nil {
 			return err
 		}
-		engine, err := newEngineORTOwner(model.Path)
+		engine, err := newEngineORTOwner(model.Path, options.ORTOptions.EngineMemory)
 		if err != nil {
 			return fmt.Errorf("error creating ortgenai engine: %w", err)
 		}
@@ -235,6 +238,9 @@ func createORTGenerativeSession(ctx context.Context, model *Model, options *opti
 func validateGenerativeEngineOptions(options *options.OrtOptions) error {
 	if options == nil {
 		return errors.New("ORT options must be provided to create a generative engine")
+	}
+	if options.UseStreamingASR {
+		return errors.New("WithGenerativeEngine cannot be combined with WithGenAIStreamingASR")
 	}
 	if options.CudaOptions != nil || options.CoreMLOptions != nil || options.DirectMLOptions != nil ||
 		options.OpenVINOOptions != nil || options.TensorRTOptions != nil || options.NvTensorRTRTXOptions != nil ||
@@ -292,6 +298,17 @@ func initialiseORTGenAI(ctx context.Context, options *options.Options) error {
 		}
 	}
 	return nil
+}
+
+// ShutdownORTGenAI releases the GenAI environment after every model and owner
+// thread has been closed. The core ORT environment has a separate lifetime.
+func ShutdownORTGenAI() error {
+	generativeBackendMutex.Lock()
+	defer generativeBackendMutex.Unlock()
+	if !ortgenai.IsInitialized() {
+		return nil
+	}
+	return ortgenai.DestroyEnvironment()
 }
 
 // applyGenAIProcessControls sets process-wide GPU device and log options
@@ -378,11 +395,21 @@ func runGenerativeORTSessionOnBatch(ctx context.Context, batch *PipelineBatch, p
 	}
 	if engine != nil {
 		if batch.Images != nil || batch.Audios != nil {
-			return nil, nil, errors.New("WithGenerativeEngine supports text-only generation; use session generation for image or audio inputs")
+			return nil, nil, errors.New("WithGenerativeEngine requires image URLs or content blocks; preloaded image or audio tensors are unsupported")
+		}
+		for _, conversation := range batch.MultimodalMessages {
+			if conversationHasAudio(conversation) {
+				return nil, nil, errors.New("WithGenerativeEngine does not support audio inputs; use session generation")
+			}
 		}
 		if enableThinking != nil {
 			return nil, nil, errors.New("WithGenerativeEngine does not support enableThinking; use session generation")
 		}
+		marker := ""
+		if p.Model.ORTModel.Options != nil {
+			marker = p.Model.ORTModel.Options.EngineImageMarker
+		}
+		inputs = engineORTImageMessages(inputs, batch.MultimodalMessages, marker)
 		return engine.generate(ctx, p.SessionContext, batch, inputs, maxLength, stopSequences, temperature, topP, seed, tools, guidance)
 	}
 	if session == nil {
@@ -659,20 +686,13 @@ func runGenerativeORTASR(ctx context.Context, p *BasePipeline, samples [][]float
 				streamErr = errors.Join(streamErr, fmt.Errorf("generative ASR returned invalid sequence index %d", result.Sequence))
 				continue
 			}
-			if len(result.Results) != 1 {
-				streamErr = errors.Join(streamErr, fmt.Errorf("generative ASR returned %d results for sequence %d, expected one", len(result.Results), result.Sequence))
-				continue
-			}
 			if seen[result.Sequence] {
 				streamErr = errors.Join(streamErr, fmt.Errorf("generative ASR returned duplicate sequence index %d", result.Sequence))
 				continue
 			}
 			seen[result.Sequence] = true
-			asrResult := result.Results[0]
-			results[result.Sequence] = ASRResult{
-				Text:     asrResult.Text,
-				Words:    copyORTASRTimestamps(asrResult.Words),
-				Segments: copyORTASRTimestamps(asrResult.Segments),
+			for _, fragment := range result.Results {
+				appendORTASRResult(&results[result.Sequence], fragment)
 			}
 		case streamError, ok := <-errorStream:
 			if !ok {
@@ -701,6 +721,12 @@ func runGenerativeORTASR(ctx context.Context, p *BasePipeline, samples [][]float
 		}
 	}
 	return results, nil
+}
+
+func appendORTASRResult(result *ASRResult, fragment ortgenai.ASRResult) {
+	result.Text += fragment.Text
+	result.Words = append(result.Words, copyORTASRTimestamps(fragment.Words)...)
+	result.Segments = append(result.Segments, copyORTASRTimestamps(fragment.Segments)...)
 }
 
 func copyORTASRTimestamps(timestamps []ortgenai.ASRTimestamp) []ASRTimestamp {

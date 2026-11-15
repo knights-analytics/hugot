@@ -28,16 +28,40 @@ type Guidance struct {
 type SequenceDelta struct {
 	Token    string
 	Sequence int
+	// Completion is emitted by engine mode when a turn ends. Token is empty.
+	Completion *GenerationCompletion
+}
+
+// GenerationCompletion describes a completed engine turn. TerminalTokenID is
+// the sampled EOS token, or -1; it must not be appended to generated text.
+type GenerationCompletion struct {
+	TerminalTokenID        int32
+	FinishReason           string
+	MatchedStopStringIndex int32
+	PromptTokens           uint64
+	GeneratedTokens        uint64
+	CachedPromptTokens     uint64
 }
 
 // ASRTimestamp is a word or segment recognized by a generative ASR model.
-// Times are measured in seconds and frames use the model's timestamp frame unit.
+// Times are int64 milliseconds; frames use the model's timestamp frame unit.
 type ASRTimestamp struct {
 	Text       string
 	StartFrame int64
 	StopFrame  int64
-	StartTime  float64
-	StopTime   float64
+	StartTime  int64
+	StopTime   int64
+}
+
+// StreamingASROptions configures a streaming speech package. ChunkSamples must
+// match the package's maximum PCM chunk size at the pipeline sample rate.
+type StreamingASROptions struct {
+	ChunkSamples int
+	// ProcessorOptions supports use_vad, vad_threshold, silence_duration_ms,
+	// and prefix_padding_ms. The runtime validates values and model support.
+	ProcessorOptions map[string]string
+	// RuntimeOptions configures generator settings such as lang_id.
+	RuntimeOptions map[string]string
 }
 
 // ASRResult is the transcription and timestamp output for one audio input.

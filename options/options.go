@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"runtime"
+	"strings"
 
 	"github.com/knights-analytics/hugot/util/fileutil"
 )
@@ -125,6 +126,12 @@ type OrtOptions struct {
 	ProfilingFilePrefix     *string
 	ExtraExecutionProviders []ExtraExecutionProvider
 	UseEngine               bool
+	// EngineMemory controls CUDA cache sizing for dynamic batching packages.
+	EngineMemory GenAIEngineMemoryOptions
+	// EngineImageMarker is inserted for each image; empty uses Qwen vision markers.
+	EngineImageMarker string
+	// UseStreamingASR selects a chunked speech package instead of a chat session.
+	UseStreamingASR bool
 
 	// ── ORT GenAI process-wide controls (session path) ────────────────────
 	// SetGPUDeviceID sets the process-wide GPU device for ORT GenAI.
@@ -514,15 +521,66 @@ func WithProfiling(enabled bool, filePrefix string) WithOption {
 	}
 }
 
-// WithGenerativeEngine uses the ORT GenAI request engine for concurrent text generation.
-// Engine mode does not support image inputs or session-specific execution-provider options.
+// GenAIEngineMemoryOptions contains CUDA cache sizing hints, not allocator quotas.
+// Zero values preserve the package settings. Requires engine.dynamic_batching.
+type GenAIEngineMemoryOptions struct {
+	DeviceMemoryBudgetBytes   uint64
+	DeviceMemoryHeadroomBytes uint64
+}
+
+// WithGenerativeEngine uses the ORT GenAI request engine for concurrent text or
+// image generation. Images require an Engine-compatible vision export.
+// Session-specific execution-provider options are not supported.
 func WithGenerativeEngine() WithOption {
 	return func(o *Options) error {
 		if o.Backend == "ORT" {
 			o.ORTOptions.UseEngine = true
 			return nil
 		}
-		return fmt.Errorf("WithUseEngine is only supported for ORT backend")
+		return fmt.Errorf("WithGenerativeEngine is only supported for ORT backend")
+	}
+}
+
+// WithGenerativeEngineMemory sets the engine's CUDA cache sizing hints and enables engine mode.
+func WithGenerativeEngineMemory(memory GenAIEngineMemoryOptions) WithOption {
+	return func(o *Options) error {
+		if o.Backend != BackendORT {
+			return errors.New("WithGenerativeEngineMemory is only supported for ORT backend")
+		}
+		if memory.DeviceMemoryBudgetBytes > 1<<53-1 || memory.DeviceMemoryHeadroomBytes > 1<<53-1 {
+			return errors.New("engine memory byte counts must be at most 2^53-1")
+		}
+		o.ORTOptions.UseEngine = true
+		o.ORTOptions.EngineMemory = memory
+		return nil
+	}
+}
+
+// WithGenerativeEngineImageMarker sets the model-specific marker for each image
+// and enables engine mode. The default is <|vision_start|><|image_pad|><|vision_end|>.
+func WithGenerativeEngineImageMarker(marker string) WithOption {
+	return func(o *Options) error {
+		if o.Backend != BackendORT {
+			return errors.New("WithGenerativeEngineImageMarker is only supported for ORT backend")
+		}
+		if marker == "" || strings.ContainsRune(marker, '\x00') {
+			return errors.New("engine image marker must be non-empty and contain no NUL bytes")
+		}
+		o.ORTOptions.UseEngine = true
+		o.ORTOptions.EngineImageMarker = marker
+		return nil
+	}
+}
+
+// WithGenAIStreamingASR selects a local streaming speech package. Each audio stream
+// owns its native state. Configure PCM chunk size and VAD on the ASR pipeline.
+func WithGenAIStreamingASR() WithOption {
+	return func(o *Options) error {
+		if o.Backend != BackendORT {
+			return errors.New("WithGenAIStreamingASR is only supported for ORT backend")
+		}
+		o.ORTOptions.UseStreamingASR = true
+		return nil
 	}
 }
 

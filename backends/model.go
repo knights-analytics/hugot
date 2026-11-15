@@ -46,15 +46,23 @@ type Model struct {
 }
 
 // ValidateMultimodalSession rejects engine scheduling before loading media.
-// The ORT GenAI engine currently supports text input only.
+// Audio and any-to-any generation require a session; vision turns can use an engine.
 func (model *Model) ValidateMultimodalSession() error {
 	if model == nil || !model.IsGenerative {
 		return errors.New("multimodal generation requires a GenAI model")
 	}
+	if model.UsesStreamingASR() {
+		return errors.New("streaming speech packages require the automatic speech recognition pipeline")
+	}
 	if model.loadOptions != nil && model.loadOptions.ORTOptions != nil && model.loadOptions.ORTOptions.UseEngine {
-		return errors.New("multimodal generation requires the ORT GenAI session path; WithGenerativeEngine supports text input only")
+		return errors.New("audio and any-to-any generation require the ORT GenAI session path; WithGenerativeEngine supports text and images")
 	}
 	return nil
+}
+
+// UsesStreamingASR reports whether the model was loaded as a streaming speech package.
+func (model *Model) UsesStreamingASR() bool {
+	return model != nil && model.loadOptions != nil && model.loadOptions.ORTOptions != nil && model.loadOptions.ORTOptions.UseStreamingASR
 }
 
 // GraphTransform rewrites a model's ONNX graph after its config is read and before the graph is

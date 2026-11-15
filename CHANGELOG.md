@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 ### Changed
 
 - Upgraded ONNX Runtime to 1.32.0.
+- Upgraded ORT GenAI to 0.20.0.
 
 ## [0.8.6]
 

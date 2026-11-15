@@ -191,7 +191,7 @@ See also hugot_test.go for further examples for all pipelines.
 
 Hugot uses the [Onnx Runtime Generative AI](https://onnxruntime.ai/generative-ai) backend to run generative models.
 
-Generative pipelines require ONNX Runtime GenAI v0.19.0 or newer. The matching ONNX Runtime and CUDA versions used by the Docker builds are listed in the [bake file](./docker-bake.hcl) and [CUDA Dockerfile](./cuda.Dockerfile).
+Generative pipelines require ONNX Runtime GenAI v0.20.0 or newer. The matching ONNX Runtime and CUDA versions used by the Docker builds are listed in the [bake file](./docker-bake.hcl) and [CUDA Dockerfile](./cuda.Dockerfile).
 
 Generative models are used in a variety of text and multimodal pipelines. Please look at the [ORT text tests](tests/ort/hugot_ort_text_test.go) and [ORT multimodal tests](tests/ort/hugot_ort_multimodal_test.go) for examples of their usage.
 

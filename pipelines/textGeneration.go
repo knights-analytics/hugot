@@ -171,6 +171,9 @@ func (p *TextGenerationPipeline) Validate() error {
 	if !p.Model.IsGenerative {
 		validationErrors = append(validationErrors, errors.New("model is not generative"))
 	}
+	if p.Model.UsesStreamingASR() {
+		validationErrors = append(validationErrors, errors.New("streaming speech packages require the automatic speech recognition pipeline"))
+	}
 
 	if p.MaxLength <= 0 {
 		validationErrors = append(validationErrors, errors.New("max length must be greater than zero"))

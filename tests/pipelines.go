@@ -2477,8 +2477,18 @@ func textGenerationPipeline(t *testing.T, session *hugot.Session, engineMode boo
 			return
 		}
 		var fullAnswer strings.Builder
+		var completion *backends.GenerationCompletion
 		for token := range output.TokenStream {
 			fullAnswer.WriteString(token.Token)
+			if token.Completion != nil {
+				completion = token.Completion
+			}
+		}
+		for streamErr := range output.ErrorStream {
+			CheckT(t, streamErr)
+		}
+		if engineMode && (completion == nil || completion.GeneratedTokens == 0 || completion.FinishReason == "") {
+			t.Fatalf("expected engine completion metadata, got %#v", completion)
 		}
 		if !strings.Contains(fullAnswer.String(), "4") {
 			t.Fatalf("Expected answer to contain '4', got '%s'", fullAnswer.String())

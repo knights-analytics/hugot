@@ -9,16 +9,19 @@ import (
 	"fmt"
 	"runtime"
 	"slices"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/knights-analytics/hugot/options"
 	"github.com/knights-analytics/ortgenai"
 )
 
 type generativeORTProvider struct {
-	session *ortgenai.Session
-	engine  *engineORTOwner
+	session   *ortgenai.Session
+	engine    *engineORTOwner
+	streaming *streamingORTProvider
 }
 
 func (a *generativeORTProvider) Close() error {
@@ -26,6 +29,9 @@ func (a *generativeORTProvider) Close() error {
 		return nil
 	}
 	var closeErr error
+	if a.streaming != nil {
+		a.streaming.Close()
+	}
 	if a.session != nil {
 		a.session.Destroy()
 		a.session = nil
@@ -82,6 +88,7 @@ type engineORTJob struct {
 	ctx         context.Context
 	batch       *PipelineBatch
 	inputs      [][]ortgenai.Message
+	imagePaths  [][]string
 	tools       []string
 	settings    engineORTTurnSettings
 	tokenStream chan SequenceDelta
@@ -114,13 +121,13 @@ type engineORTTurnSettings struct {
 	guidance           *Guidance
 }
 
-func newEngineORTOwner(modelPath string) (*engineORTOwner, error) {
+func newEngineORTOwner(modelPath string, memory options.GenAIEngineMemoryOptions) (*engineORTOwner, error) {
 	owner := &engineORTOwner{
 		commands: make(chan engineORTCommand),
 		done:     make(chan struct{}),
 	}
 	ready := make(chan error, 1)
-	go owner.run(modelPath, ready)
+	go owner.run(modelPath, memory, ready)
 	if err := <-ready; err != nil {
 		<-owner.done
 		return nil, err
@@ -128,7 +135,7 @@ func newEngineORTOwner(modelPath string) (*engineORTOwner, error) {
 	return owner, nil
 }
 
-func (o *engineORTOwner) run(modelPath string, ready chan<- error) {
+func (o *engineORTOwner) run(modelPath string, memory options.GenAIEngineMemoryOptions, ready chan<- error) {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 	defer close(o.done)
@@ -136,7 +143,10 @@ func (o *engineORTOwner) run(modelPath string, ready chan<- error) {
 	state := &engineORTState{
 		turns: make(map[*ortgenai.Request]*engineORTTurn),
 	}
-	engine, err := ortgenai.CreateEngine(modelPath)
+	engine, err := ortgenai.CreateEngineWithOptions(modelPath, ortgenai.EngineOptions{
+		DeviceMemoryBudgetBytes:   memory.DeviceMemoryBudgetBytes,
+		DeviceMemoryHeadroomBytes: memory.DeviceMemoryHeadroomBytes,
+	})
 	if err == nil {
 		state.engine = engine
 		state.capabilities, err = engine.Capabilities()
@@ -270,6 +280,15 @@ func (o *engineORTOwner) generate(ctx, sessionCtx context.Context, batch *Pipeli
 		cancel:      cancel,
 		stopSession: stopSession,
 	}
+	job.imagePaths = make([][]string, len(inputs))
+	for i, conversation := range batch.MultimodalMessages {
+		if i >= len(inputs) {
+			stopSession()
+			cancel()
+			return nil, nil, errors.New("engine media and messages must have the same conversation count")
+		}
+		job.imagePaths[i] = flattenImageURLs(conversation)
+	}
 	if err := o.do(jobCtx, func(state *engineORTState) error {
 		state.jobs = enqueueEngineORTJob(state.jobs, job)
 		return nil
@@ -400,6 +419,11 @@ func (s *engineORTState) startTurn(job *engineORTJob, sequence int) error {
 	}
 	settings := job.settings
 	maxSessionTokens := uint64(len(inputIDs)) + settings.maxGeneratedTokens
+	// Image embeddings expand the prompt inside the runtime. Reserve the full
+	// request capacity rather than estimating their size from text tokens.
+	if len(job.imagePaths) > sequence && len(job.imagePaths[sequence]) > 0 {
+		maxSessionTokens = s.capabilities.MaxRequestLength
+	}
 	if s.capabilities.MaxRequestLength > 0 && maxSessionTokens > s.capabilities.MaxRequestLength {
 		maxSessionTokens = s.capabilities.MaxRequestLength
 	}
@@ -449,7 +473,16 @@ func (s *engineORTState) startTurn(job *engineORTJob, sequence int) error {
 		cleanup()
 		return fmt.Errorf("creating tokenizer stream: %w", err)
 	}
-	turn.id, err = request.BeginTurn(inputIDs, turn.options)
+	if len(job.imagePaths) > sequence && len(job.imagePaths[sequence]) > 0 {
+		var images *ortgenai.Images
+		images, err = loadORTImages(job.imagePaths[sequence])
+		if err == nil {
+			turn.id, err = request.BeginTurnWithImages(prompt, images, turn.options)
+			images.Destroy()
+		}
+	} else {
+		turn.id, err = request.BeginTurn(inputIDs, turn.options)
+	}
 	if err != nil {
 		cleanup()
 		return fmt.Errorf("beginning turn: %w", err)
@@ -522,8 +555,68 @@ func (s *engineORTState) handleEvent(owner *engineORTOwner, event ortgenai.Event
 		if event.Usage != nil {
 			owner.tokens.Add(event.Usage.GeneratedTokens)
 		}
+		if !turn.cancelling && !turn.job.cancelled {
+			completion := &GenerationCompletion{
+				TerminalTokenID:        event.TerminalTokenID,
+				FinishReason:           ortFinishReason(event.FinishReason),
+				MatchedStopStringIndex: event.MatchedStopStringIndex,
+			}
+			if event.Usage != nil {
+				completion.PromptTokens = event.Usage.PromptTokens
+				completion.GeneratedTokens = event.Usage.GeneratedTokens
+				completion.CachedPromptTokens = event.Usage.CachedPromptTokens
+			}
+			select {
+			case turn.job.tokenStream <- SequenceDelta{Sequence: turn.sequence, Completion: completion}:
+			default:
+				turn.job.errors = append(turn.job.errors, fmt.Errorf("sequence %d: generation consumer is not keeping up with the engine stream", turn.sequence))
+			}
+		}
 		s.finishTurn(turn, false)
 	}
+}
+
+func ortFinishReason(reason ortgenai.FinishReason) string {
+	switch reason {
+	case ortgenai.FinishReasonNone:
+		return "none"
+	case ortgenai.FinishReasonEOS:
+		return "eos"
+	case ortgenai.FinishReasonStopString:
+		return "stop_string"
+	case ortgenai.FinishReasonMaxGeneratedTokens:
+		return "max_generated_tokens"
+	case ortgenai.FinishReasonMaxSessionTokens:
+		return "max_session_tokens"
+	case ortgenai.FinishReasonFailed:
+		return "failed"
+	case ortgenai.FinishReasonCancelled:
+		return "cancelled"
+	default:
+		return fmt.Sprint(reason)
+	}
+}
+
+// engineORTImageMessages converts the placeholders produced during preprocessing
+// to the vision package's marker, retaining message and image order.
+func engineORTImageMessages(inputs [][]ortgenai.Message, media [][]Message, marker string) [][]ortgenai.Message {
+	if marker == "" {
+		marker = "<|vision_start|><|image_pad|><|vision_end|>"
+	}
+	result := make([][]ortgenai.Message, len(inputs))
+	for i, messages := range inputs {
+		result[i] = append([]ortgenai.Message(nil), messages...)
+		if i >= len(media) {
+			continue
+		}
+		count := len(flattenImageURLs(media[i]))
+		for j := range result[i] {
+			for image := 1; image <= count; image++ {
+				result[i][j].Content = strings.ReplaceAll(result[i][j].Content, fmt.Sprintf("<|image_%d|>", image), marker)
+			}
+		}
+	}
+	return result
 }
 
 func findORTEventTurn(turns map[*ortgenai.Request]*engineORTTurn, event ortgenai.Event) (*engineORTTurn, error) {

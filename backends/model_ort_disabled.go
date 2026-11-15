@@ -55,6 +55,10 @@ func runGenerativeORTASR(_ context.Context, _ *BasePipeline, _ [][]float32, _ in
 	return nil, errors.New("ORT is not enabled")
 }
 
+func runStreamingORTASR(_ context.Context, _ *BasePipeline, _ <-chan []float32, _ StreamingASROptions) (<-chan ASRResult, <-chan error, error) {
+	return nil, nil, errors.New("ORT is not enabled")
+}
+
 func createORTGenerativeSession(_ context.Context, _ *Model, _ *options.Options) error {
 	return errors.New("ORT is not enabled")
 }

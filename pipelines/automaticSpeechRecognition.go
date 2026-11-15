@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -34,11 +35,29 @@ func (o *AutomaticSpeechRecognitionOutput) GetOutput() []any {
 // AutomaticSpeechRecognitionPipeline recognizes speech with CTC or a GenAI model.
 type AutomaticSpeechRecognitionPipeline struct {
 	*backends.BasePipeline
-	IDLabelMap map[int]string
-	BlankID    int
-	Input      backends.InputOutputInfo
-	SampleRate int
-	Prompt     string
+	IDLabelMap       map[int]string
+	BlankID          int
+	Input            backends.InputOutputInfo
+	SampleRate       int
+	Prompt           string
+	StreamingOptions StreamingASROptions
+}
+
+// StreamingASROptions configures PCM chunk sizing, VAD, and language settings.
+type StreamingASROptions = backends.StreamingASROptions
+
+// WithASRStreamingOptions configures a package loaded with WithGenAIStreamingASR.
+// ChunkSamples must be the package's maximum chunk size at its native sample rate.
+func WithASRStreamingOptions(opts StreamingASROptions) backends.PipelineOption[*AutomaticSpeechRecognitionPipeline] {
+	return func(p *AutomaticSpeechRecognitionPipeline) error {
+		if opts.ChunkSamples <= 0 {
+			return errors.New("streaming ASR ChunkSamples must be greater than zero")
+		}
+		opts.ProcessorOptions = maps.Clone(opts.ProcessorOptions)
+		opts.RuntimeOptions = maps.Clone(opts.RuntimeOptions)
+		p.StreamingOptions = opts
+		return nil
+	}
 }
 
 func (p *AutomaticSpeechRecognitionPipeline) IsGenerative() bool {
@@ -95,6 +114,18 @@ func WithASRBlankID(id int) backends.PipelineOption[*AutomaticSpeechRecognitionP
 }
 
 func (p *AutomaticSpeechRecognitionPipeline) Validate() error {
+	if p.Model != nil && p.Model.UsesStreamingASR() {
+		if p.StreamingOptions.ChunkSamples <= 0 {
+			return errors.New("WithGenAIStreamingASR requires WithASRStreamingOptions with a positive ChunkSamples setting")
+		}
+		if p.SampleRate <= 0 {
+			return errors.New("ASR sample rate must be greater than zero")
+		}
+		return nil
+	}
+	if p.StreamingOptions.ChunkSamples != 0 || len(p.StreamingOptions.ProcessorOptions) > 0 || len(p.StreamingOptions.RuntimeOptions) > 0 {
+		return errors.New("ASR streaming options require WithGenAIStreamingASR")
+	}
 	if p.Model != nil && p.Model.IsGenerative {
 		if err := p.Model.ValidateMultimodalSession(); err != nil {
 			return err
@@ -235,7 +266,13 @@ func (p *AutomaticSpeechRecognitionPipeline) RunWaveforms(ctx context.Context, i
 // RunWithAudio executes mono samples already sampled at the pipeline's configured SampleRate.
 func (p *AutomaticSpeechRecognitionPipeline) RunWithAudio(ctx context.Context, inputs [][]float32) (*AutomaticSpeechRecognitionOutput, error) {
 	if p.Model != nil && p.Model.IsGenerative {
-		results, err := backends.RunGenerativeASR(ctx, p.BasePipeline, inputs, p.SampleRate, p.Prompt)
+		var results []backends.ASRResult
+		var err error
+		if p.Model.UsesStreamingASR() {
+			results, err = p.runStreamingAudio(ctx, inputs)
+		} else {
+			results, err = backends.RunGenerativeASR(ctx, p.BasePipeline, inputs, p.SampleRate, p.Prompt)
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -257,4 +294,57 @@ func (p *AutomaticSpeechRecognitionPipeline) RunWithAudio(ctx context.Context, i
 		return output, nil
 	}
 	return backends.RunPipeline(ctx, len(inputs), func(batch *backends.PipelineBatch) error { return p.preprocess(batch, inputs) }, p.forward, p.postprocess)
+}
+
+// RunAudioStream accepts mono PCM at SampleRate and emits incremental transcript
+// fragments. Ownership of each chunk transfers to the pipeline; do not mutate it.
+// Chunks larger than ChunkSamples are split automatically. Close chunks to flush
+// the stream, and consume both output channels until closed. Cancel ctx to stop early.
+func (p *AutomaticSpeechRecognitionPipeline) RunAudioStream(ctx context.Context, chunks <-chan []float32) (<-chan backends.ASRResult, <-chan error, error) {
+	if p == nil || p.Model == nil || !p.Model.UsesStreamingASR() {
+		return nil, nil, errors.New("RunAudioStream requires a model loaded with WithGenAIStreamingASR")
+	}
+	return backends.RunStreamingASR(ctx, p.BasePipeline, chunks, p.StreamingOptions)
+}
+
+func (p *AutomaticSpeechRecognitionPipeline) runStreamingAudio(ctx context.Context, inputs [][]float32) ([]backends.ASRResult, error) {
+	if len(inputs) == 0 {
+		return nil, errors.New("at least one ASR waveform is required")
+	}
+	results := make([]backends.ASRResult, len(inputs))
+	for i, waveform := range inputs {
+		if len(waveform) == 0 {
+			return nil, fmt.Errorf("waveform %d is empty", i)
+		}
+		chunks := make(chan []float32, 1)
+		chunks <- waveform
+		close(chunks)
+		stream, errs, err := p.RunAudioStream(ctx, chunks)
+		if err != nil {
+			return nil, err
+		}
+		var streamErr error
+		for stream != nil || errs != nil {
+			select {
+			case fragment, ok := <-stream:
+				if !ok {
+					stream = nil
+					continue
+				}
+				results[i].Text += fragment.Text
+				results[i].Words = append(results[i].Words, fragment.Words...)
+				results[i].Segments = append(results[i].Segments, fragment.Segments...)
+			case err, ok := <-errs:
+				if !ok {
+					errs = nil
+					continue
+				}
+				streamErr = errors.Join(streamErr, err)
+			}
+		}
+		if streamErr != nil {
+			return nil, fmt.Errorf("waveform %d: %w", i, streamErr)
+		}
+	}
+	return results, nil
 }

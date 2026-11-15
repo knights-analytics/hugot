@@ -47,7 +47,7 @@ func TestCreateORTEngineRejectsUnsupportedOptionsBeforeModelLoad(t *testing.T) {
 	}
 }
 
-func TestGenerativeEngineRejectsImageBatch(t *testing.T) {
+func TestGenerativeEngineRejectsPreloadedImageBatch(t *testing.T) {
 	pipeline := &BasePipeline{
 		SessionContext: context.Background(),
 		Model: &Model{ORTModel: &ORTModel{
@@ -59,8 +59,8 @@ func TestGenerativeEngineRejectsImageBatch(t *testing.T) {
 	batch.Images = struct{}{}
 
 	tokens, errs, err := runGenerativeORTSessionOnBatch(context.Background(), batch, pipeline, 8, nil, nil, nil, nil, nil, nil)
-	if err == nil || !strings.Contains(err.Error(), "text-only") {
-		t.Fatalf("runGenerativeORTSessionOnBatch() error = %v, want text-only image rejection", err)
+	if err == nil || !strings.Contains(err.Error(), "preloaded") {
+		t.Fatalf("runGenerativeORTSessionOnBatch() error = %v, want preloaded image rejection", err)
 	}
 	if tokens != nil || errs != nil {
 		t.Fatal("image rejection unexpectedly returned generation streams")
@@ -76,11 +76,11 @@ func TestGenerativeEngineRejectsAudioBatch(t *testing.T) {
 	}
 	batch := NewBatch(1)
 	batch.InputValues = [][]ortgenai.Message{{{Role: "user", Content: "transcribe"}}}
-	batch.Audios = struct{}{}
+	batch.MultimodalMessages = [][]Message{{{Role: "user", AudioURLs: []string{"audio.wav"}}}}
 
 	tokens, errs, err := runGenerativeORTSessionOnBatch(context.Background(), batch, pipeline, 8, nil, nil, nil, nil, nil, nil)
-	if err == nil || !strings.Contains(err.Error(), "text-only") {
-		t.Fatalf("runGenerativeORTSessionOnBatch() error = %v, want text-only audio rejection", err)
+	if err == nil || !strings.Contains(err.Error(), "does not support audio") {
+		t.Fatalf("runGenerativeORTSessionOnBatch() error = %v, want audio rejection", err)
 	}
 	if tokens != nil || errs != nil {
 		t.Fatal("audio rejection unexpectedly returned generation streams")
@@ -360,6 +360,71 @@ func TestMarshalORTEngineTemplateInput(t *testing.T) {
 	}
 	if _, _, err := marshalORTEngineTemplateInput(nil, []string{"not-json"}); err == nil {
 		t.Fatal("expected invalid tool JSON to be rejected")
+	}
+}
+
+func TestEngineORTVisionRetainsImageAndContentBlockOrder(t *testing.T) {
+	batch := NewBatch(1)
+	err := CreateMessagesORT(batch, [][]Message{{{
+		Role: "user", ContentBlocks: []ContentBlock{
+			{Type: "image", URL: "first.png"},
+			{Type: "text", Text: " versus "},
+			{Type: "image", URL: "second.png"},
+		},
+	}}}, "system")
+	if err != nil {
+		t.Fatal(err)
+	}
+	inputs := batch.InputValues.([][]ortgenai.Message)
+	messages := engineORTImageMessages(inputs, batch.MultimodalMessages, "<image>")
+	if messages[0][0].Content != "system" || messages[0][1].Content != "<image> versus <image>" {
+		t.Fatalf("lost interleaving or system prompt: %#v", messages)
+	}
+	if inputs[0][1].Content != "<|image_1|> versus <|image_2|>" {
+		t.Fatal("engine preparation mutated the original batch")
+	}
+	paths := flattenImageURLs(batch.MultimodalMessages[0])
+	if len(paths) != 2 || paths[0] != "first.png" || paths[1] != "second.png" {
+		t.Fatalf("image order changed: %v", paths)
+	}
+}
+
+func TestEngineORTCompletionPreservesEOSMetadata(t *testing.T) {
+	request := &ortgenai.Request{}
+	job := &engineORTJob{tokenStream: make(chan SequenceDelta, 1)}
+	turn := &engineORTTurn{job: job, request: request, sequence: 3, id: 8}
+	state := &engineORTState{turns: map[*ortgenai.Request]*engineORTTurn{request: turn}}
+	owner := &engineORTOwner{}
+	state.handleEvent(owner, ortgenai.Event{
+		Flags: ortgenai.EventFlagTurnFinished, Request: request, TurnID: 8,
+		TerminalTokenID: 42, FinishReason: ortgenai.FinishReasonEOS, MatchedStopStringIndex: -1,
+		Usage: &ortgenai.TurnUsage{PromptTokens: 7, GeneratedTokens: 4, CachedPromptTokens: 2},
+	})
+	select {
+	case delta := <-job.tokenStream:
+		if delta.Token != "" || delta.Sequence != 3 || delta.Completion == nil {
+			t.Fatalf("completion was decoded as text or lost sequence: %#v", delta)
+		}
+		completion := delta.Completion
+		if completion.TerminalTokenID != 42 || completion.FinishReason != "eos" || completion.MatchedStopStringIndex != -1 || completion.PromptTokens != 7 || completion.GeneratedTokens != 4 || completion.CachedPromptTokens != 2 {
+			t.Fatalf("lost completion metadata: %#v", completion)
+		}
+	default:
+		t.Fatal("missing completion event")
+	}
+	if len(job.errors) != 0 || len(state.turns) != 0 || owner.tokens.Load() != 4 {
+		t.Fatalf("turn did not finish cleanly: errors=%v turns=%d", job.errors, len(state.turns))
+	}
+}
+
+func TestORTASRAggregatesIncrementalResults(t *testing.T) {
+	var result ASRResult
+	first := ortgenai.ASRResult{Text: "hello", Words: []ortgenai.ASRTimestamp{{Text: "hello", StartFrame: 1, StopFrame: 2, StartTime: 123, StopTime: 456}}}
+	appendORTASRResult(&result, first)
+	appendORTASRResult(&result, ortgenai.ASRResult{Text: " world", Segments: []ortgenai.ASRTimestamp{{Text: "hello world", StartTime: 123, StopTime: 789}}})
+	first.Words[0].Text = "changed"
+	if result.Text != "hello world" || len(result.Words) != 1 || result.Words[0].Text != "hello" || result.Words[0].StartTime != 123 || result.Words[0].StopFrame != 2 || len(result.Segments) != 1 || result.Segments[0].StopTime != 789 {
+		t.Fatalf("lost fragments or timestamp precision: %#v", result)
 	}
 }
 

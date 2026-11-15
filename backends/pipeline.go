@@ -332,6 +332,21 @@ func RunGenerativeASR(ctx context.Context, p *BasePipeline, samples [][]float32,
 	return backend.RunGenerativeASR(ctx, p, samples, sampleRate, prompt)
 }
 
+// RunStreamingASR transcribes PCM chunks, emitting copied incremental results.
+// Closing chunks flushes buffered audio and finalizes word/segment timestamps.
+func RunStreamingASR(ctx context.Context, p *BasePipeline, chunks <-chan []float32, opts StreamingASROptions) (<-chan ASRResult, <-chan error, error) {
+	if p == nil || p.Backend == nil {
+		return nil, nil, errors.New("pipeline backend is not configured")
+	}
+	backend, ok := p.Backend.(interface {
+		RunStreamingASR(context.Context, *BasePipeline, <-chan []float32, StreamingASROptions) (<-chan ASRResult, <-chan error, error)
+	})
+	if !ok {
+		return nil, nil, errors.New("pipeline backend does not support streaming ASR")
+	}
+	return backend.RunStreamingASR(ctx, p, chunks, opts)
+}
+
 func CreateMessages(batch *PipelineBatch, p *BasePipeline, inputs any, systemPrompt string) error {
 	if p.Backend == nil {
 		return fmt.Errorf("pipeline backend is not configured")
