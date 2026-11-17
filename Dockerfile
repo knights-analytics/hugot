@@ -16,7 +16,8 @@ ARG ONNXRUNTIME_GENAI_VERSION
 ARG GOPJRT_VERSION
 
 ENV PATH="$PATH:/usr/local/go/bin" \
-    GOPJRT_NOSUDO=1
+    GOPJRT_NOSUDO=1 \
+    GOEXPERIMENT=simd
 
 COPY ./scripts/download-onnxruntime.sh /download-onnxruntime.sh
 COPY ./scripts/download-onnxruntime-genai.sh /download-onnxruntime-genai.sh

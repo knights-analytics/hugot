@@ -29,5 +29,13 @@ docker compose -f "$src_dir/compose-test.yaml" logs --no-color >& "$test_folder/
 docker compose -f "$src_dir/compose-test.yaml" rm -fsv
 
 echo "Extracting lib artifacts"
-docker build -f ./test.Dockerfile . --output "$src_dir/artifacts" --target artifacts
+artifact_container=$(docker create hugot-test:latest)
+trap 'docker rm -f "$artifact_container" >/dev/null 2>&1 || true' EXIT
+mkdir -p "$src_dir/artifacts"
+docker cp "$artifact_container:/usr/lib/libonnxruntime.so" \
+  "$src_dir/artifacts/libonnxruntime-linux-x64.so"
+docker cp "$artifact_container:/usr/lib/libonnxruntime-genai.so" \
+  "$src_dir/artifacts/libonnxruntime-genai-linux-x64.so"
+docker rm "$artifact_container" >/dev/null
+trap - EXIT
 echo "lib artifacts extracted"

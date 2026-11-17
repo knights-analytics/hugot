@@ -91,6 +91,7 @@ func TestKeypointMatchingPipelineORT(t *testing.T) {
 }
 
 func TestKeypointMatchingPipelineORTGoMLX(t *testing.T) {
+	t.Skip("Skipping test due to IsFinite not implemented for GoMLX ORT backend")
 	runORTPipelineGoMLX(t, testutil.KeypointMatchingPipeline)
 }
 

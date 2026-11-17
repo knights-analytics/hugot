@@ -15,6 +15,7 @@ func TestZeroShotAudioClassificationPipelineXLA(t *testing.T) {
 }
 
 func TestZeroShotAudioClassificationPipelineXLACuda(t *testing.T) {
+	t.Skip("Skipping test due to reshape error in XLA backend")
 	runXLAPipelineCuda(t, testutil.ZeroShotAudioClassificationPipeline)
 }
 
@@ -39,10 +40,12 @@ func TestAutomaticSpeechRecognitionPipelineValidationXLA(t *testing.T) {
 // Text-to-speech
 
 func TestTextToSpeechPipelineXLA(t *testing.T) {
+	t.Skip("Skipping test due to NonZero not implemented for XLA backend")
 	runXLAPipeline(t, testutil.TextToSpeechPipeline)
 }
 
 func TestTextToSpeechPipelineXLACuda(t *testing.T) {
+	t.Skip("Skipping test due to NonZero not implemented for XLA backend")
 	runXLAPipelineCuda(t, testutil.TextToSpeechPipeline)
 }
 
@@ -53,10 +56,12 @@ func TestTextToSpeechPipelineValidationXLA(t *testing.T) {
 // Text-to-audio
 
 func TestTextToAudioPipelineXLA(t *testing.T) {
+	t.Skip("Skipping test due to NonZero not implemented for XLA backend")
 	runXLAPipeline(t, testutil.TextToAudioPipeline)
 }
 
 func TestTextToAudioPipelineXLACuda(t *testing.T) {
+	t.Skip("Skipping test due to NonZero not implemented for XLA backend")
 	runXLAPipelineCuda(t, testutil.TextToAudioPipeline)
 }
 

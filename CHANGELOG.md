@@ -4,12 +4,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
-## [Unreleased]
+## [0.9.0]
 
 ### Changed
 
+- All (non-generative) pipelines now run on the Go backend.
 - Upgraded ONNX Runtime to 1.32.0.
 - Upgraded ORT GenAI to 0.20.0.
+- Fixes to support embeddinggemma 2.
 
 ## [0.8.6]
 

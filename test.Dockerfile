@@ -4,6 +4,8 @@ FROM ghcr.io/knights-analytics/hugot/models:latest AS models
 
 FROM --platform=$BUILDPLATFORM hugot:latest AS hugot-test
 
+ENV GOEXPERIMENT=simd
+
 COPY . /build
 COPY --from=models /models /build/models
 
