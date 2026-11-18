@@ -55,7 +55,7 @@ RUN --mount=src=./go.mod,dst=/go.mod \
     rm go${GO_VERSION}.linux-amd64.tar.gz && \
     # onnxruntime cpu and gpu \
     if [ -n "$ONNXRUNTIME_MIRROR_URL" ]; then \
-      chmod +x /install-onnxruntime-mirror.sh && \
+      sed -i 's/\r//g' /install-onnxruntime-mirror.sh && chmod +x /install-onnxruntime-mirror.sh && \
       /install-onnxruntime-mirror.sh "$ONNXRUNTIME_MIRROR_URL" "$ONNXRUNTIME_VERSION" "$ONNXRUNTIME_GENAI_VERSION" --cuda; \
     else \
       sed -i 's/\r//g' /download-onnxruntime.sh && chmod +x /download-onnxruntime.sh && \

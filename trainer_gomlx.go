@@ -74,6 +74,16 @@ func classifierTask[T backends.Pipeline]() (backends.ClassifierTask, bool) {
 	return 0, false
 }
 
+// defaultLearningRate is the learning rate the trainer's default optimizer uses for the pipeline
+// type.
+func defaultLearningRate[T backends.Pipeline]() float64 {
+	var zero T
+	if _, ok := any(zero).(*pipelines.FeatureExtractionPipeline); ok {
+		return defaultEmbeddingLearningRate
+	}
+	return defaultClassificationLearningRate
+}
+
 // applyTrainingDefaults fills in the optimizer and loss function for the pipeline type. The type
 // has already been accepted by checkTrainable.
 func applyTrainingDefaults[T backends.Pipeline](config *TrainerConfig[T]) {
@@ -277,7 +287,7 @@ func (t *Trainer[T]) trainGoMLX(ctx context.Context) error {
 
 	gomlxTrainer := train.NewTrainer(backend,
 		store,
-		modelFn,
+		withSchedule(modelFn, t.schedule),
 		t.config.GOMLXOptions.Loss,
 		t.config.GOMLXOptions.Optimizer,
 		nil,
@@ -437,6 +447,9 @@ func (t *Trainer[T]) runTrainingLoop(ctx context.Context, gomlxTrainer *train.Tr
 	var trainAccuracies, evalAccuracies []float32
 	var trainF1s, evalF1s []float32
 	var runningLosses []float32
+	// With a schedule, the learning rate of the latest step, and of the last step of each epoch.
+	var stepRate float32
+	var learningRates []float32
 
 	// Every training step already computes its loss, so the mean over the epoch is free.
 	var stepLossSum float64
@@ -444,6 +457,9 @@ func (t *Trainer[T]) runTrainingLoop(ctx context.Context, gomlxTrainer *train.Tr
 	closeRunningLoss := func() {
 		if stepCount > 0 {
 			runningLosses = append(runningLosses, float32(stepLossSum/float64(stepCount)))
+			if t.schedule != nil {
+				learningRates = append(learningRates, stepRate)
+			}
 		}
 		stepLossSum, stepCount = 0, 0
 	}
@@ -608,6 +624,15 @@ func (t *Trainer[T]) runTrainingLoop(ctx context.Context, gomlxTrainer *train.Tr
 			stepLossSum += float64(stepLoss)
 			stepCount++
 		}
+		if t.schedule != nil {
+			rate, ok, err := currentLearningRate(store)
+			if err != nil {
+				return err
+			}
+			if ok {
+				stepRate = rate
+			}
+		}
 		return nil
 	}
 	loop.OnStep("evaluateAfterEpoch", train.Priority(1), evaluateEpoch)
@@ -658,6 +683,7 @@ func (t *Trainer[T]) runTrainingLoop(ctx context.Context, gomlxTrainer *train.Tr
 		EpochTrainF1:         trainF1s,
 		EpochEvalF1:          evalF1s,
 		EpochRunningLosses:   runningLosses,
+		EpochLearningRates:   learningRates,
 		BestEpoch:            bestEpoch,
 	}
 	return nil

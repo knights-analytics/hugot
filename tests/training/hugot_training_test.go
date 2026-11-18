@@ -1453,3 +1453,66 @@ func TestNewTrainerRejectsLabelsForEmbeddings(t *testing.T) {
 	assert.ErrorContains(t, err, "TrainerConfig.Labels applies to text and token classification only")
 	assert.Empty(t, session.GetModels())
 }
+
+// The schedule sets the rate the optimizer trains with: a constant schedule at 2e-4 on an optimizer
+// configured at 1e-9 trains exactly as a plain optimizer at 2e-4. A linear schedule with warmup
+// reports, for each epoch, the rate of its last step, on Hugging Face's curve.
+func learningRateSchedule(t *testing.T, session *hugot.Session) {
+	trainPath := testutil.TestCasesFolder + "textClassificationInvertedSentiment.jsonl"
+	const epochs = 3
+	run := func(rate float64, opts ...hugot.TrainerOption) (hugot.TrainingStatistics, int) {
+		trainDataset, err := datasets.NewTextClassificationDataset(t.Context(), trainPath, 4, datasets.SingleLabel, nil, nil)
+		testutil.CheckT(t, err)
+		batches, err := trainDataset.NumBatches()
+		testutil.CheckT(t, err)
+		trainer, err := session.NewTrainer(hugot.TrainerConfig[*pipelines.TextClassificationPipeline]{
+			ModelPath:    sst2ModelPath,
+			TrainDataset: trainDataset,
+			GOMLXOptions: &hugot.GOMLXTrainingOptions{Optimizer: optimizer.Adam().LearningRate(rate).Done()},
+		}, append([]hugot.TrainerOption{hugot.WithEpochs(epochs)}, opts...)...)
+		testutil.CheckT(t, err)
+		defer func() { testutil.CheckT(t, trainer.Close()) }()
+		testutil.CheckT(t, trainer.Train(t.Context()))
+		return trainer.Statistics(), batches
+	}
+
+	plain, _ := run(2e-4)
+	constant, _ := run(1e-9, hugot.WithLearningRateSchedule(hugot.LearningRateSchedule{
+		Decay: hugot.ConstantRate, PeakLearningRate: 2e-4,
+	}))
+	t.Logf("running losses: plain %v, constant schedule %v", plain.EpochRunningLosses, constant.EpochRunningLosses)
+	assert.Empty(t, plain.EpochLearningRates, "learning rates are recorded with a schedule only")
+	assert.InDeltaSlice(t, plain.EpochRunningLosses, constant.EpochRunningLosses, 1e-3,
+		"the schedule's rate must replace the optimizer's")
+	assert.InDeltaSlice(t, []float32{2e-4, 2e-4, 2e-4}, constant.EpochLearningRates, 1e-10)
+
+	const peak, warmup = 1e-4, 3
+	linear, batches := run(1e-9, hugot.WithLearningRateSchedule(hugot.LearningRateSchedule{
+		WarmupSteps: warmup, PeakLearningRate: peak,
+	}))
+	total := epochs * batches
+	if !assert.Len(t, linear.EpochLearningRates, epochs) {
+		return
+	}
+	for epoch, got := range linear.EpochLearningRates {
+		lastStep := (epoch+1)*batches - 1
+		want := peak * float64(total-lastStep) / float64(total-warmup)
+		if lastStep < warmup {
+			want = peak * float64(lastStep) / warmup
+		}
+		assert.InDelta(t, want, got, 1e-6*peak, "epoch %d, step %d of %d", epoch, lastStep, total)
+	}
+	assert.NotEqual(t, plain.EpochRunningLosses, linear.EpochRunningLosses, "a different schedule must train differently")
+}
+
+func TestLearningRateScheduleXLA(t *testing.T) {
+	runXLATraining(t, learningRateSchedule)
+}
+
+func TestLearningRateScheduleXLACuda(t *testing.T) {
+	runXLATrainingCuda(t, learningRateSchedule)
+}
+
+func TestLearningRateScheduleGo(t *testing.T) {
+	runGoTraining(t, learningRateSchedule)
+}

@@ -79,6 +79,11 @@ func (s *SemanticSimilarityDataset) SetShuffle(seed uint64) {
 	s.source.setShuffle(seed)
 }
 
+// NumBatches returns the number of batches in one pass over the dataset. See [BatchCounter].
+func (s *SemanticSimilarityDataset) NumBatches() (int, error) {
+	return s.source.numBatches()
+}
+
 func (s *SemanticSimilarityDataset) SetTokenizationPipeline(pipeline backends.Pipeline) error {
 	if pipeline == nil {
 		return fmt.Errorf("pipeline is required")
