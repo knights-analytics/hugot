@@ -289,7 +289,11 @@ func initialiseORTGenAI(ctx context.Context, options *options.Options) error {
 			return fmt.Errorf("cannot find the ortgenai library at: %s", libraryPath)
 		}
 		ortgenai.SetSharedLibraryPath(libraryPath)
-		err := ortgenai.InitializeEnvironment()
+		err := initializeORTGenAIEnvironment(
+			ortgenai.InitializeEnvironment,
+			options.ORTOptions.Telemetry,
+			ortgenai.SetTelemetryEnabled,
+		)
 		if err != nil {
 			return fmt.Errorf("error initializing the ort genai environment: %w", err)
 		}
@@ -297,6 +301,18 @@ func initialiseORTGenAI(ctx context.Context, options *options.Options) error {
 			return fmt.Errorf("applying ORT GenAI process controls: %w", applyErr)
 		}
 	}
+	return nil
+}
+
+func resolveGenAITelemetry(telemetry *bool) bool {
+	return telemetry != nil && *telemetry
+}
+
+func initializeORTGenAIEnvironment(initialize func() error, telemetry *bool, setTelemetryEnabled func(bool)) error {
+	if err := initialize(); err != nil {
+		return err
+	}
+	setTelemetryEnabled(resolveGenAITelemetry(telemetry))
 	return nil
 }
 
