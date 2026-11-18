@@ -32,6 +32,15 @@ type TrainingStatistics struct {
 	// for text classification (see evaluation.ScoreMultiLabel). Recorded for those pipelines only.
 	EpochTrainF1 []float32 `json:"epochTrainF1,omitempty"`
 	EpochEvalF1  []float32 `json:"epochEvalF1,omitempty"`
+	// EpochRunningLosses holds, for each epoch, the mean loss over that epoch's training steps. It is
+	// recorded on every run at no extra cost, unlike EpochTrainLosses, which takes a separate pass
+	// over TrainerConfig.TrainEvalDataset. The weights change during the epoch, so it trails the
+	// loss the model has at the epoch's end.
+	EpochRunningLosses []float32 `json:"epochRunningLosses,omitempty"`
+	// BestEpoch is the epoch, counting from 1, whose weights the trained model holds when early
+	// stopping is enabled: the one with the lowest evaluation loss. It is 0 without early stopping,
+	// where the model holds the weights of the last epoch.
+	BestEpoch int `json:"bestEpoch,omitempty"`
 }
 
 type earlyStopping struct {
@@ -87,8 +96,14 @@ type trainerSettings struct {
 	earlyStopping    *earlyStopping
 	freezeLayers     []int // 0 is the first layer; [-1] freezes all but the last layer
 	maxEpochs        int
+	seed             uint64 // seeds the training data's shuffle
 	freezeEmbeddings bool
+	noShuffle        bool
 }
+
+// defaultSeed seeds the shuffling of the training data unless WithSeed sets another. It is the
+// default seed of Hugging Face's Trainer.
+const defaultSeed = 42
 
 // TrainerOption configures how a training run behaves.
 type TrainerOption func(*trainerSettings) error
@@ -131,6 +146,26 @@ func WithFreezeLayers(layers []int) TrainerOption {
 	}
 }
 
+// WithSeed sets the seed for shuffling the training data, so that runs can differ from one another
+// or be reproduced. Defaults to 42.
+func WithSeed(seed uint64) TrainerOption {
+	return func(t *trainerSettings) error {
+		t.seed = seed
+		return nil
+	}
+}
+
+// WithoutShuffle trains on the examples in the order the training dataset holds them, the same
+// order every epoch. By default each epoch visits them in a new random order (see
+// [datasets.Shuffler]), which helps whenever the data is sorted, e.g. grouped by label, and for a
+// contrastive dataset gives each example new in-batch negatives every epoch.
+func WithoutShuffle() TrainerOption {
+	return func(t *trainerSettings) error {
+		t.noShuffle = true
+		return nil
+	}
+}
+
 // WithEarlyStopping enables early stopping with a patience of 3 epochs and a tolerance of 1e-4.
 // It requires TrainerConfig.EvalDataset to be set.
 func WithEarlyStopping() TrainerOption {
@@ -139,6 +174,10 @@ func WithEarlyStopping() TrainerOption {
 
 // WithEarlyStoppingParams enables early stopping with an explicit patience and tolerance.
 // It requires TrainerConfig.EvalDataset to be set.
+//
+// With early stopping, the trained model keeps the weights of its best epoch, the one with the
+// lowest evaluation loss, rather than those of the last epoch trained: when training stops, or runs
+// out of epochs, the best weights are restored. [TrainingStatistics.BestEpoch] reports which.
 func WithEarlyStoppingParams(patience int, tolerance float32) TrainerOption {
 	return func(t *trainerSettings) error {
 		if patience <= 0 {
@@ -254,7 +293,7 @@ func (s *Session) NewTrainer[T backends.Pipeline](config TrainerConfig[T], opts 
 		return nil, errors.New("training on an ORT session requires creating it with options.WithGoMLX()")
 	}
 
-	settings := trainerSettings{maxEpochs: 100}
+	settings := trainerSettings{maxEpochs: 100, seed: defaultSeed}
 	for _, opt := range opts {
 		if err := opt(&settings); err != nil {
 			return nil, err
@@ -341,6 +380,12 @@ func newTrainer[T backends.Pipeline](s *Session, config TrainerConfig[T], settin
 
 	if err = trainer.bindDatasets(); err != nil {
 		return nil, err
+	}
+	if !settings.noShuffle {
+		// A dataset that cannot shuffle is trained in its own order.
+		if shuffler, ok := config.TrainDataset.(datasets.Shuffler); ok {
+			shuffler.SetShuffle(settings.seed)
+		}
 	}
 	applyTrainingDefaults(&trainer.config)
 	return trainer, nil

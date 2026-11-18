@@ -30,8 +30,9 @@ import (
 const (
 	defaultClassificationLearningRate = 5e-5
 	defaultClassificationWeightDecay  = 0.01
-	// defaultContrastiveLearningRate is sentence-transformers' default for contrastive training.
-	defaultContrastiveLearningRate = 2e-5
+	// defaultEmbeddingLearningRate is sentence-transformers' default for training embeddings, both
+	// on scored pairs and contrastively.
+	defaultEmbeddingLearningRate = 2e-5
 	// evaluationBatchSize is the inference batch size for the per-epoch F1 metrics.
 	evaluationBatchSize = 32
 )
@@ -83,20 +84,18 @@ func applyTrainingDefaults[T backends.Pipeline](config *TrainerConfig[T]) {
 			config.GOMLXOptions = &GOMLXTrainingOptions{}
 		}
 		if isContrastive(config.TrainDataset) {
-			// sentence-transformers' defaults for this loss: AdamW at 2e-5, weight decay 0.01.
-			if config.GOMLXOptions.Optimizer == nil {
-				config.GOMLXOptions.Optimizer = optimizer.Adam().
-					LearningRate(defaultContrastiveLearningRate).
-					WeightDecay(defaultClassificationWeightDecay).
-					Done()
-			}
 			if config.GOMLXOptions.Loss == nil {
 				config.GOMLXOptions.Loss = loss.SparseCategoricalCrossEntropyLogits
 			}
-			return
 		}
+		// sentence-transformers' defaults for both of its losses here: AdamW at 2e-5, weight decay
+		// 0.01. This replaced plain SGD at GoMLX's default rate of 0.1, which at small batch sizes
+		// moves a pretrained transformer far enough to overwrite what it learned in pretraining.
 		if config.GOMLXOptions.Optimizer == nil {
-			config.GOMLXOptions.Optimizer = optimizer.StochasticGradientDescent()
+			config.GOMLXOptions.Optimizer = optimizer.Adam().
+				LearningRate(defaultEmbeddingLearningRate).
+				WeightDecay(defaultClassificationWeightDecay).
+				Done()
 		}
 		if config.GOMLXOptions.Loss == nil {
 			config.GOMLXOptions.Loss = loss.MeanSquaredError
@@ -284,7 +283,7 @@ func (t *Trainer[T]) trainGoMLX(ctx context.Context) error {
 		nil,
 		evalMetrics)
 
-	return t.runTrainingLoop(ctx, gomlxTrainer, len(evalMetrics) > 0)
+	return t.runTrainingLoop(ctx, gomlxTrainer, store, len(evalMetrics) > 0)
 }
 
 // classificationModelFn returns the model's logits: [batch, labels] for text classification, and
@@ -362,9 +361,67 @@ func resetInference(model *backends.Model, needed bool) error {
 	return model.GoMLXModel.ResetExec()
 }
 
+// weightSnapshot holds copies of a model's trainable weights, to restore the best epoch's.
+type weightSnapshot map[*mlmodel.Variable]*tensors.Tensor
+
+// snapshotWeights copies the store's trainable variables to host memory. Frozen variables never
+// change, so they are not copied.
+func snapshotWeights(store *mlmodel.Store) (weightSnapshot, error) {
+	snapshot := weightSnapshot{}
+	for v := range store.IterVariables() {
+		if !v.Trainable {
+			continue
+		}
+		value, err := v.Value()
+		if err != nil {
+			snapshot.finalize()
+			return nil, fmt.Errorf("failed to read variable %s: %w", v.Name(), err)
+		}
+		clone, err := value.LocalClone()
+		if err != nil {
+			snapshot.finalize()
+			return nil, fmt.Errorf("failed to copy variable %s: %w", v.Name(), err)
+		}
+		snapshot[v] = clone
+	}
+	return snapshot, nil
+}
+
+// restore sets every variable back to its copy. The copies become the variables' values, so the
+// snapshot is empty afterwards.
+func (s weightSnapshot) restore() error {
+	for v, value := range s {
+		if err := v.SetValue(value); err != nil {
+			return fmt.Errorf("failed to restore variable %s: %w", v.Name(), err)
+		}
+		delete(s, v)
+	}
+	return nil
+}
+
+// finalize releases the copies.
+func (s weightSnapshot) finalize() {
+	for v, value := range s {
+		value.FinalizeAll()
+		delete(s, v)
+	}
+}
+
+// scalarValue reads a scalar loss tensor as a float32.
+func scalarValue(t *tensors.Tensor) (float32, error) {
+	switch v := t.Value().(type) {
+	case float32:
+		return v, nil
+	case float64:
+		return float32(v), nil
+	default:
+		return 0, fmt.Errorf("expected a float scalar loss, got %T", v)
+	}
+}
+
 // runTrainingLoop runs the epochs, evaluating after each one for the statistics and early stopping.
 // With withAccuracy, the first evaluation metric after the loss is recorded as the accuracy.
-func (t *Trainer[T]) runTrainingLoop(ctx context.Context, gomlxTrainer *train.Trainer, withAccuracy bool) error {
+func (t *Trainer[T]) runTrainingLoop(ctx context.Context, gomlxTrainer *train.Trainer, store *mlmodel.Store, withAccuracy bool) error {
 	loop := train.NewLoop(gomlxTrainer)
 
 	if t.config.Verbose {
@@ -379,9 +436,25 @@ func (t *Trainer[T]) runTrainingLoop(ctx context.Context, gomlxTrainer *train.Tr
 	var trainLosses, evalLosses []float32
 	var trainAccuracies, evalAccuracies []float32
 	var trainF1s, evalF1s []float32
+	var runningLosses []float32
+
+	// Every training step already computes its loss, so the mean over the epoch is free.
+	var stepLossSum float64
+	var stepCount int
+	closeRunningLoss := func() {
+		if stepCount > 0 {
+			runningLosses = append(runningLosses, float32(stepLossSum/float64(stepCount)))
+		}
+		stepLossSum, stepCount = 0, 0
+	}
 
 	var bestLoss float32 = math.MaxFloat32
 	epochsWithoutImprovement := 0
+	// With early stopping: a copy of the weights at the best epoch so far, that epoch counting from
+	// 1, and the last epoch evaluated. If training ends past the best epoch, its weights are restored.
+	var best weightSnapshot
+	bestEpoch, lastEvaluated := 0, 0
+	defer func() { best.finalize() }()
 
 	// A backend that prefers constants for variables (the Go backend) bakes the weights into any
 	// graph built outside training mode, and the GoMLX trainer caches its evaluation graph, so every
@@ -484,9 +557,16 @@ func (t *Trainer[T]) runTrainingLoop(ctx context.Context, gomlxTrainer *train.Tr
 
 		if t.settings.earlyStopping != nil {
 			meanLoss := evalLosses[len(evalLosses)-1]
+			lastEvaluated = epoch + 1
 			if bestLoss-meanLoss > t.settings.earlyStopping.tolerance {
 				bestLoss = meanLoss
 				epochsWithoutImprovement = 0
+				bestEpoch = epoch + 1
+				best.finalize()
+				var err error
+				if best, err = snapshotWeights(store); err != nil {
+					return err
+				}
 				if t.config.Verbose {
 					fmt.Printf("New best loss: %.4f at epoch %d\n", bestLoss, epoch)
 				}
@@ -508,17 +588,26 @@ func (t *Trainer[T]) runTrainingLoop(ctx context.Context, gomlxTrainer *train.Tr
 
 	// The loop has no end-of-epoch hook, so an epoch is evaluated at the first step of the next
 	// one, and the last epoch after the loop returns.
-	var evaluateEpoch train.OnStepFn = func(loop *train.Loop, _ []*tensors.Tensor) error {
+	var evaluateEpoch train.OnStepFn = func(loop *train.Loop, metrics []*tensors.Tensor) error {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		if loop.Epoch == currentEpoch {
-			return nil
+		if loop.Epoch != currentEpoch {
+			closeRunningLoss()
+			if err := evaluate(currentEpoch); err != nil {
+				return err
+			}
+			currentEpoch = loop.Epoch
 		}
-		if err := evaluate(currentEpoch); err != nil {
-			return err
+		// This step belongs to the epoch now running. The first train metric is the step's loss.
+		if len(metrics) > 0 {
+			stepLoss, err := scalarValue(metrics[0])
+			if err != nil {
+				return err
+			}
+			stepLossSum += float64(stepLoss)
+			stepCount++
 		}
-		currentEpoch = loop.Epoch
 		return nil
 	}
 	loop.OnStep("evaluateAfterEpoch", train.Priority(1), evaluateEpoch)
@@ -536,7 +625,24 @@ func (t *Trainer[T]) runTrainingLoop(ctx context.Context, gomlxTrainer *train.Tr
 		}
 	}
 	if !stopped {
+		closeRunningLoss()
 		if err := evaluate(currentEpoch); err != nil && !errors.Is(err, stoppingError{}) {
+			return err
+		}
+	}
+
+	if bestEpoch > 0 && bestEpoch < lastEvaluated {
+		if t.config.Verbose {
+			fmt.Printf("Restoring the weights of epoch %d, the best evaluation loss (%.4f)\n", bestEpoch, bestLoss)
+		}
+		if err := best.restore(); err != nil {
+			return err
+		}
+		// Graphs that baked in the old weights as constants must be rebuilt to see the restored ones.
+		if rebuildBeforeEval {
+			gomlxTrainer.ResetComputationGraphs()
+		}
+		if err := resetInference(t.pipeline.GetModel(), rebuildBeforeEval); err != nil {
 			return err
 		}
 	}
@@ -551,6 +657,8 @@ func (t *Trainer[T]) runTrainingLoop(ctx context.Context, gomlxTrainer *train.Tr
 		EpochEvalAccuracies:  evalAccuracies,
 		EpochTrainF1:         trainF1s,
 		EpochEvalF1:          evalF1s,
+		EpochRunningLosses:   runningLosses,
+		BestEpoch:            bestEpoch,
 	}
 	return nil
 }

@@ -137,6 +137,12 @@ func (s *TextClassificationDataset) SetVerbose(v bool) {
 	s.source.verbose = v
 }
 
+// SetShuffle makes each pass over the dataset visit the examples in a new random order, drawn
+// from seed. See [Shuffler].
+func (s *TextClassificationDataset) SetShuffle(seed uint64) {
+	s.source.setShuffle(seed)
+}
+
 // SetTokenizationPipeline sets the pipeline whose tokenizer and id2label map the dataset uses.
 func (s *TextClassificationDataset) SetTokenizationPipeline(pipeline backends.Pipeline) error {
 	if pipeline == nil {
