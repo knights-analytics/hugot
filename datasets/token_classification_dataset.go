@@ -139,6 +139,11 @@ func (s *TokenClassificationDataset) SetShuffle(seed uint64) {
 	s.source.setShuffle(seed)
 }
 
+// NumBatches returns the number of batches in one pass over the dataset. See [BatchCounter].
+func (s *TokenClassificationDataset) NumBatches() (int, error) {
+	return s.source.numBatches()
+}
+
 // SetTokenizationPipeline sets the pipeline whose tokenizer and id2label map the dataset uses.
 func (s *TokenClassificationDataset) SetTokenizationPipeline(pipeline backends.Pipeline) error {
 	if pipeline == nil {

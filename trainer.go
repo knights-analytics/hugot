@@ -37,6 +37,9 @@ type TrainingStatistics struct {
 	// over TrainerConfig.TrainEvalDataset. The weights change during the epoch, so it trails the
 	// loss the model has at the epoch's end.
 	EpochRunningLosses []float32 `json:"epochRunningLosses,omitempty"`
+	// EpochLearningRates holds, for each epoch, the learning rate of its last training step. It is
+	// recorded with a learning rate schedule only (see WithLearningRateSchedule).
+	EpochLearningRates []float32 `json:"epochLearningRates,omitempty"`
 	// BestEpoch is the epoch, counting from 1, whose weights the trained model holds when early
 	// stopping is enabled: the one with the lowest evaluation loss. It is 0 without early stopping,
 	// where the model holds the weights of the last epoch.
@@ -99,6 +102,7 @@ type trainerSettings struct {
 	seed             uint64 // seeds the training data's shuffle
 	freezeEmbeddings bool
 	noShuffle        bool
+	schedule         *LearningRateSchedule // set by WithLearningRateSchedule
 }
 
 // defaultSeed seeds the shuffling of the training data unless WithSeed sets another. It is the
@@ -206,6 +210,7 @@ type Trainer[T backends.Pipeline] struct {
 	statistics TrainingStatistics
 	headChange *backends.ClassifierHeadChange
 	placement  backends.VariablePlacement // where each weight sits, read when freezing is set
+	schedule   *learningRateSchedule      // the learning rate schedule resolved for this run, if any
 	closed     bool
 }
 
@@ -385,6 +390,15 @@ func newTrainer[T backends.Pipeline](s *Session, config TrainerConfig[T], settin
 		// A dataset that cannot shuffle is trained in its own order.
 		if shuffler, ok := config.TrainDataset.(datasets.Shuffler); ok {
 			shuffler.SetShuffle(settings.seed)
+		}
+	}
+	if settings.schedule != nil {
+		// Read before the defaults fill the optimizer in: a schedule cannot learn the peak rate from
+		// an optimizer the caller built.
+		userOptimizer := config.GOMLXOptions != nil && config.GOMLXOptions.Optimizer != nil
+		if trainer.schedule, err = resolveSchedule(*settings.schedule, settings, config.TrainDataset,
+			defaultLearningRate[T](), userOptimizer); err != nil {
+			return nil, err
 		}
 	}
 	applyTrainingDefaults(&trainer.config)

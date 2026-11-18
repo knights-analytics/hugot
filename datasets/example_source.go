@@ -54,6 +54,15 @@ type Shuffler interface {
 	SetShuffle(seed uint64)
 }
 
+// BatchCounter is implemented by the datasets that can say how many batches one pass over them
+// yields. The trainer needs it to lay a learning-rate schedule over the whole run; see
+// hugot.WithLearningRateSchedule.
+type BatchCounter interface {
+	// NumBatches returns the number of batches in one pass over the dataset. For a .jsonl file it
+	// reads and parses the file once, without tokenizing, and leaves the current pass untouched.
+	NumBatches() (int, error)
+}
+
 // setShuffle enables shuffling with a random sequence drawn from seed.
 func (s *exampleSource[E]) setShuffle(seed uint64) {
 	s.rng = rand.New(rand.NewPCG(seed, seed)) // #nosec G404 -- reproducible data order, not security
@@ -253,6 +262,41 @@ func (s *exampleSource[E]) all() ([]E, error) {
 			return nil, err
 		}
 	}
+}
+
+// numBatches returns how many batches one pass yields: the examples that keep accepts, divided
+// into batches of batchSize with a final partial batch. A file is read through its own handle, so
+// the pass in progress is not disturbed.
+func (s *exampleSource[E]) numBatches() (int, error) {
+	n := len(s.examples)
+	if n == 0 {
+		if s.fsContext == nil {
+			return 0, errors.New("the dataset has not been opened")
+		}
+		file, err := fileutil.OpenFile(s.fsContext, s.path)
+		if err != nil {
+			return 0, err
+		}
+		defer func() { _ = file.Close() }()
+		reader := bufio.NewReader(file)
+		for {
+			lineBytes, err := fileutil.ReadLine(reader)
+			if errors.Is(err, io.EOF) {
+				break
+			}
+			if err != nil {
+				return 0, err
+			}
+			var example E
+			if err = json.Unmarshal(lineBytes, &example); err != nil {
+				return 0, fmt.Errorf("failed to parse JSON line: %w", err)
+			}
+			if s.keep == nil || s.keep(example) {
+				n++
+			}
+		}
+	}
+	return (n + s.batchSize - 1) / s.batchSize, nil
 }
 
 func (s *exampleSource[E]) close() error {

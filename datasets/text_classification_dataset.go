@@ -143,6 +143,11 @@ func (s *TextClassificationDataset) SetShuffle(seed uint64) {
 	s.source.setShuffle(seed)
 }
 
+// NumBatches returns the number of batches in one pass over the dataset. See [BatchCounter].
+func (s *TextClassificationDataset) NumBatches() (int, error) {
+	return s.source.numBatches()
+}
+
 // SetTokenizationPipeline sets the pipeline whose tokenizer and id2label map the dataset uses.
 func (s *TextClassificationDataset) SetTokenizationPipeline(pipeline backends.Pipeline) error {
 	if pipeline == nil {

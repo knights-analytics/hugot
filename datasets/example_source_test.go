@@ -240,6 +240,55 @@ func TestDatasetsAreShufflers(t *testing.T) {
 		if _, ok := d.(Shuffler); !ok {
 			t.Errorf("%T does not implement Shuffler", d)
 		}
+		if _, ok := d.(BatchCounter); !ok {
+			t.Errorf("%T does not implement BatchCounter", d)
+		}
+	}
+}
+
+// numBatches must equal the number of batches a pass actually yields, in memory and from a file,
+// with the examples that keep rejects left out.
+func TestExampleSourceNumBatches(t *testing.T) {
+	for _, tc := range []struct{ n, batchSize, want int }{
+		{10, 3, 4}, {9, 3, 3}, {1, 8, 1},
+	} {
+		memory := &exampleSource[numberExample]{examples: numbers(tc.n), batchSize: tc.batchSize}
+		file := fileSource(t, tc.n, tc.batchSize)
+		for name, s := range map[string]*exampleSource[numberExample]{"memory": memory, "file": file} {
+			got, err := s.numBatches()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got != tc.want {
+				t.Errorf("%s, %d examples in batches of %d: %d batches, want %d", name, tc.n, tc.batchSize, got, tc.want)
+			}
+		}
+	}
+
+	even := fileSource(t, 10, 2)
+	even.keep = func(e numberExample) bool { return e.N%2 == 0 }
+	if got, err := even.numBatches(); err != nil || got != 3 {
+		t.Errorf("5 kept examples in batches of 2: got %d batches (err %v), want 3", got, err)
+	}
+}
+
+// Counting a file in the middle of a pass must not move the pass along.
+func TestExampleSourceNumBatchesLeavesPassAlone(t *testing.T) {
+	s := fileSource(t, 10, 3)
+	s.reset()
+	first, err := s.next()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.numBatches(); err != nil {
+		t.Fatal(err)
+	}
+	second, err := s.next()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first[0].N != 0 || second[0].N != 3 {
+		t.Errorf("the pass moved: batches start at %d and %d, want 0 and 3", first[0].N, second[0].N)
 	}
 }
 

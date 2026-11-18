@@ -87,6 +87,11 @@ func (s *ContrastiveDataset) SetShuffle(seed uint64) {
 	s.source.setShuffle(seed)
 }
 
+// NumBatches returns the number of batches in one pass over the dataset. See [BatchCounter].
+func (s *ContrastiveDataset) NumBatches() (int, error) {
+	return s.source.numBatches()
+}
+
 // SetTokenizationPipeline sets the pipeline whose tokenizer the dataset uses.
 func (s *ContrastiveDataset) SetTokenizationPipeline(pipeline backends.Pipeline) error {
 	if pipeline == nil {
