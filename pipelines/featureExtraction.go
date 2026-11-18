@@ -28,9 +28,9 @@ type FeatureExtractionPipeline struct {
 	OutputIndex        int // Record the index of the output selected, defaults to first (0)
 	Normalization      bool
 	// Image mode fields (for vision encoders like CLIP visual)
-	imageMode               bool // true if this is a vision model
-	modelPooler             bool
-	emptyMediaFeatures      bool
+	imageMode          bool // true if this is a vision model
+	modelPooler        bool
+	emptyMediaFeatures bool
 }
 
 type FeatureExtractionOutput struct {

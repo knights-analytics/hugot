@@ -282,14 +282,14 @@ type PipelineBatch struct {
 	// SynthesizeEmptyMediaFeatures enables empty image/video/audio feature
 	// tensors for text-only pipeline calls that use models with those inputs.
 	SynthesizeEmptyMediaFeatures bool
-	DestroyInputs      func() error
-	DestroyMultimodal  func() error
-	Input              []TokenizedInput
-	PaddingMask        [][]bool
-	OutputValues       []any
-	Size               int
-	MaxSequenceLength  int
-	MaxNewTokens       int
+	DestroyInputs                func() error
+	DestroyMultimodal            func() error
+	Input                        []TokenizedInput
+	PaddingMask                  [][]bool
+	OutputValues                 []any
+	Size                         int
+	MaxSequenceLength            int
+	MaxNewTokens                 int
 	// PaddedBatchSize is the bucketed batch size used when the batch dimension is padded.
 	// Zero means no batch padding was applied.
 	PaddedBatchSize int
