@@ -193,11 +193,14 @@ func TestTrainSemanticSimilarity(t *testing.T) {
 	}
 
 	// we now train the model with the dataset
+	// The expected RMSE below is calibrated on plain SGD at GoMLX's default rate of 0.1, the
+	// trainer's default before AdamW at 2e-5 replaced it, so the test pins that optimizer.
 	trainingConfig := hugot.TrainerConfig[*pipelines.FeatureExtractionPipeline]{
 		ModelPath:        modelPath,
 		TrainDataset:     trainDataset,
 		TrainEvalDataset: trainEvalDataset,
 		Verbose:          true,
+		GOMLXOptions:     &hugot.GOMLXTrainingOptions{Optimizer: optimizer.StochasticGradientDescent()},
 	}
 	trainerOptions := []hugot.TrainerOption{hugot.WithEpochs(2)}
 	similaritiesGoMLXTrained := trainSimilarity(t, trainingConfig, trainerOptions, examplesLHS, examplesRHS)
@@ -854,6 +857,77 @@ func earlyStoppingStopsTraining(t *testing.T, session *hugot.Session) {
 	testutil.CheckT(t, trainer.Train(t.Context()))
 
 	assert.Len(t, trainer.Statistics().EpochEvalLosses, 2, "training should stop after the second epoch")
+}
+
+// Early stopping keeps the best epoch's weights, not the last one's. A tolerance far above any real
+// improvement makes the first epoch the best and stops after the second, so the trained model must
+// score exactly what the first epoch was recorded scoring.
+func earlyStoppingRestoresBestEpoch(t *testing.T, session *hugot.Session) {
+	trainPath := testutil.TestCasesFolder + "textClassificationInvertedSentiment.jsonl"
+	examples := readTextClassificationExamples(t, trainPath)
+	trainDataset, err := datasets.NewTextClassificationDataset(t.Context(), trainPath, 4, datasets.SingleLabel, nil, nil)
+	testutil.CheckT(t, err)
+	evalDataset, err := datasets.NewTextClassificationDataset(t.Context(), trainPath, 8, datasets.SingleLabel, nil, nil)
+	testutil.CheckT(t, err)
+
+	trainer, err := session.NewTrainer(hugot.TrainerConfig[*pipelines.TextClassificationPipeline]{
+		ModelPath:    sst2ModelPath,
+		TrainDataset: trainDataset,
+		EvalDataset:  evalDataset,
+		GOMLXOptions: &hugot.GOMLXTrainingOptions{
+			Optimizer: optimizer.Adam().LearningRate(2e-4).Done(),
+		},
+	}, hugot.WithEpochs(5), hugot.WithEarlyStoppingParams(1, 10))
+	testutil.CheckT(t, err)
+	defer func() { testutil.CheckT(t, trainer.Close()) }()
+	testutil.CheckT(t, trainer.Train(t.Context()))
+
+	stats := trainer.Statistics()
+	t.Logf("eval losses %v, eval macro-F1 %v, running losses %v", stats.EpochEvalLosses, stats.EpochEvalF1, stats.EpochRunningLosses)
+	assert.Equal(t, 1, stats.BestEpoch)
+	if !assert.Len(t, stats.EpochEvalF1, 2, "training should stop after the second epoch") {
+		return
+	}
+	assert.Len(t, stats.EpochRunningLosses, 2, "one running loss per epoch trained")
+	assert.NotEqual(t, stats.EpochEvalF1[0], stats.EpochEvalF1[1], "the two epochs must differ for the check to mean anything")
+
+	report, err := evaluation.EvaluateTextClassification(t.Context(), trainer.Pipeline(), examples, 8)
+	testutil.CheckT(t, err)
+	assert.InDelta(t, stats.EpochEvalF1[0], report.MacroF1, 1e-6, "the trained model must hold the best epoch's weights")
+}
+
+func TestEarlyStoppingRestoresBestEpochXLA(t *testing.T) {
+	runXLATraining(t, earlyStoppingRestoresBestEpoch)
+}
+
+func TestEarlyStoppingRestoresBestEpochGo(t *testing.T) {
+	runGoTraining(t, earlyStoppingRestoresBestEpoch)
+}
+
+// Shuffling is seeded: the same seed trains the same model, another seed a different one.
+func shufflingIsSeeded(t *testing.T, session *hugot.Session) {
+	trainPath := testutil.TestCasesFolder + "textClassificationInvertedSentiment.jsonl"
+	runningLosses := func(opts ...hugot.TrainerOption) []float32 {
+		trainDataset, err := datasets.NewTextClassificationDataset(t.Context(), trainPath, 4, datasets.SingleLabel, nil, nil)
+		testutil.CheckT(t, err)
+		trainer, err := session.NewTrainer(hugot.TrainerConfig[*pipelines.TextClassificationPipeline]{
+			ModelPath:    sst2ModelPath,
+			TrainDataset: trainDataset,
+		}, append([]hugot.TrainerOption{hugot.WithEpochs(2)}, opts...)...)
+		testutil.CheckT(t, err)
+		defer func() { testutil.CheckT(t, trainer.Close()) }()
+		testutil.CheckT(t, trainer.Train(t.Context()))
+		return trainer.Statistics().EpochRunningLosses
+	}
+	first := runningLosses(hugot.WithSeed(1))
+	t.Logf("running losses: seed 1 %v", first)
+	assert.Len(t, first, 2, "the running loss is recorded without any evaluation dataset")
+	assert.InDeltaSlice(t, first, runningLosses(hugot.WithSeed(1)), 1e-5, "the same seed must train the same way")
+	assert.NotEqual(t, first, runningLosses(hugot.WithSeed(2)), "another seed should see the data in another order")
+}
+
+func TestShufflingIsSeededXLA(t *testing.T) {
+	runXLATraining(t, shufflingIsSeeded)
 }
 
 func TestEarlyStoppingStopsTrainingXLA(t *testing.T) {

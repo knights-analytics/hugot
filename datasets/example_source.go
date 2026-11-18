@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"iter"
+	"math/rand/v2"
 	"path/filepath"
 
 	"github.com/gomlx/gomlx/ml/train"
@@ -28,6 +29,38 @@ type exampleSource[E any] struct {
 	batchSize      int
 	batchN         int
 	verbose        bool
+
+	// Shuffling, when enabled with setShuffle. An in-memory source is permuted at each reset; a file
+	// source is streamed through a buffer of up to shuffleBufferSize examples, drawn at random.
+	rng        *rand.Rand
+	order      []int // the current pass's permutation of examples, in memory
+	buffer     []E   // examples read from the file and not yet yielded
+	sourceDone bool  // the file has been read to the end in the current pass
+	ordered    bool  // set while all() reads, which never shuffles
+}
+
+// shuffleBufferSize is how many examples a shuffled file source holds in memory to draw from. A
+// file of up to this many examples is shuffled uniformly, in the same order as the same examples
+// held in memory with the same seed; a longer one is shuffled locally, each
+// example landing at most this many places from where a uniform shuffle would put it on average.
+const shuffleBufferSize = 10_000
+
+// Shuffler is implemented by the datasets that can visit their examples in a random order. The
+// trainer shuffles its training dataset through it; see hugot.WithSeed and hugot.WithoutShuffle.
+type Shuffler interface {
+	// SetShuffle makes each pass over the dataset visit the examples in a new random order, drawn
+	// from seed: the same seed gives the same sequence of orders. Examples read with Examples are
+	// always in their original order.
+	SetShuffle(seed uint64)
+}
+
+// setShuffle enables shuffling with a random sequence drawn from seed.
+func (s *exampleSource[E]) setShuffle(seed uint64) {
+	s.rng = rand.New(rand.NewPCG(seed, seed)) // #nosec G404 -- reproducible data order, not security
+}
+
+func (s *exampleSource[E]) shuffling() bool {
+	return s.rng != nil && !s.ordered
 }
 
 func (s *exampleSource[E]) validate() error {
@@ -70,6 +103,12 @@ func (s *exampleSource[E]) reset() {
 	}
 	s.batchN = 0
 	s.skipped = 0
+	s.order = nil
+	s.buffer = s.buffer[:0]
+	s.sourceDone = false
+	if s.shuffling() && len(s.examples) > 0 {
+		s.order = s.rng.Perm(len(s.examples))
+	}
 	if len(s.examples) == 0 {
 		if err := s.sourceFile.Close(); err != nil {
 			panic(err)
@@ -88,30 +127,64 @@ func (s *exampleSource[E]) reset() {
 func (s *exampleSource[E]) next() ([]E, error) {
 	batch := make([]E, 0, s.batchSize)
 	var endErr error
-	if len(s.examples) > 0 {
+	switch {
+	case len(s.examples) > 0:
 		start := s.batchN * s.batchSize
 		if start >= len(s.examples) {
 			return batch, io.EOF
 		}
 		end := min(start+s.batchSize, len(s.examples))
-		batch = append(batch, s.examples[start:end]...)
-	} else {
+		if s.order != nil {
+			for _, i := range s.order[start:end] {
+				batch = append(batch, s.examples[i])
+			}
+		} else {
+			batch = append(batch, s.examples[start:end]...)
+		}
+	case s.shuffling():
+		if s.batchN == 0 {
+			// A file that fits in the buffer is permuted whole, with the same draw as the same
+			// examples held in memory, so the two train in the same order.
+			if err := s.fillBuffer(); err != nil {
+				return nil, err
+			}
+			if s.sourceDone {
+				s.order = s.rng.Perm(len(s.buffer))
+			}
+		}
+		if s.order != nil {
+			start := s.batchN * s.batchSize
+			if start >= len(s.order) {
+				return batch, io.EOF
+			}
+			for _, i := range s.order[start:min(start+s.batchSize, len(s.order))] {
+				batch = append(batch, s.buffer[i])
+			}
+			break
+		}
 		for len(batch) < s.batchSize {
-			lineBytes, readErr := fileutil.ReadLine(s.reader)
-			if readErr != nil {
-				if !errors.Is(readErr, io.EOF) {
-					return nil, readErr
-				}
+			if err := s.fillBuffer(); err != nil {
+				return nil, err
+			}
+			if len(s.buffer) == 0 {
 				endErr = io.EOF
 				break
 			}
-			var example E
-			if err := json.Unmarshal(lineBytes, &example); err != nil {
-				return nil, fmt.Errorf("failed to parse JSON line: %w", err)
+			i := s.rng.IntN(len(s.buffer))
+			batch = append(batch, s.buffer[i])
+			last := len(s.buffer) - 1
+			s.buffer[i] = s.buffer[last]
+			s.buffer = s.buffer[:last]
+		}
+	default:
+		for len(batch) < s.batchSize {
+			example, err := s.read()
+			if errors.Is(err, io.EOF) {
+				endErr = io.EOF
+				break
 			}
-			if s.keep != nil && !s.keep(example) {
-				s.skipped++
-				continue
+			if err != nil {
+				return nil, err
 			}
 			batch = append(batch, example)
 		}
@@ -126,8 +199,48 @@ func (s *exampleSource[E]) next() ([]E, error) {
 	return batch, endErr
 }
 
-// all rewinds and returns every example, preprocessed if a preprocessing function was given.
+// read returns the next example from the file that keep accepts, or io.EOF at the end of the file.
+func (s *exampleSource[E]) read() (E, error) {
+	var zero E
+	for {
+		lineBytes, err := fileutil.ReadLine(s.reader)
+		if err != nil {
+			return zero, err
+		}
+		var example E
+		if err = json.Unmarshal(lineBytes, &example); err != nil {
+			return zero, fmt.Errorf("failed to parse JSON line: %w", err)
+		}
+		if s.keep != nil && !s.keep(example) {
+			s.skipped++
+			continue
+		}
+		return example, nil
+	}
+}
+
+// fillBuffer tops the shuffle buffer up from the file, until it is full or the file is exhausted.
+func (s *exampleSource[E]) fillBuffer() error {
+	for !s.sourceDone && len(s.buffer) < shuffleBufferSize {
+		example, err := s.read()
+		if errors.Is(err, io.EOF) {
+			s.sourceDone = true
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		s.buffer = append(s.buffer, example)
+	}
+	return nil
+}
+
+// all rewinds and returns every example in its original order, preprocessed if a preprocessing
+// function was given. It does not draw from the shuffle sequence, so reading the examples does not
+// change the order of the next training pass.
 func (s *exampleSource[E]) all() ([]E, error) {
+	s.ordered = true
+	defer func() { s.ordered = false }()
 	s.reset()
 	var examples []E
 	for {

@@ -107,3 +107,47 @@ func TestFreezeVariablesNothingLeft(t *testing.T) {
 	_, err := freezeVariables(store, trainerSettings{freezeLayers: []int{0, 1}}, backends.VariablePlacement{})
 	require.ErrorContains(t, err, "no variable to train")
 }
+
+// variableValues reads every variable of the store as a float32 scalar, by name.
+func variableValues(t *testing.T, store *mlmodel.Store) map[string]float32 {
+	t.Helper()
+	values := map[string]float32{}
+	for v := range store.IterVariables() {
+		value, err := v.Value()
+		require.NoError(t, err)
+		values[v.Name()] = value.Value().([]float32)[0]
+	}
+	return values
+}
+
+// A snapshot restores the trainable weights it copied, and leaves frozen ones alone.
+func TestWeightSnapshotRestores(t *testing.T) {
+	store := newFreezeTestStore(t, []string{"encoder.layer.0.weight", "classifier.weight", "embeddings.weight"})
+	for v := range store.IterVariables() {
+		if v.Name() == "embeddings.weight" {
+			v.SetTrainable(false)
+		}
+	}
+	snapshot, err := snapshotWeights(store)
+	require.NoError(t, err)
+	require.Len(t, snapshot, 2, "only the trainable variables are copied")
+
+	for v := range store.IterVariables() {
+		require.NoError(t, v.SetValue(tensors.FromValue([]float32{2})))
+	}
+	require.NoError(t, snapshot.restore())
+	require.Empty(t, snapshot, "the copies become the variables' values")
+	require.Equal(t, map[string]float32{
+		"encoder.layer.0.weight": 1,
+		"classifier.weight":      1,
+		"embeddings.weight":      2, // frozen variables are not snapshotted
+	}, variableValues(t, store))
+}
+
+func TestWithSeedAndWithoutShuffle(t *testing.T) {
+	settings := trainerSettings{seed: defaultSeed}
+	require.NoError(t, WithSeed(7)(&settings))
+	require.NoError(t, WithoutShuffle()(&settings))
+	require.Equal(t, uint64(7), settings.seed)
+	require.True(t, settings.noShuffle)
+}
