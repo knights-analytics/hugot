@@ -7,6 +7,7 @@ variable "GOPJRT_VERSION"            { default = "0.117.2" }
 variable "ONNXRUNTIME_VERSION"       { default = "1.32.0" }
 variable "ONNXRUNTIME_GENAI_VERSION" { default = "0.20.0" }
 variable "JAX_CUDA_VERSION"          { default = "0.12.0" }
+variable "LLAMA_CPP_VERSION"          { default = "v1.0.0" }
 
 target "base" {
   context   = "."
@@ -17,6 +18,7 @@ target "base" {
     ONNXRUNTIME_VERSION       = ONNXRUNTIME_VERSION
     ONNXRUNTIME_GENAI_VERSION = ONNXRUNTIME_GENAI_VERSION
     JAX_CUDA_VERSION          = JAX_CUDA_VERSION
+    LLAMA_CPP_VERSION         = LLAMA_CPP_VERSION
   }
 }
 

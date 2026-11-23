@@ -24,6 +24,7 @@ type Model struct {
 	IDLabelMap            map[int]string
 	ORTModel              *ORTModel
 	GoMLXModel            *GoMLXModel
+	YZMAModel             *YZMAModel
 	Tokenizer             *Tokenizer
 	Pipelines             map[string]Pipeline
 	loadOptions           *options.Options
@@ -87,6 +88,16 @@ func LoadModel(ctx context.Context, path string, onnxFilename string, opts *opti
 }
 
 func loadModel(ctx context.Context, path string, onnxFilename string, opts *options.Options, isGenerative bool, transform GraphTransform) (*Model, error) {
+	if opts == nil || !opts.Backend.Valid() {
+		return nil, errors.New("invalid backend")
+	}
+	capabilities := opts.Backend.Capabilities()
+	if isGenerative && !capabilities.Generative {
+		return nil, fmt.Errorf("generative models are not supported with %q backend", opts.Backend)
+	}
+	if !isGenerative && !capabilities.NonGenerative {
+		return nil, fmt.Errorf("non-generative models are not supported with %q backend", opts.Backend)
+	}
 	model := &Model{
 		graphTransform: transform,
 		ID:             path + ":" + onnxFilename,
@@ -103,21 +114,25 @@ func loadModel(ctx context.Context, path string, onnxFilename string, opts *opti
 	model.Backend = backend
 
 	if isGenerative {
-		if err := loadModelConfig(ctx, model); err != nil {
-			return nil, errors.Join(err, model.Close())
-		}
-		if err := loadGenerativeModelConfig(ctx, model); err != nil {
-			return nil, errors.Join(err, model.Close())
-		}
 		// creation of the session. Only one output (either token or sentence embedding).
-		if opts.Backend != options.BackendORT {
-			return nil, fmt.Errorf("generative models are only supported with ORT backend currently")
-		}
 		if onnxFilename != "" {
-			return nil, fmt.Errorf("onnx filename should not be provided for generative models as we currently rely on genai_config for the onnx backend")
+			return nil, fmt.Errorf("onnx filename should not be provided for generative models")
 		}
-
-		err := createORTGenerativeSession(ctx, model, opts)
+		var err error
+		switch opts.Backend {
+		case options.BackendORT:
+			if err := loadModelConfig(ctx, model); err != nil {
+				return nil, errors.Join(err, model.Close())
+			}
+			if err := loadGenerativeModelConfig(ctx, model); err != nil {
+				return nil, errors.Join(err, model.Close())
+			}
+			err = createORTGenerativeSession(ctx, model, opts)
+		case options.BackendYZMA:
+			err = createYZMAGenerativeSession(ctx, model, opts)
+		default:
+			return nil, fmt.Errorf("generative models are supported with ORT and YZMA backends, got %q", opts.Backend)
+		}
 		if err != nil {
 			return nil, errors.Join(err, model.Close())
 		}
@@ -169,6 +184,10 @@ func (model *Model) Close() error {
 	if model.GoMLXModel != nil {
 		model.GoMLXModel.Close()
 		model.GoMLXModel = nil
+	}
+	if model.YZMAModel != nil {
+		closeErr = errors.Join(closeErr, model.YZMAModel.Destroy())
+		model.YZMAModel = nil
 	}
 	return closeErr
 }

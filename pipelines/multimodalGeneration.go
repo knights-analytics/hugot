@@ -82,6 +82,9 @@ func (p *multimodalGeneration) GetStatistics() backends.PipelineStatistics {
 	if p.Model.ORTModel != nil && p.Model.ORTModel.Generative != nil {
 		return p.Model.ORTModel.Generative.Statistics()
 	}
+	if p.Model.YZMAModel != nil {
+		return p.Model.YZMAModel.GetStatistics()
+	}
 	return backends.PipelineStatistics{}
 }
 

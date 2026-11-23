@@ -22,6 +22,8 @@ import (
 type DownloadOptions struct {
 	AuthToken             string
 	OnnxFilePath          string
+	GGUFFilePath          string
+	GGUFProjectorFilePath string
 	ExternalDataPath      string
 	Branch                string
 	MaxRetries            int
@@ -49,10 +51,16 @@ func NewDownloadOptions() DownloadOptions {
 	return d
 }
 
-// DownloadModel can be used to download a model directly from huggingface. Before the model is downloaded,
-// validation occurs to ensure there is an .onnx and tokenizers.json file. Hugot only works with onnx models.
+// DownloadModel downloads an ONNX model by default, or a selected GGUF file when
+// DownloadOptions.GGUFFilePath is set.
 func DownloadModel(ctx context.Context, modelName string, destination string, options DownloadOptions) (string, error) {
-	if options.DownloadGraphBundle {
+	if options.GGUFFilePath != "" && options.OnnxFilePath != "" {
+		return "", errors.New("GGUFFilePath and OnnxFilePath cannot both be set")
+	}
+	if options.GGUFProjectorFilePath != "" && options.GGUFFilePath == "" {
+		return "", errors.New("GGUFProjectorFilePath requires GGUFFilePath")
+	}
+	if options.DownloadGraphBundle || options.GGUFFilePath != "" {
 		options.PreservePaths = true
 	}
 	// replicates code in hf downloader
@@ -76,6 +84,16 @@ func DownloadModel(ctx context.Context, modelName string, destination string, op
 		return "", fmt.Errorf("destination %s is not a directory", destination)
 	}
 	if options.PreservePaths {
+		if options.GGUFFilePath != "" {
+			if _, err := preservedDownloadPath(modelPath, options.GGUFFilePath); err != nil {
+				return "", err
+			}
+		}
+		if options.GGUFProjectorFilePath != "" {
+			if _, err := preservedDownloadPath(modelPath, options.GGUFProjectorFilePath); err != nil {
+				return "", err
+			}
+		}
 		for _, name := range options.AdditionalFilePaths {
 			if _, err := preservedDownloadPath(modelPath, name); err != nil {
 				return "", err
@@ -206,6 +224,7 @@ func selectModelArtifacts(names []string, options DownloadOptions) ([]string, er
 	slices.Sort(names)
 	files := map[string]bool{}
 	var graphs []string
+	var ggufModels []string
 	for _, name := range names {
 		switch path.Base(name) {
 		case "tokenizer.json", "special_tokens_map.json", "tokenizer_config.json", "config.json", "genai_config.json", "vocab.txt", "chat_template.jinja",
@@ -215,6 +234,33 @@ func selectModelArtifacts(names []string, options DownloadOptions) ([]string, er
 		if path.Ext(name) == ".onnx" {
 			graphs = append(graphs, name)
 		}
+		if strings.EqualFold(path.Ext(name), ".gguf") {
+			ggufModels = append(ggufModels, name)
+		}
+	}
+	if options.GGUFFilePath != "" {
+		if !slices.Contains(ggufModels, options.GGUFFilePath) {
+			return nil, fmt.Errorf("model GGUF file not found at %s", options.GGUFFilePath)
+		}
+		files[options.GGUFFilePath] = true
+		if options.GGUFProjectorFilePath != "" {
+			if !slices.Contains(ggufModels, options.GGUFProjectorFilePath) || !strings.Contains(strings.ToLower(path.Base(options.GGUFProjectorFilePath)), "mmproj") {
+				return nil, fmt.Errorf("model projector GGUF file not found at %s", options.GGUFProjectorFilePath)
+			}
+			files[options.GGUFProjectorFilePath] = true
+		}
+		for _, name := range options.AdditionalFilePaths {
+			if !slices.Contains(names, name) {
+				return nil, fmt.Errorf("additional model artifact %q not found", name)
+			}
+			files[name] = true
+		}
+		result := make([]string, 0, len(files))
+		for name := range files {
+			result = append(result, name)
+		}
+		slices.Sort(result)
+		return result, nil
 	}
 	graph := options.OnnxFilePath
 	if graph == "" {

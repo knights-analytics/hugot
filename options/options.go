@@ -14,6 +14,7 @@ type Options struct {
 	BackendOptions BackendOptions
 	ORTOptions     *OrtOptions
 	GoMLXOptions   *GoMLXOptions
+	YZMAOptions    *YZMAOptions
 	Destroy        func() error
 	Backend        Backend
 	UseGoMLX       bool
@@ -30,13 +31,122 @@ type BackendOptions interface {
 type Backend string
 
 const (
-	BackendORT Backend = "ORT"
-	BackendGo  Backend = "GO"
-	BackendXLA Backend = "XLA"
+	BackendORT  Backend = "ORT"
+	BackendGo   Backend = "GO"
+	BackendXLA  Backend = "XLA"
+	BackendYZMA Backend = "YZMA"
 )
 
 func (b Backend) Valid() bool {
-	return b == BackendORT || b == BackendGo || b == BackendXLA
+	return b == BackendORT || b == BackendGo || b == BackendXLA || b == BackendYZMA
+}
+
+// BackendCapabilities describes the model types a backend can execute.
+type BackendCapabilities struct {
+	Generative    bool
+	NonGenerative bool
+}
+
+// Capabilities reports model execution support for the backend. ORT's
+// generative support is provided by its GenAI runtime; non-generative support
+// is provided by either ORT or GoMLX, depending on session options.
+func (b Backend) Capabilities() BackendCapabilities {
+	switch b {
+	case BackendORT:
+		return BackendCapabilities{Generative: true, NonGenerative: true}
+	case BackendGo, BackendXLA:
+		return BackendCapabilities{NonGenerative: true}
+	case BackendYZMA:
+		return BackendCapabilities{Generative: true}
+	default:
+		return BackendCapabilities{}
+	}
+}
+
+// YZMAOptions configures the llama.cpp runtime.
+type YZMAOptions struct {
+	LibPath       *string
+	ProjectorPath *string
+	NGpuLayers    int32
+	NCtx          uint32
+	NThreads      int32
+}
+
+func WithYZMALibraryPath(path string) WithOption {
+	return func(o *Options) error {
+		if o.Backend != BackendYZMA {
+			return fmt.Errorf("WithYZMALibraryPath is only supported for YZMA backend")
+		}
+		if o.YZMAOptions == nil {
+			o.YZMAOptions = &YZMAOptions{}
+		}
+		o.YZMAOptions.LibPath = &path
+		return nil
+	}
+}
+
+// WithYZMAProjectorPath selects the mmproj GGUF paired with a vision model.
+func WithYZMAProjectorPath(path string) WithOption {
+	return func(o *Options) error {
+		if o.Backend != BackendYZMA {
+			return fmt.Errorf("WithYZMAProjectorPath is only supported for YZMA backend")
+		}
+		if path == "" {
+			return fmt.Errorf("YZMA projector path must not be empty")
+		}
+		if o.YZMAOptions == nil {
+			o.YZMAOptions = &YZMAOptions{}
+		}
+		o.YZMAOptions.ProjectorPath = &path
+		return nil
+	}
+}
+
+func WithYZMAGPULayers(n int32) WithOption {
+	return func(o *Options) error {
+		if o.Backend != BackendYZMA {
+			return fmt.Errorf("WithYZMAGPULayers is only supported for YZMA backend")
+		}
+		if o.YZMAOptions == nil {
+			o.YZMAOptions = &YZMAOptions{}
+		}
+		o.YZMAOptions.NGpuLayers = n
+		return nil
+	}
+}
+
+// WithYZMAContextSize sets the token context allocated by llama.cpp.
+func WithYZMAContextSize(n uint32) WithOption {
+	return func(o *Options) error {
+		if o.Backend != BackendYZMA {
+			return fmt.Errorf("WithYZMAContextSize is only supported for YZMA backend")
+		}
+		if n == 0 {
+			return fmt.Errorf("YZMA context size must be greater than zero")
+		}
+		if o.YZMAOptions == nil {
+			o.YZMAOptions = &YZMAOptions{}
+		}
+		o.YZMAOptions.NCtx = n
+		return nil
+	}
+}
+
+// WithYZMAThreads sets the number of llama.cpp inference threads.
+func WithYZMAThreads(n int32) WithOption {
+	return func(o *Options) error {
+		if o.Backend != BackendYZMA {
+			return fmt.Errorf("WithYZMAThreads is only supported for YZMA backend")
+		}
+		if n <= 0 {
+			return fmt.Errorf("YZMA thread count must be greater than zero")
+		}
+		if o.YZMAOptions == nil {
+			o.YZMAOptions = &YZMAOptions{}
+		}
+		o.YZMAOptions.NThreads = n
+		return nil
+	}
 }
 
 func Defaults() *Options {
@@ -47,6 +157,7 @@ func Defaults() *Options {
 			LibraryPath: &libraryPathDefault,
 		},
 		GoMLXOptions: &GoMLXOptions{},
+		YZMAOptions:  &YZMAOptions{},
 		FileSystem:   nil,
 		Destroy: func() error {
 			return nil

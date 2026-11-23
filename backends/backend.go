@@ -31,10 +31,40 @@ func newBackend(opts *options.Options) (Backend, error) {
 	if opts.Backend == options.BackendORT && !opts.UseGoMLX {
 		return runtimeBackend{runtime: options.BackendORT}, nil
 	}
+	if opts.Backend == options.BackendYZMA {
+		return yzmaBackend{}, nil
+	}
 	if opts.Backend == options.BackendXLA {
 		return runtimeBackend{runtime: options.BackendXLA}, nil
 	}
 	return runtimeBackend{runtime: options.BackendGo}, nil
+}
+
+type yzmaBackend struct{}
+
+func (yzmaBackend) RunSessionOnBatch(context.Context, *PipelineBatch, *BasePipeline) error {
+	return &backendUnavailableError{runtime: string(options.BackendYZMA), operation: "non-generative inference"}
+}
+func (yzmaBackend) RunGenerativeSessionOnBatch(ctx context.Context, batch *PipelineBatch, p *BasePipeline, maxLength int, stopSequences []string, temperature *float64, topP *float64, seed *int, tools []string, guidance *Guidance) (chan SequenceDelta, chan error, error) {
+	return runGenerativeYZMAOnBatch(ctx, batch, p, maxLength, stopSequences, temperature, topP, seed, tools, guidance)
+}
+func (yzmaBackend) CreateMessages(batch *PipelineBatch, inputs any, systemPrompt string) error {
+	return CreateMessagesYZMA(batch, inputs, systemPrompt)
+}
+func (yzmaBackend) CreateInputTensors(*PipelineBatch, *Model, bool) error {
+	return &backendUnavailableError{runtime: string(options.BackendYZMA), operation: "tensor creation"}
+}
+func (yzmaBackend) CreateImageTensors(*PipelineBatch, *Model, [][][][]float32) error {
+	return &backendUnavailableError{runtime: string(options.BackendYZMA), operation: "image tensors"}
+}
+func (yzmaBackend) CreateImageTextTensors(*PipelineBatch, *Model, [][][][]float32, []TokenizedInput) error {
+	return &backendUnavailableError{runtime: string(options.BackendYZMA), operation: "image and text tensors"}
+}
+func (yzmaBackend) CreateAudioTensors(*PipelineBatch, *Model, [][]float32) error {
+	return &backendUnavailableError{runtime: string(options.BackendYZMA), operation: "audio tensors"}
+}
+func (yzmaBackend) CreateTabularTensors(*PipelineBatch, *Model, [][]float32) error {
+	return &backendUnavailableError{runtime: string(options.BackendYZMA), operation: "tabular tensors"}
 }
 
 func (b runtimeBackend) RunSessionOnBatch(ctx context.Context, batch *PipelineBatch, p *BasePipeline) error {

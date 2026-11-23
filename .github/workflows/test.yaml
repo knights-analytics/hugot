@@ -24,6 +24,8 @@ jobs:
           go mod download
       - name: Build and run tests
         run: ./scripts/run-unit-tests.sh
+      - name: Test YZMA build and GGUF loading
+        run: go test -tags YZMA ./backends ./tests/yzma
       - name: Install goveralls
         run: go install github.com/mattn/goveralls@latest
       - name: list files

@@ -5,6 +5,17 @@ ARG ONNXRUNTIME_VERSION
 ARG ONNXRUNTIME_GENAI_VERSION
 ARG GOPJRT_VERSION
 ARG BUILDPLATFORM
+ARG LLAMA_CPP_VERSION
+
+FROM --platform=$BUILDPLATFORM public.ecr.aws/amazonlinux/amazonlinux:2023 AS llama-build
+ARG LLAMA_CPP_VERSION
+RUN dnf -y install git cmake gcc gcc-c++ make && dnf clean all && \
+    git clone --depth 1 --branch "${LLAMA_CPP_VERSION}" https://github.com/ggml-org/llama.cpp.git /src/llama.cpp && \
+    cmake -S /src/llama.cpp -B /src/llama.cpp/build \
+      -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=ON -DGGML_CUDA=OFF \
+      -DLLAMA_BUILD_EXAMPLES=OFF -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_SERVER=OFF && \
+    cmake --build /src/llama.cpp/build --parallel && \
+    cmake --install /src/llama.cpp/build --prefix /opt/llama
 
 #--- runtime layer with all hugot dependencies for cpu 
 #--- the image generated does not contain the hugot code, only the dependencies needed by hugot
@@ -48,3 +59,5 @@ RUN --mount=src=./go.mod,dst=/go.mod \
 COPY . /build
 RUN cd /build && \
     chown -R testuser:testuser /build
+COPY --from=llama-build /opt/llama /usr/local
+RUN ldconfig

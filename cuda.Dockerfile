@@ -6,8 +6,20 @@ ARG ONNXRUNTIME_GENAI_VERSION
 ARG GOPJRT_VERSION
 ARG JAX_CUDA_VERSION
 ARG BUILDPLATFORM
+ARG LLAMA_CPP_VERSION
 
 FROM nvidia/cuda:13.5.0-cudnn-runtime-amzn2023 AS cuda
+
+FROM nvidia/cuda:13.5.0-devel-amzn2023 AS llama-build
+ARG LLAMA_CPP_VERSION
+RUN dnf -y install git cmake gcc gcc-c++ make && dnf clean all && \
+    git clone --depth 1 --branch "${LLAMA_CPP_VERSION}" https://github.com/ggml-org/llama.cpp.git /src/llama.cpp && \
+    cmake -S /src/llama.cpp -B /src/llama.cpp/build \
+      -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=ON -DGGML_CUDA=ON \
+      -DCMAKE_CUDA_ARCHITECTURES="80;86;89;90;100;120" \
+      -DLLAMA_BUILD_EXAMPLES=OFF -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_SERVER=OFF && \
+    cmake --build /src/llama.cpp/build --parallel && \
+    cmake --install /src/llama.cpp/build --prefix /opt/llama
 
 #--- runtime layer with all hugot dependencies for cpu and gpu ---
 
@@ -62,3 +74,6 @@ RUN --mount=src=./go.mod,dst=/go.mod \
     # create non-privileged testuser with id: 1000
     useradd -u 1000 -m testuser && usermod -a -G wheel testuser && \
     echo "testuser ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers.d/testuser
+
+COPY --from=llama-build /opt/llama /usr/local
+RUN ldconfig

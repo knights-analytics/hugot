@@ -23,7 +23,7 @@ We support inference on CPU and on all accelerators supported by ONNX Runtime/Op
 
 IMPORTANT: The Go backend is designed for simpler workloads, environments that disallow cgo, and for smaller models such as [all-MiniLM-L6-v2](https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2). It works best with small batches of roughly 32 inputs per call. If you have performance requirements, please move to a C backend such as XLA or ORT (detailed below).
 
-Hugot loads and saves models in the ONNX format.
+Hugot loads ONNX models for its standard pipelines and can run text generation from GGUF files through the optional YZMA backend.
 
 ## Why
 
@@ -83,6 +83,7 @@ Hugot supports pluggable backends to perform the tokenization and run the ONNX m
 - Go
 - [Onnx Runtime](https://onnxruntime.ai/)
 - [OpenXLA](https://openxla.org/)
+- [YZMA (llama.cpp)](https://github.com/hybridgroup/yzma) for GGUF text generation
 
 The native Go backend is always available, as it does not require any cgo dependencies. It is provided by the [GoMLX](https://github.com/gomlx/gomlx) project. Note: currently, enabling GOEXPERIMENT=simd gives this backend a significant performance boost.
 
@@ -94,7 +95,24 @@ CUDA requires a C backend, either OpenXLA or Onnx Runtime.
 
 Once compiled, Hugot can be instantiated with your backend of choice via calling `NewGoSession()`, `NewXLASession()` or `NewORTSession()` respectively.
 
-You may combine build tags "-tags XLA,ORT" or use "-tags ALL" to be able to use all available backends interchangeably.
+YZMA can be included at compile time via the build tag `YZMA` (or `ALL`). It runs text generation from GGUF models and image conditioned text generation from vision GGUF models with a matching `mmproj` file. Set `ModelPath` to the model GGUF or a directory containing one model GGUF; a single `mmproj` GGUF in that directory is paired automatically. YZMA does not run ONNX pipelines.
+
+You may combine build tags such as `-tags XLA,ORT,YZMA` or use `-tags ALL` to include all available backends.
+
+#### YZMA and GGUF
+
+Build with `go build -tags YZMA` and create sessions with `NewYZMASession`. YZMA uses the llama.cpp library loaded by the `yzma` Go package. If the library is not in the platform's standard search path, provide its location with `options.WithYZMALibraryPath`. `options.WithYZMAGPULayers`, `options.WithYZMAContextSize`, and `options.WithYZMAThreads` configure model offload and context execution.
+
+Download GGUF files from a Hugging Face repository by setting `GGUFFilePath` and, for vision models, `GGUFProjectorFilePath`; the returned model directory can be passed directly as `ModelPath`:
+
+```go
+downloadOptions := hugot.NewDownloadOptions()
+downloadOptions.GGUFFilePath = "model-Q4_K_M.gguf"
+downloadOptions.GGUFProjectorFilePath = "mmproj-model-f16.gguf" // vision models only
+modelPath, err := hugot.DownloadModel(ctx, "organization/model", "./models", downloadOptions)
+```
+
+Use the `ImageTextToText` pipeline for image prompts. If a directory has multiple projector files, select one with `options.WithYZMAProjectorPath`. Images may be local files or base64 data URIs. Image and audio output, audio input, stop sequences, and tool calling are not supported yet; unsupported generation options return explicit errors. Runtime tests use `YZMA_MODEL_PATH` and `YZMA_IMAGE_PATH` for local fixtures; `YZMA_PROJECTOR_PATH` and `YZMA_LIB_PATH` are optional overrides.
 
 ### Usage
 

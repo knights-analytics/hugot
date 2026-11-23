@@ -504,6 +504,8 @@ func CreateModelBackend(ctx context.Context, model *Model, s *options.Options) e
 		}
 	case options.BackendGo, options.BackendXLA:
 		err = createGoMLXModelBackend(model, s)
+	case options.BackendYZMA:
+		return fmt.Errorf("YZMA currently supports generative models only")
 	}
 	return err
 }

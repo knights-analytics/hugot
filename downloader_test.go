@@ -56,6 +56,24 @@ func TestProcessorAndGraphBundleArtifacts(t *testing.T) {
 	}
 }
 
+func TestGGUFModelArtifacts(t *testing.T) {
+	names := []string{"model-q4.gguf", "model-q8.gguf", "mmproj-model-f16.gguf", "README.md"}
+	opts := NewDownloadOptions()
+	opts.GGUFFilePath = "model-q4.gguf"
+	opts.GGUFProjectorFilePath = "mmproj-model-f16.gguf"
+	files, err := selectModelArtifacts(names, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(files) != 2 || !slices.Contains(files, opts.GGUFFilePath) || !slices.Contains(files, opts.GGUFProjectorFilePath) {
+		t.Fatalf("got artifacts %v, want model %q and projector %q", files, opts.GGUFFilePath, opts.GGUFProjectorFilePath)
+	}
+	opts.GGUFFilePath = "missing.gguf"
+	if _, err := selectModelArtifacts(names, opts); err == nil {
+		t.Fatal("missing GGUF file was accepted")
+	}
+}
+
 func TestDownloadModelRejectsUnsafeAdditionalPathsBeforeHubAccess(t *testing.T) {
 	for _, name := range []string{"../outside", "sub/../../outside", "/absolute", `C:\outside`, `sub\..\outside`, "sub/../inside"} {
 		t.Run(name, func(t *testing.T) {
@@ -68,6 +86,12 @@ func TestDownloadModelRejectsUnsafeAdditionalPathsBeforeHubAccess(t *testing.T) 
 				t.Fatalf("expected unsafe path error for %q, got %v", name, err)
 			}
 		})
+	}
+	options := NewDownloadOptions()
+	options.GGUFFilePath = "../outside/model.gguf"
+	options.MaxRetries = 0
+	if _, err := DownloadModel(context.Background(), "example/model", t.TempDir(), options); err == nil || !strings.Contains(err.Error(), "path") {
+		t.Fatalf("expected unsafe GGUF path error before hub access, got %v", err)
 	}
 }
 
