@@ -3,6 +3,7 @@
 ARG GO_VERSION
 ARG ONNXRUNTIME_VERSION
 ARG ONNXRUNTIME_GENAI_VERSION
+ARG ONNXRUNTIME_MIRROR_URL
 ARG GOPJRT_VERSION
 ARG BUILDPLATFORM
 
@@ -13,6 +14,7 @@ FROM --platform=$BUILDPLATFORM public.ecr.aws/amazonlinux/amazonlinux:2023 AS hu
 ARG GO_VERSION
 ARG ONNXRUNTIME_VERSION
 ARG ONNXRUNTIME_GENAI_VERSION
+ARG ONNXRUNTIME_MIRROR_URL
 ARG GOPJRT_VERSION
 
 ENV PATH="$PATH:/usr/local/go/bin" \
@@ -21,8 +23,9 @@ ENV PATH="$PATH:/usr/local/go/bin" \
 
 COPY ./scripts/download-onnxruntime.sh /download-onnxruntime.sh
 COPY ./scripts/download-onnxruntime-genai.sh /download-onnxruntime-genai.sh
+COPY ./scripts/install-onnxruntime-mirror.sh /install-onnxruntime-mirror.sh
 RUN --mount=src=./go.mod,dst=/go.mod \
-    dnf --allowerasing -y install gcc jq bash tar xz gzip glibc-static libstdc++ wget zip git dirmngr sudo which && \
+    dnf --allowerasing -y install gcc jq bash tar xz gzip glibc-static libstdc++ wget zip unzip git dirmngr sudo which && \
     curl -LO https://download.fedoraproject.org/pub/fedora/linux/releases/43/Everything/x86_64/os/Packages/g/glibc-2.42-4.fc43.x86_64.rpm && \
     rpm -Uvh --nodeps --force glibc-2.42-4.fc43.x86_64.rpm && \
     rm glibc-2.42-4.fc43.x86_64.rpm && \
@@ -33,11 +36,15 @@ RUN --mount=src=./go.mod,dst=/go.mod \
     tar -C /usr/local -xzf go${GO_VERSION}.linux-amd64.tar.gz && \
     rm go${GO_VERSION}.linux-amd64.tar.gz && \
     # onnxruntime cpu \
-    sed -i 's/\r//g' /download-onnxruntime.sh && chmod +x /download-onnxruntime.sh && \
-    /download-onnxruntime.sh --onnxruntime-version=${ONNXRUNTIME_VERSION} && \
-    # onnxruntime genai \
-    sed -i 's/\r//g' /download-onnxruntime-genai.sh && chmod +x /download-onnxruntime-genai.sh && \
-    /download-onnxruntime-genai.sh --onnxruntime-genai-version=${ONNXRUNTIME_GENAI_VERSION} && \
+    if [ -n "$ONNXRUNTIME_MIRROR_URL" ]; then \
+      chmod +x /install-onnxruntime-mirror.sh && \
+      /install-onnxruntime-mirror.sh "$ONNXRUNTIME_MIRROR_URL" "$ONNXRUNTIME_VERSION" "$ONNXRUNTIME_GENAI_VERSION"; \
+    else \
+      sed -i 's/\r//g' /download-onnxruntime.sh && chmod +x /download-onnxruntime.sh && \
+      /download-onnxruntime.sh --onnxruntime-version=${ONNXRUNTIME_VERSION} && \
+      sed -i 's/\r//g' /download-onnxruntime-genai.sh && chmod +x /download-onnxruntime-genai.sh && \
+      /download-onnxruntime-genai.sh --onnxruntime-genai-version=${ONNXRUNTIME_GENAI_VERSION}; \
+    fi && \
     # XLA/goMLX \
     GOPROXY=direct go run github.com/gomlx/go-xla/cmd/pjrt_installer@latest -plugin=linux -version=v${GOPJRT_VERSION} -path=/usr/local/lib/go-xla && \
     # NON-PRIVILEGED USER

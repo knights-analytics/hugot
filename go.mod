@@ -3,12 +3,12 @@ module github.com/knights-analytics/hugot
 go 1.27.0
 
 require (
-	github.com/gomlx/compute v0.1.31
-	github.com/gomlx/compute-onnx v0.1.31
-	github.com/gomlx/go-huggingface v0.4.38
-	github.com/gomlx/go-xla v0.4.31
-	github.com/gomlx/gomlx v0.28.37
-	github.com/gomlx/onnx-gomlx v0.5.34
+	github.com/gomlx/compute v0.1.33
+	github.com/gomlx/compute-onnx v0.1.33
+	github.com/gomlx/go-huggingface v0.4.40
+	github.com/gomlx/go-xla v0.4.33
+	github.com/gomlx/gomlx v0.28.39
+	github.com/gomlx/onnx-gomlx v0.5.36
 	github.com/knights-analytics/ortgenai v0.3.6
 	github.com/microsoft/onnxruntime/go v0.0.0-20261117191608-63163cb01727
 	github.com/stretchr/testify v1.12.1
@@ -26,7 +26,7 @@ require (
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	go.yaml.in/yaml/v3 v3.0.6 // indirect
-	golang.org/x/exp v0.0.0-20261117202309-7a49493bfd90 // indirect
+	golang.org/x/exp v0.0.0-20261124000051-d6646c509b6d // indirect
 	golang.org/x/sys v0.50.0 // indirect
 	golang.org/x/term v0.48.0 // indirect
 	k8s.io/klog/v2 v2.140.0 // indirect

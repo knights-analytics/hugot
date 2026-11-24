@@ -6,6 +6,7 @@ variable "GOTESTSUM_VERSION"         { default = "1.13.1" }
 variable "GOPJRT_VERSION"            { default = "0.117.2" }
 variable "ONNXRUNTIME_VERSION"       { default = "1.32.0" }
 variable "ONNXRUNTIME_GENAI_VERSION" { default = "0.20.0" }
+variable "ONNXRUNTIME_MIRROR_URL"    { default = "https://github.com/knights-analytics/hugot/releases/download/v0.8.6/onnxruntime-mirror.zip" }
 variable "JAX_CUDA_VERSION"          { default = "0.12.0" }
 
 target "base" {
@@ -16,6 +17,7 @@ target "base" {
     GOPJRT_VERSION            = GOPJRT_VERSION
     ONNXRUNTIME_VERSION       = ONNXRUNTIME_VERSION
     ONNXRUNTIME_GENAI_VERSION = ONNXRUNTIME_GENAI_VERSION
+    ONNXRUNTIME_MIRROR_URL    = ONNXRUNTIME_MIRROR_URL
     JAX_CUDA_VERSION          = JAX_CUDA_VERSION
   }
 }

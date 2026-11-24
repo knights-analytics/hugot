@@ -51,7 +51,6 @@ func TestZeroShotObjectDetectionPipelineORT(t *testing.T) {
 }
 
 func TestZeroShotObjectDetectionPipelineORTGoMLX(t *testing.T) {
-	t.Skip("Skipping test due to Expm1 (44) not implemented for GoMLX ONNX Runtime backend")
 	runORTPipelineGoMLX(t, testutil.ZeroShotObjectDetectionPipeline)
 }
 

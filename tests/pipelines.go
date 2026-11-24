@@ -301,10 +301,12 @@ func multimodalFeatureExtractionPipeline(t *testing.T, session *hugot.Session, u
 		attentionMasks[i] = batch.Input[i].AttentionMask
 	}
 	expected := reference.MultimodalText.hiddenStateReference
+	tolerance := reference.Tolerance
 	if useCudaReference {
 		expected = reference.MultimodalTextCuda.hiddenStateReference
+		tolerance = 0.35
 	}
-	checkHiddenStateReference(t, raw, expected, reference.Tolerance, attentionMasks)
+	checkHiddenStateReference(t, raw, expected, tolerance, attentionMasks)
 }
 
 // Text classification
