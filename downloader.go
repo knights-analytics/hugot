@@ -20,8 +20,14 @@ import (
 
 // DownloadOptions is a struct of options that can be passed to DownloadModel.
 type DownloadOptions struct {
-	AuthToken             string
-	OnnxFilePath          string
+	AuthToken    string
+	OnnxFilePath string
+	// TransformerFilePath selects a GGUF file when downloading a GoMLX
+	// transformer checkpoint. Safetensors shards are selected automatically.
+	TransformerFilePath string
+	// GoMLXTransformer downloads checkpoint weights even when the repository
+	// also contains ONNX graphs.
+	GoMLXTransformer      bool
 	ExternalDataPath      string
 	Branch                string
 	MaxRetries            int
@@ -50,7 +56,8 @@ func NewDownloadOptions() DownloadOptions {
 }
 
 // DownloadModel can be used to download a model directly from huggingface. Before the model is downloaded,
-// validation occurs to ensure there is an .onnx and tokenizers.json file. Hugot only works with onnx models.
+// validation selects an ONNX graph or, when none is present, Safetensors or GGUF
+// weights for the GoMLX transformer backend.
 func DownloadModel(ctx context.Context, modelName string, destination string, options DownloadOptions) (string, error) {
 	if options.DownloadGraphBundle {
 		options.PreservePaths = true
@@ -205,7 +212,7 @@ func ValidateDownloadedHFModel(repo *hub.Repo, options DownloadOptions) ([]strin
 func selectModelArtifacts(names []string, options DownloadOptions) ([]string, error) {
 	slices.Sort(names)
 	files := map[string]bool{}
-	var graphs []string
+	var graphs, safetensors, ggufs []string
 	for _, name := range names {
 		switch path.Base(name) {
 		case "tokenizer.json", "special_tokens_map.json", "tokenizer_config.json", "config.json", "genai_config.json", "vocab.txt", "chat_template.jinja",
@@ -215,11 +222,20 @@ func selectModelArtifacts(names []string, options DownloadOptions) ([]string, er
 		if path.Ext(name) == ".onnx" {
 			graphs = append(graphs, name)
 		}
+		if path.Ext(name) == ".safetensors" {
+			safetensors = append(safetensors, name)
+		}
+		if path.Ext(name) == ".gguf" {
+			ggufs = append(ggufs, name)
+		}
 	}
 	graph := options.OnnxFilePath
+	if options.TransformerFilePath != "" || options.GoMLXTransformer {
+		return selectTransformerArtifacts(names, files, safetensors, ggufs, options)
+	}
 	if graph == "" {
 		if len(graphs) == 0 {
-			return nil, errors.New("model does not have a .onnx file, Hugot only works with onnx models")
+			return selectTransformerArtifacts(names, files, safetensors, ggufs, options)
 		}
 		if len(graphs) > 1 {
 			return nil, fmt.Errorf("model has multiple .onnx files, please specify one of the following onnxFilePaths: %s", strings.Join(graphs, " "))
@@ -246,6 +262,37 @@ func selectModelArtifacts(names []string, options DownloadOptions) ([]string, er
 			return nil, fmt.Errorf("additional model artifact %q not found", name)
 		}
 		files[name] = true
+	}
+	result := make([]string, 0, len(files))
+	for name := range files {
+		result = append(result, name)
+	}
+	slices.Sort(result)
+	return result, nil
+}
+
+func selectTransformerArtifacts(names []string, files map[string]bool, safetensors, ggufs []string, options DownloadOptions) ([]string, error) {
+	if options.TransformerFilePath != "" {
+		if !slices.Contains(ggufs, options.TransformerFilePath) {
+			return nil, fmt.Errorf("transformer model file %q not found", options.TransformerFilePath)
+		}
+		files[options.TransformerFilePath] = true
+	} else if len(safetensors) > 0 {
+		for _, name := range safetensors {
+			files[name] = true
+		}
+	} else if len(ggufs) > 0 {
+		if len(ggufs) > 1 {
+			return nil, fmt.Errorf("model has multiple .gguf files; specify TransformerFilePath from: %s", strings.Join(ggufs, " "))
+		}
+		files[ggufs[0]] = true
+	} else {
+		return nil, errors.New("model has no .onnx, .safetensors, or .gguf model file")
+	}
+	for _, name := range names {
+		if path.Base(name) == "model.safetensors.index.json" || path.Base(name) == "config.json" || path.Base(name) == "tokenizer.json" || path.Base(name) == "tokenizer_config.json" || path.Base(name) == "special_tokens_map.json" || path.Base(name) == "generation_config.json" || path.Base(name) == "modules.json" || path.Base(name) == "config_sentence_transformers.json" || path.Base(name) == "sentence_bert_config.json" || path.Base(name) == "1_Pooling/config.json" {
+			files[name] = true
+		}
 	}
 	result := make([]string, 0, len(files))
 	for name := range files {

@@ -171,6 +171,24 @@ type GoMLXOptions struct {
 	Cuda            bool
 	XLA             bool
 	TPU             bool
+	// TransformerModel loads a local Hugging Face Safetensors or GGUF
+	// checkpoint with go-huggingface instead of selecting an ONNX graph.
+	TransformerModel bool
+}
+
+// WithGoMLXTransformer loads a Safetensors or GGUF transformer checkpoint
+// directly through GoMLX. It is supported by Go, XLA, and ORT with WithGoMLX.
+func WithGoMLXTransformer() WithOption {
+	return func(o *Options) error {
+		if o.Backend == BackendORT && !o.UseGoMLX {
+			return fmt.Errorf("WithGoMLXTransformer requires a GoMLX backend")
+		}
+		if o.GoMLXOptions == nil {
+			o.GoMLXOptions = &GoMLXOptions{}
+		}
+		o.GoMLXOptions.TransformerModel = true
+		return nil
+	}
 }
 
 // WithOption is the interface for all option functions.

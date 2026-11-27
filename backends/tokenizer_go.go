@@ -11,8 +11,16 @@ import (
 
 type GoTokenizer struct {
 	Tokenizer     *hftokenizer.Tokenizer
+	APITokenizer  api.Tokenizer
 	TypeIDs       bool
 	AttentionMask bool
+}
+
+func (t *GoTokenizer) apiTokenizer() api.Tokenizer {
+	if t.APITokenizer != nil {
+		return t.APITokenizer
+	}
+	return t.Tokenizer
 }
 
 func loadGoTokenizer(tokenizerBytes []byte, model *Model) error {
@@ -83,7 +91,7 @@ func getGoTokenizerOptions(model *Model) (api.EncodeOptions, bool, bool, error) 
 func tokenizeInputsGo(batch *PipelineBatch, tk *Tokenizer, inputs []string) {
 	outputs := make([]TokenizedInput, len(inputs))
 	maxSequence := 0
-	goTK := tk.GoTokenizer.Tokenizer
+	goTK := tk.GoTokenizer.apiTokenizer()
 	for i, input := range inputs {
 		output := goTK.EncodeWithAnnotations(input)
 
@@ -149,18 +157,20 @@ func tokenizeInputPairsGo(batch *PipelineBatch, tk *Tokenizer, inputs [][2]strin
 }
 
 func decodeGo(tokens []uint32, tokenizer *Tokenizer) string {
-	return tokenizer.GoTokenizer.Tokenizer.Decode(safeconv.Uint32SliceToIntSlice(tokens))
+	return tokenizer.GoTokenizer.apiTokenizer().Decode(safeconv.Uint32SliceToIntSlice(tokens))
 }
 
 func getGoTokens(ids []int, tokenizer *Tokenizer) []string {
 	tokens := make([]string, len(ids))
-	tk := tokenizer.GoTokenizer.Tokenizer
+	tk := tokenizer.GoTokenizer.apiTokenizer()
 	for i, id := range ids {
-		if tok, found := tk.IDToToken(id); found {
-			tokens[i] = tok
-		} else {
-			tokens[i] = tk.Decode([]int{id})
+		if native, ok := tk.(*hftokenizer.Tokenizer); ok {
+			if token, found := native.IDToToken(id); found {
+				tokens[i] = token
+				continue
+			}
 		}
+		tokens[i] = tk.Decode([]int{id})
 	}
 	return tokens
 }
@@ -185,7 +195,7 @@ func convertGoOffsets(spans []api.TokenSpan) [][2]uint {
 }
 
 func allInputTokensGo(pipeline *BasePipeline) error {
-	err := pipeline.Model.Tokenizer.GoTokenizer.Tokenizer.With(api.EncodeOptions{
+	err := pipeline.Model.Tokenizer.GoTokenizer.apiTokenizer().With(api.EncodeOptions{
 		AddSpecialTokens:         true,
 		IncludeSpans:             true,
 		IncludeSpecialTokensMask: true,

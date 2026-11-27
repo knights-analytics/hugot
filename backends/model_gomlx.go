@@ -13,6 +13,7 @@ import (
 	"github.com/gomlx/compute-onnx/support/protos"
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
+	hftransformer "github.com/gomlx/go-huggingface/models/transformer"
 	"github.com/gomlx/go-huggingface/tokenizers/bucket"
 	"github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
@@ -36,6 +37,7 @@ type GoMLXModel struct {
 	execMu             sync.RWMutex
 	Backend            compute.Backend
 	OnnxModel          onnx.Model
+	HFTransformer      *hftransformer.Model
 	Scope              *mlmodel.Scope
 	Store              *mlmodel.Store
 	Exec               *mlmodel.Exec

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"slices"
 
+	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/gomlx/core/tensors"
 	mlmodel "github.com/gomlx/gomlx/ml/model"
 )
@@ -17,7 +18,7 @@ func runNamedTensorsGoMLX(ctx context.Context, model *Model, inputs map[string]T
 		}
 	}
 	m := model.GoMLXModel
-	if m == nil || m.Exec == nil || m.OnnxModel == nil {
+	if m == nil || m.Exec == nil || (m.OnnxModel == nil && m.HFTransformer == nil) {
 		return nil, errors.New("GoMLX executor is not initialized")
 	}
 	var allocated []*tensors.Tensor
@@ -34,7 +35,16 @@ func runNamedTensorsGoMLX(ctx context.Context, model *Model, inputs map[string]T
 			result = nil
 		}
 	}()
-	names, shapes := m.OnnxModel.Inputs()
+	var names []string
+	var inputShapes []shapes.Shape
+	if m.OnnxModel != nil {
+		names, inputShapes = m.OnnxModel.Inputs()
+	} else {
+		for i, meta := range model.InputsMeta {
+			names = append(names, meta.Name)
+			inputShapes = append(inputShapes, m.inputShapes[i])
+		}
+	}
 	args := make([]any, len(model.InputsMeta))
 	for i, meta := range model.InputsMeta {
 		input := inputs[meta.Name]
@@ -55,7 +65,7 @@ func runNamedTensorsGoMLX(ctx context.Context, model *Model, inputs map[string]T
 		}
 		allocated = append(allocated, tensor)
 		index := slices.Index(names, meta.Name)
-		if index < 0 || tensor.DType() != shapes[index].DType {
+		if index < 0 || tensor.DType() != inputShapes[index].DType {
 			return nil, fmt.Errorf("input %q data type %s does not match graph metadata", meta.Name, tensor.DType())
 		}
 		args[i] = tensor

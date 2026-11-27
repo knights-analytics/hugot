@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/gomlx/go-huggingface/tokenizers/api"
 	"github.com/knights-analytics/hugot/util/fileutil"
 )
 
@@ -33,6 +34,19 @@ func LoadTokenizer(ctx context.Context, model *Model) error {
 		}
 	} else {
 		return fmt.Errorf("error checking for existence of tokenizer.json: %w", err)
+	}
+	if model.TransformerModel && model.GoMLXModel != nil && model.GoMLXModel.HFTransformer != nil {
+		tk, err := model.GoMLXModel.HFTransformer.GetTokenizer()
+		if err != nil {
+			return fmt.Errorf("load GoMLX transformer tokenizer: %w", err)
+		}
+		if err := tk.With(api.EncodeOptions{AddSpecialTokens: true, IncludeSpans: true, IncludeSpecialTokensMask: true, MaxLen: model.MaxPositionEmbeddings}); err != nil {
+			return err
+		}
+		model.Tokenizer = &Tokenizer{
+			GoTokenizer:      &GoTokenizer{APITokenizer: tk, AttentionMask: true},
+			MaxAllowedTokens: model.MaxPositionEmbeddings,
+		}
 	}
 	return nil
 }

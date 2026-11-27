@@ -24,6 +24,7 @@ type Model struct {
 	IDLabelMap            map[int]string
 	ORTModel              *ORTModel
 	GoMLXModel            *GoMLXModel
+	TransformerModel      bool
 	Tokenizer             *Tokenizer
 	Pipelines             map[string]Pipeline
 	loadOptions           *options.Options
@@ -122,21 +123,37 @@ func loadModel(ctx context.Context, path string, onnxFilename string, opts *opti
 			return nil, errors.Join(err, model.Close())
 		}
 	} else {
-		err := loadModelConfig(ctx, model)
-		if err != nil {
-			return nil, errors.Join(err, model.Close())
+		// GoMLX can load Hugging Face transformer checkpoints directly when no
+		// ONNX graph is present. Native ORT remains ONNX-only.
+		hasOnnx, onnxErr := hasONNXModel(ctx, path)
+		if onnxErr != nil {
+			return nil, errors.Join(onnxErr, model.Close())
 		}
-		err = CreateModelBackend(ctx, model, opts)
-		if err != nil {
-			return nil, errors.Join(err, model.Close())
+		forceTransformer := opts.GoMLXOptions != nil && opts.GoMLXOptions.TransformerModel
+		useTransformer := (opts.Backend != options.BackendORT || opts.UseGoMLX) && (forceTransformer || !hasOnnx)
+		if useTransformer {
+			if err := createGoMLXTransformerBackend(model, opts); err != nil {
+				return nil, errors.Join(err, model.Close())
+			}
+		} else {
+			if err := loadModelConfig(ctx, model); err != nil {
+				return nil, errors.Join(err, model.Close())
+			}
+			if err := CreateModelBackend(ctx, model, opts); err != nil {
+				return nil, errors.Join(err, model.Close())
+			}
 		}
-		tkErr := LoadTokenizer(ctx, model)
-		if tkErr != nil {
-			return nil, errors.Join(tkErr, model.Close())
+		if err := LoadTokenizer(ctx, model); err != nil {
+			return nil, errors.Join(err, model.Close())
 		}
 	}
 
 	return model, nil
+}
+
+func hasONNXModel(ctx context.Context, path string) (bool, error) {
+	files, err := getOnnxFiles(ctx, path)
+	return len(files) > 0, err
 }
 
 // Close releases all resources owned by the model. It is safe to call more

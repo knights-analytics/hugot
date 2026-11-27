@@ -3,12 +3,12 @@ module github.com/knights-analytics/hugot
 go 1.27.0
 
 require (
-	github.com/gomlx/compute v0.1.33
-	github.com/gomlx/compute-onnx v0.1.33
-	github.com/gomlx/go-huggingface v0.4.40
-	github.com/gomlx/go-xla v0.4.33
-	github.com/gomlx/gomlx v0.28.39
-	github.com/gomlx/onnx-gomlx v0.5.36
+	github.com/gomlx/compute v0.1.34
+	github.com/gomlx/compute-onnx v0.1.34
+	github.com/gomlx/go-huggingface v0.4.41
+	github.com/gomlx/go-xla v0.4.34
+	github.com/gomlx/gomlx v0.28.40
+	github.com/gomlx/onnx-gomlx v0.5.37
 	github.com/knights-analytics/ortgenai v0.3.6
 	github.com/microsoft/onnxruntime/go v0.0.0-20261117191608-63163cb01727
 	github.com/stretchr/testify v1.12.1
@@ -19,6 +19,7 @@ require (
 )
 
 require (
+	github.com/edsrzf/mmap-go v1.2.0 // indirect
 	github.com/eliben/go-sentencepiece v0.7.0 // indirect
 	github.com/go-logr/logr v1.4.4 // indirect
 	github.com/gofrs/flock v0.13.2 // indirect
